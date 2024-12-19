@@ -2544,6 +2544,20 @@ fn run_module() {
     "#);
 }
 
+#[test]
+fn run_module_stdin() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.run().arg("-m").arg("-"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot run a Python module from stdin
+    "###);
+}
+
 /// When the `pyproject.toml` file is invalid.
 #[test]
 fn run_project_toml_error() -> Result<()> {
@@ -2875,6 +2889,40 @@ fn run_script_explicit() -> Result<()> {
 }
 
 #[test]
+fn run_script_explicit_stdin() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("script");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+        import iniconfig
+        print("Hello, world!")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--script").arg("-").stdin(std::fs::File::open(test_script)?), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Reading inline script metadata from `stdin`
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn run_script_explicit_no_file() {
     let context = TestContext::new("3.12");
     context
@@ -2943,6 +2991,41 @@ fn run_gui_script_explicit_windows() -> Result<()> {
 }
 
 #[test]
+#[cfg(windows)]
+fn run_gui_script_explicit_stdin_windows() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("script");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+        import iniconfig
+        print("Hello, world!")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("-").stdin(std::fs::File::open(test_script)?), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Reading inline script metadata from `stdin`
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
 #[cfg(not(windows))]
 fn run_gui_script_explicit_unix() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2969,6 +3052,41 @@ fn run_gui_script_explicit_unix() -> Result<()> {
     Resolved in [TIME]
     Audited in [TIME]
     Using executable: python3
+    "###);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(not(windows))]
+fn run_gui_script_explicit_stdin_unix() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("script");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+        import iniconfig
+        print("Hello, world!")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("-").stdin(std::fs::File::open(test_script)?), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Reading inline script metadata from `stdin`
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
     "###);
 
     Ok(())

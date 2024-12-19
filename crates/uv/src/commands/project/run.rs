@@ -1182,6 +1182,8 @@ pub(crate) enum RunCommand {
     PythonZipapp(PathBuf, Vec<OsString>),
     /// Execute a `python` script provided via `stdin`.
     PythonStdin(Vec<u8>, Vec<OsString>),
+    /// Execute a `pythonw` script provided via `stdin`.
+    PythonGuiStdin(Vec<u8>, Vec<OsString>),
     /// Execute a Python script provided via a remote URL.
     PythonRemote(tempfile::NamedTempFile, Vec<OsString>),
     /// Execute an external command.
@@ -1209,6 +1211,13 @@ impl RunCommand {
                 }
             }
             Self::PythonStdin(..) => Cow::Borrowed("python -c"),
+            Self::PythonGuiStdin(..) => {
+                if cfg!(windows) {
+                    Cow::Borrowed("pythonw -c")
+                } else {
+                    Cow::Borrowed("python -c")
+                }
+            }
             Self::External(executable, _) => executable.to_string_lossy(),
         }
     }
@@ -1280,6 +1289,38 @@ impl RunCommand {
 
                 process
             }
+            Self::PythonGuiStdin(script, args) => {
+                let python_executable = interpreter.sys_executable();
+
+                // Use `pythonw.exe` if it exists, otherwise fall back to `python.exe`.
+                // See `install-wheel-rs::get_script_executable`.gd
+                let pythonw_executable = python_executable
+                    .file_name()
+                    .map(|name| {
+                        let new_name = name.to_string_lossy().replace("python", "pythonw");
+                        python_executable.with_file_name(new_name)
+                    })
+                    .filter(|path| path.is_file())
+                    .unwrap_or_else(|| python_executable.to_path_buf());
+
+                let mut process = Command::new(&pythonw_executable);
+                process.arg("-c");
+
+                #[cfg(unix)]
+                {
+                    use std::os::unix::ffi::OsStringExt;
+                    process.arg(OsString::from_vec(script.clone()));
+                }
+
+                #[cfg(not(unix))]
+                {
+                    let script = String::from_utf8(script.clone()).expect("script is valid UTF-8");
+                    process.arg(script);
+                }
+                process.args(args);
+
+                process
+            }
             Self::External(executable, args) => {
                 let mut process = Command::new(executable);
                 process.args(args);
@@ -1328,6 +1369,10 @@ impl std::fmt::Display for RunCommand {
                 write!(f, "python -c")?;
                 Ok(())
             }
+            Self::PythonGuiStdin(..) => {
+                write!(f, "pythonw -c")?;
+                Ok(())
+            }
             Self::External(executable, args) => {
                 write!(f, "{}", executable.to_string_lossy())?;
                 for arg in args {
@@ -1359,6 +1404,19 @@ impl RunCommand {
         let Some(target) = target else {
             return Ok(Self::Empty);
         };
+
+        if target.eq_ignore_ascii_case("-") {
+            let mut buf = Vec::with_capacity(1024);
+            std::io::stdin().read_to_end(&mut buf)?;
+
+            return if module {
+                Err(anyhow!("Cannot run a Python module from stdin"))
+            } else if gui_script {
+                Ok(Self::PythonGuiStdin(buf, args.to_vec()))
+            } else {
+                Ok(Self::PythonStdin(buf, args.to_vec()))
+            };
+        }
 
         let target_path = PathBuf::from(target);
 
@@ -1402,21 +1460,17 @@ impl RunCommand {
 
         if module {
             return Ok(Self::PythonModule(target.clone(), args.to_vec()));
-        } else if script {
-            return Ok(Self::PythonScript(target.clone().into(), args.to_vec()));
         } else if gui_script {
             return Ok(Self::PythonGuiScript(target.clone().into(), args.to_vec()));
+        } else if script {
+            return Ok(Self::PythonScript(target.clone().into(), args.to_vec()));
         }
 
         let metadata = target_path.metadata();
         let is_file = metadata.as_ref().map_or(false, std::fs::Metadata::is_file);
         let is_dir = metadata.as_ref().map_or(false, std::fs::Metadata::is_dir);
 
-        if target.eq_ignore_ascii_case("-") {
-            let mut buf = Vec::with_capacity(1024);
-            std::io::stdin().read_to_end(&mut buf)?;
-            Ok(Self::PythonStdin(buf, args.to_vec()))
-        } else if target.eq_ignore_ascii_case("python") {
+        if target.eq_ignore_ascii_case("python") {
             Ok(Self::Python(args.to_vec()))
         } else if target_path
             .extension()
