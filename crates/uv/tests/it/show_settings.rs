@@ -5556,7 +5556,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.pip_install(), context.temp_dir.path())
         .arg("-r")
         .arg("requirements.in")
-        .env("UV_NO_VERIFY_HASHES", "1")
+        .env(EnvVars::UV_NO_VERIFY_HASHES, "1")
         .arg("--show-settings"), @r###"
     success: true
     exit_code: 0

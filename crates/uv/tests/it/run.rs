@@ -3173,7 +3173,7 @@ fn run_with_multiple_env_files() -> Result<()> {
     ----- stderr -----
     "###);
 
-    uv_snapshot!(context.filters(), context.run().arg("test.py").env("UV_ENV_FILE", ".env1 .env2"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("test.py").env(EnvVars::UV_ENV_FILE, ".env1 .env2"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----

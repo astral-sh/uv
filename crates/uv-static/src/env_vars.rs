@@ -539,6 +539,14 @@ impl EnvVars {
     #[attr_hidden]
     pub const KEYRING_TEST_CREDENTIALS: &'static str = "KEYRING_TEST_CREDENTIALS";
 
+    /// Used to set the vendor links url for tests.
+    #[attr_hidden]
+    pub const UV_TEST_VENDOR_LINKS_URL: &'static str = "UV_TEST_VENDOR_LINKS_URL";
+
+    /// Used to set an index url for tests.
+    #[attr_hidden]
+    pub const UV_TEST_INDEX_URL: &'static str = "UV_TEST_INDEX_URL";
+
     /// `.env` files from which to load environment variables when executing `uv run` commands.
     pub const UV_ENV_FILE: &'static str = "UV_ENV_FILE";
 

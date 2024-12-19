@@ -37,13 +37,15 @@ pub const PACKSE_VERSION: &str = "0.3.42";
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
 pub fn build_vendor_links_url() -> String {
-    env::var("UV_TEST_VENDOR_LINKS_URL").ok().unwrap_or(format!(
-        "https://raw.githubusercontent.com/astral-sh/packse/{PACKSE_VERSION}/vendor/links.html"
-    ))
+    env::var(EnvVars::UV_TEST_VENDOR_LINKS_URL)
+        .ok()
+        .unwrap_or(format!(
+            "https://raw.githubusercontent.com/astral-sh/packse/{PACKSE_VERSION}/vendor/links.html"
+        ))
 }
 
 pub fn packse_index_url() -> String {
-    env::var("UV_TEST_INDEX_URL").ok().unwrap_or(format!(
+    env::var(EnvVars::UV_TEST_INDEX_URL).ok().unwrap_or(format!(
         "https://astral-sh.github.io/packse/{PACKSE_VERSION}/simple-html/"
     ))
 }

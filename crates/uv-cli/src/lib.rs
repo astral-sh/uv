@@ -4300,7 +4300,7 @@ pub struct PythonInstallArgs {
     ///
     /// See `uv python dir` to view the current Python installation directory. Defaults to
     /// `~/.local/share/uv/python`.
-    #[arg(long, short, env = "UV_PYTHON_INSTALL_DIR")]
+    #[arg(long, short, env = EnvVars::UV_PYTHON_INSTALL_DIR)]
     pub install_dir: Option<PathBuf>,
 
     /// The Python version(s) to install.
@@ -4363,7 +4363,7 @@ pub struct PythonInstallArgs {
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonUninstallArgs {
     /// The directory where the Python was installed.
-    #[arg(long, short, env = "UV_PYTHON_INSTALL_DIR")]
+    #[arg(long, short, env = EnvVars::UV_PYTHON_INSTALL_DIR)]
     pub install_dir: Option<PathBuf>,
 
     /// The Python version(s) to uninstall.
