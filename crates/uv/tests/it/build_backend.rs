@@ -5,7 +5,7 @@ use flate2::bufread::GzDecoder;
 use fs_err::File;
 use indoc::indoc;
 use std::env;
-use std::io::{BufReader, Write};
+use std::io::BufReader;
 use std::path::Path;
 use std::process::Command;
 use tempfile::TempDir;
@@ -218,6 +218,8 @@ fn built_by_uv_editable() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn preserve_executable_bit() -> Result<()> {
+    use std::io::Write;
+
     let context = TestContext::new("3.12");
 
     let project_dir = context.temp_dir.path().join("preserve_executable_bit");
