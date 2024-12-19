@@ -13,7 +13,7 @@ use dashmap::DashMap;
 use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
-use pubgrub::{Id, IncompId, Incompatibility, Range, Ranges, State};
+use pubgrub::{Id, IncompId, Incompatibility, Kind, Range, Ranges, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
@@ -31,7 +31,7 @@ use uv_distribution_types::{
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{release_specifiers_to_ranges, Version, VersionSpecifiers, MIN_VERSION};
-use uv_pep508::MarkerTree;
+use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{
     ConflictItem, ConflictItemRef, Conflicts, Requirement, ResolutionMetadata, VerbatimParsedUrl,
@@ -61,7 +61,9 @@ pub(crate) use crate::resolver::availability::{
 use crate::resolver::batch_prefetch::BatchPrefetcher;
 pub use crate::resolver::derivation::DerivationChainBuilder;
 pub use crate::resolver::environment::ResolverEnvironment;
-use crate::resolver::environment::{fork_python_requirement, ForkingPossibility};
+use crate::resolver::environment::{
+    fork_version_by_marker, fork_version_by_python_requirement, ForkingPossibility,
+};
 pub(crate) use crate::resolver::fork_map::{ForkMap, ForkSet};
 pub(crate) use crate::resolver::urls::Urls;
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
@@ -486,6 +488,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .expect("a package was chosen but we don't have a term");
                 let decision = self.choose_version(
                     next_package,
+                    next_id,
                     index,
                     term_intersection.unwrap_positive(),
                     &mut state.pins,
@@ -493,6 +496,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &state.fork_urls,
                     &state.env,
                     &state.python_requirement,
+                    &state.pubgrub,
                     &mut visited,
                     &request_sink,
                 )?;
@@ -1008,6 +1012,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     fn choose_version(
         &self,
         package: &PubGrubPackage,
+        id: Id<PubGrubPackage>,
         index: Option<&IndexUrl>,
         range: &Range<Version>,
         pins: &mut FilePins,
@@ -1015,6 +1020,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
+        pubgrub: &State<UvDependencyProvider>,
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
@@ -1042,9 +1048,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         index,
                         range,
                         package,
+                        id,
                         preferences,
                         env,
                         python_requirement,
+                        pubgrub,
                         pins,
                         visited,
                         request_sink,
@@ -1142,9 +1150,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         index: Option<&IndexUrl>,
         range: &Range<Version>,
         package: &PubGrubPackage,
+        id: Id<PubGrubPackage>,
         preferences: &Preferences,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
+        pubgrub: &State<UvDependencyProvider>,
         pins: &mut FilePins,
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
@@ -1216,7 +1226,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         {
             if matches!(self.options.fork_strategy, ForkStrategy::RequiresPython) {
                 if env.marker_environment().is_none() {
-                    let forks = fork_python_requirement(requires_python, python_requirement, env);
+                    let forks = fork_version_by_python_requirement(
+                        requires_python,
+                        python_requirement,
+                        env,
+                    );
                     if !forks.is_empty() {
                         debug!(
                             "Forking Python requirement `{}` on `{}` for {}=={} ({})",
@@ -1239,6 +1253,53 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 candidate.version().clone(),
                 UnavailableVersion::IncompatibleDist(incompatibility),
             )));
+        }
+
+        // Check whether this version covers all supported platforms. This only applies to versions
+        // that lack source distributions and, for now, we only apply this to local versions. The
+        // intent is such that, if we're resolving PyTorch, and we choose `torch==2.5.2+cpu`, we
+        // want to fork so that we can select `torch==2.5.2` on macOS (since the `+cpu` variant
+        // doesn't include any macOS wheels).
+        if candidate.version().is_local() {
+            if !dist.implied_markers().is_true() {
+                for platform in [
+                    ResolverPlatform::Linux,
+                    ResolverPlatform::Windows,
+                    ResolverPlatform::MacOS,
+                ] {
+                    // If the platform is part of the current environment...
+                    let marker = platform.marker();
+                    if env.included_by_marker(marker) {
+                        // But isn't supported by the distribution...
+                        if dist.implied_markers().is_disjoint(marker)
+                            && !find_environments(id, pubgrub).is_disjoint(marker)
+                        {
+                            // Then we need to fork.
+                            let forks = fork_version_by_marker(env, marker);
+                            return if forks.is_empty() {
+                                Ok(Some(ResolverVersion::Unavailable(
+                                    candidate.version().clone(),
+                                    UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
+                                        IncompatibleWheel::MissingPlatform(platform.to_string()),
+                                    )),
+                                )))
+                            } else {
+                                debug!(
+                                    "Forking platform for {}=={} ({})",
+                                    name,
+                                    candidate.version(),
+                                    forks
+                                        .iter()
+                                        .map(ToString::to_string)
+                                        .collect::<Vec<_>>()
+                                        .join(", ")
+                                );
+                                Ok(Some(ResolverVersion::Forked(forks)))
+                            };
+                        }
+                    }
+                }
+            }
         }
 
         let filename = match dist.for_installation() {
@@ -3336,6 +3397,35 @@ fn find_conflicting_extra(conflicting: &Conflicts, reqs: &[Requirement]) -> Opti
     None
 }
 
+/// Compute the set of markers for which a package is known to be relevant.
+fn find_environments(id: Id<PubGrubPackage>, state: &State<UvDependencyProvider>) -> MarkerTree {
+    let package = &state.package_store[id];
+    if package.is_root() {
+        return MarkerTree::TRUE;
+    }
+
+    // Retrieve the incompatibilities for the current package.
+    let Some(incompatibilities) = state.incompatibilities.get(&id) else {
+        return MarkerTree::FALSE;
+    };
+
+    // Find all dependencies on the current package.
+    let mut marker = MarkerTree::FALSE;
+    for index in incompatibilities {
+        let incompat = &state.incompatibility_store[*index];
+        if let Kind::FromDependencyOf(id1, _, id2, _) = &incompat.kind {
+            if id == *id2 {
+                marker.or({
+                    let mut marker = package.marker();
+                    marker.and(find_environments(*id1, state));
+                    marker
+                });
+            }
+        }
+    }
+    marker
+}
+
 #[derive(Debug, Default, Clone)]
 struct ConflictTracker {
     /// How often a decision on the package was discarded due to another package decided earlier.
@@ -3350,4 +3440,42 @@ struct ConflictTracker {
     ///
     /// Distilled from `culprit` for fast checking in the hot loop.
     deprioritize: Vec<Id<PubGrubPackage>>,
+}
+
+/// A platform for which the resolver is solving.
+#[derive(Debug, Clone, Copy)]
+enum ResolverPlatform {
+    Linux,
+    Windows,
+    MacOS,
+}
+
+impl ResolverPlatform {
+    /// Return the platform's `sys.platform` value.
+    fn sys_platform(self) -> &'static str {
+        match self {
+            ResolverPlatform::Linux => "linux",
+            ResolverPlatform::Windows => "win32",
+            ResolverPlatform::MacOS => "darwin",
+        }
+    }
+
+    /// Return a [`MarkerTree`] for the platform.
+    fn marker(self) -> MarkerTree {
+        MarkerTree::expression(MarkerExpression::String {
+            key: MarkerValueString::SysPlatform,
+            operator: MarkerOperator::Equal,
+            value: self.sys_platform().to_string(),
+        })
+    }
+}
+
+impl Display for ResolverPlatform {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResolverPlatform::Linux => write!(f, "Linux"),
+            ResolverPlatform::Windows => write!(f, "Windows"),
+            ResolverPlatform::MacOS => write!(f, "macOS"),
+        }
+    }
 }

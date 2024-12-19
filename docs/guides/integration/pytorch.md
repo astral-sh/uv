@@ -114,16 +114,13 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
 
 === "CPU-only"
 
-    PyTorch doesn't publish CPU-only builds for macOS, since macOS builds are always considered CPU-only.
-    As such, we gate on `platform_system` to instruct uv to ignore the PyTorch index when resolving for macOS.
-
     ```toml
     [tool.uv.sources]
     torch = [
-      { index = "pytorch-cpu", marker = "platform_system != 'Darwin'"},
+      { index = "pytorch-cpu" },
     ]
     torchvision = [
-      { index = "pytorch-cpu", marker = "platform_system != 'Darwin'"},
+      { index = "pytorch-cpu" },
     ]
     ```
 
@@ -201,10 +198,10 @@ dependencies = [
 
 [tool.uv.sources]
 torch = [
-    { index = "pytorch-cpu", marker = "platform_system != 'Darwin'" },
+    { index = "pytorch-cpu" },
 ]
 torchvision = [
-    { index = "pytorch-cpu", marker = "platform_system != 'Darwin'" },
+    { index = "pytorch-cpu" },
 ]
 
 [[tool.uv.index]]
@@ -290,12 +287,14 @@ conflicts = [
 
 [tool.uv.sources]
 torch = [
-  { index = "pytorch-cpu", extra = "cpu", marker = "platform_system != 'Darwin'" },
-  { index = "pytorch-cu124", extra = "cu124" },
+  { index = "pytorch-cpu", extra = "cpu" },
+  { index = "pytorch-cpu", extra = "cu124", marker = "platform_system == 'Darwin'" },
+  { index = "pytorch-cu124", extra = "cu124", marker = "platform_system != 'Darwin'" },
 ]
 torchvision = [
-  { index = "pytorch-cpu", extra = "cpu", marker = "platform_system != 'Darwin'" },
-  { index = "pytorch-cu124", extra = "cu124" },
+  { index = "pytorch-cpu", extra = "cpu" },
+  { index = "pytorch-cpu", extra = "cu124", marker = "platform_system == 'Darwin'" },
+  { index = "pytorch-cu124", extra = "cu124", marker = "platform_system != 'Darwin'" },
 ]
 
 [[tool.uv.index]]
