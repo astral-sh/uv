@@ -7656,14 +7656,14 @@ fn universal_overlapping_local_requirement() -> Result<()> {
         name = "example"
         version = "0.0.0"
         dependencies = [
-            "torch==2.0.0+cu118 ; sys_platform == 'linux'"
+            "torch==2.0.0+cu118 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
         ]
         requires-python = ">=3.11"
     "#})?;
 
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc! {"
-        torch==2.0.0
+        torch==2.0.0 ; sys_platform == 'linux'
         .
     "})?;
 
@@ -7681,30 +7681,30 @@ fn universal_overlapping_local_requirement() -> Result<()> {
         # via triton
     .
         # via -r requirements.in
-    filelock==3.13.1
+    filelock==3.13.1 ; sys_platform == 'linux'
         # via
         #   torch
         #   triton
-    jinja2==3.1.3
+    jinja2==3.1.3 ; sys_platform == 'linux'
         # via torch
     lit==18.1.2 ; platform_machine == 'x86_64' and sys_platform == 'linux'
         # via triton
-    markupsafe==2.1.5
+    markupsafe==2.1.5 ; sys_platform == 'linux'
         # via jinja2
-    mpmath==1.3.0
+    mpmath==1.3.0 ; sys_platform == 'linux'
         # via sympy
-    networkx==3.2.1
+    networkx==3.2.1 ; sys_platform == 'linux'
         # via torch
-    sympy==1.12
+    sympy==1.12 ; sys_platform == 'linux'
         # via torch
-    torch==2.0.0+cu118
+    torch==2.0.0+cu118 ; sys_platform == 'linux'
         # via
         #   -r requirements.in
         #   example
         #   triton
     triton==2.0.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'
         # via torch
-    typing-extensions==4.10.0
+    typing-extensions==4.10.0 ; sys_platform == 'linux'
         # via torch
 
     ----- stderr -----
