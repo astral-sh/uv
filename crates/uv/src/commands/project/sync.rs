@@ -26,7 +26,7 @@ use uv_installer::{InstallationStrategy, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::{Preview, PreviewFeature};
-use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
+use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedUrl};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, ResolutionMode};
@@ -1052,7 +1052,8 @@ fn store_credentials_from_target(target: InstallTarget<'_>, client_builder: &Bas
             continue;
         };
         match &url.parsed_url {
-            ParsedUrl::Git(ParsedGitUrl { url, .. }) => {
+            ParsedUrl::GitDirectory(ParsedGitDirectoryUrl { url, .. })
+            | ParsedUrl::GitPath(ParsedGitPathUrl { url, .. }) => {
                 uv_git::store_credentials_from_url(url.url());
             }
             ParsedUrl::Archive(ParsedArchiveUrl { url, .. }) => {

@@ -5,12 +5,12 @@ use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuildInfo, CachedDirectUrlDist, CachedRegistryDist, DirectUrlSourceDist, DirectorySourceDist,
-    GitSourceDist, Hashed, PathSourceDist,
+    GitDirectorySourceDist, GitPathSourceDist, Hashed, PathSourceDist,
 };
 use uv_pypi_types::{HashDigest, HashDigests, VerbatimParsedUrl};
 
 use crate::archive::Archive;
-use crate::{HttpArchivePointer, LocalArchivePointer};
+use crate::{HttpArchivePointer, PathArchivePointer};
 
 #[derive(Debug, Clone)]
 pub(crate) struct ResolvedWheel {
@@ -105,7 +105,7 @@ impl CachedWheel {
         let path = path.as_ref();
 
         // Read the pointer.
-        let pointer = LocalArchivePointer::read_from(path).ok()??;
+        let pointer = PathArchivePointer::read_from(path).ok()??;
         let cache_info = pointer.to_cache_info();
         let build_info = pointer.to_build_info();
         let archive = pointer.into_archive();
@@ -188,8 +188,24 @@ impl CachedWheel {
     }
 
     /// Convert a [`CachedWheel`] into a [`CachedDirectUrlDist`] by merging in the given
-    /// [`GitSourceDist`].
-    pub fn into_git_dist(self, dist: &GitSourceDist) -> CachedDirectUrlDist {
+    /// [`GitDirectorySourceDist`].
+    pub fn into_git_dist(self, dist: &GitDirectorySourceDist) -> CachedDirectUrlDist {
+        CachedDirectUrlDist {
+            filename: self.filename,
+            url: VerbatimParsedUrl {
+                parsed_url: dist.parsed_url(),
+                verbatim: dist.url.clone(),
+            },
+            path: self.entry.into_path_buf().into_boxed_path(),
+            hashes: self.hashes,
+            cache_info: self.cache_info,
+            build_info: self.build_info,
+        }
+    }
+
+    /// Convert a [`CachedWheel`] into a [`CachedDirectUrlDist`] by merging in the given
+    /// [`GitPathSourceDist`].
+    pub fn into_git_path_dist(self, dist: &GitPathSourceDist) -> CachedDirectUrlDist {
         CachedDirectUrlDist {
             filename: self.filename,
             url: VerbatimParsedUrl {

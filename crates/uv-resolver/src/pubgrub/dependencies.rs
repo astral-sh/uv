@@ -9,8 +9,8 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{
-    ConflictItemRef, Conflicts, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl,
-    ParsedUrl, VerbatimParsedUrl,
+    ConflictItemRef, Conflicts, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl,
+    ParsedGitPathUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
 };
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
@@ -51,7 +51,8 @@ impl DependencySource {
             }
             RequirementSource::Registry { .. } => Self::Unspecified,
             RequirementSource::Url { .. }
-            | RequirementSource::Git { .. }
+            | RequirementSource::GitDirectory { .. }
+            | RequirementSource::GitPath { .. }
             | RequirementSource::Path { .. }
             | RequirementSource::Directory { .. } => requirement
                 .source
@@ -281,13 +282,28 @@ impl PubGrubRequirement {
                 ));
                 (url, parsed_url)
             }
-            RequirementSource::Git {
+            RequirementSource::GitDirectory {
                 git,
                 url,
                 subdirectory,
             } => {
-                let parsed_url =
-                    ParsedUrl::Git(ParsedGitUrl::from_source(git.clone(), subdirectory.clone()));
+                let parsed_url = ParsedUrl::GitDirectory(ParsedGitDirectoryUrl::from_source(
+                    git.clone(),
+                    subdirectory.clone(),
+                ));
+                (url, parsed_url)
+            }
+            RequirementSource::GitPath {
+                git,
+                install_path,
+                ext,
+                url,
+            } => {
+                let parsed_url = ParsedUrl::GitPath(ParsedGitPathUrl::from_source(
+                    git.clone(),
+                    install_path.clone(),
+                    *ext,
+                ));
                 (url, parsed_url)
             }
             RequirementSource::Path {

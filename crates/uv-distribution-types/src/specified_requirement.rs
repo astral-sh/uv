@@ -98,7 +98,7 @@ impl UnresolvedRequirement {
                     })
                     .unwrap_or(requirement.marker),
                 source: match requirement.source {
-                    RequirementSource::Git {
+                    RequirementSource::GitDirectory {
                         git,
                         subdirectory,
                         url,
@@ -113,9 +113,32 @@ impl UnresolvedRequirement {
                         } else {
                             git
                         };
-                        RequirementSource::Git {
+                        RequirementSource::GitDirectory {
                             git,
                             subdirectory,
+                            url,
+                        }
+                    }
+                    RequirementSource::GitPath {
+                        git,
+                        install_path,
+                        ext,
+                        url,
+                    } => {
+                        let git = if let Some(git_reference) = git_reference {
+                            git.with_reference(git_reference)
+                        } else {
+                            git
+                        };
+                        let git = if let Some(lfs) = lfs {
+                            git.with_lfs(GitLfs::from(lfs))
+                        } else {
+                            git
+                        };
+                        RequirementSource::GitPath {
+                            git,
+                            install_path,
+                            ext,
                             url,
                         }
                     }
@@ -131,7 +154,7 @@ impl UnresolvedRequirement {
                     })
                     .unwrap_or(requirement.marker),
                 url: match requirement.url.parsed_url {
-                    ParsedUrl::Git(mut git) => {
+                    ParsedUrl::GitDirectory(mut git) => {
                         if let Some(git_reference) = git_reference {
                             git.url = git.url.with_reference(git_reference);
                         }
@@ -139,7 +162,19 @@ impl UnresolvedRequirement {
                             git.url = git.url.with_lfs(GitLfs::from(lfs));
                         }
                         VerbatimParsedUrl {
-                            parsed_url: ParsedUrl::Git(git),
+                            parsed_url: ParsedUrl::GitDirectory(git),
+                            verbatim: requirement.url.verbatim,
+                        }
+                    }
+                    ParsedUrl::GitPath(mut git) => {
+                        if let Some(git_reference) = git_reference {
+                            git.url = git.url.with_reference(git_reference);
+                        }
+                        if let Some(lfs) = lfs {
+                            git.url = git.url.with_lfs(GitLfs::from(lfs));
+                        }
+                        VerbatimParsedUrl {
+                            parsed_url: ParsedUrl::GitPath(git),
                             verbatim: requirement.url.verbatim,
                         }
                     }
