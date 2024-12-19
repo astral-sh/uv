@@ -18,7 +18,7 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_install_wheel::linker::LinkMode;
-use uv_installer::{SatisfiesResult, SitePackages};
+use uv_installer::{InstalledPackages, SatisfiesResult};
 use uv_pep508::PackageName;
 use uv_pypi_types::{Conflicts, Requirement};
 use uv_python::{
@@ -216,7 +216,7 @@ pub(crate) async fn pip_install(
     );
 
     // Determine the set of installed packages.
-    let site_packages = SitePackages::from_environment(&environment)?;
+    let installed_packages = InstalledPackages::from_environment(&environment)?;
 
     // Check if the current environment satisfies the requirements.
     // Ideally, the resolver would be fast enough to let us remove this check. But right now, for large environments,
@@ -227,7 +227,7 @@ pub(crate) async fn pip_install(
         && overrides.is_empty()
         && matches!(modifications, Modifications::Sufficient)
     {
-        match site_packages.satisfies(&requirements, &constraints, &marker_env)? {
+        match installed_packages.satisfies(&requirements, &constraints, &marker_env)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -406,7 +406,7 @@ pub(crate) async fn pip_install(
         None,
         extras,
         preferences,
-        site_packages.clone(),
+        installed_packages.clone(),
         &hasher,
         &reinstall,
         &upgrade,
@@ -436,7 +436,7 @@ pub(crate) async fn pip_install(
     // Sync the environment.
     match operations::install(
         &resolution,
-        site_packages,
+        installed_packages,
         modifications,
         &reinstall,
         &build_options,
