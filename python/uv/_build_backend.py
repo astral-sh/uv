@@ -33,6 +33,8 @@ def call(args: "list[str]", config_settings: "dict | None" = None) -> str:
     warn_config_settings(config_settings)
     # Unlike `find_uv_bin`, this mechanism must work according to PEP 517
     uv_bin = shutil.which("uv")
+    if uv_bin is None:
+        raise RuntimeError("uv was not properly installed")
     # Forward stderr, capture stdout for the filename
     result = subprocess.run([uv_bin] + args, stdout=subprocess.PIPE)
     if result.returncode != 0:
