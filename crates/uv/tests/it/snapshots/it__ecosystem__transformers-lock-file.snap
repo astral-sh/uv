@@ -774,24 +774,69 @@ wheels = [
 name = "datasets"
 version = "2.14.4"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.13' and sys_platform == 'darwin'",
+    "python_full_version == '3.12.*' and sys_platform == 'darwin'",
+    "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version == '3.12.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.12.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version == '3.11.*' and sys_platform == 'darwin'",
+    "python_full_version == '3.11.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version == '3.11.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.11.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version == '3.10.*' and sys_platform == 'darwin'",
+    "python_full_version == '3.10.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version == '3.10.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.10.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version < '3.10' and platform_machine == 'arm64' and sys_platform == 'darwin'",
+    "python_full_version < '3.10' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version < '3.10' and platform_machine != 'arm64' and sys_platform == 'darwin') or (python_full_version < '3.10' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.10' and sys_platform != 'darwin' and sys_platform != 'linux')",
+]
 dependencies = [
-    { name = "aiohttp" },
-    { name = "dill" },
-    { name = "fsspec", extra = ["http"] },
-    { name = "huggingface-hub" },
-    { name = "multiprocess" },
-    { name = "numpy" },
-    { name = "packaging" },
-    { name = "pandas" },
-    { name = "pyarrow" },
-    { name = "pyyaml" },
-    { name = "requests" },
-    { name = "tqdm" },
-    { name = "xxhash" },
+    { name = "aiohttp", marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
+    { name = "dill", marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
+    { name = "fsspec", version = "2024.6.1", source = { registry = "https://pypi.org/simple" }, extra = ["http"], marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
+    { name = "huggingface-hub", marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
+    { name = "multiprocess", marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
+    { name = "numpy", marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
+    { name = "packaging", marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
+    { name = "pandas", marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
+    { name = "pyarrow", marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
+    { name = "pyyaml", marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
+    { name = "requests", marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
+    { name = "tqdm", marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
+    { name = "xxhash", marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1d/69/8cc725b5d38968fd118e4ce56a483b16e75b7793854c1a392ec4a34eeb31/datasets-2.14.4.tar.gz", hash = "sha256:ef29c2b5841de488cd343cfc26ab979bff77efa4d2285af51f1ad7db5c46a83b", size = 2178719 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/66/f8/38298237d18d4b6a8ee5dfe390e97bed5adb8e01ec6f9680c0ddf3066728/datasets-2.14.4-py3-none-any.whl", hash = "sha256:29336bd316a7d827ccd4da2236596279b20ca2ac78f64c04c9483da7cbc2459b", size = 519335 },
+]
+
+[[package]]
+name = "datasets"
+version = "2.20.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.13' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version >= '3.13' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.13' and sys_platform != 'darwin' and sys_platform != 'linux')",
+]
+dependencies = [
+    { name = "aiohttp", marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "dill", marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "filelock", marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "fsspec", version = "2024.5.0", source = { registry = "https://pypi.org/simple" }, extra = ["http"], marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "huggingface-hub", marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "multiprocess", marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "numpy", marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "packaging", marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "pandas", marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "pyarrow", marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "pyarrow-hotfix", marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "pyyaml", marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "requests", marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "tqdm", marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "xxhash", marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d5/59/b94bfb5f6225c4c931cd516390b3f006e232a036a48337f72889c6c9ab27/datasets-2.20.0.tar.gz", hash = "sha256:3c4dbcd27e0f642b9d41d20ff2efa721a5e04b32b2ca4009e0fc9139e324553f", size = 2225757 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/60/2d/963b266bb8f88492d5ab4232d74292af8beb5b6fdae97902df9e284d4c32/datasets-2.20.0-py3-none-any.whl", hash = "sha256:76ac02e3bdfff824492e20678f0b6b1b6d080515957fe834b00c2ba8d6b18e5e", size = 547777 },
 ]
 
 [[package]]
@@ -900,7 +945,7 @@ wheels = [
 
 [package.optional-dependencies]
 epath = [
-    { name = "fsspec", marker = "python_full_version < '3.10'" },
+    { name = "fsspec", version = "2024.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "importlib-resources", marker = "python_full_version < '3.10'" },
     { name = "typing-extensions", marker = "python_full_version < '3.10'" },
     { name = "zipp", marker = "python_full_version < '3.10'" },
@@ -925,7 +970,7 @@ wheels = [
 
 [package.optional-dependencies]
 epath = [
-    { name = "fsspec", marker = "python_full_version == '3.10.*'" },
+    { name = "fsspec", version = "2024.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.10.*'" },
     { name = "importlib-resources", marker = "python_full_version == '3.10.*'" },
     { name = "typing-extensions", marker = "python_full_version == '3.10.*'" },
     { name = "zipp", marker = "python_full_version == '3.10.*'" },
@@ -956,7 +1001,8 @@ wheels = [
 
 [package.optional-dependencies]
 epath = [
-    { name = "fsspec", marker = "python_full_version >= '3.11'" },
+    { name = "fsspec", version = "2024.5.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "fsspec", version = "2024.6.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and python_full_version < '3.13') or (python_full_version >= '3.11' and sys_platform == 'darwin')" },
     { name = "importlib-resources", marker = "python_full_version >= '3.11'" },
     { name = "typing-extensions", marker = "python_full_version >= '3.11'" },
     { name = "zipp", marker = "python_full_version >= '3.11'" },
@@ -970,9 +1016,11 @@ name = "evaluate"
 version = "0.4.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "datasets" },
+    { name = "datasets", version = "2.14.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
+    { name = "datasets", version = "2.20.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
     { name = "dill" },
-    { name = "fsspec", extra = ["http"] },
+    { name = "fsspec", version = "2024.5.0", source = { registry = "https://pypi.org/simple" }, extra = ["http"], marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "fsspec", version = "2024.6.1", source = { registry = "https://pypi.org/simple" }, extra = ["http"], marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
     { name = "huggingface-hub" },
     { name = "multiprocess" },
     { name = "numpy" },
@@ -1196,8 +1244,41 @@ wheels = [
 
 [[package]]
 name = "fsspec"
+version = "2024.5.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.13' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version >= '3.13' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.13' and sys_platform != 'darwin' and sys_platform != 'linux')",
+]
+sdist = { url = "https://files.pythonhosted.org/packages/71/28/cbf337fddd6f22686b7c2639b80e006accd904db152fe333fd98f4cd8d1e/fsspec-2024.5.0.tar.gz", hash = "sha256:1d021b0b0f933e3b3029ed808eb400c08ba101ca2de4b3483fbc9ca23fcee94a", size = 400066 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ba/a3/16e9fe32187e9c8bc7f9b7bcd9728529faa725231a0c96f2f98714ff2fc5/fsspec-2024.5.0-py3-none-any.whl", hash = "sha256:e0fdbc446d67e182f49a70b82cf7889028a63588fde6b222521f10937b2b670c", size = 316106 },
+]
+
+[package.optional-dependencies]
+http = [
+    { name = "aiohttp", marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+]
+
+[[package]]
+name = "fsspec"
 version = "2024.6.1"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.13' and sys_platform == 'darwin'",
+    "python_full_version == '3.12.*' and sys_platform == 'darwin'",
+    "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version == '3.12.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.12.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version == '3.11.*' and sys_platform == 'darwin'",
+    "python_full_version == '3.11.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version == '3.11.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.11.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version == '3.10.*' and sys_platform == 'darwin'",
+    "python_full_version == '3.10.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version == '3.10.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.10.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version < '3.10' and platform_machine == 'arm64' and sys_platform == 'darwin'",
+    "python_full_version < '3.10' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version < '3.10' and platform_machine != 'arm64' and sys_platform == 'darwin') or (python_full_version < '3.10' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.10' and sys_platform != 'darwin' and sys_platform != 'linux')",
+]
 sdist = { url = "https://files.pythonhosted.org/packages/90/b6/eba5024a9889fcfff396db543a34bef0ab9d002278f163129f9f01005960/fsspec-2024.6.1.tar.gz", hash = "sha256:fad7d7e209dd4c1208e3bbfda706620e0da5142bebbd9c384afb95b07e798e49", size = 284584 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5e/44/73bea497ac69bafde2ee4269292fa3b41f1198f4bb7bbaaabde30ad29d4a/fsspec-2024.6.1-py3-none-any.whl", hash = "sha256:3cb443f8bcd2efb31295a5b9fdb02aee81d8452c80d28f97a6d0959e6cee101e", size = 177561 },
@@ -1205,7 +1286,7 @@ wheels = [
 
 [package.optional-dependencies]
 http = [
-    { name = "aiohttp" },
+    { name = "aiohttp", marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
 ]
 
 [[package]]
@@ -1484,7 +1565,8 @@ version = "0.24.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "filelock" },
-    { name = "fsspec" },
+    { name = "fsspec", version = "2024.5.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "fsspec", version = "2024.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
     { name = "packaging" },
     { name = "pyyaml" },
     { name = "requests" },
@@ -3091,6 +3173,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pyarrow-hotfix"
+version = "0.6"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/70/0a/71da7b0db0c7078d4cf34ecf0c70ded5ed29decc06612097474e0114f4cc/pyarrow_hotfix-0.6.tar.gz", hash = "sha256:79d3e030f7ff890d408a100ac16d6f00b14d44a502d7897cd9fc3e3a534e9945", size = 9754 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e4/f4/9ec2222f5f5f8ea04f66f184caafd991a39c8782e31f5b0266f101cb68ca/pyarrow_hotfix-0.6-py3-none-any.whl", hash = "sha256:dcc9ae2d220dff0083be6a9aa8e0cdee5182ad358d4931fce825c545e5c89178", size = 7888 },
+]
+
+[[package]]
 name = "pyasn1"
 version = "0.6.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3481,7 +3572,8 @@ wheels = [
 
 [package.optional-dependencies]
 tune = [
-    { name = "fsspec" },
+    { name = "fsspec", version = "2024.5.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "fsspec", version = "2024.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
     { name = "pandas" },
     { name = "pyarrow" },
     { name = "requests" },
@@ -4841,7 +4933,8 @@ version = "2.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "filelock" },
-    { name = "fsspec" },
+    { name = "fsspec", version = "2024.5.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
+    { name = "fsspec", version = "2024.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
     { name = "jinja2" },
     { name = "networkx", version = "3.2.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "networkx", version = "3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
@@ -4981,7 +5074,8 @@ accelerate = [
 ]
 agents = [
     { name = "accelerate" },
-    { name = "datasets" },
+    { name = "datasets", version = "2.14.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
+    { name = "datasets", version = "2.20.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
     { name = "diffusers" },
     { name = "opencv-python" },
     { name = "pillow" },
@@ -5035,7 +5129,8 @@ deepspeed-testing = [
     { name = "accelerate" },
     { name = "beautifulsoup4" },
     { name = "cookiecutter" },
-    { name = "datasets" },
+    { name = "datasets", version = "2.14.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
+    { name = "datasets", version = "2.20.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
     { name = "deepspeed" },
     { name = "dill" },
     { name = "evaluate" },
@@ -5066,7 +5161,8 @@ dev-dependencies = [
     { name = "beautifulsoup4" },
     { name = "codecarbon" },
     { name = "cookiecutter" },
-    { name = "datasets" },
+    { name = "datasets", version = "2.14.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
+    { name = "datasets", version = "2.20.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
     { name = "decord" },
     { name = "dill" },
     { name = "evaluate" },
@@ -5204,7 +5300,8 @@ optuna = [
     { name = "optuna" },
 ]
 quality = [
-    { name = "datasets" },
+    { name = "datasets", version = "2.14.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
+    { name = "datasets", version = "2.20.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
     { name = "gitpython" },
     { name = "hf-doc-builder" },
     { name = "isort" },
@@ -5215,7 +5312,8 @@ ray = [
     { name = "ray", extra = ["tune"] },
 ]
 retrieval = [
-    { name = "datasets" },
+    { name = "datasets", version = "2.14.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13' or sys_platform == 'darwin'" },
+    { name = "datasets", version = "2.20.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13' and sys_platform != 'darwin'" },
     { name = "faiss-cpu" },
 ]
 sagemaker = [
@@ -5579,7 +5677,7 @@ name = "triton"
 version = "3.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "filelock", marker = "python_full_version < '3.13'" },
+    { name = "filelock" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/45/27/14cc3101409b9b4b9241d2ba7deaa93535a217a211c86c4cc7151fb12181/triton-3.0.0-1-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:e1efef76935b2febc365bfadf74bcb65a6f959a9872e5bddf44cc9e0adce1e1a", size = 209376304 },
