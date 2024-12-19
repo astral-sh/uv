@@ -175,7 +175,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 Some(RunCommand::PythonRemote(script, _)) => {
                     Pep723Metadata::read(&script).await?.map(Pep723Item::Remote)
                 }
-                Some(RunCommand::PythonStdin(contents)) => {
+                Some(RunCommand::PythonStdin(contents, _)) => {
                     Pep723Metadata::parse(contents)?.map(Pep723Item::Stdin)
                 }
                 _ => None,
