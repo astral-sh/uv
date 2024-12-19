@@ -228,6 +228,11 @@ impl PubGrubPackage {
         }
     }
 
+    /// Returns `true` if this PubGrub package is the root package.
+    pub(crate) fn is_root(&self) -> bool {
+        matches!(&**self, PubGrubPackageInner::Root(_))
+    }
+
     /// Returns `true` if this PubGrub package is a proxy package.
     pub(crate) fn is_proxy(&self) -> bool {
         matches!(

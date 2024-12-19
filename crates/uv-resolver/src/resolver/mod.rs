@@ -13,7 +13,7 @@ use dashmap::DashMap;
 use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
-use pubgrub::{Id, IncompId, Incompatibility, Range, Ranges, State};
+use pubgrub::{Id, IncompId, Incompatibility, Kind, Range, Ranges, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
@@ -71,7 +71,6 @@ pub(crate) use provider::MetadataUnavailable;
 
 pub use crate::resolver::index::InMemoryIndex;
 use crate::resolver::indexes::Indexes;
-use crate::resolver::markers::KnownMarkers;
 pub use crate::resolver::provider::{
     DefaultResolverProvider, MetadataResponse, PackageVersionsResult, ResolverProvider,
     VersionsResponse, WheelMetadataResult,
@@ -88,7 +87,6 @@ mod environment;
 mod fork_map;
 mod index;
 mod indexes;
-mod markers;
 mod provider;
 mod reporter;
 mod urls;
@@ -490,14 +488,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .expect("a package was chosen but we don't have a term");
                 let decision = self.choose_version(
                     next_package,
+                    next_id,
                     index,
                     term_intersection.unwrap_positive(),
                     &mut state.pins,
                     &preferences,
-                    &state.known_markers,
                     &state.fork_urls,
                     &state.env,
                     &state.python_requirement,
+                    &state.pubgrub,
                     &mut visited,
                     &request_sink,
                 )?;
@@ -631,7 +630,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             let index =
                                 package.name().and_then(|name| state.fork_indexes.get(name));
                             self.visit_package(package, url, index, &request_sink)?;
-                            state.visit_package(package);
                         }
                     }
                     ForkedDependencies::Forked {
@@ -874,7 +872,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .name()
                         .and_then(|name| forked_state.fork_indexes.get(name));
                     self.visit_package(package, url, index, request_sink)?;
-                    forked_state.visit_package(package);
                 }
                 Ok(forked_state)
             })
@@ -1015,14 +1012,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     fn choose_version(
         &self,
         package: &PubGrubPackage,
+        id: Id<PubGrubPackage>,
         index: Option<&IndexUrl>,
         range: &Range<Version>,
         pins: &mut FilePins,
         preferences: &Preferences,
-        known_markers: &KnownMarkers,
         fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
+        pubgrub: &State<UvDependencyProvider>,
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
@@ -1050,10 +1048,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         index,
                         range,
                         package,
+                        id,
                         preferences,
                         env,
                         python_requirement,
-                        known_markers,
+                        pubgrub,
                         pins,
                         visited,
                         request_sink,
@@ -1151,10 +1150,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         index: Option<&IndexUrl>,
         range: &Range<Version>,
         package: &PubGrubPackage,
+        id: Id<PubGrubPackage>,
         preferences: &Preferences,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
-        known_markers: &KnownMarkers,
+        pubgrub: &State<UvDependencyProvider>,
         pins: &mut FilePins,
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
@@ -1272,9 +1272,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     if env.included_by_marker(marker) {
                         // But isn't supported by the distribution...
                         if dist.implied_markers().is_disjoint(marker)
-                            && known_markers
-                                .get(name)
-                                .is_none_or(|m| !m.is_disjoint(marker))
+                            && !find_environments(id, pubgrub).is_disjoint(marker)
                         {
                             // Then we need to fork.
                             let forks = fork_version_by_marker(env, marker);
@@ -2278,8 +2276,6 @@ pub(crate) struct ForkState {
     /// After resolution is finished, this maps is consulted in order to select
     /// the wheel chosen during resolution.
     pins: FilePins,
-    /// The superset of markers for which a dependency is known to be relevant.
-    known_markers: KnownMarkers,
     /// Ensure we don't have duplicate URLs in any branch.
     ///
     /// Unlike [`Urls`], we add only the URLs we have seen in this branch, and there can be only
@@ -2347,7 +2343,6 @@ impl ForkState {
             next: pubgrub.root_package,
             pubgrub,
             pins: FilePins::default(),
-            known_markers: KnownMarkers::default(),
             fork_urls: ForkUrls::default(),
             fork_indexes: ForkIndexes::default(),
             priorities: PubGrubPriorities::default(),
@@ -2555,22 +2550,6 @@ impl ForkState {
             self.python_requirement = req;
         }
         self
-    }
-
-    /// Visit a package and update the known markers.
-    fn visit_package(&mut self, package: &PubGrubPackage) {
-        match &**package {
-            PubGrubPackageInner::Dev { marker, name, .. } => {
-                self.known_markers.insert(name.clone(), *marker);
-            }
-            PubGrubPackageInner::Extra { marker, name, .. } => {
-                self.known_markers.insert(name.clone(), *marker);
-            }
-            PubGrubPackageInner::Marker { marker, name, .. } => {
-                self.known_markers.insert(name.clone(), *marker);
-            }
-            _ => {}
-        }
     }
 
     fn into_resolution(self) -> Resolution {
@@ -3416,6 +3395,35 @@ fn find_conflicting_extra(conflicting: &Conflicts, reqs: &[Requirement]) -> Opti
         }
     }
     None
+}
+
+/// Compute the set of markers for which a package is known to be relevant.
+fn find_environments(id: Id<PubGrubPackage>, state: &State<UvDependencyProvider>) -> MarkerTree {
+    let package = &state.package_store[id];
+    if package.is_root() {
+        return MarkerTree::TRUE;
+    }
+
+    // Retrieve the incompatibilities for the current package.
+    let Some(incompatibilities) = state.incompatibilities.get(&id) else {
+        return MarkerTree::FALSE;
+    };
+
+    // Find all dependencies on the current package.
+    let mut marker = MarkerTree::FALSE;
+    for index in incompatibilities {
+        let incompat = &state.incompatibility_store[*index];
+        if let Kind::FromDependencyOf(id1, _, id2, _) = &incompat.kind {
+            if id == *id2 {
+                marker.or({
+                    let mut marker = package.marker();
+                    marker.and(find_environments(*id1, state));
+                    marker
+                });
+            }
+        }
+    }
+    marker
 }
 
 #[derive(Debug, Default, Clone)]
