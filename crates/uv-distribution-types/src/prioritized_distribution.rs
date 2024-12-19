@@ -7,7 +7,8 @@ use uv_platform_tags::{IncompatibleTag, TagPriority};
 use uv_pypi_types::{HashDigest, Yanked};
 
 use crate::{
-    InstalledDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, ResolvedDistRef,
+    InstalledDist, KnownPlatform, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    ResolvedDistRef,
 };
 
 /// A collection of distributions that have been filtered by relevance.
@@ -202,8 +203,14 @@ impl Display for IncompatibleDist {
                 IncompatibleWheel::RequiresPython(python, _) => {
                     write!(f, "Python {python}")
                 }
-                IncompatibleWheel::MissingPlatform(platform) => {
-                    write!(f, "no {platform}-compatible wheels")
+                IncompatibleWheel::MissingPlatform(marker) => {
+                    if let Some(platform) = KnownPlatform::from_marker(*marker) {
+                        write!(f, "no {platform}-compatible wheels")
+                    } else if let Some(marker) = marker.try_to_string() {
+                        write!(f, "no `{marker}`-compatible wheels")
+                    } else {
+                        write!(f, "no compatible wheels")
+                    }
                 }
             },
             Self::Source(incompatibility) => match incompatibility {
@@ -258,7 +265,7 @@ pub enum IncompatibleWheel {
     /// The use of binary wheels is disabled.
     NoBinary,
     /// The distribution is missing support for the target platform.
-    MissingPlatform(String),
+    MissingPlatform(MarkerTree),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -663,28 +670,30 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
         match platform_tag.as_str() {
             "any" => marker.or(MarkerTree::TRUE),
             tag if tag.starts_with("win") => {
-                marker.or(MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::SysPlatform,
-                    operator: MarkerOperator::Equal,
-                    value: "win32".to_string(),
-                }));
+                marker.or(KnownPlatform::Windows.marker());
             }
             tag if tag.starts_with("macosx") => {
-                marker.or(MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::SysPlatform,
-                    operator: MarkerOperator::Equal,
-                    value: "darwin".to_string(),
-                }));
+                let mut tag_marker = KnownPlatform::MacOS.marker();
+                if tag.ends_with("x86_64") {
+                    tag_marker.and(MarkerTree::expression(MarkerExpression::String {
+                        key: MarkerValueString::PlatformMachine,
+                        operator: MarkerOperator::Equal,
+                        value: "x86_64".to_string(),
+                    }));
+                } else if tag.ends_with("arm64") {
+                    tag_marker.and(MarkerTree::expression(MarkerExpression::String {
+                        key: MarkerValueString::PlatformMachine,
+                        operator: MarkerOperator::Equal,
+                        value: "arm64".to_string(),
+                    }));
+                }
+                marker.or(tag_marker);
             }
             tag if tag.starts_with("manylinux")
                 || tag.starts_with("musllinux")
                 || tag.starts_with("linux") =>
             {
-                marker.or(MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::SysPlatform,
-                    operator: MarkerOperator::Equal,
-                    value: "linux".to_string(),
-                }));
+                marker.or(KnownPlatform::Linux.marker());
             }
             _ => {}
         }

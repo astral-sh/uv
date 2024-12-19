@@ -17,7 +17,7 @@ use uv_configuration::{
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
-    DependencyMetadata, Index, IndexLocations, NameRequirementSpecification,
+    DependencyMetadata, Index, IndexLocations, KnownPlatform, NameRequirementSpecification,
     UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
@@ -390,6 +390,40 @@ async fn do_lock(
         environments
     };
 
+    // Collect the list of required platforms.
+    let required_platforms = if let Some(required_platforms) = workspace.required_platforms() {
+        // Ensure that the environments are disjoint.
+        for (lhs, rhs) in required_platforms
+            .as_markers()
+            .iter()
+            .zip(required_platforms.as_markers().iter().skip(1))
+        {
+            if !lhs.is_disjoint(*rhs) {
+                let mut hint = lhs.negate();
+                hint.and(*rhs);
+
+                let lhs = lhs
+                    .contents()
+                    .map(|contents| contents.to_string())
+                    .unwrap_or_else(|| "true".to_string());
+                let rhs = rhs
+                    .contents()
+                    .map(|contents| contents.to_string())
+                    .unwrap_or_else(|| "true".to_string());
+                let hint = hint
+                    .contents()
+                    .map(|contents| contents.to_string())
+                    .unwrap_or_else(|| "true".to_string());
+
+                return Err(ProjectError::OverlappingMarkers(lhs, rhs, hint));
+            }
+        }
+
+        Some(required_platforms)
+    } else {
+        None
+    };
+
     // Determine the supported Python range. If no range is defined, and warn and default to the
     // current minor version.
     let requires_python = find_requires_python(workspace);
@@ -473,6 +507,14 @@ async fn do_lock(
         .exclude_newer(exclude_newer)
         .index_strategy(index_strategy)
         .build_options(build_options.clone())
+        // By default, we require support for macOS, Linux, and Windows.
+        .required_platforms(required_platforms.cloned().unwrap_or_else(|| {
+            SupportedEnvironments::from_markers(vec![
+                KnownPlatform::MacOS.marker(),
+                KnownPlatform::Linux.marker(),
+                KnownPlatform::Windows.marker(),
+            ])
+        }))
         .build();
     let hasher = HashStrategy::Generate;
 
@@ -526,6 +568,7 @@ async fn do_lock(
             &constraints,
             &overrides,
             environments,
+            required_platforms,
             dependency_metadata,
             interpreter,
             &requires_python,
@@ -692,6 +735,11 @@ async fn do_lock(
                         .cloned()
                         .map(SupportedEnvironments::into_markers)
                         .unwrap_or_default(),
+                )
+                .with_required_platforms(
+                    required_platforms
+                        .cloned()
+                        .map(SupportedEnvironments::into_markers),
                 );
 
             Ok(LockResult::Changed(previous, lock))
@@ -723,6 +771,7 @@ impl ValidatedLock {
         constraints: &[Requirement],
         overrides: &[Requirement],
         environments: Option<&SupportedEnvironments>,
+        required_platforms: Option<&SupportedEnvironments>,
         dependency_metadata: &DependencyMetadata,
         interpreter: &Interpreter,
         requires_python: &RequiresPython,
@@ -834,6 +883,25 @@ impl ValidatedLock {
         if expected != actual {
             debug!(
                 "Ignoring existing lockfile due to change in supported environments: `{:?}` vs. `{:?}`",
+                expected, actual
+            );
+            return Ok(Self::Versions(lock));
+        }
+
+        // If the set of required platforms has changed, we have to perform a clean resolution.
+        let expected = lock.simplified_required_platforms();
+        let actual = required_platforms
+            .map(SupportedEnvironments::as_markers)
+            .map(|required_platforms| {
+                required_platforms
+                    .iter()
+                    .copied()
+                    .map(|marker| lock.simplify_environment(marker))
+                    .collect::<Vec<_>>()
+            });
+        if expected != actual {
+            debug!(
+                "Ignoring existing lockfile due to change in required platforms: `{:?}` vs. `{:?}`",
                 expected, actual
             );
             return Ok(Self::Versions(lock));

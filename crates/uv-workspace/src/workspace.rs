@@ -374,6 +374,15 @@ impl Workspace {
             .and_then(|uv| uv.environments.as_ref())
     }
 
+    /// Returns the set of required platforms for the workspace.
+    pub fn required_platforms(&self) -> Option<&SupportedEnvironments> {
+        self.pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.required_platforms.as_ref())
+    }
+
     /// Returns the set of conflicts for the workspace.
     pub fn conflicts(&self) -> Conflicts {
         let mut conflicting = Conflicts::empty();

@@ -9,6 +9,11 @@ use uv_pep508::MarkerTree;
 pub struct SupportedEnvironments(Vec<MarkerTree>);
 
 impl SupportedEnvironments {
+    /// Create a new [`SupportedEnvironments`] struct from a list of marker trees.
+    pub fn from_markers(markers: Vec<MarkerTree>) -> Self {
+        SupportedEnvironments(markers)
+    }
+
     /// Return the list of marker trees.
     pub fn as_markers(&self) -> &[MarkerTree] {
         &self.0
@@ -17,6 +22,10 @@ impl SupportedEnvironments {
     /// Convert the [`SupportedEnvironments`] struct into a list of marker trees.
     pub fn into_markers(self) -> Vec<MarkerTree> {
         self.0
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<MarkerTree> {
+        self.0.iter()
     }
 }
 
