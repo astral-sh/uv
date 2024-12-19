@@ -26,14 +26,15 @@ def warn_config_settings(config_settings: "dict | None" = None):
 
 def call(args: "list[str]", config_settings: "dict | None" = None) -> str:
     """Invoke a uv subprocess and return the filename from stdout."""
+    import shutil
     import subprocess
     import sys
 
-    from ._find_uv import find_uv_bin
-
     warn_config_settings(config_settings)
+    # Unlike `find_uv_bin`, this mechanism must work according to PEP 517
+    uv_bin = shutil.which("uv")
     # Forward stderr, capture stdout for the filename
-    result = subprocess.run([find_uv_bin()] + args, stdout=subprocess.PIPE)
+    result = subprocess.run([uv_bin] + args, stdout=subprocess.PIPE)
     if result.returncode != 0:
         sys.exit(result.returncode)
     # If there was extra stdout, forward it (there should not be extra stdout)
