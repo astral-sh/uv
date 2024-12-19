@@ -512,7 +512,7 @@ impl<'d> Forker<'d> {
 }
 
 /// Fork the resolver based on a `Requires-Python` specifier.
-pub(crate) fn fork_python_requirement(
+pub(crate) fn fork_version_by_python_requirement(
     requires_python: &VersionSpecifiers,
     python_requirement: &PythonRequirement,
     env: &ResolverEnvironment,
@@ -552,6 +552,51 @@ pub(crate) fn fork_python_requirement(
         envs.push(env.narrow_environment(upper.to_marker_tree()));
     }
     debug_assert!(!envs.is_empty(), "at least one fork should be produced");
+    envs
+}
+
+/// Fork the resolver based on a marker.
+pub(crate) fn fork_version_by_marker(
+    env: &ResolverEnvironment,
+    marker: MarkerTree,
+) -> Vec<ResolverEnvironment> {
+    let Kind::Universal {
+        markers: ref env_marker,
+        ..
+    } = env.kind
+    else {
+        panic!("resolver must be in universal mode for forking")
+    };
+
+    // Attempt to split based on the marker.
+    //
+    // For example, given `python_version >= '3.10'` and the split marker `sys_platform == 'linux'`,
+    // the result will be:
+    //
+    //   `python_version >= '3.10' and sys_platform == 'linux'`
+    //   `python_version >= '3.10' and sys_platform != 'linux'`
+    //
+    // If the marker is disjoint with the current environment, then we should return an empty list.
+    // If the marker complement is disjoint with the current environment, then we should also return
+    // an empty list.
+    //
+    // For example, given `python_version >= '3.10' and sys_platform == 'linux'` and the split marker
+    // `sys_platform == 'win32'`, return an empty list, since the following isn't satisfiable:
+    //
+    //   python_version >= '3.10' and sys_platform == 'linux' and sys_platform == 'win32'
+
+    let mut envs = vec![];
+    if env_marker.is_disjoint(marker) {
+        return vec![];
+    }
+    envs.push(env.narrow_environment(marker));
+
+    let complement = marker.negate();
+    if env_marker.is_disjoint(complement) {
+        return vec![];
+    }
+    envs.push(env.narrow_environment(complement));
+
     envs
 }
 
