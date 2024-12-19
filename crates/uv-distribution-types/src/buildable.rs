@@ -9,7 +9,10 @@ use uv_pep508::VerbatimUrl;
 
 use uv_normalize::PackageName;
 
-use crate::{DirectorySourceDist, GitSourceDist, Name, PathSourceDist, SourceDist};
+use crate::{
+    DirectorySourceDist, GitDirectorySourceDist, GitPathSourceDist, Name, PathSourceDist,
+    SourceDist,
+};
 
 /// A reference to a source that can be built into a built distribution.
 ///
@@ -88,7 +91,8 @@ impl std::fmt::Display for BuildableSource<'_> {
 #[derive(Debug, Clone)]
 pub enum SourceUrl<'a> {
     Direct(DirectSourceUrl<'a>),
-    Git(GitSourceUrl<'a>),
+    GitDirectory(GitDirectorySourceUrl<'a>),
+    GitPath(GitPathSourceUrl<'a>),
     Path(PathSourceUrl<'a>),
     Directory(DirectorySourceUrl<'a>),
 }
@@ -98,7 +102,8 @@ impl SourceUrl<'_> {
     pub fn url(&self) -> &Url {
         match self {
             Self::Direct(dist) => dist.url,
-            Self::Git(dist) => dist.url,
+            Self::GitDirectory(dist) => dist.url,
+            Self::GitPath(dist) => dist.url,
             Self::Path(dist) => dist.url,
             Self::Directory(dist) => dist.url,
         }
@@ -122,7 +127,8 @@ impl std::fmt::Display for SourceUrl<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Direct(url) => write!(f, "{url}"),
-            Self::Git(url) => write!(f, "{url}"),
+            Self::GitDirectory(url) => write!(f, "{url}"),
+            Self::GitPath(url) => write!(f, "{url}"),
             Self::Path(url) => write!(f, "{url}"),
             Self::Directory(url) => write!(f, "{url}"),
         }
@@ -143,7 +149,33 @@ impl std::fmt::Display for DirectSourceUrl<'_> {
 }
 
 #[derive(Debug, Clone)]
-pub struct GitSourceUrl<'a> {
+pub struct GitPathSourceUrl<'a> {
+    /// The URL with the revision and path fragment.
+    pub url: &'a VerbatimUrl,
+    pub git: &'a GitUrl,
+    pub path: Cow<'a, Path>,
+    pub ext: SourceDistExtension,
+}
+
+impl std::fmt::Display for GitPathSourceUrl<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{url}", url = self.url)
+    }
+}
+
+impl<'a> From<&'a GitPathSourceDist> for GitPathSourceUrl<'a> {
+    fn from(dist: &'a GitPathSourceDist) -> Self {
+        Self {
+            url: &dist.url,
+            git: &dist.git,
+            path: Cow::Borrowed(&dist.install_path),
+            ext: dist.ext,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct GitDirectorySourceUrl<'a> {
     /// The URL with the revision and subdirectory fragment.
     pub url: &'a VerbatimUrl,
     pub git: &'a GitUrl,
@@ -151,14 +183,14 @@ pub struct GitSourceUrl<'a> {
     pub subdirectory: Option<&'a Path>,
 }
 
-impl std::fmt::Display for GitSourceUrl<'_> {
+impl std::fmt::Display for GitDirectorySourceUrl<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{url}", url = self.url)
     }
 }
 
-impl<'a> From<&'a GitSourceDist> for GitSourceUrl<'a> {
-    fn from(dist: &'a GitSourceDist) -> Self {
+impl<'a> From<&'a GitDirectorySourceDist> for GitDirectorySourceUrl<'a> {
+    fn from(dist: &'a GitDirectorySourceDist) -> Self {
         Self {
             url: &dist.url,
             git: &dist.git,

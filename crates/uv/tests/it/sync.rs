@@ -5527,6 +5527,96 @@ fn sync_git_repeated_member_backwards_path() -> Result<()> {
     Ok(())
 }
 
+/// A Git repository that points to a pre-built archive within the repository.
+#[test]
+fn sync_git_path_archive() -> Result<()> {
+    let context = TestContext::new("3.13");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["archive-in-git-test"]
+
+        [tool.uv.sources]
+        archive-in-git-test = { git = "https://github.com/astral-sh/archive-in-git-test.git" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!(
+        {
+            filters => context.filters(),
+        },
+        {
+            assert_snapshot!(
+                lock, @r###"
+            version = 1
+            requires-python = ">=3.13"
+
+            [options]
+            exclude-newer = "2024-03-25T00:00:00Z"
+
+            [[package]]
+            name = "archive-in-git-test"
+            version = "0.1.0"
+            source = { git = "https://github.com/astral-sh/archive-in-git-test.git#bb7ce6abf9f90544767701de5b7b0c7802dc642b" }
+            dependencies = [
+                { name = "iniconfig" },
+            ]
+
+            [[package]]
+            name = "foo"
+            version = "0.1.0"
+            source = { virtual = "." }
+            dependencies = [
+                { name = "archive-in-git-test" },
+            ]
+
+            [package.metadata]
+            requires-dist = [{ name = "archive-in-git-test", git = "https://github.com/astral-sh/archive-in-git-test.git" }]
+
+            [[package]]
+            name = "iniconfig"
+            version = "2.0.0"
+            source = { git = "https://github.com/astral-sh/archive-in-git-test.git?path=archives%2Finiconfig-2.0.0-py3-none-any.whl#bb7ce6abf9f90544767701de5b7b0c7802dc642b" }
+            wheels = [
+                { filename = "iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
+            ]
+            "###
+            );
+        }
+    );
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + archive-in-git-test==0.1.0 (from git+https://github.com/astral-sh/archive-in-git-test.git@bb7ce6abf9f90544767701de5b7b0c7802dc642b)
+     + iniconfig==2.0.0 (from git+https://github.com/astral-sh/archive-in-git-test.git@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl)
+    "###);
+
+    Ok(())
+}
+
 /// The project itself is marked as an editable dependency, but under the wrong name. The project
 /// is a package.
 #[test]

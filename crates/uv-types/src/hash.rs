@@ -314,7 +314,8 @@ impl HashStrategy {
                 ))
             }
             RequirementSource::Url { url, .. }
-            | RequirementSource::Git { url, .. }
+            | RequirementSource::GitPath { url, .. }
+            | RequirementSource::GitDirectory { url, .. }
             | RequirementSource::Path { url, .. }
             | RequirementSource::Directory { url, .. } => Some(VersionId::from_url(url)),
         }

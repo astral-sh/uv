@@ -179,6 +179,7 @@ impl LoweredRequirement {
                         Source::Git {
                             git,
                             subdirectory,
+                            path,
                             rev,
                             tag,
                             branch,
@@ -188,6 +189,7 @@ impl LoweredRequirement {
                             let source = git_source(
                                 &git,
                                 subdirectory.map(PathBuf::from),
+                                path.map(PathBuf::from),
                                 rev,
                                 tag,
                                 branch,
@@ -310,7 +312,7 @@ impl LoweredRequirement {
                                     uv_fs::relative_to(member.root(), git_member.fetch_root)
                                         .expect("Workspace member must be relative");
                                 let subdirectory = uv_fs::normalize_path_buf(subdirectory);
-                                RequirementSource::Git {
+                                RequirementSource::GitDirectory {
                                     repository: git_member.git_source.git.repository().clone(),
                                     reference: git_member.git_source.git.reference().clone(),
                                     precise: git_member.git_source.git.precise(),
@@ -416,6 +418,7 @@ impl LoweredRequirement {
                         Source::Git {
                             git,
                             subdirectory,
+                            path,
                             rev,
                             tag,
                             branch,
@@ -425,6 +428,7 @@ impl LoweredRequirement {
                             let source = git_source(
                                 &git,
                                 subdirectory.map(PathBuf::from),
+                                path.map(PathBuf::from),
                                 rev,
                                 tag,
                                 branch,
@@ -572,6 +576,7 @@ impl std::fmt::Display for SourceKind {
 fn git_source(
     git: &Url,
     subdirectory: Option<PathBuf>,
+    path: Option<PathBuf>,
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
@@ -595,17 +600,40 @@ fn git_source(
             .ok_or_else(|| LoweringError::NonUtf8Path(subdirectory.clone()))?;
         url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
     }
+    if let Some(path) = path.as_ref() {
+        let path = path
+            .to_str()
+            .ok_or_else(|| LoweringError::NonUtf8Path(path.clone()))?;
+        url.set_fragment(Some(&format!("path={path}")));
+    }
     let url = VerbatimUrl::from_url(url);
 
     let repository = git.clone();
 
-    Ok(RequirementSource::Git {
-        url,
-        repository,
-        reference,
-        precise: None,
-        subdirectory,
-    })
+    if let Some(path) = path {
+        let ext = match DistExtension::from_path(&path) {
+            Ok(ext) => ext,
+            Err(err) => {
+                return Err(ParsedUrlError::MissingExtensionPath(path, err).into());
+            }
+        };
+        Ok(RequirementSource::GitPath {
+            url,
+            repository,
+            reference,
+            precise: None,
+            install_path: path,
+            ext,
+        })
+    } else {
+        Ok(RequirementSource::GitDirectory {
+            url,
+            repository,
+            reference,
+            precise: None,
+            subdirectory,
+        })
+    }
 }
 
 /// Convert a URL source into a [`RequirementSource`].
@@ -716,12 +744,13 @@ fn path_source(
     } else {
         install_path.extension().is_none()
     };
-    if is_dir {
-        if let Some(git_member) = git_member {
+
+    if let Some(git_member) = git_member {
+        return if is_dir {
             let subdirectory = uv_fs::relative_to(install_path, git_member.fetch_root)
                 .expect("Workspace member must be relative");
             let subdirectory = uv_fs::normalize_path_buf(subdirectory);
-            return Ok(RequirementSource::Git {
+            Ok(RequirementSource::GitDirectory {
                 repository: git_member.git_source.git.repository().clone(),
                 reference: git_member.git_source.git.reference().clone(),
                 precise: git_member.git_source.git.precise(),
@@ -731,9 +760,24 @@ fn path_source(
                     Some(subdirectory)
                 },
                 url,
-            });
-        }
+            })
+        } else {
+            let install_path = uv_fs::relative_to(install_path, git_member.fetch_root)
+                .expect("Workspace member must be relative");
+            let install_path = uv_fs::normalize_path_buf(install_path);
+            Ok(RequirementSource::GitPath {
+                url,
+                repository: git_member.git_source.git.repository().clone(),
+                reference: git_member.git_source.git.reference().clone(),
+                precise: git_member.git_source.git.precise(),
+                ext: DistExtension::from_path(&install_path)
+                    .map_err(|err| ParsedUrlError::MissingExtensionPath(path.to_path_buf(), err))?,
+                install_path,
+            })
+        };
+    }
 
+    if is_dir {
         if editable {
             Ok(RequirementSource::Directory {
                 install_path,
@@ -763,10 +807,6 @@ fn path_source(
             })
         }
     } else {
-        // TODO(charlie): If a Git repo contains a source that points to a file, what should we do?
-        if git_member.is_some() {
-            return Err(LoweringError::GitFile(url.to_string()));
-        }
         if editable {
             return Err(LoweringError::EditableFile(url.to_string()));
         }

@@ -1,12 +1,16 @@
 use crate::index::cached_wheel::CachedWheel;
-use crate::source::{HttpRevisionPointer, LocalRevisionPointer, HTTP_REVISION, LOCAL_REVISION};
+use crate::source::{
+    HttpRevisionPointer, LocalRevisionPointer, RevisionHashes, HASHES, HTTP_REVISION,
+    LOCAL_REVISION,
+};
 use crate::Error;
 use uv_cache::{Cache, CacheBucket, CacheShard, WheelCache};
 use uv_cache_info::CacheInfo;
 use uv_cache_key::cache_digest;
 use uv_configuration::ConfigSettings;
 use uv_distribution_types::{
-    DirectUrlSourceDist, DirectorySourceDist, GitSourceDist, Hashed, PathSourceDist,
+    DirectUrlSourceDist, DirectorySourceDist, GitDirectorySourceDist, GitPathSourceDist, Hashed,
+    PathSourceDist,
 };
 use uv_fs::symlinks;
 use uv_platform_tags::Tags;
@@ -160,7 +164,7 @@ impl<'a> BuiltWheelIndex<'a> {
     }
 
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a git URL.
-    pub fn git(&self, source_dist: &GitSourceDist) -> Option<CachedWheel> {
+    pub fn git_directory(&self, source_dist: &GitDirectorySourceDist) -> Option<CachedWheel> {
         // Enforce hash-checking, which isn't supported for Git distributions.
         if self.hasher.get(source_dist).is_validate() {
             return None;
@@ -181,6 +185,37 @@ impl<'a> BuiltWheelIndex<'a> {
         };
 
         self.find(&cache_shard)
+    }
+
+    /// Return the most compatible [`CachedWheel`] for a given source distribution at a git URL.
+    pub fn git_path(&self, source_dist: &GitPathSourceDist) -> Result<Option<CachedWheel>, Error> {
+        let Some(git_sha) = source_dist.git.precise() else {
+            return Ok(None);
+        };
+
+        let cache_shard = self.cache.shard(
+            CacheBucket::SourceDistributions,
+            WheelCache::Git(&source_dist.url, &git_sha.to_short_string()).root(),
+        );
+
+        // Read the revision from the cache.
+        let Some(revision) = RevisionHashes::read_from(cache_shard.entry(HASHES))? else {
+            return Ok(None);
+        };
+
+        // Enforce hash-checking by omitting any wheels that don't satisfy the required hashes.
+        if !revision.satisfies(self.hasher.get(source_dist)) {
+            return Ok(None);
+        }
+
+        // If there are build settings, we need to scope to a cache shard.
+        let cache_shard = if self.build_configuration.is_empty() {
+            cache_shard
+        } else {
+            cache_shard.shard(cache_digest(self.build_configuration))
+        };
+
+        Ok(self.find(&cache_shard))
     }
 
     /// Find the "best" distribution in the index for a given source distribution.

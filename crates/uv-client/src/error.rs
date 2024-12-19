@@ -144,6 +144,9 @@ pub enum ErrorKind {
     #[error(transparent)]
     JoinRelativeUrl(#[from] uv_pypi_types::JoinRelativeError),
 
+    #[error(transparent)]
+    Git(#[from] uv_git::GitResolverError),
+
     #[error("Expected a file URL, but received: {0}")]
     NonFileUrl(Url),
 

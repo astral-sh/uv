@@ -38,6 +38,8 @@ pub enum DirectUrl {
         vcs_info: VcsInfo,
         #[serde(skip_serializing_if = "Option::is_none")]
         subdirectory: Option<PathBuf>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        path: Option<PathBuf>,
     },
 }
 
@@ -108,6 +110,7 @@ impl TryFrom<&DirectUrl> for Url {
                 url,
                 vcs_info,
                 subdirectory,
+                path,
             } => {
                 let mut url = Self::parse(&format!("{}+{}", vcs_info.vcs, url))?;
                 if let Some(commit_id) = &vcs_info.commit_id {
@@ -117,6 +120,9 @@ impl TryFrom<&DirectUrl> for Url {
                 }
                 if let Some(subdirectory) = subdirectory {
                     url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
+                }
+                if let Some(path) = path {
+                    url.set_fragment(Some(&format!("path={}", path.display())));
                 }
                 Ok(url)
             }

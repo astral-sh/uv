@@ -164,8 +164,10 @@ pub enum ParsedUrl {
     Path(ParsedPathUrl),
     /// The direct URL is a path to a local directory.
     Directory(ParsedDirectoryUrl),
-    /// The direct URL is path to a Git repository.
-    Git(ParsedGitUrl),
+    /// The direct URL is path to a source tree within a Git repository.
+    GitDirectory(ParsedGitDirectoryUrl),
+    /// The direct URL is path to an archive within a Git repository.
+    GitPath(ParsedGitPathUrl),
     /// The direct URL is a URL to a source archive (e.g., a `.tar.gz` file) or built archive
     /// (i.e., a `.whl` file).
     Archive(ParsedArchiveUrl),
@@ -231,19 +233,20 @@ impl ParsedDirectoryUrl {
     }
 }
 
-/// A Git repository URL.
+/// A Git repository URL, pointing to the repository root or a subdirectory defining a source tree.
 ///
 /// Examples:
 /// * `git+https://git.example.com/MyProject.git`
 /// * `git+https://git.example.com/MyProject.git@v1.0#egg=pkg&subdirectory=pkg_dir`
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
-pub struct ParsedGitUrl {
+pub struct ParsedGitDirectoryUrl {
     pub url: GitUrl,
+    /// The subdirectory within the repository to install.
     pub subdirectory: Option<PathBuf>,
 }
 
-impl ParsedGitUrl {
-    /// Construct a [`ParsedGitUrl`] from a Git requirement source.
+impl ParsedGitDirectoryUrl {
+    /// Construct a [`ParsedGitDirectoryUrl`] from a Git requirement source.
     pub fn from_source(
         repository: Url,
         reference: GitReference,
@@ -259,7 +262,7 @@ impl ParsedGitUrl {
     }
 }
 
-impl TryFrom<Url> for ParsedGitUrl {
+impl TryFrom<Url> for ParsedGitDirectoryUrl {
     type Error = ParsedUrlError;
 
     /// Supports URLs with and without the `git+` prefix.
@@ -277,6 +280,68 @@ impl TryFrom<Url> for ParsedGitUrl {
         let url = GitUrl::try_from(url)
             .map_err(|err| ParsedUrlError::GitShaParse(url_in.to_string(), err))?;
         Ok(Self { url, subdirectory })
+    }
+}
+
+/// A Git repository URL, pointing to a pre-built archive within the repository.
+///
+/// Examples:
+/// * `git+https://git.example.com/MyProject.git@v1.0#egg=pkg&path=path/to/wheel.whl`
+#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
+pub struct ParsedGitPathUrl {
+    pub url: GitUrl,
+    /// The path to the distribution within the repository.
+    pub install_path: PathBuf,
+    /// The file extension, e.g. `tar.gz`, `zip`, etc.
+    pub ext: DistExtension,
+}
+
+impl ParsedGitPathUrl {
+    /// Construct a [`ParsedGitPathUrl`] from a Git requirement source.
+    pub fn from_source(
+        repository: Url,
+        reference: GitReference,
+        precise: Option<GitSha>,
+        install_path: PathBuf,
+        ext: DistExtension,
+    ) -> Self {
+        let url = if let Some(precise) = precise {
+            GitUrl::from_commit(repository, reference, precise)
+        } else {
+            GitUrl::from_reference(repository, reference)
+        };
+        Self {
+            url,
+            install_path,
+            ext,
+        }
+    }
+}
+
+impl TryFrom<Url> for ParsedGitPathUrl {
+    type Error = ParsedUrlError;
+
+    /// Supports URLs with and without the `git+` prefix.
+    ///
+    /// When the URL includes a prefix, it's presumed to come from a PEP 508 requirement; when it's
+    /// excluded, it's presumed to come from `tool.uv.sources`.
+    fn try_from(url_in: Url) -> Result<Self, Self::Error> {
+        let install_path = get_install_path(&url_in).unwrap();
+        let ext = DistExtension::from_path(&install_path)
+            .map_err(|err| ParsedUrlError::MissingExtensionPath(install_path.clone(), err))?;
+
+        let url = url_in
+            .as_str()
+            .strip_prefix("git+")
+            .unwrap_or(url_in.as_str());
+        let url = Url::parse(url).map_err(|err| ParsedUrlError::UrlParse(url.to_string(), err))?;
+        let url = GitUrl::try_from(url)
+            .map_err(|err| ParsedUrlError::GitShaParse(url_in.to_string(), err))?;
+        Ok(Self {
+            url,
+            install_path,
+            ext,
+        })
     }
 }
 
@@ -324,10 +389,10 @@ impl TryFrom<Url> for ParsedArchiveUrl {
     }
 }
 
-/// If the URL points to a subdirectory, extract it, as in (git):
+/// If the URL points to a subdirectory, extract it, as in (Git):
 ///   `git+https://git.example.com/MyProject.git@v1.0#subdirectory=pkg_dir`
 ///   `git+https://git.example.com/MyProject.git@v1.0#egg=pkg&subdirectory=pkg_dir`
-/// or (direct archive url):
+/// or (direct URL):
 ///   `https://github.com/foo-labs/foo/archive/master.zip#subdirectory=packages/bar`
 ///   `https://github.com/foo-labs/foo/archive/master.zip#egg=pkg&subdirectory=packages/bar`
 fn get_subdirectory(url: &Url) -> Option<PathBuf> {
@@ -338,13 +403,30 @@ fn get_subdirectory(url: &Url) -> Option<PathBuf> {
     Some(PathBuf::from(subdirectory))
 }
 
+/// If the URL points to an archive, extract it, as in (Git):
+///   `git+https://git.example.com/MyProject.git@v1.0#path=path/to/wheel.whl`
+///   `git+https://git.example.com/MyProject.git@v1.0#egg=pkg&path=path/to/wheel.whl`
+fn get_install_path(url: &Url) -> Option<PathBuf> {
+    let fragment = url.fragment()?;
+    let install_path = fragment
+        .split('&')
+        .find_map(|fragment| fragment.strip_prefix("path="))?;
+    Some(PathBuf::from(install_path))
+}
+
 impl TryFrom<Url> for ParsedUrl {
     type Error = ParsedUrlError;
 
     fn try_from(url: Url) -> Result<Self, Self::Error> {
         if let Some((prefix, ..)) = url.scheme().split_once('+') {
             match prefix {
-                "git" => Ok(Self::Git(ParsedGitUrl::try_from(url)?)),
+                "git" => {
+                    if get_install_path(&url).is_some() {
+                        Ok(Self::GitPath(ParsedGitPathUrl::try_from(url)?))
+                    } else {
+                        Ok(Self::GitDirectory(ParsedGitDirectoryUrl::try_from(url)?))
+                    }
+                }
                 "bzr" => Err(ParsedUrlError::UnsupportedUrlPrefix {
                     prefix: prefix.to_string(),
                     url: url.to_string(),
@@ -370,7 +452,7 @@ impl TryFrom<Url> for ParsedUrl {
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("git"))
         {
-            Ok(Self::Git(ParsedGitUrl::try_from(url)?))
+            Ok(Self::GitDirectory(ParsedGitDirectoryUrl::try_from(url)?))
         } else if url.scheme().eq_ignore_ascii_case("file") {
             let path = url
                 .to_file_path()
@@ -408,7 +490,8 @@ impl TryFrom<&ParsedUrl> for DirectUrl {
         match value {
             ParsedUrl::Path(value) => Self::try_from(value),
             ParsedUrl::Directory(value) => Self::try_from(value),
-            ParsedUrl::Git(value) => Self::try_from(value),
+            ParsedUrl::GitPath(value) => Self::try_from(value),
+            ParsedUrl::GitDirectory(value) => Self::try_from(value),
             ParsedUrl::Archive(value) => Self::try_from(value),
         }
     }
@@ -457,10 +540,10 @@ impl TryFrom<&ParsedArchiveUrl> for DirectUrl {
     }
 }
 
-impl TryFrom<&ParsedGitUrl> for DirectUrl {
+impl TryFrom<&ParsedGitDirectoryUrl> for DirectUrl {
     type Error = ParsedUrlError;
 
-    fn try_from(value: &ParsedGitUrl) -> Result<Self, Self::Error> {
+    fn try_from(value: &ParsedGitDirectoryUrl) -> Result<Self, Self::Error> {
         Ok(Self::VcsUrl {
             url: value.url.repository().to_string(),
             vcs_info: VcsInfo {
@@ -469,6 +552,24 @@ impl TryFrom<&ParsedGitUrl> for DirectUrl {
                 requested_revision: value.url.reference().as_str().map(ToString::to_string),
             },
             subdirectory: value.subdirectory.clone(),
+            path: None,
+        })
+    }
+}
+
+impl TryFrom<&ParsedGitPathUrl> for DirectUrl {
+    type Error = ParsedUrlError;
+
+    fn try_from(value: &ParsedGitPathUrl) -> Result<Self, Self::Error> {
+        Ok(Self::VcsUrl {
+            url: value.url.repository().to_string(),
+            vcs_info: VcsInfo {
+                vcs: VcsKind::Git,
+                commit_id: value.url.precise().as_ref().map(ToString::to_string),
+                requested_revision: value.url.reference().as_str().map(ToString::to_string),
+            },
+            subdirectory: None,
+            path: Some(value.install_path.clone()),
         })
     }
 }
@@ -478,7 +579,8 @@ impl From<ParsedUrl> for Url {
         match value {
             ParsedUrl::Path(value) => value.into(),
             ParsedUrl::Directory(value) => value.into(),
-            ParsedUrl::Git(value) => value.into(),
+            ParsedUrl::GitPath(value) => value.into(),
+            ParsedUrl::GitDirectory(value) => value.into(),
             ParsedUrl::Archive(value) => value.into(),
         }
     }
@@ -506,8 +608,17 @@ impl From<ParsedArchiveUrl> for Url {
     }
 }
 
-impl From<ParsedGitUrl> for Url {
-    fn from(value: ParsedGitUrl) -> Self {
+impl From<ParsedGitPathUrl> for Url {
+    fn from(value: ParsedGitPathUrl) -> Self {
+        let mut url = Self::parse(&format!("{}{}", "git+", Self::from(value.url).as_str()))
+            .expect("Git URL is invalid");
+        url.set_fragment(Some(&format!("path={}", value.install_path.display())));
+        url
+    }
+}
+
+impl From<ParsedGitDirectoryUrl> for Url {
+    fn from(value: ParsedGitDirectoryUrl) -> Self {
         let mut url = Self::parse(&format!("{}{}", "git+", Self::from(value.url).as_str()))
             .expect("Git URL is invalid");
         if let Some(subdirectory) = value.subdirectory {
