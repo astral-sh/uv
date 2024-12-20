@@ -334,10 +334,11 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of package-a are available:
+      ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
               package-a==1.0.0
-              package-a>2.0.0,<=3.0.0
-          and package-a==1.0.0 depends on package-b==1.0.0, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
+              package-a>2.0.0
+          we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
+          And because only package-a<=3.0.0 is available, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
 
           Because only the following versions of package-c are available:
               package-c==1.0.0
@@ -445,10 +446,11 @@ fn dependency_excludes_range_of_compatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of package-a are available:
+      ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
               package-a==1.0.0
-              package-a>2.0.0,<=3.0.0
-          and package-a==1.0.0 depends on package-b==1.0.0, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
+              package-a>2.0.0
+          we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
+          And because only package-a<=3.0.0 is available, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
 
           Because only the following versions of package-c are available:
               package-c==1.0.0
