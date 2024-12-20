@@ -1,3 +1,5 @@
+use std::env;
+
 use crate::common::{uv_snapshot, TestContext};
 
 #[test]
@@ -450,6 +452,10 @@ fn help_subcommand() {
 
 #[test]
 fn help_subsubcommand() {
+    if env::var("UV_PYTHON_INSTALL_DIR").is_ok() {
+        // skip this test
+        return;
+    }
     let context = TestContext::new_with_versions(&[]);
 
     uv_snapshot!(context.filters(), context.help().arg("python").arg("install"), @r###"
