@@ -47,7 +47,7 @@ Testing uv requires multiple specific Python versions; they can be installed wit
 cargo run python install
 ```
 
-The storage directory can be configured with `UV_PYTHON_INSTALL_DIR`.
+The storage directory can be configured with `UV_PYTHON_INSTALL_DIR`. (It must be an absolute path.)
 
 ### Snapshot testing
 
