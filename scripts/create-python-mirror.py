@@ -91,11 +91,10 @@ def collect_metadata_from_git_history() -> List[Dict]:
 
 def check_arch(entry, arch):
     """Checks whether arch entry in metadata matches the provided filter."""
-    match entry:
-        case {"family": family}:
-            return family == arch
-        case str:
-            return entry == arch
+    if isinstance(entry, str):
+        return entry == arch
+    elif isinstance(entry, dict) and "family" in entry:
+        return entry["family"] == arch
     return False
 
 
