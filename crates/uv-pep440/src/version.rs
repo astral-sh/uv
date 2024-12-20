@@ -256,7 +256,7 @@ impl std::fmt::Display for OperatorParseError {
 ///
 /// ```rust
 /// use std::str::FromStr;
-/// use pep440_rs::Version;
+/// use uv_pep440::Version;
 ///
 /// let version = Version::from_str("1.19").unwrap();
 /// ```
