@@ -166,18 +166,20 @@ fn parse_string(cursor: &mut Cursor, quote: char) -> Result<String, Error> {
         };
         match c {
             '\\' => {
-                // Handle escaped quotes.
-                if cursor.first() == quote {
-                    // Consume the backslash.
-                    cursor.bump();
-                    result.push(quote);
-                    continue;
-                }
-
-                // Keep the backslash and following character.
-                result.push('\\');
-                result.push(cursor.first());
-                cursor.bump();
+                // Treat the next character as a literal.
+                //
+                // See: https://github.com/astral-sh/ruff/blob/d47fba1e4aeeb18085900dfbbcd187e90d536913/crates/ruff_python_parser/src/string.rs#L194
+                let Some(c) = cursor.bump() else {
+                    return Err(Error::UnexpectedEof);
+                };
+                result.push(match c {
+                    '\\' => '\\',
+                    '\'' => '\'',
+                    '\"' => '"',
+                    _ => {
+                        return Err(Error::UnrecognizedEscape(c));
+                    }
+                });
             }
 
             // Consume closing quote.
@@ -255,6 +257,8 @@ pub enum Error {
     UnexpectedCharacter(char),
     #[error("Unexpected end of file")]
     UnexpectedEof,
+    #[error("Unrecognized escape sequence: {0}")]
+    UnrecognizedEscape(char),
     #[error("Failed to parse integer")]
     ParseInt(#[from] std::num::ParseIntError),
     #[error("`_sysconfigdata_` is missing a header comment")]
@@ -291,6 +295,64 @@ mod tests {
             "key3": "multi-part string"
         }
         "###);
+    }
+
+    #[test]
+    fn test_parse_backslash() {
+        let input = indoc::indoc!(
+            r#"
+            # system configuration generated and used by the sysconfig module
+            build_time_vars = {
+                "key1": "value1\"value2\"value3",
+                "key2": "value1\\value2\\value3",
+                "key3": "value1\\\"value2\\\"value3",
+                "key4": "value1\\\\value2\\\\value3",
+            }
+        "#
+        );
+
+        let result = input.parse::<SysconfigData>().expect("Parsing failed");
+        let snapshot = result.to_string_pretty().unwrap();
+
+        insta::assert_snapshot!(snapshot, @r###"
+        # system configuration generated and used by the sysconfig module
+        build_time_vars = {
+            "key1": "value1\"value2\"value3",
+            "key2": "value1\\value2\\value3",
+            "key3": "value1\\\"value2\\\"value3",
+            "key4": "value1\\\\value2\\\\value3"
+        }
+        "###);
+    }
+
+    #[test]
+    fn test_parse_trailing_backslash() {
+        let input = indoc::indoc!(
+            r#"
+            # system configuration generated and used by the sysconfig module
+            build_time_vars = {
+                "key1": "value1\\value2\\value3\",
+            }
+        "#
+        );
+
+        let result = input.parse::<SysconfigData>();
+        assert!(matches!(result, Err(Error::UnexpectedEof)));
+    }
+
+    #[test]
+    fn test_parse_unrecognized_escape() {
+        let input = indoc::indoc!(
+            r#"
+            # system configuration generated and used by the sysconfig module
+            build_time_vars = {
+                "key1": "value1\value2",
+            }
+        "#
+        );
+
+        let result = input.parse::<SysconfigData>();
+        assert!(matches!(result, Err(Error::UnrecognizedEscape('v'))));
     }
 
     #[test]
