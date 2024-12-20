@@ -1,7 +1,8 @@
 use std::fmt::{Display, Formatter};
-use uv_distribution_filename::BuildTag;
+use uv_distribution_filename::{BuildTag, WheelFilename};
 
 use uv_pep440::VersionSpecifiers;
+use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
 use uv_platform_tags::{IncompatibleTag, TagPriority};
 use uv_pypi_types::{HashDigest, Yanked};
 
@@ -14,7 +15,7 @@ use crate::{
 pub struct PrioritizedDist(Box<PrioritizedDistInner>);
 
 /// [`PrioritizedDist`] is boxed because [`Dist`] is large.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 struct PrioritizedDistInner {
     /// The highest-priority source distribution. Between compatible source distributions this priority is arbitrary.
     source: Option<(RegistrySourceDist, SourceDistCompatibility)>,
@@ -25,6 +26,20 @@ struct PrioritizedDistInner {
     wheels: Vec<(RegistryBuiltWheel, WheelCompatibility)>,
     /// The hashes for each distribution.
     hashes: Vec<HashDigest>,
+    /// The set of supported platforms for the distribution, described in terms of their markers.
+    markers: MarkerTree,
+}
+
+impl Default for PrioritizedDistInner {
+    fn default() -> Self {
+        Self {
+            source: None,
+            best_wheel_index: None,
+            wheels: Vec::new(),
+            hashes: Vec::new(),
+            markers: MarkerTree::FALSE,
+        }
+    }
 }
 
 /// A distribution that can be used for both resolution and installation.
@@ -68,6 +83,16 @@ impl CompatibleDist<'_> {
             CompatibleDist::SourceDist { sdist, .. } => sdist.file.requires_python.as_ref(),
             CompatibleDist::CompatibleWheel { wheel, .. } => wheel.file.requires_python.as_ref(),
             CompatibleDist::IncompatibleWheel { sdist, .. } => sdist.file.requires_python.as_ref(),
+        }
+    }
+
+    /// Return the set of supported platform the distribution, in terms of their markers.
+    pub fn implied_markers(&self) -> MarkerTree {
+        match self {
+            CompatibleDist::InstalledDist(_) => MarkerTree::TRUE,
+            CompatibleDist::SourceDist { prioritized, .. } => prioritized.0.markers,
+            CompatibleDist::CompatibleWheel { prioritized, .. } => prioritized.0.markers,
+            CompatibleDist::IncompatibleWheel { prioritized, .. } => prioritized.0.markers,
         }
     }
 }
@@ -257,6 +282,7 @@ impl PrioritizedDist {
         compatibility: WheelCompatibility,
     ) -> Self {
         Self(Box::new(PrioritizedDistInner {
+            markers: implied_markers(&dist.filename),
             best_wheel_index: Some(0),
             wheels: vec![(dist, compatibility)],
             source: None,
@@ -271,6 +297,7 @@ impl PrioritizedDist {
         compatibility: SourceDistCompatibility,
     ) -> Self {
         Self(Box::new(PrioritizedDistInner {
+            markers: MarkerTree::TRUE,
             best_wheel_index: None,
             wheels: vec![],
             source: Some((dist, compatibility)),
@@ -293,8 +320,11 @@ impl PrioritizedDist {
         } else {
             self.0.best_wheel_index = Some(self.0.wheels.len());
         }
-        self.0.wheels.push((dist, compatibility));
         self.0.hashes.extend(hashes);
+        if !self.0.markers.is_true() {
+            self.0.markers.or(implied_markers(&dist.filename));
+        }
+        self.0.wheels.push((dist, compatibility));
     }
 
     /// Insert the given source distribution into the [`PrioritizedDist`].
@@ -312,7 +342,9 @@ impl PrioritizedDist {
         } else {
             self.0.source = Some((dist, compatibility));
         }
-
+        if !self.0.markers.is_true() {
+            self.0.markers.or(MarkerTree::TRUE);
+        }
         self.0.hashes.extend(hashes);
     }
 
@@ -563,6 +595,7 @@ impl IncompatibleSource {
 }
 
 impl IncompatibleWheel {
+    #[allow(clippy::match_like_matches_macro)]
     fn is_more_compatible(&self, other: &Self) -> bool {
         match self {
             Self::ExcludeNewer(timestamp_self) => match other {
@@ -598,4 +631,40 @@ impl IncompatibleWheel {
             Self::NoBinary => false,
         }
     }
+}
+
+/// Given a wheel filename, determine the set of supported platforms, in terms of their markers.
+pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
+    let mut marker = MarkerTree::FALSE;
+    for platform_tag in &filename.platform_tag {
+        match platform_tag.as_str() {
+            "any" => marker.or(MarkerTree::TRUE),
+            tag if tag.starts_with("win") => {
+                marker.or(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "win32".to_string(),
+                }));
+            }
+            tag if tag.starts_with("macosx") => {
+                marker.or(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "darwin".to_string(),
+                }));
+            }
+            tag if tag.starts_with("manylinux")
+                || tag.starts_with("musllinux")
+                || tag.starts_with("linux") =>
+            {
+                marker.or(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "linux".to_string(),
+                }));
+            }
+            _ => {}
+        }
+    }
+    marker
 }
