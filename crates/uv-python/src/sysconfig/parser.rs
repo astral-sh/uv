@@ -26,6 +26,11 @@ impl SysconfigData {
         self.0.iter_mut()
     }
 
+    /// Returns the value corresponding to the key.
+    pub(super) fn get(&self, key: &str) -> Option<&Value> {
+        self.0.get(key)
+    }
+
     /// Inserts a key-value pair into the map.
     pub(super) fn insert(&mut self, key: String, value: Value) -> Option<Value> {
         self.0.insert(key, value)

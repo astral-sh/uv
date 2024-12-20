@@ -151,6 +151,14 @@ pub(crate) fn update_sysconfig(
     // Update the `_sysconfigdata_` file in-memory.
     let contents = fs_err::read_to_string(&sysconfigdata)?;
     let data = SysconfigData::from_str(&contents)?;
+
+    // If `_sysconfigdata_` is already patched, skip the update.
+    if data.get("PYTHON_BUILD_STANDALONE").is_some() {
+        trace!("`sysconfig` data is already patched");
+        return Ok(());
+    }
+
+    // Otherwise, patch the `_sysconfigdata_` file.
     let data = patch_sysconfigdata(data, &real_prefix);
     let contents = data.to_string_pretty()?;
 
