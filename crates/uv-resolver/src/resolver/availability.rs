@@ -3,8 +3,7 @@ use std::fmt::{Display, Formatter};
 use uv_distribution_types::IncompatibleDist;
 use uv_pep440::{Version, VersionSpecifiers};
 
-use crate::resolver::MetadataUnavailable;
-use crate::ResolverEnvironment;
+use crate::resolver::{MetadataUnavailable, VersionFork};
 
 /// The reason why a package or a version cannot be used.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -170,6 +169,6 @@ pub(crate) enum ResolverVersion {
     Unavailable(Version, UnavailableVersion),
     /// A usable version
     Unforked(Version),
-    /// A set of forks.
-    Forked(Vec<ResolverEnvironment>),
+    /// A set of forks, optionally with resolved versions
+    Forked(Vec<VersionFork>),
 }

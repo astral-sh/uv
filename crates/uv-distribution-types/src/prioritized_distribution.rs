@@ -119,9 +119,6 @@ impl IncompatibleDist {
                     None => format!("has {self}"),
                 },
                 IncompatibleWheel::RequiresPython(..) => format!("requires {self}"),
-                IncompatibleWheel::MissingPlatform(_) => {
-                    format!("has {self}")
-                }
             },
             Self::Source(incompatibility) => match incompatibility {
                 IncompatibleSource::NoBuild => format!("has {self}"),
@@ -149,9 +146,6 @@ impl IncompatibleDist {
                     None => format!("have {self}"),
                 },
                 IncompatibleWheel::RequiresPython(..) => format!("require {self}"),
-                IncompatibleWheel::MissingPlatform(_) => {
-                    format!("have {self}")
-                }
             },
             Self::Source(incompatibility) => match incompatibility {
                 IncompatibleSource::NoBuild => format!("have {self}"),
@@ -201,9 +195,6 @@ impl Display for IncompatibleDist {
                 },
                 IncompatibleWheel::RequiresPython(python, _) => {
                     write!(f, "Python {python}")
-                }
-                IncompatibleWheel::MissingPlatform(platform) => {
-                    write!(f, "no {platform}-compatible wheels")
                 }
             },
             Self::Source(incompatibility) => match incompatibility {
@@ -257,8 +248,6 @@ pub enum IncompatibleWheel {
     Yanked(Yanked),
     /// The use of binary wheels is disabled.
     NoBinary,
-    /// The distribution is missing support for the target platform.
-    MissingPlatform(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -618,40 +607,28 @@ impl IncompatibleWheel {
                         timestamp_other < timestamp_self
                     }
                 },
-                Self::MissingPlatform(_)
-                | Self::NoBinary
-                | Self::RequiresPython(_, _)
-                | Self::Tag(_)
-                | Self::Yanked(_) => true,
+                Self::NoBinary | Self::RequiresPython(_, _) | Self::Tag(_) | Self::Yanked(_) => {
+                    true
+                }
             },
             Self::Tag(tag_self) => match other {
                 Self::ExcludeNewer(_) => false,
                 Self::Tag(tag_other) => tag_self > tag_other,
-                Self::MissingPlatform(_)
-                | Self::NoBinary
-                | Self::RequiresPython(_, _)
-                | Self::Yanked(_) => true,
+                Self::NoBinary | Self::RequiresPython(_, _) | Self::Yanked(_) => true,
             },
             Self::RequiresPython(_, _) => match other {
                 Self::ExcludeNewer(_) | Self::Tag(_) => false,
                 // Version specifiers cannot be reasonably compared
                 Self::RequiresPython(_, _) => false,
-                Self::MissingPlatform(_) | Self::NoBinary | Self::Yanked(_) => true,
+                Self::NoBinary | Self::Yanked(_) => true,
             },
             Self::Yanked(_) => match other {
                 Self::ExcludeNewer(_) | Self::Tag(_) | Self::RequiresPython(_, _) => false,
                 // Yanks with a reason are more helpful for errors
                 Self::Yanked(yanked_other) => matches!(yanked_other, Yanked::Reason(_)),
-                Self::MissingPlatform(_) | Self::NoBinary => true,
+                Self::NoBinary => true,
             },
-            Self::NoBinary => match other {
-                Self::MissingPlatform(_) => true,
-                _ => false,
-            },
-            Self::MissingPlatform(platform_other) => match other {
-                Self::MissingPlatform(platform_self) => platform_self > platform_other,
-                _ => false,
-            },
+            Self::NoBinary => false,
         }
     }
 }

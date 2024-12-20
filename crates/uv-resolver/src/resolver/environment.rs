@@ -559,7 +559,7 @@ pub(crate) fn fork_version_by_python_requirement(
 pub(crate) fn fork_version_by_marker(
     env: &ResolverEnvironment,
     marker: MarkerTree,
-) -> Vec<ResolverEnvironment> {
+) -> Option<(ResolverEnvironment, ResolverEnvironment)> {
     let Kind::Universal {
         markers: ref env_marker,
         ..
@@ -584,20 +584,18 @@ pub(crate) fn fork_version_by_marker(
     // `sys_platform == 'win32'`, return an empty list, since the following isn't satisfiable:
     //
     //   python_version >= '3.10' and sys_platform == 'linux' and sys_platform == 'win32'
-
-    let mut envs = vec![];
     if env_marker.is_disjoint(marker) {
-        return vec![];
+        return None;
     }
-    envs.push(env.narrow_environment(marker));
+    let with_marker = env.narrow_environment(marker);
 
     let complement = marker.negate();
     if env_marker.is_disjoint(complement) {
-        return vec![];
+        return None;
     }
-    envs.push(env.narrow_environment(complement));
+    let without_marker = env.narrow_environment(complement);
 
-    envs
+    Some((with_marker, without_marker))
 }
 
 #[cfg(test)]
