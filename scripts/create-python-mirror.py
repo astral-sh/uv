@@ -18,6 +18,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 from urllib.parse import unquote
@@ -98,8 +99,20 @@ def check_arch(entry, arch):
     return False
 
 
+def match_version(entry, pattern):
+    """Checks whether pattern matches against the entries version."""
+    vers = f"{entry['major']}.{entry['minor']}.{entry['patch']}"
+    if entry["prerelease"] != "":
+        vers += f"-{entry['prerelease']}"
+    return pattern.match(vers) is not None
+
+
 def filter_metadata(
-    metadata: List[Dict], name: Optional[str], arch: Optional[str], os: Optional[str]
+    metadata: List[Dict],
+    name: Optional[str],
+    arch: Optional[str],
+    os: Optional[str],
+    version: Optional[re.Pattern],
 ) -> List[Dict]:
     """Filter the metadata based on name, architecture, and OS, ensuring unique URLs."""
     filtered = [
@@ -108,6 +121,7 @@ def filter_metadata(
         if (not name or entry["name"] == name)
         and (not arch or check_arch(entry["arch"], arch))
         and (not os or entry["os"] == os)
+        and (not version or match_version(entry, version))
     ]
     # Use a set to ensure unique URLs
     unique_urls = set()
@@ -215,6 +229,9 @@ def parse_arguments():
     parser.add_argument("--arch", help="Filter by architecture (e.g., 'aarch64').")
     parser.add_argument("--os", help="Filter by operating system (e.g., 'darwin').")
     parser.add_argument(
+        "--version", help="Filter version by regex (e.g., '3.13.\\d+$')."
+    )
+    parser.add_argument(
         "--max-concurrent",
         type=int,
         default=20,
@@ -243,7 +260,10 @@ def main():
         with open(VERSIONS_FILE) as f:
             metadata = list(json.load(f).values())
 
-    filtered_metadata = filter_metadata(metadata, args.name, args.arch, args.os)
+    version = re.compile(args.version) if args.version else None
+    filtered_metadata = filter_metadata(
+        metadata, args.name, args.arch, args.os, version
+    )
     urls = {(entry["url"], entry["sha256"]) for entry in filtered_metadata}
 
     if not urls:
