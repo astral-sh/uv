@@ -288,13 +288,11 @@ conflicts = [
 [tool.uv.sources]
 torch = [
   { index = "pytorch-cpu", extra = "cpu" },
-  { index = "pytorch-cpu", extra = "cu124", marker = "platform_system == 'Darwin'" },
-  { index = "pytorch-cu124", extra = "cu124", marker = "platform_system != 'Darwin'" },
+  { index = "pytorch-cu124", extra = "cu124" },
 ]
 torchvision = [
   { index = "pytorch-cpu", extra = "cpu" },
-  { index = "pytorch-cpu", extra = "cu124", marker = "platform_system == 'Darwin'" },
-  { index = "pytorch-cu124", extra = "cu124", marker = "platform_system != 'Darwin'" },
+  { index = "pytorch-cu124", extra = "cu124" },
 ]
 
 [[tool.uv.index]]
@@ -310,9 +308,8 @@ explicit = true
 
 !!! note
 
-    Since GPU-accelerated builds aren't available on macOS, the above configuration will continue to use
-    the CPU-only builds on macOS via the `"platform_system != 'Darwin'"` marker, regardless of the extra
-    provided.
+    Since GPU-accelerated builds aren't available on macOS, the above configuration will fail to install
+    on macOS when the `cu124` extra is enabled.
 
 ## The `uv pip` interface
 

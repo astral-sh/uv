@@ -31,7 +31,7 @@ use uv_distribution_types::{
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{release_specifiers_to_ranges, Version, VersionSpecifiers, MIN_VERSION};
-use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
+use uv_pep508::MarkerTree;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{
     ConflictItem, ConflictItemRef, Conflicts, Requirement, ResolutionMetadata, VerbatimParsedUrl,
@@ -1339,88 +1339,108 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         };
 
-        for platform in [
-            ResolverPlatform::Linux,
-            ResolverPlatform::Windows,
-            ResolverPlatform::MacOS,
-        ] {
-            let marker = platform.marker();
+        debug!(
+            "Looking at local version: {}=={}",
+            name,
+            candidate.version()
+        );
 
-            // If the platform is relevant to the current environment...
-            if !env.included_by_marker(marker) {
-                continue;
-            }
+        // If there's a non-local version...
+        let range = range.clone().intersection(&Range::singleton(
+            candidate.version().clone().without_local(),
+        ));
 
-            // But isn't supported by the distribution...
-            if !dist.implied_markers().is_disjoint(marker) {
-                continue;
-            }
+        let Some(base_candidate) = self.selector.select(
+            name,
+            &range,
+            version_maps,
+            preferences,
+            &self.installed_packages,
+            &self.exclusions,
+            index,
+            env,
+        ) else {
+            return Ok(None);
+        };
+        let CandidateDist::Compatible(base_dist) = base_candidate.dist() else {
+            return Ok(None);
+        };
 
-            // And there's a non-local version that _does_ support the platform.
-            let range = range.clone().intersection(&Range::singleton(
-                candidate.version().clone().without_local(),
-            ));
+        // ...and the non-local version has greater platform support...
+        let remainder = {
+            let mut remainder = base_dist.implied_markers();
+            remainder.and(dist.implied_markers().negate());
+            remainder
+        };
+        if remainder.is_false() {
+            return Ok(None);
+        }
 
-            let Some(platform_candidate) = self.selector.select(
-                name,
-                &range,
-                version_maps,
-                preferences,
-                &self.installed_packages,
-                &self.exclusions,
-                index,
-                env,
-            ) else {
-                continue;
-            };
-            let CandidateDist::Compatible(platform_dist) = platform_candidate.dist() else {
-                continue;
-            };
+        // If the remainder isn't relevant to the current environment, there's no need to fork.
+        // For example, if we're solving for `sys_platform == 'darwin'` but the remainder is
+        // `sys_platform == 'linux'`, we don't need to fork.
+        if !env.included_by_marker(remainder) {
+            return Ok(None);
+        }
 
-            if platform_dist.implied_markers().is_disjoint(marker) {
-                continue;
-            };
-
-            // Then we need to fork.
-            let Some((platform_env, env)) = fork_version_by_marker(env, marker) else {
-                continue;
+        // Similarly, if the local distribution is incompatible with the current environment, then
+        // use the base distribution instead (but don't fork).
+        if !env.included_by_marker(dist.implied_markers()) {
+            let filename = match dist.for_installation() {
+                ResolvedDistRef::InstallableRegistrySourceDist { sdist, .. } => sdist
+                    .filename()
+                    .unwrap_or(Cow::Borrowed("unknown filename")),
+                ResolvedDistRef::InstallableRegistryBuiltDist { wheel, .. } => wheel
+                    .filename()
+                    .unwrap_or(Cow::Borrowed("unknown filename")),
+                ResolvedDistRef::Installed { .. } => Cow::Borrowed("installed"),
             };
 
             debug!(
-                "Forking platform for {}=={} ({})",
+                "Preferring non-local candidate: {}=={} [{}] ({})",
                 name,
-                candidate.version(),
-                [&platform_env, &env]
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ")
+                base_candidate.version(),
+                base_candidate.choice_kind(),
+                filename,
             );
-            self.visit_candidate(candidate, dist, package, pins, request_sink)?;
-            self.visit_candidate(
-                &platform_candidate,
-                platform_dist,
-                package,
-                pins,
-                request_sink,
-            )?;
+            self.visit_candidate(&base_candidate, base_dist, package, pins, request_sink)?;
 
-            let forks = vec![
-                VersionFork {
-                    env: env.clone(),
-                    id,
-                    version: Some(candidate.version().clone()),
-                },
-                VersionFork {
-                    env: platform_env.clone(),
-                    id,
-                    version: Some(platform_candidate.version().clone()),
-                },
-            ];
-            return Ok(Some(ResolverVersion::Forked(forks)));
+            return Ok(Some(ResolverVersion::Unforked(
+                base_candidate.version().clone(),
+            )));
         }
 
-        Ok(None)
+        // Otherwise, we need to fork.
+        let Some((base_env, local_env)) = fork_version_by_marker(env, remainder) else {
+            return Ok(None);
+        };
+
+        debug!(
+            "Forking platform for {}=={} ({})",
+            name,
+            candidate.version(),
+            [&base_env, &local_env]
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        self.visit_candidate(candidate, dist, package, pins, request_sink)?;
+        self.visit_candidate(&base_candidate, base_dist, package, pins, request_sink)?;
+
+        let forks = vec![
+            VersionFork {
+                env: base_env.clone(),
+                id,
+                version: Some(base_candidate.version().clone()),
+            },
+            VersionFork {
+                env: local_env.clone(),
+                id,
+                version: Some(candidate.version().clone()),
+            },
+        ];
+        Ok(Some(ResolverVersion::Forked(forks)))
     }
 
     /// Visit a selected candidate.
@@ -3535,42 +3555,4 @@ struct ConflictTracker {
     ///
     /// Distilled from `culprit` for fast checking in the hot loop.
     deprioritize: Vec<Id<PubGrubPackage>>,
-}
-
-/// A platform for which the resolver is solving.
-#[derive(Debug, Clone, Copy)]
-enum ResolverPlatform {
-    Linux,
-    Windows,
-    MacOS,
-}
-
-impl ResolverPlatform {
-    /// Return the platform's `sys.platform` value.
-    fn sys_platform(self) -> &'static str {
-        match self {
-            ResolverPlatform::Linux => "linux",
-            ResolverPlatform::Windows => "win32",
-            ResolverPlatform::MacOS => "darwin",
-        }
-    }
-
-    /// Return a [`MarkerTree`] for the platform.
-    fn marker(self) -> MarkerTree {
-        MarkerTree::expression(MarkerExpression::String {
-            key: MarkerValueString::SysPlatform,
-            operator: MarkerOperator::Equal,
-            value: self.sys_platform().to_string(),
-        })
-    }
-}
-
-impl Display for ResolverPlatform {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ResolverPlatform::Linux => write!(f, "Linux"),
-            ResolverPlatform::Windows => write!(f, "Windows"),
-            ResolverPlatform::MacOS => write!(f, "macOS"),
-        }
-    }
 }
