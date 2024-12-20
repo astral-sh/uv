@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.5.11
+
+### Enhancements
+
+- Normalize `platform_system` to `sys_platform` ([#9949](https://github.com/astral-sh/uv/pull/9949))
+- Improve retry mechanisms on Windows for `copy_atomic` and `write_atomic` ([#10026](https://github.com/astral-sh/uv/pull/10026))
+- Add nuance to prefetch logging ([#9984](https://github.com/astral-sh/uv/pull/9984))
+- Update to [`python-build-standalone 20241219`](https://github.com/astral-sh/python-build-standalone/releases/tag/20241219)
+
+### Preview features
+
+- Build backend: Preserve executable bits for scripts in distributions ([#10027](https://github.com/astral-sh/uv/pull/10027))
+- Build backend: Handle case where `metadata_directory` already contains `dist-info` directory ([#10005](https://github.com/astral-sh/uv/pull/10005))
+
+### Performance
+
+- Batch resolver pre-fetches per fork ([#10029](https://github.com/astral-sh/uv/pull/10029))
+
+### Bug fixes
+
+- Allow `--script` to be provided with `uv run -` ([#10035](https://github.com/astral-sh/uv/pull/10035))
+- Allow `uv run` arguments when reading from `stdin` ([#10034](https://github.com/astral-sh/uv/pull/10034))
+- Prefer higher Python lower-bounds when forking ([#10007](https://github.com/astral-sh/uv/pull/10007))
+- Remove references to deprecated `first-match` ([#10036](https://github.com/astral-sh/uv/pull/10036))
+
+### Documentation
+
+- Add `uv python install --preview` to the documentation ([#10010](https://github.com/astral-sh/uv/pull/10010))
+- Fix `uv python install --default` note about multiple requests ([#10011](https://github.com/astral-sh/uv/pull/10011))
+- Fix typo in Caching docs ([#10032](https://github.com/astral-sh/uv/pull/10032))
+- Remove remaining references to deprecated `first-match` ([#10038](https://github.com/astral-sh/uv/pull/10038))
+- Supplement missing separators for `UV_INSTALL_DIR` directions on Windows ([#9507](https://github.com/astral-sh/uv/pull/9507))
+
 ## 0.5.10
 
 ### Enhancements
