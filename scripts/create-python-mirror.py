@@ -89,6 +89,15 @@ def collect_metadata_from_git_history() -> List[Dict]:
     return metadata
 
 
+def check_arch(entry, arch):
+    """Checks whether arch entry in metadata matches the provided filter."""
+    if isinstance(entry, str):
+        return entry == arch
+    elif isinstance(entry, dict) and "family" in entry:
+        return entry["family"] == arch
+    return False
+
+
 def filter_metadata(
     metadata: List[Dict], name: Optional[str], arch: Optional[str], os: Optional[str]
 ) -> List[Dict]:
@@ -97,7 +106,7 @@ def filter_metadata(
         entry
         for entry in metadata
         if (not name or entry["name"] == name)
-        and (not arch or entry["arch"] == arch)
+        and (not arch or check_arch(entry["arch"], arch))
         and (not os or entry["os"] == os)
     ]
     # Use a set to ensure unique URLs
