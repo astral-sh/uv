@@ -2023,7 +2023,7 @@ be correct.
 
 Limit candidate packages to those that were uploaded prior to a given point in time.
 
-Accepts [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g.,
+Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
 `2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will
 behave consistently across timezones.
 
