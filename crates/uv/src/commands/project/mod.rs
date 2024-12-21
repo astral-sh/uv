@@ -877,6 +877,7 @@ pub(crate) async fn get_or_init_environment(
                 prompt,
                 false,
                 false,
+                true,
                 false,
                 false,
             )?)

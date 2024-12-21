@@ -1,6 +1,6 @@
 [package]
 name = "uv-virtualenv"
-version = "0.0.4"
+version = "0.0.5"
 publish = false
 description = "virtualenv creation implemented in rust"
 keywords = ["virtualenv", "venv", "python"]

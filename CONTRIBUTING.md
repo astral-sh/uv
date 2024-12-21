@@ -31,7 +31,7 @@ See the [Python](#python) section for instructions on installing the Python vers
 ### Windows
 
 You can install CMake from the [installers](https://cmake.org/download/) or with
-`pipx install cmake`.
+`uv tool install cmake`.
 
 ## Testing
 

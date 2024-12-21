@@ -53,6 +53,7 @@ pub fn create_venv(
     prompt: Prompt,
     system_site_packages: bool,
     allow_existing: bool,
+    activatable: bool,
     relocatable: bool,
     seed: bool,
 ) -> Result<PythonEnvironment, Error> {
@@ -63,6 +64,7 @@ pub fn create_venv(
         prompt,
         system_site_packages,
         allow_existing,
+        activatable,
         relocatable,
         seed,
     )?;
