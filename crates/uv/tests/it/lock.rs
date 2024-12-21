@@ -1138,7 +1138,7 @@ fn lock_sdist_url() -> Result<()> {
             { name = "idna" },
             { name = "sniffio" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6" }
+        sdist = { hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6" }
 
         [package.metadata]
         requires-dist = [
@@ -1307,7 +1307,7 @@ fn lock_sdist_url_subdirectory() -> Result<()> {
         dependencies = [
             { name = "anyio" },
         ]
-        sdist = { url = "https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz", hash = "sha256:24b55efee28d08ad3cdc58903e359e820601baa6a4a4b3424311541ebcfb09d3" }
+        sdist = { hash = "sha256:24b55efee28d08ad3cdc58903e359e820601baa6a4a4b3424311541ebcfb09d3" }
 
         [package.metadata]
         requires-dist = [{ name = "anyio" }]
@@ -9556,7 +9556,7 @@ fn lock_sources_url() -> Result<()> {
         dependencies = [
             { name = "anyio" },
         ]
-        sdist = { url = "https://github.com/user-attachments/files/16592193/workspace.zip", hash = "sha256:ba690a925dc3d1b53e0675201c9ec26ab59eeec72ab271562f53297bf1817263" }
+        sdist = { hash = "sha256:ba690a925dc3d1b53e0675201c9ec26ab59eeec72ab271562f53297bf1817263" }
 
         [package.metadata]
         requires-dist = [{ name = "anyio" }]
@@ -9636,11 +9636,11 @@ fn lock_sources_archive() -> Result<()> {
 
     let lock = context.read("uv.lock");
 
-    // insta::with_settings!({
-    //     filters => context.filters(),
-    // }, {
-    assert_snapshot!(
-        lock, @r###"
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
         version = 1
         requires-python = ">=3.12"
 
@@ -9696,12 +9696,13 @@ fn lock_sources_archive() -> Result<()> {
         dependencies = [
             { name = "anyio" },
         ]
+        sdist = { hash = "sha256:ba690a925dc3d1b53e0675201c9ec26ab59eeec72ab271562f53297bf1817263" }
 
         [package.metadata]
         requires-dist = [{ name = "anyio" }]
         "###
-    );
-    // });
+        );
+    });
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
@@ -17496,7 +17497,7 @@ fn lock_multiple_sources() -> Result<()> {
         resolution-markers = [
             "sys_platform == 'win32'",
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3" }
+        sdist = { hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3" }
 
         [[package]]
         name = "iniconfig"
