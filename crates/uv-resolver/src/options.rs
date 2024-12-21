@@ -1,7 +1,7 @@
-use uv_configuration::{BuildOptions, IndexStrategy};
-
 use crate::fork_strategy::ForkStrategy;
 use crate::{DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};
+use uv_configuration::{BuildOptions, IndexStrategy};
+use uv_pypi_types::SupportedEnvironments;
 
 /// Options for resolving a manifest.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -12,6 +12,7 @@ pub struct Options {
     pub fork_strategy: ForkStrategy,
     pub exclude_newer: Option<ExcludeNewer>,
     pub index_strategy: IndexStrategy,
+    pub required_platforms: SupportedEnvironments,
     pub flexibility: Flexibility,
     pub build_options: BuildOptions,
 }
@@ -25,6 +26,7 @@ pub struct OptionsBuilder {
     fork_strategy: ForkStrategy,
     exclude_newer: Option<ExcludeNewer>,
     index_strategy: IndexStrategy,
+    required_platforms: SupportedEnvironments,
     flexibility: Flexibility,
     build_options: BuildOptions,
 }
@@ -77,6 +79,13 @@ impl OptionsBuilder {
         self
     }
 
+    /// Sets the required platforms.
+    #[must_use]
+    pub fn required_platforms(mut self, required_platforms: SupportedEnvironments) -> Self {
+        self.required_platforms = required_platforms;
+        self
+    }
+
     /// Sets the [`Flexibility`].
     #[must_use]
     pub fn flexibility(mut self, flexibility: Flexibility) -> Self {
@@ -100,6 +109,7 @@ impl OptionsBuilder {
             fork_strategy: self.fork_strategy,
             exclude_newer: self.exclude_newer,
             index_strategy: self.index_strategy,
+            required_platforms: self.required_platforms,
             flexibility: self.flexibility,
             build_options: self.build_options,
         }

@@ -83,6 +83,8 @@ pub struct Lock {
     conflicts: Conflicts,
     /// The list of supported environments specified by the user.
     supported_environments: Vec<MarkerTree>,
+    /// The list of required platforms specified by the user.
+    required_platforms: Vec<MarkerTree>,
     /// The range of supported Python versions.
     requires_python: RequiresPython,
     /// We discard the lockfile if these options don't match.
@@ -242,6 +244,7 @@ impl Lock {
             ResolverManifest::default(),
             Conflicts::empty(),
             vec![],
+            vec![],
             resolution.fork_markers.clone(),
         )?;
         Ok(lock)
@@ -314,6 +317,7 @@ impl Lock {
         manifest: ResolverManifest,
         conflicts: Conflicts,
         supported_environments: Vec<MarkerTree>,
+        required_platforms: Vec<MarkerTree>,
         fork_markers: Vec<UniversalMarker>,
     ) -> Result<Self, LockError> {
         // Put all dependencies for each package in a canonical order and
@@ -464,6 +468,7 @@ impl Lock {
             fork_markers,
             conflicts,
             supported_environments,
+            required_platforms,
             requires_python,
             options,
             packages,
@@ -500,6 +505,16 @@ impl Lock {
         // The nice thing about complexifying is that it's a no-op if the
         // markers given have already been complexified.
         self.supported_environments = supported_environments
+            .into_iter()
+            .map(|marker| self.requires_python.complexify_markers(marker))
+            .collect();
+        self
+    }
+
+    /// Record the required platforms that were used to generate this lock.
+    #[must_use]
+    pub fn with_required_platforms(mut self, required_platforms: Vec<MarkerTree>) -> Self {
+        self.required_platforms = required_platforms
             .into_iter()
             .map(|marker| self.requires_python.complexify_markers(marker))
             .collect();
@@ -561,6 +576,11 @@ impl Lock {
         &self.supported_environments
     }
 
+    /// Returns the required platforms that were used to generate this lock.
+    pub fn required_platforms(&self) -> &[MarkerTree] {
+        &self.required_platforms
+    }
+
     /// Returns the workspace members that were used to generate this lock.
     pub fn members(&self) -> &BTreeSet<PackageName> {
         &self.manifest.members
@@ -587,6 +607,16 @@ impl Lock {
     /// '{requires-python-bound}'` attached to each one.)
     pub fn simplified_supported_environments(&self) -> Vec<MarkerTree> {
         self.supported_environments()
+            .iter()
+            .copied()
+            .map(|marker| self.simplify_environment(marker))
+            .collect()
+    }
+
+    /// Returns the required platforms that were used to generate this
+    /// lock.
+    pub fn simplified_required_platforms(&self) -> Vec<MarkerTree> {
+        self.required_platforms()
             .iter()
             .copied()
             .map(|marker| self.simplify_environment(marker))
@@ -630,9 +660,20 @@ impl Lock {
                     .iter()
                     .copied()
                     .map(|marker| SimplifiedMarkerTree::new(&self.requires_python, marker))
-                    .filter_map(super::requires_python::SimplifiedMarkerTree::try_to_string),
+                    .filter_map(SimplifiedMarkerTree::try_to_string),
             );
             doc.insert("supported-markers", value(supported_environments));
+        }
+
+        if !self.required_platforms.is_empty() {
+            let required_platforms = each_element_on_its_line_array(
+                self.required_platforms
+                    .iter()
+                    .copied()
+                    .map(|marker| SimplifiedMarkerTree::new(&self.requires_python, marker))
+                    .filter_map(SimplifiedMarkerTree::try_to_string),
+            );
+            doc.insert("required-markers", value(required_platforms));
         }
 
         if !self.conflicts.is_empty() {
@@ -1402,6 +1443,8 @@ struct LockWire {
     fork_markers: Vec<SimplifiedMarkerTree>,
     #[serde(rename = "supported-markers", default)]
     supported_environments: Vec<SimplifiedMarkerTree>,
+    #[serde(rename = "required-markers", default)]
+    required_platforms: Vec<SimplifiedMarkerTree>,
     #[serde(rename = "conflicts", default)]
     conflicts: Option<Conflicts>,
     /// We discard the lockfile if these options match.
@@ -1444,6 +1487,11 @@ impl TryFrom<LockWire> for Lock {
             .into_iter()
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
             .collect();
+        let required_platforms = wire
+            .required_platforms
+            .into_iter()
+            .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
+            .collect();
         let fork_markers = wire
             .fork_markers
             .into_iter()
@@ -1462,6 +1510,7 @@ impl TryFrom<LockWire> for Lock {
             wire.manifest,
             wire.conflicts.unwrap_or_else(Conflicts::empty),
             supported_environments,
+            required_platforms,
             fork_markers,
         )?;
 
