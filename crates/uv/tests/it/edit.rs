@@ -5853,29 +5853,30 @@ fn sorted_dependencies_name_specifiers() -> Result<()> {
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
-    [project]
-    name = "project"
-    version = "0.1.0"
-    requires-python = ">=3.12"
-    dependencies = [
-        "typing>=3",
-        "typing-extensions>=4",
-    ]
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12.0"
+        dependencies = [
+            "pytest>=8",
+            "typing-extensions>=4.10.0",
+        ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().args(["anyio"]), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.add().args(["pytest-mock"]), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Prepared 5 packages in [TIME]
-    Installed 5 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + sniffio==1.3.1
-     + typing==3.10.0.0
+    Resolved 8 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + pytest-mock==3.14.0
      + typing-extensions==4.10.0
     "###);
 
@@ -5889,15 +5890,49 @@ fn sorted_dependencies_name_specifiers() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        requires-python = ">=3.12"
+        requires-python = ">=3.12.[X]"
         dependencies = [
-            "anyio>=4.3.0",
-            "typing>=3",
-            "typing-extensions>=4",
+            "pytest>=8",
+            "pytest-mock>=3.14.0",
+            "typing-extensions>=4.10.0",
         ]
         "###
         );
     });
+
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.add().args(["pytest-randomly"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + pytest-randomly==3.15.0
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12.[X]"
+        dependencies = [
+            "pytest>=8",
+            "pytest-mock>=3.14.0",
+            "pytest-randomly>=3.15.0",
+            "typing-extensions>=4.10.0",
+        ]
+        "###
+        );
+    });
+
     Ok(())
 }
 
