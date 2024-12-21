@@ -1703,7 +1703,7 @@ impl Package {
                             self.wheels[best_wheel_index].filename.clone();
                         let url = Url::from(ParsedArchiveUrl {
                             url: url.to_url(),
-                            subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
+                            subdirectory: direct.subdirectory.clone(),
                             ext: DistExtension::Wheel,
                         });
                         let direct_dist = DirectUrlBuiltDist {
@@ -1848,14 +1848,14 @@ impl Package {
                 // Reconstruct the PEP 508-compatible URL from the `GitSource`.
                 let url = Url::from(ParsedGitUrl {
                     url: git_url.clone(),
-                    subdirectory: git.subdirectory.as_ref().map(PathBuf::from),
+                    subdirectory: git.subdirectory.clone(),
                 });
 
                 let git_dist = GitSourceDist {
                     name: self.id.name.clone(),
                     url: VerbatimUrl::from_url(url),
                     git: Box::new(git_url),
-                    subdirectory: git.subdirectory.as_ref().map(PathBuf::from),
+                    subdirectory: git.subdirectory.clone(),
                 };
                 uv_distribution_types::SourceDist::Git(git_dist)
             }
@@ -2475,11 +2475,7 @@ impl Source {
         Source::Direct(
             normalize_url(direct_dist.url.to_url()),
             DirectSource {
-                subdirectory: direct_dist
-                    .subdirectory
-                    .as_deref()
-                    .and_then(Path::to_str)
-                    .map(ToString::to_string),
+                subdirectory: direct_dist.subdirectory.clone(),
             },
         )
     }
@@ -2541,11 +2537,7 @@ impl Source {
                 precise: git_dist.git.precise().unwrap_or_else(|| {
                     panic!("Git distribution is missing a precise hash: {git_dist}")
                 }),
-                subdirectory: git_dist
-                    .subdirectory
-                    .as_deref()
-                    .and_then(Path::to_str)
-                    .map(ToString::to_string),
+                subdirectory: git_dist.subdirectory.clone(),
             },
         )
     }
@@ -2603,7 +2595,10 @@ impl Source {
             Source::Direct(ref url, DirectSource { ref subdirectory }) => {
                 source_table.insert("url", Value::from(url.as_ref()));
                 if let Some(ref subdirectory) = *subdirectory {
-                    source_table.insert("subdirectory", Value::from(subdirectory));
+                    source_table.insert(
+                        "subdirectory",
+                        Value::from(PortablePath::from(subdirectory).to_string()),
+                    );
                 }
             }
             Source::Path(ref path) => {
@@ -2683,15 +2678,14 @@ impl Source {
 #[serde(untagged)]
 enum SourceWire {
     Registry {
-        registry: RegistrySource,
+        registry: RegistrySourceWire,
     },
     Git {
         git: String,
     },
     Direct {
         url: UrlString,
-        #[serde(default)]
-        subdirectory: Option<String>,
+        subdirectory: Option<PortablePathBuf>,
     },
     Path {
         path: PortablePathBuf,
@@ -2715,7 +2709,7 @@ impl TryFrom<SourceWire> for Source {
         use self::SourceWire::*;
 
         match wire {
-            Registry { registry } => Ok(Source::Registry(registry)),
+            Registry { registry } => Ok(Source::Registry(registry.into())),
             Git { git } => {
                 let url = Url::parse(&git)
                     .map_err(|err| SourceParseError::InvalidUrl {
@@ -2737,7 +2731,12 @@ impl TryFrom<SourceWire> for Source {
 
                 Ok(Source::Git(UrlString::from(url), git_source))
             }
-            Direct { url, subdirectory } => Ok(Source::Direct(url, DirectSource { subdirectory })),
+            Direct { url, subdirectory } => Ok(Source::Direct(
+                url,
+                DirectSource {
+                    subdirectory: subdirectory.map(PathBuf::from),
+                },
+            )),
             Path { path } => Ok(Source::Path(path.into())),
             Directory { directory } => Ok(Source::Directory(directory.into())),
             Editable { editable } => Ok(Source::Editable(editable.into())),
@@ -2764,7 +2763,15 @@ impl std::fmt::Display for RegistrySource {
     }
 }
 
-impl<'de> serde::de::Deserialize<'de> for RegistrySource {
+#[derive(Clone, Debug)]
+enum RegistrySourceWire {
+    /// Ex) `https://pypi.org/simple`
+    Url(UrlString),
+    /// Ex) `../path/to/local/index`
+    Path(PortablePathBuf),
+}
+
+impl<'de> serde::de::Deserialize<'de> for RegistrySourceWire {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::de::Deserializer<'de>,
@@ -2772,7 +2779,7 @@ impl<'de> serde::de::Deserialize<'de> for RegistrySource {
         struct Visitor;
 
         impl serde::de::Visitor<'_> for Visitor {
-            type Value = RegistrySource;
+            type Value = RegistrySourceWire;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 formatter.write_str("a valid URL or a file path")
@@ -2787,14 +2794,14 @@ impl<'de> serde::de::Deserialize<'de> for RegistrySource {
                         serde::Deserialize::deserialize(serde::de::value::StrDeserializer::new(
                             value,
                         ))
-                        .map(RegistrySource::Url)?,
+                        .map(RegistrySourceWire::Url)?,
                     )
                 } else {
                     Ok(
                         serde::Deserialize::deserialize(serde::de::value::StrDeserializer::new(
                             value,
                         ))
-                        .map(RegistrySource::Path)?,
+                        .map(RegistrySourceWire::Path)?,
                     )
                 }
             }
@@ -2804,9 +2811,18 @@ impl<'de> serde::de::Deserialize<'de> for RegistrySource {
     }
 }
 
+impl From<RegistrySourceWire> for RegistrySource {
+    fn from(wire: RegistrySourceWire) -> Self {
+        match wire {
+            RegistrySourceWire::Url(url) => Self::Url(url),
+            RegistrySourceWire::Path(path) => Self::Path(path.into()),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 struct DirectSource {
-    subdirectory: Option<String>,
+    subdirectory: Option<PathBuf>,
 }
 
 /// NOTE: Care should be taken when adding variants to this enum. Namely, new
@@ -2816,7 +2832,7 @@ struct DirectSource {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 struct GitSource {
     precise: GitSha,
-    subdirectory: Option<String>,
+    subdirectory: Option<PathBuf>,
     kind: GitSourceKind,
 }
 
@@ -2838,7 +2854,7 @@ impl GitSource {
                 "tag" => kind = GitSourceKind::Tag(val.into_owned()),
                 "branch" => kind = GitSourceKind::Branch(val.into_owned()),
                 "rev" => kind = GitSourceKind::Rev(val.into_owned()),
-                "subdirectory" => subdirectory = Some(val.into_owned()),
+                "subdirectory" => subdirectory = Some(PortablePathBuf::from(val.as_ref()).into()),
                 _ => continue,
             };
         }

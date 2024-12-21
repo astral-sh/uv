@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::env;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::stdout;
