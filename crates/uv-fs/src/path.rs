@@ -392,6 +392,16 @@ impl std::fmt::Display for PortablePathBuf {
     }
 }
 
+impl From<&str> for PortablePathBuf {
+    fn from(path: &str) -> Self {
+        if path == "." {
+            Self(PathBuf::new())
+        } else {
+            Self(PathBuf::from(path))
+        }
+    }
+}
+
 impl From<PortablePathBuf> for PathBuf {
     fn from(portable: PortablePathBuf) -> Self {
         portable.0
