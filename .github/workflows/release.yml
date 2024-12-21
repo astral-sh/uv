@@ -108,6 +108,7 @@ jobs:
     secrets: inherit
     permissions:
       "contents": "read"
+      "id-token": "write"
       "packages": "write"
 
   # Build and package all the platform-agnostic(ish) things
