@@ -2,7 +2,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use uv_configuration::BuildOptions;
-use uv_distribution::{ArchiveMetadata, DistributionDatabase};
+use uv_distribution::{ArchiveMetadata, DistributionDatabase, Reporter};
 use uv_distribution_types::{Dist, IndexCapabilities, IndexUrl, InstalledDist, RequestedDist};
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
@@ -97,9 +97,9 @@ pub trait ResolverProvider {
         dist: &'io InstalledDist,
     ) -> impl Future<Output = WheelMetadataResult> + 'io;
 
-    /// Set the [`uv_distribution::Reporter`] to use for this installer.
+    /// Set the [`Reporter`] to use for this installer.
     #[must_use]
-    fn with_reporter(self, reporter: impl uv_distribution::Reporter + 'static) -> Self;
+    fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self;
 }
 
 /// The main IO backend for the resolver, which does cached requests network requests using the
@@ -273,9 +273,9 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
         }
     }
 
-    /// Set the [`uv_distribution::Reporter`] to use for this installer.
+    /// Set the [`Reporter`] to use for this installer.
     #[must_use]
-    fn with_reporter(self, reporter: impl uv_distribution::Reporter + 'static) -> Self {
+    fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
             fetcher: self.fetcher.with_reporter(reporter),
             ..self

@@ -82,11 +82,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
     /// Set the [`Reporter`] to use for the [`DistributionDatabase`].
     #[must_use]
-    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
-        let reporter = Arc::new(reporter);
+    pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
-            reporter: Some(reporter.clone()),
-            builder: self.builder.with_reporter(reporter),
+            builder: self.builder.with_reporter(reporter.clone()),
+            reporter: Some(reporter),
             ..self
         }
     }

@@ -73,7 +73,6 @@ pub use crate::resolver::provider::{
     DefaultResolverProvider, MetadataResponse, PackageVersionsResult, ResolverProvider,
     VersionsResponse, WheelMetadataResult,
 };
-use crate::resolver::reporter::Facade;
 pub use crate::resolver::reporter::{BuildId, Reporter};
 use crate::yanks::AllowedYanks;
 use crate::{marker, DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode, VersionMap};
@@ -243,15 +242,15 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
 
     /// Set the [`Reporter`] to use for this installer.
     #[must_use]
-    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
-        let reporter = Arc::new(reporter);
-
+    pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
             state: ResolverState {
                 reporter: Some(reporter.clone()),
                 ..self.state
             },
-            provider: self.provider.with_reporter(Facade { reporter }),
+            provider: self
+                .provider
+                .with_reporter(reporter.into_distribution_reporter()),
         }
     }
 

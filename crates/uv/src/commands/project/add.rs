@@ -1,12 +1,12 @@
-use std::collections::hash_map::Entry;
-use std::fmt::Write;
-use std::io;
-use std::path::{Path, PathBuf};
-
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
+use std::collections::hash_map::Entry;
+use std::fmt::Write;
+use std::io;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tracing::debug;
 use url::Url;
 
@@ -350,7 +350,7 @@ pub(crate) async fn add(
                     state.index(),
                     DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
                 )
-                .with_reporter(ResolverReporter::from(printer))
+                .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(unnamed.into_iter())
                 .await?,
             );

@@ -29,15 +29,18 @@ pub trait Reporter: Send + Sync {
     fn on_download_complete(&self, name: &PackageName, id: usize);
 }
 
-/// A facade for converting from [`Reporter`] to [`uv_git::Reporter`].
-pub(crate) struct Facade {
-    reporter: Arc<dyn Reporter>,
+impl dyn Reporter {
+    /// Converts this reporter to a [`uv_git::Reporter`].
+    pub(crate) fn into_git_reporter(self: Arc<dyn Reporter>) -> Arc<dyn uv_git::Reporter> {
+        Arc::new(Facade {
+            reporter: self.clone(),
+        })
+    }
 }
 
-impl From<Arc<dyn Reporter>> for Facade {
-    fn from(reporter: Arc<dyn Reporter>) -> Self {
-        Self { reporter }
-    }
+/// A facade for converting from [`Reporter`] to [`uv_git::Reporter`].
+struct Facade {
+    reporter: Arc<dyn Reporter>,
 }
 
 impl uv_git::Reporter for Facade {
