@@ -224,7 +224,7 @@ async fn venv_impl(
 
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
+        if let Some(credentials) = index.credentials(None) {
             uv_auth::store_credentials(index.raw_url(), credentials);
         }
     }
@@ -271,7 +271,7 @@ async fn venv_impl(
 
         // Add all authenticated sources to the cache.
         for index in index_locations.allowed_indexes() {
-            if let Some(credentials) = index.credentials() {
+            if let Some(credentials) = index.credentials(None) {
                 uv_auth::store_credentials(index.raw_url(), credentials);
             }
         }
