@@ -303,7 +303,7 @@ ENV UV_COMPILE_BYTECODE=1
 
 ### Caching
 
-A [cache mount](https://docs.docker.com/build/guide/mounts/#add-a-cache-mount) can be used to
+A [cache mount](https://docs.docker.com/build/cache/optimize/#use-cache-mounts) can be used to
 improve performance across builds:
 
 ```dockerfile title="Dockerfile"
