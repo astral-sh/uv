@@ -7,7 +7,7 @@ use thiserror::Error;
 use url::Url;
 use uv_distribution_filename::DistExtension;
 
-use uv_fs::{relative_to, PortablePathBuf, CWD};
+use uv_fs::{relative_to, PortablePath, PortablePathBuf, CWD};
 use uv_git::{GitReference, GitSha, GitUrl};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
@@ -666,7 +666,7 @@ enum RequirementSourceWire {
     /// Ex) `source = { url = "<https://example.org/foo-1.0.zip>" }`
     Direct {
         url: Url,
-        subdirectory: Option<String>,
+        subdirectory: Option<PortablePathBuf>,
     },
     /// Ex) `source = { path = "/home/ferris/iniconfig-2.0.0-py3-none-any.whl" }`
     Path { path: PortablePathBuf },
@@ -709,10 +709,7 @@ impl From<RequirementSource> for RequirementSourceWire {
                 url: _,
             } => Self::Direct {
                 url: location,
-                subdirectory: subdirectory
-                    .as_deref()
-                    .and_then(Path::to_str)
-                    .map(ToString::to_string),
+                subdirectory: subdirectory.map(PortablePathBuf::from),
             },
             RequirementSource::Git {
                 repository,
@@ -731,9 +728,14 @@ impl From<RequirementSource> for RequirementSourceWire {
                 url.set_query(None);
 
                 // Put the subdirectory in the query.
-                if let Some(subdirectory) = subdirectory.as_deref().and_then(Path::to_str) {
+                if let Some(subdirectory) = subdirectory
+                    .as_deref()
+                    .map(PortablePath::from)
+                    .as_ref()
+                    .map(PortablePath::to_string)
+                {
                     url.query_pairs_mut()
-                        .append_pair("subdirectory", subdirectory);
+                        .append_pair("subdirectory", &subdirectory);
                 }
 
                 // Put the requested reference in the query.
@@ -815,13 +817,15 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 let mut repository = Url::parse(&git)?;
 
                 let mut reference = GitReference::DefaultBranch;
-                let mut subdirectory = None;
+                let mut subdirectory: Option<PortablePathBuf> = None;
                 for (key, val) in repository.query_pairs() {
                     match &*key {
                         "tag" => reference = GitReference::Tag(val.into_owned()),
                         "branch" => reference = GitReference::Branch(val.into_owned()),
                         "rev" => reference = GitReference::from_rev(val.into_owned()),
-                        "subdirectory" => subdirectory = Some(val.into_owned()),
+                        "subdirectory" => {
+                            subdirectory = Some(PortablePathBuf::from(val.as_ref()));
+                        }
                         _ => continue,
                     };
                 }
@@ -840,7 +844,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 if let Some(rev) = reference.as_str() {
                     url.set_path(&format!("{}@{}", url.path(), rev));
                 }
-                if let Some(subdirectory) = &subdirectory {
+                if let Some(subdirectory) = subdirectory.as_ref() {
                     url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
                 }
                 let url = VerbatimUrl::from_url(url);
