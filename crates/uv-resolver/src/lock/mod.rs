@@ -2905,11 +2905,16 @@ enum SourceDist {
         #[serde(flatten)]
         metadata: SourceDistMetadata,
     },
+    Metadata {
+        #[serde(flatten)]
+        metadata: SourceDistMetadata,
+    },
 }
 
 impl SourceDist {
     fn filename(&self) -> Option<Cow<str>> {
         match self {
+            SourceDist::Metadata { .. } => None,
             SourceDist::Url { url, .. } => url.filename().ok(),
             SourceDist::Path { path, .. } => {
                 path.file_name().map(|filename| filename.to_string_lossy())
@@ -2919,6 +2924,7 @@ impl SourceDist {
 
     fn url(&self) -> Option<&UrlString> {
         match &self {
+            SourceDist::Metadata { .. } => None,
             SourceDist::Url { url, .. } => Some(url),
             SourceDist::Path { .. } => None,
         }
@@ -2926,6 +2932,7 @@ impl SourceDist {
 
     fn path(&self) -> Option<&Path> {
         match &self {
+            SourceDist::Metadata { .. } => None,
             SourceDist::Url { .. } => None,
             SourceDist::Path { path, .. } => Some(path),
         }
@@ -2933,6 +2940,7 @@ impl SourceDist {
 
     fn hash(&self) -> Option<&Hash> {
         match &self {
+            SourceDist::Metadata { metadata } => metadata.hash.as_ref(),
             SourceDist::Url { metadata, .. } => metadata.hash.as_ref(),
             SourceDist::Path { metadata, .. } => metadata.hash.as_ref(),
         }
@@ -2940,6 +2948,7 @@ impl SourceDist {
 
     fn size(&self) -> Option<u64> {
         match &self {
+            SourceDist::Metadata { metadata } => metadata.size,
             SourceDist::Url { metadata, .. } => metadata.size,
             SourceDist::Path { metadata, .. } => metadata.size,
         }
@@ -2990,14 +2999,16 @@ impl SourceDist {
             uv_distribution_types::SourceDist::Registry(ref reg_dist) => {
                 SourceDist::from_registry_dist(reg_dist, index)
             }
-            uv_distribution_types::SourceDist::DirectUrl(ref direct_dist) => {
-                SourceDist::from_direct_dist(id, direct_dist, hashes).map(Some)
+            uv_distribution_types::SourceDist::DirectUrl(_) => {
+                SourceDist::from_direct_dist(id, hashes).map(Some)
+            }
+            uv_distribution_types::SourceDist::Path(_) => {
+                SourceDist::from_path_dist(id, hashes).map(Some)
             }
             // An actual sdist entry in the lockfile is only required when
             // it's from a registry or a direct URL. Otherwise, it's strictly
             // redundant with the information in all other kinds of `source`.
             uv_distribution_types::SourceDist::Git(_)
-            | uv_distribution_types::SourceDist::Path(_)
             | uv_distribution_types::SourceDist::Directory(_) => Ok(None),
         }
     }
@@ -3046,11 +3057,7 @@ impl SourceDist {
         }
     }
 
-    fn from_direct_dist(
-        id: &PackageId,
-        direct_dist: &DirectUrlSourceDist,
-        hashes: &[HashDigest],
-    ) -> Result<SourceDist, LockError> {
+    fn from_direct_dist(id: &PackageId, hashes: &[HashDigest]) -> Result<SourceDist, LockError> {
         let Some(hash) = hashes.iter().max().cloned().map(Hash::from) else {
             let kind = LockErrorKind::Hash {
                 id: id.clone(),
@@ -3059,8 +3066,24 @@ impl SourceDist {
             };
             return Err(kind.into());
         };
-        Ok(SourceDist::Url {
-            url: normalize_url(direct_dist.url.to_url()),
+        Ok(SourceDist::Metadata {
+            metadata: SourceDistMetadata {
+                hash: Some(hash),
+                size: None,
+            },
+        })
+    }
+
+    fn from_path_dist(id: &PackageId, hashes: &[HashDigest]) -> Result<SourceDist, LockError> {
+        let Some(hash) = hashes.iter().max().cloned().map(Hash::from) else {
+            let kind = LockErrorKind::Hash {
+                id: id.clone(),
+                artifact_type: "path source distribution",
+                expected: true,
+            };
+            return Err(kind.into());
+        };
+        Ok(SourceDist::Metadata {
             metadata: SourceDistMetadata {
                 hash: Some(hash),
                 size: None,
@@ -3082,6 +3105,10 @@ enum SourceDistWire {
         #[serde(flatten)]
         metadata: SourceDistMetadata,
     },
+    Metadata {
+        #[serde(flatten)]
+        metadata: SourceDistMetadata,
+    },
 }
 
 impl SourceDist {
@@ -3089,6 +3116,7 @@ impl SourceDist {
     fn to_toml(&self) -> anyhow::Result<InlineTable> {
         let mut table = InlineTable::new();
         match &self {
+            SourceDist::Metadata { .. } => {}
             SourceDist::Url { url, .. } => {
                 table.insert("url", Value::from(url.as_ref()));
             }
@@ -3116,6 +3144,7 @@ impl TryFrom<SourceDistWire> for SourceDist {
                 path: path.into(),
                 metadata,
             }),
+            SourceDistWire::Metadata { metadata } => Ok(SourceDist::Metadata { metadata }),
         }
     }
 }
