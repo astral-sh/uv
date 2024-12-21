@@ -853,13 +853,23 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                     url,
                 })
             }
-            RequirementSourceWire::Direct { url, subdirectory } => Ok(Self::Url {
-                url: VerbatimUrl::from_url(url.clone()),
-                location: url.clone(),
-                subdirectory: subdirectory.map(PathBuf::from),
-                ext: DistExtension::from_path(url.path())
-                    .map_err(|err| ParsedUrlError::MissingExtensionUrl(url.to_string(), err))?,
-            }),
+            RequirementSourceWire::Direct { url, subdirectory } => {
+                let location = url.clone();
+
+                // Create a PEP 508-compatible URL.
+                let mut url = url.clone();
+                if let Some(subdirectory) = &subdirectory {
+                    url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
+                }
+
+                Ok(Self::Url {
+                    location,
+                    subdirectory: subdirectory.map(PathBuf::from),
+                    ext: DistExtension::from_path(url.path())
+                        .map_err(|err| ParsedUrlError::MissingExtensionUrl(url.to_string(), err))?,
+                    url: VerbatimUrl::from_url(url.clone()),
+                })
+            }
             // TODO(charlie): The use of `CWD` here is incorrect. These should be resolved relative
             // to the workspace root, but we don't have access to it here. When comparing these
             // sources in the lockfile, we replace the URL anyway.

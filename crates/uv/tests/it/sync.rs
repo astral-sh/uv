@@ -5448,6 +5448,7 @@ fn sync_git_repeated_member_backwards_path() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.13"
         dependencies = ["package", "dependency"]
+
         [tool.uv.sources]
         package = { git = "https://github.com/astral-sh/uv-backwards-path-test", subdirectory = "root" }
         dependency = { git = "https://github.com/astral-sh/uv-backwards-path-test", subdirectory = "dependency" }

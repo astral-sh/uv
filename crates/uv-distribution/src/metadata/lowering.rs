@@ -622,7 +622,7 @@ fn url_source(
         let subdirectory = subdirectory
             .to_str()
             .ok_or_else(|| LoweringError::NonUtf8Path(subdirectory.clone()))?;
-        verbatim_url.set_fragment(Some(subdirectory));
+        verbatim_url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
     }
 
     let ext = match DistExtension::from_path(url.path()) {

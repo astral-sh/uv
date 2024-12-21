@@ -1864,15 +1864,16 @@ impl Package {
                 let DistExtension::Source(ext) = DistExtension::from_path(url.as_ref())? else {
                     return Ok(None);
                 };
+                let location = url.to_url();
                 let subdirectory = direct.subdirectory.as_ref().map(PathBuf::from);
                 let url = Url::from(ParsedArchiveUrl {
-                    url: url.to_url(),
+                    url: location.clone(),
                     subdirectory: subdirectory.clone(),
                     ext: DistExtension::Source(ext),
                 });
                 let direct_dist = DirectUrlSourceDist {
                     name: self.id.name.clone(),
-                    location: url.clone(),
+                    location,
                     subdirectory: subdirectory.clone(),
                     ext,
                     url: VerbatimUrl::from_url(url),
@@ -3822,23 +3823,33 @@ fn normalize_requirement(
             })
         }
         RequirementSource::Url {
-            location,
+            mut location,
             subdirectory,
             ext,
             url,
-        } => Ok(Requirement {
-            name: requirement.name,
-            extras: requirement.extras,
-            groups: requirement.groups,
-            marker: requirement.marker,
-            source: RequirementSource::Url {
-                location,
-                subdirectory,
-                ext,
-                url,
-            },
-            origin: None,
-        }),
+        } => {
+            // Redact the credentials.
+            redact_credentials(&mut location);
+
+            // Redact the PEP 508 URL.
+            let mut url = url.to_url();
+            redact_credentials(&mut url);
+            let url = VerbatimUrl::from_url(url);
+
+            Ok(Requirement {
+                name: requirement.name,
+                extras: requirement.extras,
+                groups: requirement.groups,
+                marker: requirement.marker,
+                source: RequirementSource::Url {
+                    location,
+                    subdirectory,
+                    ext,
+                    url,
+                },
+                origin: None,
+            })
+        }
     }
 }
 
