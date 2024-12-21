@@ -21071,7 +21071,7 @@ fn lock_pytorch_cpu() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12.0"
-        dependencies = []
+        dependencies = ["jinja2<=3.1.4"]
 
         [project.optional-dependencies]
         cpu = [
@@ -21438,6 +21438,9 @@ fn lock_pytorch_cpu() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { virtual = "." }
+        dependencies = [
+            { name = "jinja2" },
+        ]
 
         [package.optional-dependencies]
         cpu = [
@@ -21453,6 +21456,7 @@ fn lock_pytorch_cpu() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
+            { name = "jinja2", specifier = "<=3.1.4" },
             { name = "torch", marker = "extra == 'cpu'", specifier = ">=2.5.1", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "project", extra = "cpu" } },
             { name = "torch", marker = "extra == 'cu124'", specifier = ">=2.5.1", index = "https://download.pytorch.org/whl/cu124", conflict = { package = "project", extra = "cu124" } },
             { name = "torchvision", marker = "extra == 'cpu'", specifier = ">=0.20.1", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "project", extra = "cpu" } },
