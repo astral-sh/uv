@@ -1398,9 +1398,11 @@ impl Source {
                 group: None,
             },
             RequirementSource::Url {
-                subdirectory, url, ..
+                location,
+                subdirectory,
+                ..
             } => Source::Url {
-                url: url.to_url(),
+                url: location,
                 subdirectory: subdirectory.map(PortablePathBuf::from),
                 marker: MarkerTree::TRUE,
                 extra: None,
