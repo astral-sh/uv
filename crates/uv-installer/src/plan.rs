@@ -87,7 +87,7 @@ impl<'a> Planner<'a> {
                         let source = RequirementSource::from(dist);
                         match RequirementSatisfaction::check(installed, &source)? {
                             RequirementSatisfaction::Mismatch => {
-                                debug!("Requirement installed, but mismatched: {installed:?}");
+                                debug!("Requirement installed, but mismatched:\n  Installed: {installed:?}\n  Requested: {source:?}");
                             }
                             RequirementSatisfaction::Satisfied => {
                                 debug!("Requirement already installed: {installed}");
