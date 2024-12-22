@@ -3752,6 +3752,7 @@ fn normalize_file_location(location: &FileLocation) -> Result<UrlString, ToUrlEr
 /// Convert a [`Url`] into a normalized [`UrlString`].
 fn normalize_url(mut url: Url) -> UrlString {
     url.set_fragment(None);
+    url.set_query(None);
     UrlString::from(url)
 }
 
@@ -3773,15 +3774,20 @@ fn normalize_requirement(
             reference,
             precise,
             subdirectory,
-            url,
+            url: _,
         } => {
             // Redact the credentials.
             redact_credentials(&mut repository);
 
-            // Redact the PEP 508 URL.
-            let mut url = url.to_url();
-            redact_credentials(&mut url);
-            let url = VerbatimUrl::from_url(url);
+            // Remove the fragment and query from the URL; they're already present in the source.
+            repository.set_fragment(None);
+            repository.set_query(None);
+
+            // Reconstruct the PEP 508 URL from the underlying data.
+            let url = Url::from(ParsedGitUrl {
+                url: uv_git::GitUrl::from_reference(repository.clone(), reference.clone()),
+                subdirectory: subdirectory.clone(),
+            });
 
             Ok(Requirement {
                 name: requirement.name,
@@ -3793,7 +3799,7 @@ fn normalize_requirement(
                     reference,
                     precise,
                     subdirectory,
-                    url,
+                    url: VerbatimUrl::from_url(url),
                 },
                 origin: None,
             })
@@ -3871,15 +3877,21 @@ fn normalize_requirement(
             mut location,
             subdirectory,
             ext,
-            url,
+            url: _,
         } => {
             // Redact the credentials.
             redact_credentials(&mut location);
 
-            // Redact the PEP 508 URL.
-            let mut url = url.to_url();
-            redact_credentials(&mut url);
-            let url = VerbatimUrl::from_url(url);
+            // Remove the fragment and query from the URL; they're already present in the source.
+            location.set_fragment(None);
+            location.set_query(None);
+
+            // Reconstruct the PEP 508 URL from the underlying data.
+            let url = Url::from(ParsedArchiveUrl {
+                url: location.clone(),
+                subdirectory: subdirectory.clone(),
+                ext,
+            });
 
             Ok(Requirement {
                 name: requirement.name,
@@ -3890,7 +3902,7 @@ fn normalize_requirement(
                     location,
                     subdirectory,
                     ext,
-                    url,
+                    url: VerbatimUrl::from_url(url),
                 },
                 origin: None,
             })

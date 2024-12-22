@@ -307,8 +307,12 @@ impl ParsedArchiveUrl {
 impl TryFrom<Url> for ParsedArchiveUrl {
     type Error = ParsedUrlError;
 
-    fn try_from(url: Url) -> Result<Self, Self::Error> {
+    fn try_from(mut url: Url) -> Result<Self, Self::Error> {
+        // Extract the `#subdirectory` fragment, if present.
         let subdirectory = get_subdirectory(&url);
+        url.set_fragment(None);
+
+        // Infer the extension from the path.
         let ext = match DistExtension::from_path(url.path()) {
             Ok(ext) => ext,
             Err(..) if looks_like_git_repository(&url) => {
@@ -316,6 +320,7 @@ impl TryFrom<Url> for ParsedArchiveUrl {
             }
             Err(err) => return Err(ParsedUrlError::MissingExtensionUrl(url.to_string(), err)),
         };
+
         Ok(Self {
             url,
             subdirectory,

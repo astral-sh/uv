@@ -2377,8 +2377,8 @@ async fn read_egg_info(
                         continue;
                     };
                     if let Some(name) = name {
-                        debug!("Skipping `{file_stem}.egg-info` due to name mismatch (expected: `{name}`)");
                         if file_name.name != *name {
+                            debug!("Skipping `{file_stem}.egg-info` due to name mismatch (expected: `{name}`)");
                             continue;
                         }
                     }
