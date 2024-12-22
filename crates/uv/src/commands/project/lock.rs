@@ -885,7 +885,7 @@ impl ValidatedLock {
             }
             SatisfiesResult::MismatchedMembers(expected, actual) => {
                 debug!(
-                    "Ignoring existing lockfile due to mismatched members:\n  Expected: {:?}\n  Actual: {:?}",
+                    "Ignoring existing lockfile due to mismatched members:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))
@@ -916,28 +916,28 @@ impl ValidatedLock {
             }
             SatisfiesResult::MismatchedRequirements(expected, actual) => {
                 debug!(
-                    "Ignoring existing lockfile due to mismatched requirements:\n  Expected: {:?}\n  Actual: {:?}",
+                    "Ignoring existing lockfile due to mismatched requirements:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedConstraints(expected, actual) => {
                 debug!(
-                    "Ignoring existing lockfile due to mismatched constraints:\n  Expected: {:?}\n  Actual: {:?}",
+                    "Ignoring existing lockfile due to mismatched constraints:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedOverrides(expected, actual) => {
                 debug!(
-                    "Ignoring existing lockfile due to mismatched overrides:\n  Expected: {:?}\n  Actual: {:?}",
+                    "Ignoring existing lockfile due to mismatched overrides:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedStaticMetadata(expected, actual) => {
                 debug!(
-                    "Ignoring existing lockfile due to mismatched static metadata:\n  Expected: {:?}\n  Actual: {:?}",
+                    "Ignoring existing lockfile due to mismatched static metadata:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))
@@ -960,14 +960,14 @@ impl ValidatedLock {
             }
             SatisfiesResult::MismatchedRequiresDist(name, version, expected, actual) => {
                 debug!(
-                    "Ignoring existing lockfile due to mismatched `requires-dist` for: `{name}=={version}`\n  Expected: {:?}\n  Actual: {:?}",
+                    "Ignoring existing lockfile due to mismatched `requires-dist` for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedDependencyGroups(name, version, expected, actual) => {
                 debug!(
-                    "Ignoring existing lockfile due to mismatched dev dependencies for: `{name}=={version}`\n  Expected: {:?}\n  Actual: {:?}",
+                    "Ignoring existing lockfile due to mismatched dev dependencies for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))
