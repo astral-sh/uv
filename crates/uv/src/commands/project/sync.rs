@@ -526,6 +526,41 @@ fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolu
 /// These credentials can come from any of `tool.uv.sources`, `tool.uv.dev-dependencies`,
 /// `project.dependencies`, and `project.optional-dependencies`.
 fn store_credentials_from_workspace(workspace: &Workspace) {
+    // Iterate over any sources in the workspace root.
+    for source in workspace.sources().values().flat_map(Sources::iter) {
+        match source {
+            Source::Git { git, .. } => {
+                uv_git::store_credentials_from_url(git);
+            }
+            Source::Url { url, .. } => {
+                uv_auth::store_credentials_from_url(url);
+            }
+            _ => {}
+        }
+    }
+
+    // Iterate over any dependencies defined in the workspace root.
+    for requirement in workspace
+        .non_project_requirements()
+        .ok()
+        .into_iter()
+        .flatten()
+    {
+        let Some(VersionOrUrl::Url(url)) = &requirement.version_or_url else {
+            continue;
+        };
+        match &url.parsed_url {
+            ParsedUrl::Git(ParsedGitUrl { url, .. }) => {
+                uv_git::store_credentials_from_url(url.repository());
+            }
+            ParsedUrl::Archive(ParsedArchiveUrl { url, .. }) => {
+                uv_auth::store_credentials_from_url(url);
+            }
+            _ => {}
+        }
+    }
+
+    // Iterate over each workspace member.
     for member in workspace.packages().values() {
         // Iterate over the `tool.uv.sources`.
         for source in member
