@@ -293,7 +293,7 @@ See [Dependencies](../concepts/projects/dependencies.md) for more.
 
 [tool.uv.sources]
 httpx = { git = "https://github.com/encode/httpx", tag = "0.27.0" }
-pytest =  { url = "https://files.pythonhosted.org/packages/6b/77/7440a06a8ead44c7757a64362dd22df5760f9b12dc5f11b6188cd2fc27a0/pytest-8.3.3-py3-none-any.whl" }
+pytest = { url = "https://files.pythonhosted.org/packages/6b/77/7440a06a8ead44c7757a64362dd22df5760f9b12dc5f11b6188cd2fc27a0/pytest-8.3.3-py3-none-any.whl" }
 pydantic = { path = "/path/to/pydantic", editable = true }
 ```
 

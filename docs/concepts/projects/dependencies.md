@@ -290,10 +290,7 @@ $ uv add git+https://github.com/encode/httpx --tag 0.27.0
 dependencies = ["httpx"]
 
 [tool.uv.sources]
-httpx = {
-  git = "https://github.com/encode/httpx",
-  tag = "0.27.0"
-}
+httpx = { git = "https://github.com/encode/httpx", tag = "0.27.0" }
 ```
 
 Or, a branch:
@@ -307,10 +304,7 @@ $ uv add git+https://github.com/encode/httpx --branch main
 dependencies = ["httpx"]
 
 [tool.uv.sources]
-httpx = {
-  git = "https://github.com/encode/httpx",
-  branch = "main"
-}
+httpx = { git = "https://github.com/encode/httpx", branch = "main" }
 ```
 
 Or, a revision (commit):
@@ -324,10 +318,7 @@ $ uv add git+https://github.com/encode/httpx --rev 326b9431c761e1ef1e00b9f760d1f
 dependencies = ["httpx"]
 
 [tool.uv.sources]
-httpx = {
-  git = "https://github.com/encode/httpx",
-  rev = "326b9431c761e1ef1e00b9f760d1f654c8db48c6"
-}
+httpx = { git = "https://github.com/encode/httpx", rev = "326b9431c761e1ef1e00b9f760d1f654c8db48c6" }
 ```
 
 A `subdirectory` may be specified if the package isn't in the repository root.
@@ -438,11 +429,7 @@ For example, to pull `httpx` from GitHub, but only on macOS, use the following:
 dependencies = ["httpx"]
 
 [tool.uv.sources]
-httpx = {
-  git = "https://github.com/encode/httpx",
-  tag = "0.27.2",
-  marker = "sys_platform == 'darwin'"
-}
+httpx = { git = "https://github.com/encode/httpx", tag = "0.27.2", marker = "sys_platform == 'darwin'" }
 ```
 
 By specifying the marker on the source, uv will still include `httpx` on all platforms, but will
@@ -462,16 +449,8 @@ dependencies = ["httpx"]
 
 [tool.uv.sources]
 httpx = [
-  {
-    git = "https://github.com/encode/httpx",
-    tag = "0.27.2",
-    marker = "sys_platform == 'darwin'"
-  },
-  {
-    git = "https://github.com/encode/httpx",
-    tag = "0.24.1",
-    marker = "sys_platform == 'linux'"
-  },
+  { git = "https://github.com/encode/httpx", tag = "0.27.2", marker = "sys_platform == 'darwin'" },
+  { git = "https://github.com/encode/httpx", tag = "0.24.1", marker = "sys_platform == 'linux'" },
 ]
 ```
 
