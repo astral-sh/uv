@@ -2565,7 +2565,7 @@ pub struct InitArgs {
     ///
     /// By default, adds a requirement on the system Python version; use `--python` to specify an
     /// alternative Python version requirement.
-    #[arg(long, alias="script", conflicts_with_all=["app", "lib", "package", "build_backend"])]
+    #[arg(long, conflicts_with_all=["app", "lib", "package", "build_backend"])]
     pub r#script: bool,
 
     /// Initialize a version control system for the project.
