@@ -278,7 +278,7 @@ impl Workspace {
             .any(|member| *member.root() == self.install_path)
     }
 
-    /// Returns the set of requirements that include all packages in the workspace.
+    /// Returns the set of all workspace members.
     pub fn members_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
         self.packages.values().filter_map(|member| {
             let url = VerbatimUrl::from_absolute_path(&member.root)
@@ -309,7 +309,7 @@ impl Workspace {
         })
     }
 
-    /// Returns the set of requirements that include all packages in the workspace.
+    /// Returns the set of all workspace member dependency groups.
     pub fn group_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
         self.packages.values().filter_map(|member| {
             let url = VerbatimUrl::from_absolute_path(&member.root)

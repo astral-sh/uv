@@ -147,7 +147,7 @@ pub(crate) async fn sync(
 
     let lock = match do_safe_lock(
         mode,
-        project.workspace(),
+        project.workspace().into(),
         settings.as_ref().into(),
         LowerBound::Warn,
         &state,
