@@ -21,7 +21,7 @@ use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
 use crate::graph_ops::marker_reachability;
 use crate::lock::{Package, PackageId, Source};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
-use crate::{InstallTarget, LockError};
+use crate::{Installable, LockError};
 
 /// An export of a [`Lock`] that renders in `requirements.txt` format.
 #[derive(Debug)]
@@ -33,7 +33,7 @@ pub struct RequirementsTxtExport<'lock> {
 
 impl<'lock> RequirementsTxtExport<'lock> {
     pub fn from_lock(
-        target: InstallTarget<'lock>,
+        target: &impl Installable<'lock>,
         prune: &[PackageName],
         extras: &ExtrasSpecification,
         dev: &DevGroupsManifest,
@@ -51,7 +51,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
         let root = petgraph.add_node(Node::Root);
 
         // Add the workspace packages to the queue.
-        for root_name in target.packages() {
+        for root_name in target.roots() {
             if prune.contains(root_name) {
                 continue;
             }

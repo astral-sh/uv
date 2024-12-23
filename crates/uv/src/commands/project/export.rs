@@ -15,10 +15,11 @@ use uv_configuration::{
 use uv_dispatch::SharedState;
 use uv_normalize::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
-use uv_resolver::{InstallTarget, RequirementsTxtExport};
+use uv_resolver::RequirementsTxtExport;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
+use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::{
     default_dependency_groups, detect_conflicts, DependencyGroupsTarget, ProjectError,
@@ -215,7 +216,7 @@ pub(crate) async fn export(
     match format {
         ExportFormat::RequirementsTxt => {
             let export = RequirementsTxtExport::from_lock(
-                target,
+                &target,
                 &prune,
                 &extras,
                 &dev,
