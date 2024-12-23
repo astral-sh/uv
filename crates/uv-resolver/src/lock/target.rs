@@ -3,6 +3,7 @@ use petgraph::Graph;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, VecDeque};
+use std::path::Path;
 use uv_configuration::{BuildOptions, DevGroupsManifest, ExtrasSpecification, InstallOptions};
 use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
@@ -34,15 +35,22 @@ pub enum InstallTarget<'env> {
         workspace: &'env Workspace,
         lock: &'env Lock,
     },
+    /// A PEP 723 script.
+    Script {
+        path: &'env Path,
+        dependencies: Option<&'env [uv_pep508::Requirement<VerbatimParsedUrl>]>,
+        lock: &'env Lock,
+    },
 }
 
 impl<'env> InstallTarget<'env> {
     /// Return the [`Workspace`] of the target.
-    pub fn workspace(&self) -> &'env Workspace {
+    pub fn install_path(&self) -> &'env Path {
         match self {
-            Self::Project { workspace, .. } => workspace,
-            Self::Workspace { workspace, .. } => workspace,
-            Self::NonProjectWorkspace { workspace, .. } => workspace,
+            Self::Project { workspace, .. } => workspace.install_path(),
+            Self::Workspace { workspace, .. } => workspace.install_path(),
+            Self::NonProjectWorkspace { workspace, .. } => workspace.install_path(),
+            Self::Script { path, .. } => path.parent().unwrap(),
         }
     }
 
@@ -52,6 +60,7 @@ impl<'env> InstallTarget<'env> {
             Self::Project { lock, .. } => lock,
             Self::Workspace { lock, .. } => lock,
             Self::NonProjectWorkspace { lock, .. } => lock,
+            Self::Script { lock, .. } => lock,
         }
     }
 
@@ -59,7 +68,9 @@ impl<'env> InstallTarget<'env> {
     pub fn packages(&self) -> impl Iterator<Item = &PackageName> {
         match self {
             Self::Project { name, .. } => Either::Right(Either::Left(std::iter::once(*name))),
-            Self::NonProjectWorkspace { lock, .. } => Either::Left(lock.members().iter()),
+            Self::NonProjectWorkspace { lock, .. } => {
+                Either::Left(Either::Left(lock.members().iter()))
+            }
             Self::Workspace { lock, .. } => {
                 // Identify the workspace members.
                 //
@@ -70,9 +81,24 @@ impl<'env> InstallTarget<'env> {
                         lock.root().into_iter().map(|package| &package.id.name),
                     ))
                 } else {
-                    Either::Left(lock.members().iter())
+                    Either::Left(Either::Left(lock.members().iter()))
                 }
             }
+            Self::Script { .. } => Either::Left(Either::Right(std::iter::empty())),
+        }
+    }
+
+    /// Return the [`InstallTarget`] requirements.
+    ///
+    /// Returns dependencies that apply to the workspace root, but not any of its members. As such,
+    /// only returns a non-empty iterator for scripts, which include packages directly (unlike
+    /// workspaces, in which each member has its own dependencies).
+    pub fn requirements(&self) -> Option<&[uv_pep508::Requirement<VerbatimParsedUrl>]> {
+        match self {
+            Self::Project { .. } => None,
+            Self::Workspace { .. } => None,
+            Self::NonProjectWorkspace { .. } => None,
+            Self::Script { dependencies, .. } => dependencies.as_deref(),
         }
     }
 
@@ -135,6 +161,7 @@ impl<'env> InstallTarget<'env> {
 
                 Ok(map)
             }
+            Self::Script { .. } => Ok(BTreeMap::default()),
         }
     }
 
@@ -144,6 +171,7 @@ impl<'env> InstallTarget<'env> {
             Self::Project { name, .. } => Some(name),
             Self::Workspace { .. } => None,
             Self::NonProjectWorkspace { .. } => None,
+            Self::Script { .. } => None,
         }
     }
 
@@ -269,6 +297,63 @@ impl<'env> InstallTarget<'env> {
                     if seen.insert((&dep.package_id, Some(extra))) {
                         queue.push_back((dep_dist, Some(extra)));
                     }
+                }
+            }
+        }
+
+        // Add any dependencies that are exclusive to the workspace root (e.g., dependencies in
+        // scripts).
+        for dependency in self.requirements().into_iter().flatten() {
+            if !dependency.marker.evaluate(marker_env, &[]) {
+                continue;
+            }
+
+            let root_name = &dependency.name;
+            let dist = self
+                .lock()
+                .find_by_markers(root_name, marker_env)
+                .map_err(|_| LockErrorKind::MultipleRootPackages {
+                    name: root_name.clone(),
+                })?
+                .ok_or_else(|| LockErrorKind::MissingRootPackage {
+                    name: root_name.clone(),
+                })?;
+
+            // Add the package to the graph.
+            let index = match inverse.entry(&dist.id) {
+                Entry::Vacant(entry) => {
+                    let index = petgraph.add_node(self.package_to_node(
+                        dist,
+                        tags,
+                        build_options,
+                        install_options,
+                    )?);
+                    entry.insert(index);
+                    index
+                }
+                Entry::Occupied(entry) => {
+                    // Critically, if the package is already in the graph, then it's a workspace
+                    // member. If it was omitted due to, e.g., `--only-dev`, but is itself
+                    // referenced as a development dependency, then we need to re-enable it.
+                    let index = *entry.get();
+                    let node = &mut petgraph[index];
+                    if !dev.prod() {
+                        *node = self.package_to_node(dist, tags, build_options, install_options)?;
+                    }
+                    index
+                }
+            };
+
+            // Add the edge.
+            petgraph.add_edge(root, index, Edge::Prod(dependency.marker));
+
+            // Push its dependencies on the queue.
+            if seen.insert((&dist.id, None)) {
+                queue.push_back((dist, None));
+            }
+            for extra in &dependency.extras {
+                if seen.insert((&dist.id, Some(extra))) {
+                    queue.push_back((dist, Some(extra)));
                 }
             }
         }
@@ -419,7 +504,7 @@ impl<'env> InstallTarget<'env> {
         build_options: &BuildOptions,
     ) -> Result<Node, LockError> {
         let dist = package.to_dist(
-            self.workspace().install_path(),
+            self.install_path(),
             TagPolicy::Required(tags),
             build_options,
         )?;
@@ -436,7 +521,7 @@ impl<'env> InstallTarget<'env> {
     /// Create a non-installable [`Node`] from a [`Package`].
     fn non_installable_node(&self, package: &Package, tags: &Tags) -> Result<Node, LockError> {
         let dist = package.to_dist(
-            self.workspace().install_path(),
+            self.install_path(),
             TagPolicy::Preferred(tags),
             &BuildOptions::default(),
         )?;

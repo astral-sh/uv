@@ -111,7 +111,7 @@ pub(crate) async fn tree(
     // Update the lockfile, if necessary.
     let lock = match do_safe_lock(
         mode,
-        &workspace,
+        (&workspace).into(),
         settings.as_ref(),
         LowerBound::Allow,
         &state,

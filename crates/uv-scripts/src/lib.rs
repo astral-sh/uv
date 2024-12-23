@@ -54,6 +54,14 @@ impl Pep723Item {
             Self::Remote(_) => None,
         }
     }
+
+    /// Return the PEP 723 script, if any.
+    pub fn as_script(&self) -> Option<&Pep723Script> {
+        match self {
+            Self::Script(script) => Some(script),
+            _ => None,
+        }
+    }
 }
 
 /// A PEP 723 script, including its [`Pep723Metadata`].

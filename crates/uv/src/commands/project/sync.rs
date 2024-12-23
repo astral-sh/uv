@@ -34,6 +34,7 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, 
 use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::lock::{do_safe_lock, LockMode};
+use crate::commands::project::target::LockTarget;
 use crate::commands::project::{
     default_dependency_groups, detect_conflicts, DependencyGroupsTarget, ProjectError,
 };
@@ -146,7 +147,7 @@ pub(crate) async fn sync(
 
     let lock = match do_safe_lock(
         mode,
-        project.workspace(),
+        project.workspace().into(),
         settings.as_ref().into(),
         LowerBound::Warn,
         &state,
@@ -367,7 +368,7 @@ pub(super) async fn do_sync(
     }
 
     // Populate credentials from the workspace.
-    store_credentials_from_workspace(target.workspace());
+    // store_credentials_from_workspace(target.into());
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
@@ -525,8 +526,9 @@ fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolu
 ///
 /// These credentials can come from any of `tool.uv.sources`, `tool.uv.dev-dependencies`,
 /// `project.dependencies`, and `project.optional-dependencies`.
-fn store_credentials_from_workspace(workspace: &Workspace) {
-    for member in workspace.packages().values() {
+fn store_credentials_from_workspace(target: LockTarget<'_>) {
+    // TODO(charlie): I think this misses dependencies in the non-project root.
+    for member in target.packages().values() {
         // Iterate over the `tool.uv.sources`.
         for source in member
             .pyproject_toml()

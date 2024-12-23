@@ -37,7 +37,7 @@ use crate::printer::Printer;
 #[allow(clippy::single_match_else, clippy::fn_params_excessive_bools)]
 pub(crate) async fn init(
     project_dir: &Path,
-    explicit_path: Option<PathBuf>,
+    script: Option<PathBuf>,
     name: Option<PackageName>,
     package: bool,
     init_kind: InitKind,
@@ -64,7 +64,7 @@ pub(crate) async fn init(
     }
     match init_kind {
         InitKind::Script => {
-            let Some(path) = explicit_path.as_deref() else {
+            let Some(path) = script.as_deref() else {
                 anyhow::bail!("Script initialization requires a file path")
             };
 
@@ -96,7 +96,7 @@ pub(crate) async fn init(
         }
         InitKind::Project(project_kind) => {
             // Default to the current directory if a path was not provided.
-            let path = match explicit_path {
+            let path = match script {
                 None => project_dir.to_path_buf(),
                 Some(ref path) => std::path::absolute(path)?,
             };
@@ -156,7 +156,7 @@ pub(crate) async fn init(
                 }
             }
 
-            match explicit_path {
+            match script {
                 // Initialized a project in the current directory.
                 None => {
                     writeln!(printer.stderr(), "Initialized project `{}`", name.cyan())?;

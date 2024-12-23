@@ -221,7 +221,7 @@ pub(crate) async fn remove(
     // Lock and sync the environment, if necessary.
     let lock = match project::lock::do_safe_lock(
         mode,
-        project.workspace(),
+        project.workspace().into(),
         settings.as_ref().into(),
         LowerBound::Allow,
         &state,

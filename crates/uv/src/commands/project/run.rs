@@ -17,8 +17,8 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{
-    Concurrency, DevGroupsSpecification, EditableMode, ExtrasSpecification, GroupsSpecification,
-    InstallOptions, LowerBound, PreviewMode, SourceStrategy, TrustedHost,
+    Concurrency, DevGroupsManifest, DevGroupsSpecification, EditableMode, ExtrasSpecification,
+    GroupsSpecification, InstallOptions, LowerBound, PreviewMode, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::SharedState;
 use uv_distribution::LoweredRequirement;
@@ -44,6 +44,7 @@ use crate::commands::pip::loggers::{
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::lock::LockMode;
+use crate::commands::project::target::LockTarget;
 use crate::commands::project::{
     default_dependency_groups, validate_requires_python, validate_script_requires_python,
     DependencyGroupsTarget, EnvironmentSpecification, ProjectError, ScriptPython, WorkspacePython,
@@ -227,109 +228,65 @@ pub(crate) async fn run(
             }
         }
 
-        // Determine the working directory for the script.
-        let script_dir = match &script {
-            Pep723Item::Script(script) => std::path::absolute(&script.path)?
-                .parent()
-                .expect("script path has no parent")
-                .to_owned(),
-            Pep723Item::Stdin(..) | Pep723Item::Remote(..) => std::env::current_dir()?,
-        };
-        let script = script.into_metadata();
+        // If a lockfile already exists, lock the script.
+        if let Some(target) = script
+            .as_script()
+            .map(LockTarget::from)
+            .filter(LockTarget::exists)
+        {
+            debug!(
+                "Found existing lockfile for script at: {}",
+                target.lock_path().display()
+            );
 
-        // Install the script requirements, if necessary. Otherwise, use an isolated environment.
-        if let Some(dependencies) = script.dependencies {
-            // Collect any `tool.uv.index` from the script.
-            let empty = Vec::default();
-            let script_indexes = match settings.sources {
-                SourceStrategy::Enabled => script
-                    .tool
-                    .as_ref()
-                    .and_then(|tool| tool.uv.as_ref())
-                    .and_then(|uv| uv.top_level.index.as_deref())
-                    .unwrap_or(&empty),
-                SourceStrategy::Disabled => &empty,
+            // Determine the lock mode.
+            let mode = if frozen {
+                LockMode::Frozen
+            } else if locked {
+                LockMode::Locked(&interpreter)
+            } else {
+                LockMode::Write(&interpreter)
             };
 
-            // Collect any `tool.uv.sources` from the script.
-            let empty = BTreeMap::default();
-            let script_sources = match settings.sources {
-                SourceStrategy::Enabled => script
-                    .tool
-                    .as_ref()
-                    .and_then(|tool| tool.uv.as_ref())
-                    .and_then(|uv| uv.sources.as_ref())
-                    .unwrap_or(&empty),
-                SourceStrategy::Disabled => &empty,
-            };
-
-            let requirements = dependencies
-                .into_iter()
-                .flat_map(|requirement| {
-                    LoweredRequirement::from_non_workspace_requirement(
-                        requirement,
-                        script_dir.as_ref(),
-                        script_sources,
-                        script_indexes,
-                        &settings.index_locations,
-                        LowerBound::Allow,
-                    )
-                    .map_ok(LoweredRequirement::into_inner)
-                })
-                .collect::<Result<_, _>>()?;
-            let constraints = script
-                .tool
-                .as_ref()
-                .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.constraint_dependencies.as_ref())
-                .into_iter()
-                .flatten()
-                .cloned()
-                .flat_map(|requirement| {
-                    LoweredRequirement::from_non_workspace_requirement(
-                        requirement,
-                        script_dir.as_ref(),
-                        script_sources,
-                        script_indexes,
-                        &settings.index_locations,
-                        LowerBound::Allow,
-                    )
-                    .map_ok(LoweredRequirement::into_inner)
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            let overrides = script
-                .tool
-                .as_ref()
-                .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.override_dependencies.as_ref())
-                .into_iter()
-                .flatten()
-                .cloned()
-                .flat_map(|requirement| {
-                    LoweredRequirement::from_non_workspace_requirement(
-                        requirement,
-                        script_dir.as_ref(),
-                        script_sources,
-                        script_indexes,
-                        &settings.index_locations,
-                        LowerBound::Allow,
-                    )
-                    .map_ok(LoweredRequirement::into_inner)
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-
-            let spec =
-                RequirementsSpecification::from_overrides(requirements, constraints, overrides);
-            let result = CachedEnvironment::get_or_create(
-                EnvironmentSpecification::from(spec),
-                interpreter,
-                &settings,
+            // Generate a lockfile.
+            let lock = project::lock::do_safe_lock(
+                mode,
+                target,
+                settings.as_ref().into(),
+                LowerBound::Allow,
                 &state,
                 if show_resolution {
                     Box::new(DefaultResolveLogger)
                 } else {
                     Box::new(SummaryResolveLogger)
                 },
+                connectivity,
+                concurrency,
+                native_tls,
+                allow_insecure_host,
+                cache,
+                printer,
+                preview,
+            )
+            .await?
+            .into_lock();
+
+            let dependencies = script.metadata().dependencies.as_deref();
+
+            let target = InstallTarget::Script {
+                path: target.install_path(),
+                dependencies,
+                lock: &lock,
+            };
+
+            let result = CachedEnvironment::from_lock(
+                target,
+                &ExtrasSpecification::default(),
+                &DevGroupsManifest::default(),
+                InstallOptions::default(),
+                &settings,
+                interpreter,
+                &state,
                 if show_resolution {
                     Box::new(DefaultInstallLogger)
                 } else {
@@ -358,19 +315,153 @@ pub(crate) async fn run(
 
             Some(environment.into_interpreter())
         } else {
-            // Create a virtual environment.
-            temp_dir = cache.venv_dir()?;
-            let environment = uv_virtualenv::create_venv(
-                temp_dir.path(),
-                interpreter,
-                uv_virtualenv::Prompt::None,
-                false,
-                false,
-                false,
-                false,
-            )?;
+            // Determine the working directory for the script.
+            let script_dir = match &script {
+                Pep723Item::Script(script) => std::path::absolute(&script.path)?
+                    .parent()
+                    .expect("script path has no parent")
+                    .to_owned(),
+                Pep723Item::Stdin(..) | Pep723Item::Remote(..) => std::env::current_dir()?,
+            };
 
-            Some(environment.into_interpreter())
+            let script = script.into_metadata();
+
+            // Install the script requirements, if necessary. Otherwise, use an isolated environment.
+            if let Some(dependencies) = script.dependencies {
+                // Collect any `tool.uv.index` from the script.
+                let empty = Vec::default();
+                let script_indexes = match settings.sources {
+                    SourceStrategy::Enabled => script
+                        .tool
+                        .as_ref()
+                        .and_then(|tool| tool.uv.as_ref())
+                        .and_then(|uv| uv.top_level.index.as_deref())
+                        .unwrap_or(&empty),
+                    SourceStrategy::Disabled => &empty,
+                };
+
+                // Collect any `tool.uv.sources` from the script.
+                let empty = BTreeMap::default();
+                let script_sources = match settings.sources {
+                    SourceStrategy::Enabled => script
+                        .tool
+                        .as_ref()
+                        .and_then(|tool| tool.uv.as_ref())
+                        .and_then(|uv| uv.sources.as_ref())
+                        .unwrap_or(&empty),
+                    SourceStrategy::Disabled => &empty,
+                };
+
+                let requirements = dependencies
+                    .into_iter()
+                    .flat_map(|requirement| {
+                        LoweredRequirement::from_non_workspace_requirement(
+                            requirement,
+                            script_dir.as_ref(),
+                            script_sources,
+                            script_indexes,
+                            &settings.index_locations,
+                            LowerBound::Allow,
+                        )
+                        .map_ok(LoweredRequirement::into_inner)
+                    })
+                    .collect::<Result<_, _>>()?;
+                let constraints = script
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.constraint_dependencies.as_ref())
+                    .into_iter()
+                    .flatten()
+                    .cloned()
+                    .flat_map(|requirement| {
+                        LoweredRequirement::from_non_workspace_requirement(
+                            requirement,
+                            script_dir.as_ref(),
+                            script_sources,
+                            script_indexes,
+                            &settings.index_locations,
+                            LowerBound::Allow,
+                        )
+                        .map_ok(LoweredRequirement::into_inner)
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let overrides = script
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.override_dependencies.as_ref())
+                    .into_iter()
+                    .flatten()
+                    .cloned()
+                    .flat_map(|requirement| {
+                        LoweredRequirement::from_non_workspace_requirement(
+                            requirement,
+                            script_dir.as_ref(),
+                            script_sources,
+                            script_indexes,
+                            &settings.index_locations,
+                            LowerBound::Allow,
+                        )
+                        .map_ok(LoweredRequirement::into_inner)
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                let spec =
+                    RequirementsSpecification::from_overrides(requirements, constraints, overrides);
+
+                let result = CachedEnvironment::get_or_create(
+                    EnvironmentSpecification::from(spec),
+                    interpreter,
+                    &settings,
+                    &state,
+                    if show_resolution {
+                        Box::new(DefaultResolveLogger)
+                    } else {
+                        Box::new(SummaryResolveLogger)
+                    },
+                    if show_resolution {
+                        Box::new(DefaultInstallLogger)
+                    } else {
+                        Box::new(SummaryInstallLogger)
+                    },
+                    installer_metadata,
+                    connectivity,
+                    concurrency,
+                    native_tls,
+                    allow_insecure_host,
+                    cache,
+                    printer,
+                    preview,
+                )
+                .await;
+
+                let environment = match result {
+                    Ok(resolution) => resolution,
+                    Err(ProjectError::Operation(err)) => {
+                        return diagnostics::OperationDiagnostic::with_context("script")
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    }
+                    Err(err) => return Err(err.into()),
+                };
+
+                Some(environment.into_interpreter())
+            } else {
+                // Create a virtual environment.
+                temp_dir = cache.venv_dir()?;
+                let environment = uv_virtualenv::create_venv(
+                    temp_dir.path(),
+                    interpreter,
+                    uv_virtualenv::Prompt::None,
+                    false,
+                    false,
+                    false,
+                    false,
+                )?;
+
+                Some(environment.into_interpreter())
+            }
         }
     } else {
         None
@@ -611,7 +702,8 @@ pub(crate) async fn run(
                 // If we're not syncing, we should still attempt to respect the locked preferences
                 // in any `--with` requirements.
                 if !isolated && !requirements.is_empty() {
-                    lock = project::lock::read(project.workspace())
+                    lock = LockTarget::from(project.workspace())
+                        .read()
                         .await
                         .ok()
                         .flatten()
@@ -649,7 +741,7 @@ pub(crate) async fn run(
 
                 let result = match project::lock::do_safe_lock(
                     mode,
-                    project.workspace(),
+                    project.workspace().into(),
                     settings.as_ref().into(),
                     LowerBound::Allow,
                     &state,
@@ -722,15 +814,13 @@ pub(crate) async fn run(
                     }
                 };
 
-                let install_options = InstallOptions::default();
-
                 match project::sync::do_sync(
                     target,
                     &venv,
                     &extras,
                     &dev.with_defaults(defaults),
                     editable,
-                    install_options,
+                    InstallOptions::default(),
                     Modifications::Sufficient,
                     settings.as_ref().into(),
                     if show_resolution {

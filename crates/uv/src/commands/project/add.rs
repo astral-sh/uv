@@ -45,8 +45,9 @@ use crate::commands::pip::loggers::{
 };
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::lock::LockMode;
+use crate::commands::project::target::LockTarget;
 use crate::commands::project::{
-    init_script_python_requirement, lock, validate_script_requires_python, ProjectError,
+    init_script_python_requirement, validate_script_requires_python, ProjectError,
     ProjectInterpreter, ScriptPython,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
@@ -633,7 +634,7 @@ pub(crate) async fn add(
     let project_root = project.root().to_path_buf();
     let workspace_root = project.workspace().install_path().clone();
     let existing_pyproject_toml = project.pyproject_toml().as_ref().to_vec();
-    let existing_uv_lock = lock::read_bytes(project.workspace()).await?;
+    let existing_uv_lock = LockTarget::from(project.workspace()).read_bytes().await?;
 
     // Update the `pypackage.toml` in-memory.
     let project = project
@@ -737,7 +738,7 @@ async fn lock_and_sync(
 
     let mut lock = project::lock::do_safe_lock(
         mode,
-        project.workspace(),
+        project.workspace().into(),
         settings.into(),
         bounds,
         &state,
@@ -856,7 +857,7 @@ async fn lock_and_sync(
             // the addition of the minimum version specifiers.
             lock = project::lock::do_safe_lock(
                 mode,
-                project.workspace(),
+                project.workspace().into(),
                 settings.into(),
                 bounds,
                 &state,
