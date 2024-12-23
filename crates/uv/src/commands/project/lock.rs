@@ -32,6 +32,7 @@ use uv_resolver::{
     FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, PythonRequirement, RequiresPython,
     ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
 };
+use uv_scripts::{Pep723ItemRef, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -39,7 +40,7 @@ use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceMember};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::LockTarget;
-use crate::commands::project::{ProjectError, ProjectInterpreter};
+use crate::commands::project::{ProjectError, ProjectInterpreter, ScriptInterpreter};
 use crate::commands::reporters::ResolverReporter;
 use crate::commands::{diagnostics, pip, ExitStatus};
 use crate::printer::Printer;
@@ -80,6 +81,7 @@ pub(crate) async fn lock(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
+    script: Option<Pep723Script>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
@@ -92,29 +94,52 @@ pub(crate) async fn lock(
     preview: PreviewMode,
 ) -> anyhow::Result<ExitStatus> {
     // Find the project requirements.
-    let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
+    let workspace;
+    let target = if let Some(script) = script.as_ref() {
+        LockTarget::Script(script)
+    } else {
+        workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
+        LockTarget::Workspace(&workspace)
+    };
 
     // Determine the lock mode.
     let interpreter;
     let mode = if frozen {
         LockMode::Frozen
     } else {
-        interpreter = ProjectInterpreter::discover(
-            &workspace,
-            project_dir,
-            python.as_deref().map(PythonRequest::parse),
-            python_preference,
-            python_downloads,
-            connectivity,
-            native_tls,
-            allow_insecure_host,
-            &install_mirrors,
-            no_config,
-            cache,
-            printer,
-        )
-        .await?
-        .into_interpreter();
+        interpreter = match target {
+            LockTarget::Workspace(workspace) => ProjectInterpreter::discover(
+                workspace,
+                project_dir,
+                python.as_deref().map(PythonRequest::parse),
+                python_preference,
+                python_downloads,
+                connectivity,
+                native_tls,
+                allow_insecure_host,
+                &install_mirrors,
+                no_config,
+                cache,
+                printer,
+            )
+            .await?
+            .into_interpreter(),
+            LockTarget::Script(script) => ScriptInterpreter::discover(
+                Pep723ItemRef::Script(script),
+                python.as_deref().map(PythonRequest::parse),
+                python_preference,
+                python_downloads,
+                connectivity,
+                native_tls,
+                allow_insecure_host,
+                &install_mirrors,
+                no_config,
+                cache,
+                printer,
+            )
+            .await?
+            .into_interpreter(),
+        };
 
         if locked {
             LockMode::Locked(&interpreter)
@@ -131,7 +156,7 @@ pub(crate) async fn lock(
     // Perform the lock operation.
     match do_safe_lock(
         mode,
-        (&workspace).into(),
+        target,
         settings.as_ref(),
         LowerBound::Warn,
         &state,

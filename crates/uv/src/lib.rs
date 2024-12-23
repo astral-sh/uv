@@ -187,6 +187,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }) = &**command
         {
             Pep723Script::read(&script).await?.map(Pep723Item::Script)
+        } else if let ProjectCommand::Lock(uv_cli::LockArgs {
+            script: Some(script),
+            ..
+        }) = &**command
+        {
+            Pep723Script::read(&script).await?.map(Pep723Item::Script)
         } else {
             None
         }
@@ -1508,7 +1514,14 @@ async fn run_project(
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
-            commands::lock(
+            // Unwrap the script.
+            let script = script.map(|script| match script {
+                Pep723Item::Script(script) => script,
+                Pep723Item::Stdin(_) => unreachable!("`uv lock` does not support stdin"),
+                Pep723Item::Remote(_) => unreachable!("`uv lock` does not support remote files"),
+            });
+
+            Box::pin(commands::lock(
                 project_dir,
                 args.locked,
                 args.frozen,
@@ -1516,6 +1529,7 @@ async fn run_project(
                 args.python,
                 args.install_mirrors,
                 args.settings,
+                script,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.connectivity,
@@ -1526,7 +1540,7 @@ async fn run_project(
                 &cache,
                 printer,
                 globals.preview,
-            )
+            ))
             .await
         }
         ProjectCommand::Add(args) => {

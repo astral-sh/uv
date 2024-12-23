@@ -2135,6 +2135,10 @@ uv lock [OPTIONS]
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
+</dd><dt><code>--script</code> <i>script</i></dt><dd><p>Lock the specified Python script, rather than the current project.</p>
+
+<p>If provided, uv will lock the script (based on its inline metadata table, in adherence with PEP 723) to a <code>.lock</code> file adjacent to the script itself.</p>
+
 </dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
 </dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>

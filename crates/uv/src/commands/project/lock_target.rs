@@ -1,12 +1,16 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use itertools::Either;
+
 use uv_configuration::{LowerBound, SourceStrategy};
+use uv_distribution::LoweredRequirement;
 use uv_distribution_types::IndexLocations;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{Conflicts, Requirement, SupportedEnvironments, VerbatimParsedUrl};
 use uv_resolver::{Lock, LockVersion, RequiresPython, VERSION};
+use uv_scripts::Pep723Script;
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::{Workspace, WorkspaceMember};
 
@@ -16,11 +20,18 @@ use crate::commands::project::{find_requires_python, ProjectError};
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum LockTarget<'lock> {
     Workspace(&'lock Workspace),
+    Script(&'lock Pep723Script),
 }
 
 impl<'lock> From<&'lock Workspace> for LockTarget<'lock> {
     fn from(workspace: &'lock Workspace) -> Self {
         Self::Workspace(workspace)
+    }
+}
+
+impl<'lock> From<&'lock Pep723Script> for LockTarget<'lock> {
+    fn from(script: &'lock Pep723Script) -> Self {
+        LockTarget::Script(script)
     }
 }
 
@@ -30,6 +41,7 @@ impl<'lock> LockTarget<'lock> {
     pub(crate) fn requirements(self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
         match self {
             Self::Workspace(workspace) => workspace.requirements(),
+            Self::Script(script) => script.metadata.dependencies.clone().unwrap_or_default(),
         }
     }
 
@@ -37,6 +49,16 @@ impl<'lock> LockTarget<'lock> {
     pub(crate) fn overrides(self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
         match self {
             Self::Workspace(workspace) => workspace.overrides(),
+            Self::Script(script) => script
+                .metadata
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.override_dependencies.as_ref())
+                .into_iter()
+                .flatten()
+                .cloned()
+                .collect(),
         }
     }
 
@@ -44,6 +66,16 @@ impl<'lock> LockTarget<'lock> {
     pub(crate) fn constraints(self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
         match self {
             Self::Workspace(workspace) => workspace.constraints(),
+            Self::Script(script) => script
+                .metadata
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.constraint_dependencies.as_ref())
+                .into_iter()
+                .flatten()
+                .cloned()
+                .collect(),
         }
     }
 
@@ -57,20 +89,23 @@ impl<'lock> LockTarget<'lock> {
     > {
         match self {
             Self::Workspace(workspace) => workspace.dependency_groups(),
+            Self::Script(_) => Ok(BTreeMap::new()),
         }
     }
 
     /// Returns the set of all members within the target.
     pub(crate) fn members_requirements(self) -> impl Iterator<Item = Requirement> + 'lock {
         match self {
-            Self::Workspace(workspace) => workspace.members_requirements(),
+            Self::Workspace(workspace) => Either::Left(workspace.members_requirements()),
+            Self::Script(_) => Either::Right(std::iter::empty()),
         }
     }
 
     /// Returns the set of all dependency groups within the target.
     pub(crate) fn group_requirements(self) -> impl Iterator<Item = Requirement> + 'lock {
         match self {
-            Self::Workspace(workspace) => workspace.group_requirements(),
+            Self::Workspace(workspace) => Either::Left(workspace.group_requirements()),
+            Self::Script(_) => Either::Right(std::iter::empty()),
         }
     }
 
@@ -90,6 +125,7 @@ impl<'lock> LockTarget<'lock> {
 
                 members
             }
+            Self::Script(_) => Vec::new(),
         }
     }
 
@@ -97,6 +133,10 @@ impl<'lock> LockTarget<'lock> {
     pub(crate) fn packages(self) -> &'lock BTreeMap<PackageName, WorkspaceMember> {
         match self {
             Self::Workspace(workspace) => workspace.packages(),
+            Self::Script(_) => {
+                static EMPTY: BTreeMap<PackageName, WorkspaceMember> = BTreeMap::new();
+                &EMPTY
+            }
         }
     }
 
@@ -104,6 +144,10 @@ impl<'lock> LockTarget<'lock> {
     pub(crate) fn environments(self) -> Option<&'lock SupportedEnvironments> {
         match self {
             Self::Workspace(workspace) => workspace.environments(),
+            Self::Script(_) => {
+                // TODO(charlie): Add support for environments in scripts.
+                None
+            }
         }
     }
 
@@ -111,6 +155,7 @@ impl<'lock> LockTarget<'lock> {
     pub(crate) fn conflicts(self) -> Conflicts {
         match self {
             Self::Workspace(workspace) => workspace.conflicts(),
+            Self::Script(_) => Conflicts::empty(),
         }
     }
 
@@ -118,6 +163,11 @@ impl<'lock> LockTarget<'lock> {
     pub(crate) fn requires_python(self) -> Option<RequiresPython> {
         match self {
             Self::Workspace(workspace) => find_requires_python(workspace),
+            Self::Script(script) => script
+                .metadata
+                .requires_python
+                .as_ref()
+                .map(RequiresPython::from_specifiers),
         }
     }
 
@@ -125,13 +175,24 @@ impl<'lock> LockTarget<'lock> {
     pub(crate) fn install_path(self) -> &'lock Path {
         match self {
             Self::Workspace(workspace) => workspace.install_path(),
+            Self::Script(script) => script.path.parent().unwrap(),
         }
     }
 
     /// Return the path to the lockfile.
     pub(crate) fn lock_path(self) -> PathBuf {
         match self {
+            // `uv.lock`
             Self::Workspace(workspace) => workspace.install_path().join("uv.lock"),
+            // `script.py.lock`
+            Self::Script(script) => {
+                let mut file_name = match script.path.file_name() {
+                    Some(f) => f.to_os_string(),
+                    None => panic!("Script path has no file name"),
+                };
+                file_name.push(".lock");
+                script.path.with_file_name(file_name)
+            }
         }
     }
 
@@ -222,6 +283,55 @@ impl<'lock> LockTarget<'lock> {
                     .into_iter()
                     .map(|requirement| requirement.with_origin(RequirementOrigin::Workspace))
                     .collect::<Vec<_>>())
+            }
+            Self::Script(script) => {
+                // Collect any `tool.uv.index` from the script.
+                let empty = Vec::default();
+                let indexes = match sources {
+                    SourceStrategy::Enabled => script
+                        .metadata
+                        .tool
+                        .as_ref()
+                        .and_then(|tool| tool.uv.as_ref())
+                        .and_then(|uv| uv.top_level.index.as_deref())
+                        .unwrap_or(&empty),
+                    SourceStrategy::Disabled => &empty,
+                };
+
+                // Collect any `tool.uv.sources` from the script.
+                let empty = BTreeMap::default();
+                let sources = match sources {
+                    SourceStrategy::Enabled => script
+                        .metadata
+                        .tool
+                        .as_ref()
+                        .and_then(|tool| tool.uv.as_ref())
+                        .and_then(|uv| uv.sources.as_ref())
+                        .unwrap_or(&empty),
+                    SourceStrategy::Disabled => &empty,
+                };
+
+                Ok(requirements
+                    .into_iter()
+                    .flat_map(|requirement| {
+                        let requirement_name = requirement.name.clone();
+                        LoweredRequirement::from_non_workspace_requirement(
+                            requirement,
+                            script.path.parent().unwrap(),
+                            sources,
+                            indexes,
+                            locations,
+                            LowerBound::Allow,
+                        )
+                        .map(move |requirement| match requirement {
+                            Ok(requirement) => Ok(requirement.into_inner()),
+                            Err(err) => Err(uv_distribution::MetadataError::LoweringError(
+                                requirement_name.clone(),
+                                Box::new(err),
+                            )),
+                        })
+                    })
+                    .collect::<Result<_, _>>()?)
             }
         }
     }
