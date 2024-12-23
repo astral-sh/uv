@@ -1,7 +1,7 @@
 use crate::Error;
 use itertools::Itertools;
 use serde::Deserialize;
-use std::collections::{BTreeMap, Bound};
+use std::collections::{BTreeMap, BTreeSet, Bound};
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
@@ -11,7 +11,9 @@ use uv_fs::Simplified;
 use uv_globfilter::{parse_portable_glob, GlobDirFilter};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pep508::{Requirement, VersionOrUrl};
+use uv_pep508::{
+    ExtraOperator, MarkerExpression, MarkerTree, MarkerValueExtra, Requirement, VersionOrUrl,
+};
 use uv_pypi_types::{Metadata23, VerbatimParsedUrl};
 use version_ranges::Ranges;
 use walkdir::WalkDir;
@@ -471,8 +473,21 @@ impl PyProjectToml {
             .optional_dependencies
             .iter()
             .flat_map(|optional_dependencies| optional_dependencies.keys())
-            .map(ToString::to_string)
-            .collect();
+            .collect::<Vec<_>>();
+
+        let requires_dist = self
+            .project
+            .dependencies
+            .iter()
+            .flatten()
+            .cloned()
+            .chain(
+                extras
+                    .iter()
+                    .copied()
+                    .flat_map(|extra| self.flatten_optional_dependencies(extra)),
+            )
+            .collect::<Vec<_>>();
 
         Ok(Metadata23 {
             metadata_version: metadata_version.to_string(),
@@ -500,13 +515,8 @@ impl PyProjectToml {
             license_expression,
             license_files,
             classifiers: self.project.classifiers.clone().unwrap_or_default(),
-            requires_dist: self
-                .project
-                .dependencies
-                .iter()
-                .flatten()
-                .map(ToString::to_string)
-                .collect(),
+            requires_dist: requires_dist.iter().map(ToString::to_string).collect(),
+            provides_extras: extras.iter().map(ToString::to_string).collect(),
             // Not commonly set.
             provides_dist: vec![],
             // Not supported.
@@ -519,9 +529,78 @@ impl PyProjectToml {
             // Not used by other tools, not supported.
             requires_external: vec![],
             project_urls,
-            provides_extras: extras,
             dynamic: vec![],
         })
+    }
+
+    /// Return the flattened [`Requirement`] entries for the given [`ExtraName`].
+    fn flatten_optional_dependencies(&self, extra: &ExtraName) -> Vec<Requirement> {
+        fn collect<'project>(
+            extra: &'project ExtraName,
+            marker: MarkerTree,
+            optional_dependencies: &'project BTreeMap<ExtraName, Vec<Requirement>>,
+            project_name: &'project PackageName,
+            dependencies: &mut Vec<Requirement>,
+            seen: &mut BTreeSet<(&'project ExtraName, MarkerTree)>,
+        ) {
+            if !seen.insert((extra, marker)) {
+                return;
+            }
+
+            for requirement in optional_dependencies.get(extra).into_iter().flatten() {
+                if requirement.name == *project_name {
+                    for extra in &requirement.extras {
+                        collect(
+                            extra,
+                            marker,
+                            optional_dependencies,
+                            project_name,
+                            dependencies,
+                            seen,
+                        );
+                    }
+                } else {
+                    let mut marker = marker;
+                    marker.and(requirement.marker);
+                    dependencies.push(Requirement {
+                        name: requirement.name.clone(),
+                        extras: requirement.extras.clone(),
+                        version_or_url: requirement.version_or_url.clone(),
+                        origin: requirement.origin.clone(),
+                        marker,
+                    });
+                }
+            }
+        }
+
+        // Resolve all dependencies for the given extra.
+        let mut dependencies = {
+            let mut dependencies = Vec::new();
+            collect(
+                extra,
+                MarkerTree::default(),
+                self.project
+                    .optional_dependencies
+                    .as_ref()
+                    .unwrap_or(&BTreeMap::new()),
+                &self.project.name,
+                &mut dependencies,
+                &mut BTreeSet::default(),
+            );
+            dependencies
+        };
+
+        // Add the extra to the marker to each dependency.
+        for requirement in &mut dependencies {
+            requirement
+                .marker
+                .and(MarkerTree::expression(MarkerExpression::Extra {
+                    operator: ExtraOperator::Equal,
+                    name: MarkerValueExtra::Extra(extra.clone()),
+                }));
+        }
+
+        dependencies
     }
 
     /// Validate and convert the entrypoints in `pyproject.toml`, including console and GUI scripts,
@@ -1009,37 +1088,172 @@ mod tests {
         let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
 
         assert_snapshot!(metadata.core_metadata_format(), @r###"
-    Metadata-Version: 2.3
-    Name: hello-world
-    Version: 0.1.0
-    Summary: A Python package
-    Keywords: demo,example,package
-    Author: Ferris the crab
-    Author-email: Ferris the crab <ferris@rustacean.net>
-    License: THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
-             INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-             PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-             HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
-             CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
-             OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-    Classifier: Development Status :: 6 - Mature
-    Classifier: License :: OSI Approved :: MIT License
-    Classifier: License :: OSI Approved :: Apache Software License
-    Classifier: Programming Language :: Python
-    Requires-Dist: flask>=3,<4
-    Requires-Dist: sqlalchemy[asyncio]>=2.0.35,<3
-    Maintainer: Konsti
-    Maintainer-email: Konsti <konstin@mailbox.org>
-    Project-URL: Homepage, https://github.com/astral-sh/uv
-    Project-URL: Repository, https://astral.sh
-    Provides-Extra: mysql
-    Provides-Extra: postgres
-    Description-Content-Type: text/markdown
+        Metadata-Version: 2.3
+        Name: hello-world
+        Version: 0.1.0
+        Summary: A Python package
+        Keywords: demo,example,package
+        Author: Ferris the crab
+        Author-email: Ferris the crab <ferris@rustacean.net>
+        License: THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+                 INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+                 PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+                 HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+                 CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+                 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+        Classifier: Development Status :: 6 - Mature
+        Classifier: License :: OSI Approved :: MIT License
+        Classifier: License :: OSI Approved :: Apache Software License
+        Classifier: Programming Language :: Python
+        Requires-Dist: flask>=3,<4
+        Requires-Dist: sqlalchemy[asyncio]>=2.0.35,<3
+        Requires-Dist: pymysql>=1.1.1,<2 ; extra == 'mysql'
+        Requires-Dist: psycopg>=3.2.2,<4 ; extra == 'postgres'
+        Maintainer: Konsti
+        Maintainer-email: Konsti <konstin@mailbox.org>
+        Project-URL: Homepage, https://github.com/astral-sh/uv
+        Project-URL: Repository, https://astral.sh
+        Provides-Extra: mysql
+        Provides-Extra: postgres
+        Description-Content-Type: text/markdown
 
-    # Foo
+        # Foo
 
-    This is the foo library.
-    "###);
+        This is the foo library.
+        "###);
+
+        assert_snapshot!(pyproject_toml.to_entry_points().unwrap().unwrap(), @r###"
+        [console_scripts]
+        foo = foo.cli:__main__
+
+        [gui_scripts]
+        foo-gui = foo.gui
+
+        [bar_group]
+        foo-bar = foo:bar
+
+        "###);
+    }
+
+    #[test]
+    fn self_extras() {
+        let temp_dir = TempDir::new().unwrap();
+
+        fs_err::write(
+            temp_dir.path().join("Readme.md"),
+            indoc! {r"
+            # Foo
+
+            This is the foo library.
+        "},
+        )
+        .unwrap();
+
+        fs_err::write(
+            temp_dir.path().join("License.txt"),
+            indoc! {r#"
+                THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+                INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+                PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+                HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+                CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+                OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+        "#},
+        )
+        .unwrap();
+
+        let contents = indoc! {r#"
+            # See https://github.com/pypa/sampleproject/blob/main/pyproject.toml for another example
+
+            [project]
+            name = "hello-world"
+            version = "0.1.0"
+            description = "A Python package"
+            readme = "Readme.md"
+            requires_python = ">=3.12"
+            license = { file = "License.txt" }
+            authors = [{ name = "Ferris the crab", email = "ferris@rustacean.net" }]
+            maintainers = [{ name = "Konsti", email = "konstin@mailbox.org" }]
+            keywords = ["demo", "example", "package"]
+            classifiers = [
+                "Development Status :: 6 - Mature",
+                "License :: OSI Approved :: MIT License",
+                # https://github.com/pypa/trove-classifiers/issues/17
+                "License :: OSI Approved :: Apache Software License",
+                "Programming Language :: Python",
+            ]
+            dependencies = ["flask>=3,<4", "sqlalchemy[asyncio]>=2.0.35,<3"]
+            # We don't support dynamic fields, the default empty array is the only allowed value.
+            dynamic = []
+
+            [project.optional-dependencies]
+            postgres = ["psycopg>=3.2.2,<4 ; sys_platform == 'linux'"]
+            mysql = ["pymysql>=1.1.1,<2"]
+            databases = ["hello-world[mysql]", "hello-world[postgres]"]
+            all = ["hello-world[databases]", "hello-world[postgres]", "hello-world[mysql]"]
+
+            [project.urls]
+            "Homepage" = "https://github.com/astral-sh/uv"
+            "Repository" = "https://astral.sh"
+
+            [project.scripts]
+            foo = "foo.cli:__main__"
+
+            [project.gui-scripts]
+            foo-gui = "foo.gui"
+
+            [project.entry-points.bar_group]
+            foo-bar = "foo:bar"
+
+            [build-system]
+            requires = ["uv>=0.4.15,<5"]
+            build-backend = "uv"
+        "#
+        };
+
+        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
+
+        assert_snapshot!(metadata.core_metadata_format(), @r###"
+        Metadata-Version: 2.3
+        Name: hello-world
+        Version: 0.1.0
+        Summary: A Python package
+        Keywords: demo,example,package
+        Author: Ferris the crab
+        Author-email: Ferris the crab <ferris@rustacean.net>
+        License: THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+                 INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+                 PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+                 HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+                 CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+                 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+        Classifier: Development Status :: 6 - Mature
+        Classifier: License :: OSI Approved :: MIT License
+        Classifier: License :: OSI Approved :: Apache Software License
+        Classifier: Programming Language :: Python
+        Requires-Dist: flask>=3,<4
+        Requires-Dist: sqlalchemy[asyncio]>=2.0.35,<3
+        Requires-Dist: pymysql>=1.1.1,<2 ; extra == 'all'
+        Requires-Dist: psycopg>=3.2.2,<4 ; sys_platform == 'linux' and extra == 'all'
+        Requires-Dist: pymysql>=1.1.1,<2 ; extra == 'databases'
+        Requires-Dist: psycopg>=3.2.2,<4 ; sys_platform == 'linux' and extra == 'databases'
+        Requires-Dist: pymysql>=1.1.1,<2 ; extra == 'mysql'
+        Requires-Dist: psycopg>=3.2.2,<4 ; sys_platform == 'linux' and extra == 'postgres'
+        Maintainer: Konsti
+        Maintainer-email: Konsti <konstin@mailbox.org>
+        Project-URL: Homepage, https://github.com/astral-sh/uv
+        Project-URL: Repository, https://astral.sh
+        Provides-Extra: all
+        Provides-Extra: databases
+        Provides-Extra: mysql
+        Provides-Extra: postgres
+        Description-Content-Type: text/markdown
+
+        # Foo
+
+        This is the foo library.
+        "###);
 
         assert_snapshot!(pyproject_toml.to_entry_points().unwrap().unwrap(), @r###"
         [console_scripts]
