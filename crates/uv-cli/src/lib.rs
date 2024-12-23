@@ -3089,10 +3089,10 @@ pub struct LockArgs {
     #[arg(long, conflicts_with = "check_exists", conflicts_with = "check")]
     pub dry_run: bool,
 
-    /// Remove the dependency from the specified Python script, rather than from a project.
+    /// Lock the specified Python script, rather than the current project.
     ///
-    /// If provided, uv will remove the dependency from the script's inline metadata
-    /// table, in adherence with PEP 723.
+    /// If provided, uv will lock the script based on its inline metadata table, in adherence
+    /// with PEP 723.
     #[arg(long)]
     pub script: Option<PathBuf>,
 
