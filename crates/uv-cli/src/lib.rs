@@ -3437,6 +3437,14 @@ pub struct TreeArgs {
     #[command(flatten)]
     pub resolver: ResolverArgs,
 
+    /// Show the dependency tree the specified PEP 723 Python script, rather than the current
+    /// project.
+    ///
+    /// If provided, uv will resolve the dependencies based on its inline metadata table, in
+    /// adherence with PEP 723.
+    #[arg(long)]
+    pub script: Option<PathBuf>,
+
     /// The Python version to use when filtering the tree.
     ///
     /// For example, pass `--python-version 3.10` to display the dependencies

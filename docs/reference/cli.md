@@ -2959,6 +2959,10 @@ uv tree [OPTIONS]
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
+</dd><dt><code>--script</code> <i>script</i></dt><dd><p>Show the dependency tree the specified PEP 723 Python script, rather than the current project.</p>
+
+<p>If provided, uv will resolve the dependencies based on its inline metadata table, in adherence with PEP 723.</p>
+
 </dd><dt><code>--universal</code></dt><dd><p>Show a platform-independent dependency tree.</p>
 
 <p>Shows resolved package versions for all Python versions and platforms, rather than filtering to those that are relevant for the current environment.</p>
