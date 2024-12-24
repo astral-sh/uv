@@ -630,7 +630,7 @@ impl Lock {
                     .iter()
                     .copied()
                     .map(|marker| SimplifiedMarkerTree::new(&self.requires_python, marker))
-                    .filter_map(super::requires_python::SimplifiedMarkerTree::try_to_string),
+                    .filter_map(SimplifiedMarkerTree::try_to_string),
             );
             doc.insert("supported-markers", value(supported_environments));
         }
@@ -3567,7 +3567,7 @@ struct Dependency {
     /// by assuming `requires-python` is satisfied. So if
     /// `requires-python = '>=3.8'`, then
     /// `python_version >= '3.8' and python_version < '3.12'`
-    /// gets simplfiied to `python_version < '3.12'`.
+    /// gets simplified to `python_version < '3.12'`.
     ///
     /// Generally speaking, this marker should not be exposed to
     /// anything outside this module unless it's for a specialized use
