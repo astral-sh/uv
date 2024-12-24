@@ -1,15 +1,16 @@
+use std::collections::hash_map::Entry;
+use std::collections::VecDeque;
+
 use either::Either;
 use petgraph::Graph;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
-use std::collections::hash_map::Entry;
-use std::collections::{BTreeMap, VecDeque};
+
 use uv_configuration::{BuildOptions, DevGroupsManifest, ExtrasSpecification, InstallOptions};
 use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
-use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_platform_tags::Tags;
-use uv_pypi_types::{ResolverMarkerEnvironment, VerbatimParsedUrl};
-use uv_workspace::dependency_groups::{DependencyGroupError, FlatDependencyGroups};
+use uv_pypi_types::ResolverMarkerEnvironment;
 use uv_workspace::Workspace;
 
 use crate::lock::{LockErrorKind, Package, TagPolicy};
@@ -72,68 +73,6 @@ impl<'env> InstallTarget<'env> {
                 } else {
                     Either::Left(lock.members().iter())
                 }
-            }
-        }
-    }
-
-    /// Return the [`InstallTarget`] dependency groups.
-    ///
-    /// Returns dependencies that apply to the workspace root, but not any of its members. As such,
-    /// only returns a non-empty iterator for virtual workspaces, which can include dev dependencies
-    /// on the virtual root.
-    pub fn groups(
-        &self,
-    ) -> Result<
-        BTreeMap<GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
-        DependencyGroupError,
-    > {
-        match self {
-            Self::Project { .. } => Ok(BTreeMap::default()),
-            Self::Workspace { .. } => Ok(BTreeMap::default()),
-            Self::NonProjectWorkspace { workspace, .. } => {
-                // For non-projects, we might have `dependency-groups` or `tool.uv.dev-dependencies`
-                // that are attached to the workspace root (which isn't a member).
-
-                // First, collect `tool.uv.dev_dependencies`
-                let dev_dependencies = workspace
-                    .pyproject_toml()
-                    .tool
-                    .as_ref()
-                    .and_then(|tool| tool.uv.as_ref())
-                    .and_then(|uv| uv.dev_dependencies.as_ref());
-
-                // Then, collect `dependency-groups`
-                let dependency_groups = workspace
-                    .pyproject_toml()
-                    .dependency_groups
-                    .iter()
-                    .flatten()
-                    .collect::<BTreeMap<_, _>>();
-
-                // Merge any overlapping groups.
-                let mut map = BTreeMap::new();
-                for (name, dependencies) in
-                    FlatDependencyGroups::from_dependency_groups(&dependency_groups)
-                        .map_err(|err| err.with_dev_dependencies(dev_dependencies))?
-                        .into_iter()
-                        .chain(
-                            // Only add the `dev` group if `dev-dependencies` is defined.
-                            dev_dependencies.into_iter().map(|requirements| {
-                                (DEV_DEPENDENCIES.clone(), requirements.clone())
-                            }),
-                        )
-                {
-                    match map.entry(name) {
-                        std::collections::btree_map::Entry::Vacant(entry) => {
-                            entry.insert(dependencies);
-                        }
-                        std::collections::btree_map::Entry::Occupied(mut entry) => {
-                            entry.get_mut().extend(dependencies);
-                        }
-                    }
-                }
-
-                Ok(map)
             }
         }
     }
@@ -275,10 +214,9 @@ impl<'env> InstallTarget<'env> {
 
         // Add any dependency groups that are exclusive to the workspace root (e.g., dev
         // dependencies in (legacy) non-project workspace roots).
-        let groups = self
-            .groups()
-            .map_err(|err| LockErrorKind::DependencyGroup { err })?;
-        for (group, dependency) in groups
+        for (group, dependency) in self
+            .lock()
+            .dependency_groups()
             .iter()
             .filter_map(|(group, deps)| {
                 if dev.contains(group) {

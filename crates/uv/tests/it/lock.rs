@@ -8035,7 +8035,9 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
-        requirements = [{ name = "uv-private-pypackage", git = "https://github.com/astral-test/uv-private-pypackage" }]
+
+        [manifest.dependency-groups]
+        dev = [{ name = "uv-private-pypackage", git = "https://github.com/astral-test/uv-private-pypackage" }]
 
         [[package]]
         name = "uv-private-pypackage"
@@ -13644,7 +13646,9 @@ fn lock_non_project_fork() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
-        requirements = [
+
+        [manifest.dependency-groups]
+        dev = [
             { name = "anyio", marker = "python_full_version < '3.11'", specifier = ">3" },
             { name = "anyio", marker = "python_full_version >= '3.11'", specifier = "<3" },
         ]
@@ -13830,7 +13834,9 @@ fn lock_non_project_conditional() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
-        requirements = [{ name = "anyio", marker = "sys_platform == 'linux'", specifier = ">3" }]
+
+        [manifest.dependency-groups]
+        dev = [{ name = "anyio", marker = "sys_platform == 'linux'", specifier = ">3" }]
 
         [[package]]
         name = "anyio"
@@ -13936,11 +13942,13 @@ fn lock_non_project_group() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
-        requirements = [
+
+        [manifest.dependency-groups]
+        dev = [
             { name = "anyio" },
-            { name = "iniconfig" },
             { name = "typing-extensions" },
         ]
+        lint = [{ name = "iniconfig" }]
 
         [[package]]
         name = "anyio"
@@ -14074,7 +14082,9 @@ fn lock_non_project_sources() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
-        requirements = [{ name = "idna", url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }]
+
+        [manifest.dependency-groups]
+        dev = [{ name = "idna", url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }]
 
         [[package]]
         name = "idna"

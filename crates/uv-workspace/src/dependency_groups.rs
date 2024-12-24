@@ -12,7 +12,7 @@ use uv_pypi_types::VerbatimParsedUrl;
 use crate::pyproject::DependencyGroupSpecifier;
 
 /// PEP 735 dependency groups, with any `include-group` entries resolved.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct FlatDependencyGroups(
     BTreeMap<GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
 );
@@ -104,11 +104,29 @@ impl FlatDependencyGroups {
         self.0.get(group)
     }
 
+    /// Return the entry for a given group, if any.
     pub fn entry(
         &mut self,
         group: GroupName,
     ) -> Entry<GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>> {
         self.0.entry(group)
+    }
+
+    /// Consume the [`FlatDependencyGroups`] and return the inner map.
+    pub fn into_inner(self) -> BTreeMap<GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>> {
+        self.0
+    }
+}
+
+impl FromIterator<(GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>)>
+    for FlatDependencyGroups
+{
+    fn from_iter<
+        T: IntoIterator<Item = (GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>)>,
+    >(
+        iter: T,
+    ) -> Self {
+        Self(iter.into_iter().collect())
     }
 }
 
