@@ -1082,7 +1082,7 @@ fn non_project() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    anyio v4.3.0
+    anyio v4.3.0 (group: async)
     ├── idna v3.6
     └── sniffio v1.3.1
 
@@ -1133,12 +1133,33 @@ fn non_project_member() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    anyio v4.3.0
+    anyio v4.3.0 (group: async)
     ├── idna v3.6
     └── sniffio v1.3.1
     child v0.1.0
+    ├── anyio v4.3.0 (*)
     ├── iniconfig v2.0.0
     └── sniffio v1.3.1
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    idna v3.6
+    └── anyio v4.3.0
+        └── child v0.1.0
+    iniconfig v2.0.0
+    └── child v0.1.0
+    sniffio v1.3.1
+    ├── anyio v4.3.0 (*)
+    └── child v0.1.0
+    (*) Package tree already displayed
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
