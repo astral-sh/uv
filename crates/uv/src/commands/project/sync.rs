@@ -120,7 +120,7 @@ pub(crate) async fn sync(
     let venv = project::get_or_init_environment(
         project.workspace(),
         python.as_deref().map(PythonRequest::parse),
-        install_mirrors,
+        &install_mirrors,
         python_preference,
         python_downloads,
         connectivity,

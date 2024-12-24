@@ -109,7 +109,7 @@ pub(crate) async fn lock(
             connectivity,
             native_tls,
             allow_insecure_host,
-            install_mirrors,
+            &install_mirrors,
             no_config,
             cache,
             printer,
