@@ -167,6 +167,9 @@ pub(crate) enum ProjectError {
     #[error("Failed to update `pyproject.toml`")]
     PyprojectTomlUpdate,
 
+    #[error("Failed to parse PEP 723 script metadata")]
+    Pep723ScriptTomlParse(#[source] toml::de::Error),
+
     #[error(transparent)]
     DependencyGroup(#[from] DependencyGroupError),
 

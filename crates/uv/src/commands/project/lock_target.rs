@@ -235,11 +235,11 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Read the lockfile from the workspace as bytes.
-    pub(crate) async fn read_bytes(self) -> Result<Option<Vec<u8>>, ProjectError> {
+    pub(crate) async fn read_bytes(self) -> Result<Option<Vec<u8>>, std::io::Error> {
         match fs_err::tokio::read(self.lock_path()).await {
             Ok(encoded) => Ok(Some(encoded)),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(err) => Err(err.into()),
+            Err(err) => Err(err),
         }
     }
 
