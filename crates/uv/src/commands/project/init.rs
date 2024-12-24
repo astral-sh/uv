@@ -242,7 +242,7 @@ async fn init_script(
 
     let requires_python = init_script_python_requirement(
         python.as_deref(),
-        install_mirrors,
+        &install_mirrors,
         &CWD,
         no_pin_python,
         python_preference,

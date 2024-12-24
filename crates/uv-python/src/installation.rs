@@ -229,6 +229,7 @@ impl PythonInstallation {
         &self.interpreter
     }
 
+    /// Consume the [`PythonInstallation`] and return the [`Interpreter`].
     pub fn into_interpreter(self) -> Interpreter {
         self.interpreter
     }

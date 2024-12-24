@@ -397,7 +397,7 @@ pub(crate) fn validate_requires_python(
 
 /// Returns an error if the [`Interpreter`] does not satisfy script or workspace `requires-python`.
 #[allow(clippy::result_large_err)]
-pub(crate) fn validate_script_requires_python(
+fn validate_script_requires_python(
     interpreter: &Interpreter,
     workspace: Option<&Workspace>,
     requires_python: &RequiresPython,
@@ -406,35 +406,105 @@ pub(crate) fn validate_script_requires_python(
 ) -> Result<(), ProjectError> {
     match requires_python_source {
         RequiresPythonSource::Project => {
-            validate_requires_python(interpreter, workspace, requires_python, request_source)?;
+            validate_requires_python(interpreter, workspace, requires_python, request_source)
         }
-        RequiresPythonSource::Script => {}
-    };
+        RequiresPythonSource::Script => {
+            if requires_python.contains(interpreter.python_version()) {
+                return Ok(());
+            }
 
-    if requires_python.contains(interpreter.python_version()) {
-        return Ok(());
+            match request_source {
+                PythonRequestSource::UserRequest => {
+                    Err(ProjectError::RequestedPythonScriptIncompatibility(
+                        interpreter.python_version().clone(),
+                        requires_python.clone(),
+                    ))
+                }
+                PythonRequestSource::DotPythonVersion(file) => {
+                    Err(ProjectError::DotPythonVersionScriptIncompatibility(
+                        file.file_name().to_string(),
+                        interpreter.python_version().clone(),
+                        requires_python.clone(),
+                    ))
+                }
+                PythonRequestSource::RequiresPython => {
+                    Err(ProjectError::RequiresPythonScriptIncompatibility(
+                        interpreter.python_version().clone(),
+                        requires_python.clone(),
+                    ))
+                }
+            }
+        }
+    }
+}
+
+/// An interpreter suitable for a PEP 723 script.
+#[derive(Debug, Clone)]
+pub(crate) struct ScriptInterpreter(Interpreter);
+
+impl ScriptInterpreter {
+    /// Discover the interpreter to use for the current [`Pep723Item`].
+    pub(crate) async fn discover(
+        script: &Pep723Item,
+        python_request: Option<PythonRequest>,
+        python_preference: PythonPreference,
+        python_downloads: PythonDownloads,
+        connectivity: Connectivity,
+        native_tls: bool,
+        allow_insecure_host: &[TrustedHost],
+        install_mirrors: &PythonInstallMirrors,
+        no_config: bool,
+        cache: &Cache,
+        printer: Printer,
+    ) -> Result<Self, ProjectError> {
+        // For now, we assume that scripts are never evaluated in the context of a workspace.
+        let workspace = None;
+
+        let ScriptPython {
+            source,
+            python_request,
+            requires_python,
+        } = ScriptPython::from_request(python_request, workspace, script, no_config).await?;
+
+        let client_builder = BaseClientBuilder::new()
+            .connectivity(connectivity)
+            .native_tls(native_tls)
+            .allow_insecure_host(allow_insecure_host.to_vec());
+
+        let reporter = PythonDownloadReporter::single(printer);
+
+        let interpreter = PythonInstallation::find_or_download(
+            python_request.as_ref(),
+            EnvironmentPreference::Any,
+            python_preference,
+            python_downloads,
+            &client_builder,
+            cache,
+            Some(&reporter),
+            install_mirrors.python_install_mirror.as_deref(),
+            install_mirrors.pypy_install_mirror.as_deref(),
+        )
+        .await?
+        .into_interpreter();
+
+        if let Some((requires_python, requires_python_source)) = requires_python {
+            if let Err(err) = validate_script_requires_python(
+                &interpreter,
+                workspace,
+                &requires_python,
+                &requires_python_source,
+                &source,
+            ) {
+                warn_user!("{err}");
+            }
+        }
+
+        Ok(Self(interpreter))
     }
 
-    match request_source {
-        PythonRequestSource::UserRequest => {
-            Err(ProjectError::RequestedPythonScriptIncompatibility(
-                interpreter.python_version().clone(),
-                requires_python.clone(),
-            ))
-        }
-        PythonRequestSource::DotPythonVersion(file) => {
-            Err(ProjectError::DotPythonVersionScriptIncompatibility(
-                file.file_name().to_string(),
-                interpreter.python_version().clone(),
-                requires_python.clone(),
-            ))
-        }
-        PythonRequestSource::RequiresPython => {
-            Err(ProjectError::RequiresPythonScriptIncompatibility(
-                interpreter.python_version().clone(),
-                requires_python.clone(),
-            ))
-        }
+    /// Consume the [`PythonInstallation`] and return the [`Interpreter`].
+    pub(crate) fn into_interpreter(self) -> Interpreter {
+        self.0
     }
 }
 
@@ -459,7 +529,7 @@ impl ProjectInterpreter {
         connectivity: Connectivity,
         native_tls: bool,
         allow_insecure_host: &[TrustedHost],
-        install_mirrors: PythonInstallMirrors,
+        install_mirrors: &PythonInstallMirrors,
         no_config: bool,
         cache: &Cache,
         printer: Printer,
@@ -547,7 +617,7 @@ impl ProjectInterpreter {
 
         let reporter = PythonDownloadReporter::single(printer);
 
-        // Locate the Python interpreter to use in the environment
+        // Locate the Python interpreter to use in the environment.
         let python = PythonInstallation::find_or_download(
             python_request.as_ref(),
             EnvironmentPreference::OnlySystem,
@@ -771,7 +841,7 @@ impl ScriptPython {
 pub(crate) async fn get_or_init_environment(
     workspace: &Workspace,
     python: Option<PythonRequest>,
-    install_mirrors: PythonInstallMirrors,
+    install_mirrors: &PythonInstallMirrors,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
@@ -1598,7 +1668,7 @@ pub(crate) async fn update_environment(
 /// Determine the [`RequiresPython`] requirement for a new PEP 723 script.
 pub(crate) async fn init_script_python_requirement(
     python: Option<&str>,
-    install_mirrors: PythonInstallMirrors,
+    install_mirrors: &PythonInstallMirrors,
     directory: &Path,
     no_pin_python: bool,
     python_preference: PythonPreference,

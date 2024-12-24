@@ -26,10 +26,7 @@ use uv_git::{GitReference, GIT_STORE};
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_pep508::{ExtraName, Requirement, UnnamedRequirement, VersionOrUrl};
 use uv_pypi_types::{redact_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
-use uv_python::{
-    EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest,
-};
+use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InstallTarget};
 use uv_scripts::{Pep723Item, Pep723Script};
@@ -46,8 +43,7 @@ use crate::commands::pip::loggers::{
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::{
-    init_script_python_requirement, lock, validate_script_requires_python, ProjectError,
-    ProjectInterpreter, ScriptPython,
+    init_script_python_requirement, lock, ProjectError, ProjectInterpreter, ScriptInterpreter,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{diagnostics, project, ExitStatus};
@@ -144,7 +140,7 @@ pub(crate) async fn add(
         } else {
             let requires_python = init_script_python_requirement(
                 python.as_deref(),
-                install_mirrors.clone(),
+                &install_mirrors,
                 project_dir,
                 false,
                 python_preference,
@@ -158,41 +154,22 @@ pub(crate) async fn add(
             Pep723Script::init(&script, requires_python.specifiers()).await?
         };
 
-        let ScriptPython {
-            source,
-            python_request,
-            requires_python,
-        } = ScriptPython::from_request(
-            python.as_deref().map(PythonRequest::parse),
-            None,
+        // Discover the interpreter.
+        let interpreter = ScriptInterpreter::discover(
             &Pep723Item::Script(script.clone()),
-            no_config,
-        )
-        .await?;
-
-        let interpreter = PythonInstallation::find_or_download(
-            python_request.as_ref(),
-            EnvironmentPreference::Any,
+            python.as_deref().map(PythonRequest::parse),
             python_preference,
             python_downloads,
-            &client_builder,
+            connectivity,
+            native_tls,
+            allow_insecure_host,
+            &install_mirrors,
+            no_config,
             cache,
-            Some(&reporter),
-            install_mirrors.python_install_mirror.as_deref(),
-            install_mirrors.pypy_install_mirror.as_deref(),
+            printer,
         )
         .await?
         .into_interpreter();
-
-        if let Some((requires_python, requires_python_source)) = requires_python {
-            validate_script_requires_python(
-                &interpreter,
-                None,
-                &requires_python,
-                &requires_python_source,
-                &source,
-            )?;
-        }
 
         Target::Script(script, Box::new(interpreter))
     } else {
@@ -234,7 +211,7 @@ pub(crate) async fn add(
                 connectivity,
                 native_tls,
                 allow_insecure_host,
-                install_mirrors.clone(),
+                &install_mirrors,
                 no_config,
                 cache,
                 printer,
@@ -248,7 +225,7 @@ pub(crate) async fn add(
             let venv = project::get_or_init_environment(
                 project.workspace(),
                 python.as_deref().map(PythonRequest::parse),
-                install_mirrors.clone(),
+                &install_mirrors,
                 python_preference,
                 python_downloads,
                 connectivity,

@@ -45,8 +45,8 @@ use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::{
-    default_dependency_groups, validate_requires_python, validate_script_requires_python,
-    DependencyGroupsTarget, EnvironmentSpecification, ProjectError, ScriptPython, WorkspacePython,
+    default_dependency_groups, validate_requires_python, DependencyGroupsTarget,
+    EnvironmentSpecification, ProjectError, ScriptInterpreter, WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{diagnostics, project, ExitStatus};
@@ -181,51 +181,22 @@ pub(crate) async fn run(
             }
         }
 
-        let ScriptPython {
-            source,
-            python_request,
-            requires_python,
-        } = ScriptPython::from_request(
-            python.as_deref().map(PythonRequest::parse),
-            None,
+        // Discover the interpreter for the script.
+        let interpreter = ScriptInterpreter::discover(
             &script,
-            no_config,
-        )
-        .await?;
-
-        let client_builder = BaseClientBuilder::new()
-            .connectivity(connectivity)
-            .native_tls(native_tls)
-            .allow_insecure_host(allow_insecure_host.to_vec());
-
-        let interpreter = PythonInstallation::find_or_download(
-            python_request.as_ref(),
-            EnvironmentPreference::Any,
+            python.as_deref().map(PythonRequest::parse),
             python_preference,
             python_downloads,
-            &client_builder,
+            connectivity,
+            native_tls,
+            allow_insecure_host,
+            &install_mirrors,
+            no_config,
             cache,
-            Some(&download_reporter),
-            install_mirrors.python_install_mirror.as_deref(),
-            install_mirrors.pypy_install_mirror.as_deref(),
+            printer,
         )
         .await?
         .into_interpreter();
-
-        if let Some((requires_python, requires_python_source)) = requires_python {
-            match validate_script_requires_python(
-                &interpreter,
-                None,
-                &requires_python,
-                &requires_python_source,
-                &source,
-            ) {
-                Ok(()) => {}
-                Err(err) => {
-                    warn_user!("{err}");
-                }
-            }
-        }
 
         // Determine the working directory for the script.
         let script_dir = match &script {
@@ -592,7 +563,7 @@ pub(crate) async fn run(
                 project::get_or_init_environment(
                     project.workspace(),
                     python.as_deref().map(PythonRequest::parse),
-                    install_mirrors,
+                    &install_mirrors,
                     python_preference,
                     python_downloads,
                     connectivity,
