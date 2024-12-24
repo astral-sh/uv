@@ -282,7 +282,7 @@ inherits = "release"
 # Config for 'dist'
 [workspace.metadata.dist]
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.25.2-prerelease.3"
+cargo-dist-version = "0.27.0"
 # CI backends to support
 ci = "github"
 # The installers to generate for each app
