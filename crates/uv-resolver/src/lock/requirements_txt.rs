@@ -19,7 +19,7 @@ use uv_pep508::MarkerTree;
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
 
 use crate::graph_ops::marker_reachability;
-use crate::lock::{Package, PackageId, Source};
+use crate::lock::{LockErrorKind, Package, PackageId, Source};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{InstallTarget, LockError};
 
@@ -50,7 +50,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
         let root = petgraph.add_node(Node::Root);
 
-        // Add the workspace package to the queue.
+        // Add the workspace packages to the queue.
         for root_name in target.packages() {
             if prune.contains(root_name) {
                 continue;
@@ -130,6 +130,98 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 for extra in &dep.extra {
                     if seen.insert((&dep.package_id, Some(extra))) {
                         queue.push_back((dep_dist, Some(extra)));
+                    }
+                }
+            }
+        }
+
+        // Add requirements that are exclusive to the workspace root (e.g., dependency groups in
+        // (legacy) non-project workspace roots).
+        let root_groups = target
+            .groups()
+            .map_err(|err| LockErrorKind::DependencyGroup { err })?;
+        let root_requirements = {
+            root_groups
+                .iter()
+                .filter_map(|(group, deps)| {
+                    if dev.contains(group) {
+                        Some(deps)
+                    } else {
+                        None
+                    }
+                })
+                .flatten()
+                .filter(|dep| !prune.contains(&dep.name))
+                .collect::<Vec<_>>()
+        };
+
+        // Index the lockfile by package name, to avoid making multiple passes over the lockfile.
+        if !root_requirements.is_empty() {
+            let by_name: FxHashMap<_, Vec<_>> = {
+                let names = root_requirements
+                    .iter()
+                    .map(|dep| &dep.name)
+                    .collect::<FxHashSet<_>>();
+                target.lock().packages().iter().fold(
+                    FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher),
+                    |mut map, package| {
+                        if names.contains(&package.id.name) {
+                            map.entry(&package.id.name).or_default().push(package);
+                        }
+                        map
+                    },
+                )
+            };
+
+            for requirement in root_requirements {
+                for dist in by_name.get(&requirement.name).into_iter().flatten() {
+                    // Determine whether this entry is "relevant" for the requirement, by intersecting
+                    // the markers.
+                    let marker = if dist.fork_markers.is_empty() {
+                        requirement.marker
+                    } else {
+                        let mut combined = MarkerTree::FALSE;
+                        for fork_marker in &dist.fork_markers {
+                            combined.or(fork_marker.pep508());
+                        }
+                        combined.and(requirement.marker);
+                        combined
+                    };
+
+                    // Simplify the marker.
+                    let marker = target.lock().simplify_environment(marker);
+
+                    // Add the dependency to the graph.
+                    if let Entry::Vacant(entry) = inverse.entry(&dist.id) {
+                        entry.insert(petgraph.add_node(Node::Package(dist)));
+                    }
+
+                    // Add an edge from the root.
+                    let dep_index = inverse[&dist.id];
+                    petgraph.add_edge(
+                        root,
+                        dep_index,
+                        UniversalMarker::new(
+                            marker,
+                            // OK because we've verified above that we do not have any
+                            // conflicting extras/groups.
+                            //
+                            // So why use `UniversalMarker`? Because that's what
+                            // `marker_reachability` wants and it (probably) isn't
+                            // worth inventing a new abstraction so that it can accept
+                            // graphs with either `MarkerTree` or `UniversalMarker`.
+                            ConflictMarker::TRUE,
+                        ),
+                    );
+
+                    // Push its dependencies on the queue.
+                    if seen.insert((&dist.id, None)) {
+                        queue.push_back((dist, None));
+                    }
+                    for extra in &requirement.extras {
+                        if seen.insert((&dist.id, Some(extra))) {
+                            queue.push_back((dist, Some(extra)));
+                        }
                     }
                 }
             }
