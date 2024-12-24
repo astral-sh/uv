@@ -139,16 +139,22 @@ impl<'lock> RequirementsTxtExport<'lock> {
         // (legacy) non-project workspace roots).
         let root_requirements = target
             .lock()
-            .dependency_groups()
+            .requirements()
             .iter()
-            .filter_map(|(group, deps)| {
-                if dev.contains(group) {
-                    Some(deps)
-                } else {
-                    None
-                }
-            })
-            .flatten()
+            .chain(
+                target
+                    .lock()
+                    .dependency_groups()
+                    .iter()
+                    .filter_map(|(group, deps)| {
+                        if dev.contains(group) {
+                            Some(deps)
+                        } else {
+                            None
+                        }
+                    })
+                    .flatten(),
+            )
             .filter(|dep| !prune.contains(&dep.name))
             .collect::<Vec<_>>();
 
@@ -184,6 +190,10 @@ impl<'lock> RequirementsTxtExport<'lock> {
                         combined.and(requirement.marker);
                         combined
                     };
+
+                    if marker.is_false() {
+                        continue;
+                    }
 
                     // Simplify the marker.
                     let marker = target.lock().simplify_environment(marker);

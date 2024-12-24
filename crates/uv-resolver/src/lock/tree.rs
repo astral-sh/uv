@@ -6,11 +6,12 @@ use owo_colors::OwoColorize;
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::prelude::EdgeRef;
 use petgraph::Direction;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_configuration::DevGroupsManifest;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
+use uv_pep508::MarkerTree;
 use uv_pypi_types::ResolverMarkerEnvironment;
 
 use crate::lock::{Dependency, PackageId};
@@ -43,20 +44,72 @@ impl<'env> TreeDisplay<'env> {
         no_dedupe: bool,
         invert: bool,
     ) -> Self {
-        // Identify the workspace members.
-        let members: FxHashSet<&PackageId> = if lock.members().is_empty() {
-            lock.root().into_iter().map(|package| &package.id).collect()
-        } else {
-            lock.packages
-                .iter()
-                .filter_map(|package| {
-                    if lock.members().contains(&package.id.name) {
-                        Some(&package.id)
+        // Identify the packages that "must" be included in the tree. This includes:
+        // - The workspace members.
+        // - The root package, if it's not in the list of members. (The root package is omitted from
+        //   the list of workspace members for single-member workspaces with a `[project]` section,
+        //   to avoid cluttering the lockfile.
+        // - Requirements that are attached to the workspace itself. This would include `[dependency-groups]`
+        //   for workspaces whose roots do not include a `[project]` table, since those roots are
+        //   not workspace members, but they _can_ define dependencies.
+        let members: FxHashSet<&PackageId> = {
+            // Identify any workspace members.
+            let mut members: FxHashSet<&PackageId> = if lock.members().is_empty() {
+                lock.root().into_iter().map(|package| &package.id).collect()
+            } else {
+                lock.packages
+                    .iter()
+                    .filter_map(|package| {
+                        if lock.members().contains(&package.id.name) {
+                            Some(&package.id)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
+            };
+
+            // Index the lockfile by name.
+            let by_name: FxHashMap<_, Vec<_>> = {
+                lock.packages().iter().fold(
+                    FxHashMap::with_capacity_and_hasher(lock.len(), FxBuildHasher),
+                    |mut map, package| {
+                        map.entry(&package.id.name).or_default().push(package);
+                        map
+                    },
+                )
+            };
+
+            // Identify any requirements attached to the workspace itself.
+            for requirement in lock.requirements().iter().chain(
+                lock.dependency_groups()
+                    .iter()
+                    .flat_map(|(.., requirements)| requirements.iter()),
+            ) {
+                for package in by_name.get(&requirement.name).into_iter().flatten() {
+                    // Determine whether this entry is "relevant" for the requirement, by intersecting
+                    // the markers.
+                    let marker = if package.fork_markers.is_empty() {
+                        requirement.marker
                     } else {
-                        None
+                        let mut combined = MarkerTree::FALSE;
+                        for fork_marker in &package.fork_markers {
+                            combined.or(fork_marker.pep508());
+                        }
+                        combined.and(requirement.marker);
+                        combined
+                    };
+                    if marker.is_false() {
+                        continue;
                     }
-                })
-                .collect()
+                    if markers.is_some_and(|markers| !marker.evaluate(markers, &[])) {
+                        continue;
+                    }
+                    members.insert(&package.id);
+                }
+            }
+
+            members
         };
 
         // Create a graph.

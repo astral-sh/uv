@@ -1062,3 +1062,92 @@ fn workspace_dev() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn non_project() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = []
+
+        [dependency-groups]
+        async = ["anyio"]
+    "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    anyio v4.3.0
+    ├── idna v3.6
+    └── sniffio v1.3.1
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    "###
+    );
+
+    // `uv tree` should update the lockfile
+    let lock = context.read("uv.lock");
+    assert!(!lock.is_empty());
+
+    Ok(())
+}
+
+#[test]
+fn non_project_member() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [dependency-groups]
+        async = ["anyio"]
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig", "sniffio", "anyio"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    anyio v4.3.0
+    ├── idna v3.6
+    └── sniffio v1.3.1
+    child v0.1.0
+    ├── iniconfig v2.0.0
+    └── sniffio v1.3.1
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "###
+    );
+
+    // `uv tree` should update the lockfile
+    let lock = context.read("uv.lock");
+    assert!(!lock.is_empty());
+
+    Ok(())
+}
