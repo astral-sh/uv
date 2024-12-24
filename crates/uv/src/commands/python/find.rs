@@ -9,7 +9,7 @@ use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
 
 use crate::commands::{
-    project::{validate_requires_python, WorkspacePython},
+    project::{validate_project_requires_python, WorkspacePython},
     ExitStatus,
 };
 
@@ -65,7 +65,7 @@ pub(crate) async fn find(
 
     // Warn if the discovered Python version is incompatible with the current workspace
     if let Some(requires_python) = requires_python {
-        match validate_requires_python(
+        match validate_project_requires_python(
             python.interpreter(),
             project.as_ref().map(VirtualProject::workspace),
             &requires_python,

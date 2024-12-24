@@ -32,7 +32,7 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::pip::operations::{report_interpreter, Changelog};
-use crate::commands::project::{validate_requires_python, WorkspacePython};
+use crate::commands::project::{validate_project_requires_python, WorkspacePython};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -231,7 +231,7 @@ async fn venv_impl(
 
     // Check if the discovered Python version is incompatible with the current workspace
     if let Some(requires_python) = requires_python {
-        match validate_requires_python(
+        match validate_project_requires_python(
             &interpreter,
             project.as_ref().map(VirtualProject::workspace),
             &requires_python,

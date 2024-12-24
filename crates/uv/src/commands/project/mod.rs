@@ -315,8 +315,11 @@ pub(crate) fn find_requires_python(workspace: &Workspace) -> Option<RequiresPyth
 }
 
 /// Returns an error if the [`Interpreter`] does not satisfy the [`Workspace`] `requires-python`.
+///
+/// If no [`Workspace`] is provided, the `requires-python` will be validated against the originating
+/// source (e.g., a `.python-version` file or a `--python` command-line argument).
 #[allow(clippy::result_large_err)]
-pub(crate) fn validate_requires_python(
+pub(crate) fn validate_project_requires_python(
     interpreter: &Interpreter,
     workspace: Option<&Workspace>,
     requires_python: &RequiresPython,
@@ -399,41 +402,31 @@ pub(crate) fn validate_requires_python(
 #[allow(clippy::result_large_err)]
 fn validate_script_requires_python(
     interpreter: &Interpreter,
-    workspace: Option<&Workspace>,
     requires_python: &RequiresPython,
-    requires_python_source: &RequiresPythonSource,
-    request_source: &PythonRequestSource,
+    source: &PythonRequestSource,
 ) -> Result<(), ProjectError> {
-    match requires_python_source {
-        RequiresPythonSource::Project => {
-            validate_requires_python(interpreter, workspace, requires_python, request_source)
+    if requires_python.contains(interpreter.python_version()) {
+        return Ok(());
+    }
+    match source {
+        PythonRequestSource::UserRequest => {
+            Err(ProjectError::RequestedPythonScriptIncompatibility(
+                interpreter.python_version().clone(),
+                requires_python.clone(),
+            ))
         }
-        RequiresPythonSource::Script => {
-            if requires_python.contains(interpreter.python_version()) {
-                return Ok(());
-            }
-
-            match request_source {
-                PythonRequestSource::UserRequest => {
-                    Err(ProjectError::RequestedPythonScriptIncompatibility(
-                        interpreter.python_version().clone(),
-                        requires_python.clone(),
-                    ))
-                }
-                PythonRequestSource::DotPythonVersion(file) => {
-                    Err(ProjectError::DotPythonVersionScriptIncompatibility(
-                        file.file_name().to_string(),
-                        interpreter.python_version().clone(),
-                        requires_python.clone(),
-                    ))
-                }
-                PythonRequestSource::RequiresPython => {
-                    Err(ProjectError::RequiresPythonScriptIncompatibility(
-                        interpreter.python_version().clone(),
-                        requires_python.clone(),
-                    ))
-                }
-            }
+        PythonRequestSource::DotPythonVersion(file) => {
+            Err(ProjectError::DotPythonVersionScriptIncompatibility(
+                file.file_name().to_string(),
+                interpreter.python_version().clone(),
+                requires_python.clone(),
+            ))
+        }
+        PythonRequestSource::RequiresPython => {
+            Err(ProjectError::RequiresPythonScriptIncompatibility(
+                interpreter.python_version().clone(),
+                requires_python.clone(),
+            ))
         }
     }
 }
@@ -487,16 +480,16 @@ impl ScriptInterpreter {
         .await?
         .into_interpreter();
 
-        if let Some((requires_python, requires_python_source)) = requires_python {
-            if let Err(err) = validate_script_requires_python(
-                &interpreter,
-                workspace,
-                &requires_python,
-                &requires_python_source,
-                &source,
-            ) {
-                warn_user!("{err}");
+        if let Err(err) = match requires_python {
+            Some((requires_python, RequiresPythonSource::Project)) => {
+                validate_project_requires_python(&interpreter, workspace, &requires_python, &source)
             }
+            Some((requires_python, RequiresPythonSource::Script)) => {
+                validate_script_requires_python(&interpreter, &requires_python, &source)
+            }
+            None => Ok(()),
+        } {
+            warn_user!("{err}");
         }
 
         Ok(Self(interpreter))
@@ -653,7 +646,12 @@ impl ProjectInterpreter {
         }
 
         if let Some(requires_python) = requires_python.as_ref() {
-            validate_requires_python(&interpreter, Some(workspace), requires_python, &source)?;
+            validate_project_requires_python(
+                &interpreter,
+                Some(workspace),
+                requires_python,
+                &source,
+            )?;
         }
 
         Ok(Self::Interpreter(interpreter))

@@ -45,7 +45,7 @@ use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::{
-    default_dependency_groups, validate_requires_python, DependencyGroupsTarget,
+    default_dependency_groups, validate_project_requires_python, DependencyGroupsTarget,
     EnvironmentSpecification, ProjectError, ScriptInterpreter, WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
@@ -538,7 +538,7 @@ pub(crate) async fn run(
                 .into_interpreter();
 
                 if let Some(requires_python) = requires_python.as_ref() {
-                    validate_requires_python(
+                    validate_project_requires_python(
                         &interpreter,
                         Some(project.workspace()),
                         requires_python,
