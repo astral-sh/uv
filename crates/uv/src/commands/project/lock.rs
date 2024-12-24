@@ -1,6 +1,6 @@
 #![allow(clippy::single_match_else)]
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::Path;
 
@@ -8,6 +8,12 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
+use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
+use crate::commands::project::{find_requires_python, ProjectError, ProjectInterpreter};
+use crate::commands::reporters::ResolverReporter;
+use crate::commands::{diagnostics, pip, ExitStatus};
+use crate::printer::Printer;
+use crate::settings::{ResolverSettings, ResolverSettingsRef};
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -21,7 +27,7 @@ use uv_distribution_types::{
     UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
-use uv_normalize::PackageName;
+use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{Requirement, SupportedEnvironments, VerbatimParsedUrl};
@@ -37,13 +43,6 @@ use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
-
-use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
-use crate::commands::project::{find_requires_python, ProjectError, ProjectInterpreter};
-use crate::commands::reporters::ResolverReporter;
-use crate::commands::{diagnostics, pip, ExitStatus};
-use crate::printer::Printer;
-use crate::settings::{ResolverSettings, ResolverSettingsRef};
 
 /// The result of running a lock operation.
 #[derive(Debug, Clone)]
@@ -329,15 +328,23 @@ async fn do_lock(
     } = settings;
 
     // Collect the requirements, etc.
-    let requirements = workspace.non_project_requirements()?;
+    let requirements = workspace.requirements();
     let overrides = workspace.overrides();
     let constraints = workspace.constraints();
+    let dependency_groups = workspace.dependency_groups()?;
     let source_trees = vec![];
 
     // If necessary, lower the overrides and constraints.
     let requirements = lower(requirements, workspace, index_locations, sources)?;
     let overrides = lower(overrides, workspace, index_locations, sources)?;
     let constraints = lower(constraints, workspace, index_locations, sources)?;
+    let dependency_groups = dependency_groups
+        .into_iter()
+        .map(|(name, requirements)| {
+            let requirements = lower(requirements, workspace, index_locations, sources)?;
+            Ok((name, requirements))
+        })
+        .collect::<Result<BTreeMap<_, _>, ProjectError>>()?;
 
     // Collect the list of members.
     let members = {
@@ -523,6 +530,7 @@ async fn do_lock(
             workspace,
             &members,
             &requirements,
+            &dependency_groups,
             &constraints,
             &overrides,
             environments,
@@ -631,6 +639,11 @@ async fn do_lock(
                     .into_iter()
                     .chain(workspace.group_requirements())
                     .chain(requirements.iter().cloned())
+                    .chain(
+                        dependency_groups
+                            .values()
+                            .flat_map(|requirements| requirements.iter().cloned()),
+                    )
                     .map(UnresolvedRequirementSpecification::from)
                     .collect(),
                 constraints
@@ -679,6 +692,7 @@ async fn do_lock(
                 requirements,
                 constraints,
                 overrides,
+                dependency_groups,
                 dependency_metadata.values().cloned(),
             )
             .relative_to(workspace)?;
@@ -720,6 +734,7 @@ impl ValidatedLock {
         workspace: &Workspace,
         members: &[PackageName],
         requirements: &[Requirement],
+        dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         constraints: &[Requirement],
         overrides: &[Requirement],
         environments: Option<&SupportedEnvironments>,
@@ -870,6 +885,7 @@ impl ValidatedLock {
                 requirements,
                 constraints,
                 overrides,
+                dependency_groups,
                 dependency_metadata,
                 indexes,
                 interpreter.tags()?,
@@ -935,6 +951,13 @@ impl ValidatedLock {
                 );
                 Ok(Self::Preferable(lock))
             }
+            SatisfiesResult::MismatchedDependencyGroups(expected, actual) => {
+                debug!(
+                    "Ignoring existing lockfile due to mismatched dependency groups:\n  Requested: {:?}\n  Existing: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
             SatisfiesResult::MismatchedStaticMetadata(expected, actual) => {
                 debug!(
                     "Ignoring existing lockfile due to mismatched static metadata:\n  Requested: {:?}\n  Existing: {:?}",
@@ -958,14 +981,14 @@ impl ValidatedLock {
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedRequiresDist(name, version, expected, actual) => {
+            SatisfiesResult::MismatchedPackageRequirements(name, version, expected, actual) => {
                 debug!(
                     "Ignoring existing lockfile due to mismatched `requires-dist` for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedDependencyGroups(name, version, expected, actual) => {
+            SatisfiesResult::MismatchedPackageDependencyGroups(name, version, expected, actual) => {
                 debug!(
                     "Ignoring existing lockfile due to mismatched dev dependencies for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual

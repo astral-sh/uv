@@ -1231,7 +1231,9 @@ fn non_project_fork() -> Result<()> {
             members = [
                 "child",
             ]
-            requirements = [{ name = "anyio" }]
+
+            [manifest.dependency-groups]
+            async = [{ name = "anyio" }]
 
             [[package]]
             name = "anyio"

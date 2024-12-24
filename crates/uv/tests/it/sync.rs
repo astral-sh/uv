@@ -654,6 +654,63 @@ fn sync_legacy_non_project_group() -> Result<()> {
     Ok(())
 }
 
+/// Sync development dependencies in a (legacy) non-project workspace root with `--frozen`.
+///
+/// Modify the `pyproject.toml` after locking.
+#[test]
+fn sync_legacy_non_project_frozen_modification() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = []
+
+        [dependency-groups]
+        async = ["anyio"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group").arg("async"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    // Modify the "live" dependency groups.
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = []
+
+        [dependency-groups]
+        async = ["iniconfig"]
+        "#,
+    )?;
+
+    // This should succeed.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group").arg("async"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 3 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
 /// Use a `pip install` step to pre-install build dependencies for `--no-build-isolation`.
 #[test]
 fn sync_build_isolation() -> Result<()> {
@@ -2004,7 +2061,9 @@ fn sync_group_legacy_non_project_member() -> Result<()> {
         members = [
             "child",
         ]
-        requirements = [
+
+        [manifest.dependency-groups]
+        foo = [
             { name = "child", editable = "child" },
             { name = "typing-extensions", specifier = ">=4" },
         ]

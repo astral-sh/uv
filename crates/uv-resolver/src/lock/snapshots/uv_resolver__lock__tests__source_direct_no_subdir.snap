@@ -83,6 +83,7 @@ Ok(
         manifest: ResolverManifest {
             members: {},
             requirements: {},
+            dependency_groups: {},
             constraints: {},
             overrides: {},
             dependency_metadata: {},

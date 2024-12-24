@@ -540,11 +540,27 @@ fn store_credentials_from_workspace(workspace: &Workspace) {
     }
 
     // Iterate over any dependencies defined in the workspace root.
+    for requirement in &workspace.requirements() {
+        let Some(VersionOrUrl::Url(url)) = &requirement.version_or_url else {
+            continue;
+        };
+        match &url.parsed_url {
+            ParsedUrl::Git(ParsedGitUrl { url, .. }) => {
+                uv_git::store_credentials_from_url(url.repository());
+            }
+            ParsedUrl::Archive(ParsedArchiveUrl { url, .. }) => {
+                uv_auth::store_credentials_from_url(url);
+            }
+            _ => {}
+        }
+    }
+
+    // Iterate over any dependency groups defined in the workspace root.
     for requirement in workspace
-        .non_project_requirements()
+        .dependency_groups()
         .ok()
-        .into_iter()
-        .flatten()
+        .iter()
+        .flat_map(|groups| groups.values().flat_map(|group| group.iter()))
     {
         let Some(VersionOrUrl::Url(url)) = &requirement.version_or_url else {
             continue;

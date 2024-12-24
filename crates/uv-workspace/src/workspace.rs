@@ -386,13 +386,24 @@ impl Workspace {
     /// Returns any requirements that are exclusive to the workspace root, i.e., not included in
     /// any of the workspace members.
     ///
-    /// For workspaces with non-project roots, returns the dev dependencies in the corresponding
-    /// `pyproject.toml`.
+    /// For now, there are no such requirements.
+    pub fn requirements(&self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
+        Vec::new()
+    }
+
+    /// Returns any dependency groups that are exclusive to the workspace root, i.e., not included
+    /// in any of the workspace members.
+    ///
+    /// For workspaces with non-`[project]` roots, returns the dependency groups defined in the
+    /// corresponding `pyproject.toml`.
     ///
     /// Otherwise, returns an empty list.
-    pub fn non_project_requirements(
+    pub fn dependency_groups(
         &self,
-    ) -> Result<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>, DependencyGroupError> {
+    ) -> Result<
+        BTreeMap<GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+        DependencyGroupError,
+    > {
         if self
             .packages
             .values()
@@ -400,7 +411,7 @@ impl Workspace {
         {
             // If the workspace has an explicit root, the root is a member, so we don't need to
             // include any root-only requirements.
-            Ok(Vec::new())
+            Ok(BTreeMap::default())
         } else {
             // Otherwise, return the dependency groups in the non-project workspace root.
             // First, collect `tool.uv.dev_dependencies`
@@ -419,19 +430,20 @@ impl Workspace {
                 .flatten()
                 .collect::<BTreeMap<_, _>>();
 
-            // Resolve any `include-group` entries in `dependency-groups`.
-            let dependency_groups =
+            // Flatten the dependency groups.
+            let mut dependency_groups =
                 FlatDependencyGroups::from_dependency_groups(&dependency_groups)
                     .map_err(|err| err.with_dev_dependencies(dev_dependencies))?;
 
-            // Concatenate the two sets of requirements.
-            let dev_dependencies = dependency_groups
-                .into_iter()
-                .flat_map(|(_, requirements)| requirements)
-                .chain(dev_dependencies.into_iter().flatten().cloned())
-                .collect();
+            // Add the `dev` group, if `dev-dependencies` is defined.
+            if let Some(dev_dependencies) = dev_dependencies {
+                dependency_groups
+                    .entry(DEV_DEPENDENCIES.clone())
+                    .or_insert_with(Vec::new)
+                    .extend(dev_dependencies.clone());
+            }
 
-            Ok(dev_dependencies)
+            Ok(dependency_groups.into_inner())
         }
     }
 

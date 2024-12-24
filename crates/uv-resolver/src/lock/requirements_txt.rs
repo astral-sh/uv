@@ -19,7 +19,7 @@ use uv_pep508::MarkerTree;
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
 
 use crate::graph_ops::marker_reachability;
-use crate::lock::{LockErrorKind, Package, PackageId, Source};
+use crate::lock::{Package, PackageId, Source};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{InstallTarget, LockError};
 
@@ -137,23 +137,20 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
         // Add requirements that are exclusive to the workspace root (e.g., dependency groups in
         // (legacy) non-project workspace roots).
-        let root_groups = target
-            .groups()
-            .map_err(|err| LockErrorKind::DependencyGroup { err })?;
-        let root_requirements = {
-            root_groups
-                .iter()
-                .filter_map(|(group, deps)| {
-                    if dev.contains(group) {
-                        Some(deps)
-                    } else {
-                        None
-                    }
-                })
-                .flatten()
-                .filter(|dep| !prune.contains(&dep.name))
-                .collect::<Vec<_>>()
-        };
+        let root_requirements = target
+            .lock()
+            .dependency_groups()
+            .iter()
+            .filter_map(|(group, deps)| {
+                if dev.contains(group) {
+                    Some(deps)
+                } else {
+                    None
+                }
+            })
+            .flatten()
+            .filter(|dep| !prune.contains(&dep.name))
+            .collect::<Vec<_>>();
 
         // Index the lockfile by package name, to avoid making multiple passes over the lockfile.
         if !root_requirements.is_empty() {
