@@ -6,6 +6,7 @@ use owo_colors::OwoColorize;
 use std::collections::{BTreeSet, HashSet};
 use std::fmt::Write;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tracing::debug;
 use uv_tool::InstalledTools;
 
@@ -138,7 +139,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                     index,
                     DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
                 )
-                .with_reporter(ResolverReporter::from(printer))
+                .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(unnamed.into_iter())
                 .await?,
             );
@@ -152,7 +153,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 index,
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
             )
-            .with_reporter(ResolverReporter::from(printer))
+            .with_reporter(Arc::new(ResolverReporter::from(printer)))
             .resolve(source_trees.iter().map(PathBuf::as_path))
             .await?;
 
@@ -221,7 +222,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                     index,
                     DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
                 )
-                .with_reporter(ResolverReporter::from(printer))
+                .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(unnamed.into_iter())
                 .await?,
             );
@@ -251,7 +252,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 index,
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
             )
-            .with_reporter(ResolverReporter::from(printer))
+            .with_reporter(Arc::new(ResolverReporter::from(printer)))
             .resolve(&resolver_env)
             .await?
         }
@@ -297,7 +298,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             installed_packages,
             DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
         )?
-        .with_reporter(reporter);
+        .with_reporter(Arc::new(reporter));
 
         resolver.resolve().await?
     };
@@ -460,7 +461,9 @@ pub(crate) async fn install(
             build_options,
             DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
         )
-        .with_reporter(PrepareReporter::from(printer).with_length(remote.len() as u64));
+        .with_reporter(Arc::new(
+            PrepareReporter::from(printer).with_length(remote.len() as u64),
+        ));
 
         let wheels = preparer
             .prepare(remote.clone(), in_flight, resolution)
@@ -519,7 +522,9 @@ pub(crate) async fn install(
             .with_link_mode(link_mode)
             .with_cache(cache)
             .with_installer_metadata(installer_metadata)
-            .with_reporter(InstallReporter::from(printer).with_length(installs.len() as u64))
+            .with_reporter(Arc::new(
+                InstallReporter::from(printer).with_length(installs.len() as u64),
+            ))
             // This technically can block the runtime, but we are on the main thread and
             // have no other running tasks at this point, so this lets us avoid spawning a blocking
             // task.

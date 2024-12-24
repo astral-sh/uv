@@ -1,21 +1,22 @@
+use std::convert;
+use std::sync::{Arc, LazyLock};
+
 use anyhow::{Context, Error, Result};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use std::convert;
-use std::sync::LazyLock;
 use tokio::sync::oneshot;
 use tracing::instrument;
-use uv_install_wheel::{linker::LinkMode, Layout};
 
 use uv_cache::Cache;
 use uv_configuration::RAYON_INITIALIZE;
 use uv_distribution_types::CachedDist;
+use uv_install_wheel::{linker::LinkMode, Layout};
 use uv_python::PythonEnvironment;
 
 pub struct Installer<'a> {
     venv: &'a PythonEnvironment,
     link_mode: LinkMode,
     cache: Option<&'a Cache>,
-    reporter: Option<Box<dyn Reporter>>,
+    reporter: Option<Arc<dyn Reporter>>,
     installer_name: Option<String>,
     installer_metadata: bool,
 }
@@ -50,9 +51,9 @@ impl<'a> Installer<'a> {
 
     /// Set the [`Reporter`] to use for this installer.
     #[must_use]
-    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
+    pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
-            reporter: Some(Box::new(reporter)),
+            reporter: Some(reporter),
             ..self
         }
     }
@@ -66,7 +67,7 @@ impl<'a> Installer<'a> {
         }
     }
 
-    /// Set the whether to link Uv specific files in dist-info
+    /// Set whether to install uv-specifier files in the dist-info directory.
     #[must_use]
     pub fn with_installer_metadata(self, installer_metadata: bool) -> Self {
         Self {
@@ -151,7 +152,7 @@ fn install(
     layout: Layout,
     installer_name: Option<String>,
     link_mode: LinkMode,
-    reporter: Option<Box<dyn Reporter>>,
+    reporter: Option<Arc<dyn Reporter>>,
     relocatable: bool,
     installer_metadata: bool,
 ) -> Result<Vec<CachedDist>> {

@@ -1319,7 +1319,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 resource.git,
                 client.unmanaged.uncached_client(resource.url).clone(),
                 self.build_context.cache().bucket(CacheBucket::Git),
-                self.reporter.clone().map(Facade::from),
+                self.reporter
+                    .clone()
+                    .map(Facade::from)
+                    .map(Arc::new)
+                    .map(|reporter| reporter as _),
             )
             .await?;
 
@@ -1416,7 +1420,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 resource.git,
                 client.unmanaged.uncached_client(resource.url).clone(),
                 self.build_context.cache().bucket(CacheBucket::Git),
-                self.reporter.clone().map(Facade::from),
+                self.reporter
+                    .clone()
+                    .map(Facade::from)
+                    .map(Arc::new)
+                    .map(|reporter| reporter as _),
             )
             .await?;
 
@@ -1592,7 +1600,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         &source.git,
                         client.unmanaged.uncached_client(&source.url).clone(),
                         self.build_context.cache().bucket(CacheBucket::Git),
-                        self.reporter.clone().map(Facade::from),
+                        self.reporter
+                            .clone()
+                            .map(Facade::from)
+                            .map(Arc::new)
+                            .map(|reporter| reporter as _),
                     )
                     .await?;
             }
@@ -1603,7 +1615,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         source.git,
                         client.unmanaged.uncached_client(source.url).clone(),
                         self.build_context.cache().bucket(CacheBucket::Git),
-                        self.reporter.clone().map(Facade::from),
+                        self.reporter
+                            .clone()
+                            .map(Facade::from)
+                            .map(Arc::new)
+                            .map(|reporter| reporter as _),
                     )
                     .await?;
             }

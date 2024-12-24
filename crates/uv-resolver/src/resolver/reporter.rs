@@ -39,7 +39,13 @@ pub trait Reporter: Send + Sync {
 
 /// A facade for converting from [`Reporter`] to [`uv_distribution::Reporter`].
 pub(crate) struct Facade {
-    pub(crate) reporter: Arc<dyn Reporter>,
+    reporter: Arc<dyn Reporter>,
+}
+
+impl From<Arc<dyn Reporter>> for Facade {
+    fn from(reporter: Arc<dyn Reporter>) -> Self {
+        Self { reporter }
+    }
 }
 
 impl uv_distribution::Reporter for Facade {

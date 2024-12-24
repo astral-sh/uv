@@ -3,6 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::Path;
+use std::sync::Arc;
 
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
@@ -632,7 +633,7 @@ async fn do_lock(
             // Resolve the requirements.
             let resolution = pip::operations::resolve(
                 ExtrasResolver::new(&hasher, state.index(), database)
-                    .with_reporter(ResolverReporter::from(printer))
+                    .with_reporter(Arc::new(ResolverReporter::from(printer)))
                     .resolve(workspace.members_requirements())
                     .await
                     .map_err(|err| ProjectError::Operation(err.into()))?

@@ -48,15 +48,16 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
 
     /// Set the [`Reporter`] to use for operations.
     #[must_use]
-    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
-        let reporter: Arc<dyn Reporter> = Arc::new(reporter);
+    pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
             tags: self.tags,
             cache: self.cache,
             hashes: self.hashes,
             build_options: self.build_options,
-            database: self.database.with_reporter(Facade::from(reporter.clone())),
-            reporter: Some(reporter.clone()),
+            database: self
+                .database
+                .with_reporter(Arc::new(Facade::from(reporter.clone()))),
+            reporter: Some(reporter),
         }
     }
 
@@ -269,7 +270,7 @@ pub trait Reporter: Send + Sync {
     fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize);
 }
 
-/// A facade for converting from [`Reporter`] to [`uv_git::Reporter`].
+/// A facade for converting from [`Reporter`] to [`uv_distribution::Reporter`].
 struct Facade {
     reporter: Arc<dyn Reporter>,
 }

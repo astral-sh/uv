@@ -1,5 +1,6 @@
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -1071,7 +1072,7 @@ pub(crate) async fn resolve_names(
             state.index(),
             DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
         )
-        .with_reporter(ResolverReporter::from(printer))
+        .with_reporter(Arc::new(ResolverReporter::from(printer)))
         .resolve(unnamed.into_iter())
         .await?,
     );
