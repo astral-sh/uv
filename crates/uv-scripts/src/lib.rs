@@ -54,6 +54,14 @@ impl Pep723Item {
             Self::Remote(_) => None,
         }
     }
+
+    /// Return the PEP 723 script, if any.
+    pub fn as_script(&self) -> Option<&Pep723Script> {
+        match self {
+            Self::Script(script) => Some(script),
+            _ => None,
+        }
+    }
 }
 
 /// A reference to a PEP 723 item.
@@ -233,6 +241,18 @@ impl Pep723Script {
         fs_err::tokio::write(&self.path, content).await?;
 
         Ok(())
+    }
+
+    /// Return the [`Sources`] defined in the PEP 723 metadata.
+    pub fn sources(&self) -> &BTreeMap<PackageName, Sources> {
+        static EMPTY: BTreeMap<PackageName, Sources> = BTreeMap::new();
+
+        self.metadata
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.sources.as_ref())
+            .unwrap_or(&EMPTY)
     }
 }
 
