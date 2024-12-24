@@ -212,6 +212,46 @@ impl<'env> InstallTarget<'env> {
             }
         }
 
+        // Add any requirements that are exclusive to the workspace root (e.g., dependencies in
+        // PEP 723 scripts).
+        for dependency in self.lock().requirements() {
+            if !dependency.marker.evaluate(marker_env, &[]) {
+                continue;
+            }
+
+            let root_name = &dependency.name;
+            let dist = self
+                .lock()
+                .find_by_markers(root_name, marker_env)
+                .map_err(|_| LockErrorKind::MultipleRootPackages {
+                    name: root_name.clone(),
+                })?
+                .ok_or_else(|| LockErrorKind::MissingRootPackage {
+                    name: root_name.clone(),
+                })?;
+
+            // Add the package to the graph.
+            let index = petgraph.add_node(if dev.prod() {
+                self.package_to_node(dist, tags, build_options, install_options)?
+            } else {
+                self.non_installable_node(dist, tags)?
+            });
+            inverse.insert(&dist.id, index);
+
+            // Add the edge.
+            petgraph.add_edge(root, index, Edge::Prod(dependency.marker));
+
+            // Push its dependencies on the queue.
+            if seen.insert((&dist.id, None)) {
+                queue.push_back((dist, None));
+            }
+            for extra in &dependency.extras {
+                if seen.insert((&dist.id, Some(extra))) {
+                    queue.push_back((dist, Some(extra)));
+                }
+            }
+        }
+
         // Add any dependency groups that are exclusive to the workspace root (e.g., dev
         // dependencies in (legacy) non-project workspace roots).
         for (group, dependency) in self
