@@ -95,7 +95,7 @@ impl Pep723Script {
         let metadata = Pep723Metadata::from_str(&metadata)?;
 
         Ok(Some(Self {
-            path: file.as_ref().to_path_buf(),
+            path: std::path::absolute(file)?,
             metadata,
             prelude,
             postlude,
@@ -124,7 +124,7 @@ impl Pep723Script {
         let (shebang, postlude) = extract_shebang(&contents)?;
 
         Ok(Self {
-            path: file.as_ref().to_path_buf(),
+            path: std::path::absolute(file)?,
             prelude: if shebang.is_empty() {
                 String::new()
             } else {
