@@ -77,11 +77,11 @@ where
     ///
     /// If the bytes fail validation (e.g., contains unaligned pointers or
     /// strings aren't valid UTF-8), then this returns an error.
-    pub fn new(raw: rkyv::util::AlignedVec) -> Result<Self, Error> {
+    pub fn new(raw: AlignedVec) -> Result<Self, Error> {
         // We convert the error to a simple string because... the error type
         // does not implement Send. And I don't think we really need to keep
         // the error type around anyway.
-        let _ = rkyv::access::<A::Archived, rkyv::rancor::Error>(&raw)
+        let _ = rkyv::access::<A::Archived, rancor::Error>(&raw)
             .map_err(|e| ErrorKind::ArchiveRead(e.to_string()))?;
         Ok(Self {
             raw,
@@ -98,7 +98,7 @@ where
     /// If the bytes fail validation (e.g., contains unaligned pointers or
     /// strings aren't valid UTF-8), then this returns an error.
     pub fn from_reader<R: std::io::Read>(mut rdr: R) -> Result<Self, Error> {
-        let mut buf = rkyv::util::AlignedVec::with_capacity(1024);
+        let mut buf = AlignedVec::with_capacity(1024);
         buf.extend_from_reader(&mut rdr).map_err(ErrorKind::Io)?;
         Self::new(buf)
     }

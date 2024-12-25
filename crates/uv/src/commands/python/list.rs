@@ -66,7 +66,7 @@ pub(crate) async fn list(
 
         let downloads = download_request
             .as_ref()
-            .map(uv_python::downloads::PythonDownloadRequest::iter_downloads)
+            .map(PythonDownloadRequest::iter_downloads)
             .into_iter()
             .flatten();
 

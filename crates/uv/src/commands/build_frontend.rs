@@ -1092,8 +1092,8 @@ impl<'a> From<Source<'a>> for AnnotatedSource<'a> {
     }
 }
 
-impl std::fmt::Display for AnnotatedSource<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for AnnotatedSource<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(package) = &self.package {
             write!(f, "{} @ {}", package, self.path().simplified_display())
         } else {

@@ -12686,7 +12686,7 @@ fn tool_uv_sources() -> Result<()> {
         poetry_editable = { path = "../poetry_editable", editable = true }
     "#})?;
 
-    let project_root = fs_err::canonicalize(std::env::current_dir()?.join("../.."))?;
+    let project_root = fs_err::canonicalize(current_dir()?.join("../.."))?;
     fs_err::create_dir_all(context.temp_dir.join("poetry_editable/poetry_editable"))?;
     fs_err::copy(
         project_root.join("scripts/packages/poetry_editable/pyproject.toml"),

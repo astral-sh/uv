@@ -81,7 +81,7 @@ pub enum TrustedHostError {
     InvalidPort(String),
 }
 
-impl std::str::FromStr for TrustedHost {
+impl FromStr for TrustedHost {
     type Err = TrustedHostError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {

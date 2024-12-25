@@ -319,7 +319,7 @@ impl PyProjectTomlMut {
         if index.default {
             if !table
                 .get("default")
-                .and_then(toml_edit::Item::as_bool)
+                .and_then(Item::as_bool)
                 .is_some_and(|default| default)
             {
                 let mut formatted = Formatted::new(true);
@@ -371,7 +371,7 @@ impl PyProjectTomlMut {
         });
 
         // Set the position to the minimum, if it's not already the first element.
-        if let Some(min) = existing.iter().filter_map(toml_edit::Table::position).min() {
+        if let Some(min) = existing.iter().filter_map(Table::position).min() {
             table.set_position(min);
 
             // Increment the position of all existing elements.

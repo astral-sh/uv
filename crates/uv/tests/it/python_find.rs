@@ -1,6 +1,5 @@
 use assert_fs::prelude::PathChild;
 use assert_fs::{fixture::FileWriteStr, prelude::PathCreateDir};
-use fs_err::remove_dir_all;
 use indoc::indoc;
 
 use uv_python::platform::{Arch, Os};
@@ -450,7 +449,7 @@ fn python_find_venv() {
     "###);
 
     // But if we delete the parent virtual environment
-    remove_dir_all(context.temp_dir.child(".venv")).unwrap();
+    fs_err::remove_dir_all(context.temp_dir.child(".venv")).unwrap();
 
     // And query from there... we should not find the child virtual environment
     uv_snapshot!(context.filters(), context.python_find(), @r###"

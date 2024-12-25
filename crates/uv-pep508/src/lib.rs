@@ -232,12 +232,12 @@ impl<T: Pep508Url> Requirement<T> {
     }
 }
 
-/// Type to parse URLs from `name @ <url>` into. Defaults to [`url::Url`].
+/// Type to parse URLs from `name @ <url>` into. Defaults to [`Url`].
 pub trait Pep508Url: Display + Debug + Sized {
     /// String to URL parsing error
     type Err: Error + Debug;
 
-    /// Parse a url from `name @ <url>`. Defaults to [`url::Url::parse_url`].
+    /// Parse a url from `name @ <url>`. Defaults to [`Url::parse_url`].
     fn parse_url(url: &str, working_dir: Option<&Path>) -> Result<Self, Self::Err>;
 }
 
@@ -1069,7 +1069,7 @@ mod tests {
             marker: MarkerTree::expression(MarkerExpression::Version {
                 key: MarkerValueVersion::PythonFullVersion,
                 specifier: VersionSpecifier::from_pattern(
-                    uv_pep440::Operator::LessThan,
+                    Operator::LessThan,
                     "2.7".parse().unwrap(),
                 )
                 .unwrap(),
@@ -1333,11 +1333,8 @@ mod tests {
 
         let mut a = MarkerTree::expression(MarkerExpression::Version {
             key: MarkerValueVersion::PythonVersion,
-            specifier: VersionSpecifier::from_pattern(
-                uv_pep440::Operator::Equal,
-                "2.7".parse().unwrap(),
-            )
-            .unwrap(),
+            specifier: VersionSpecifier::from_pattern(Operator::Equal, "2.7".parse().unwrap())
+                .unwrap(),
         });
         let mut b = MarkerTree::expression(MarkerExpression::String {
             key: MarkerValueString::SysPlatform,

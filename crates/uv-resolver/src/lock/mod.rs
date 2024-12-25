@@ -2432,7 +2432,7 @@ impl PackageId {
     }
 }
 
-impl std::fmt::Display for PackageId {
+impl Display for PackageId {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}=={} @ {}", self.name, self.version, self.source)
     }
@@ -2736,7 +2736,7 @@ impl Source {
     }
 }
 
-impl std::fmt::Display for Source {
+impl Display for Source {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Source::Registry(RegistrySource::Url(url))
@@ -2866,7 +2866,7 @@ enum RegistrySource {
     Path(PathBuf),
 }
 
-impl std::fmt::Display for RegistrySource {
+impl Display for RegistrySource {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             RegistrySource::Url(url) => write!(f, "{url}"),
@@ -3765,7 +3765,7 @@ impl Dependency {
     }
 }
 
-impl std::fmt::Display for Dependency {
+impl Display for Dependency {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         if self.extra.is_empty() {
             write!(
@@ -3826,7 +3826,7 @@ impl From<HashDigest> for Hash {
     }
 }
 
-impl std::str::FromStr for Hash {
+impl FromStr for Hash {
     type Err = HashParseError;
 
     fn from_str(s: &str) -> Result<Hash, HashParseError> {
@@ -3843,7 +3843,7 @@ impl std::str::FromStr for Hash {
     }
 }
 
-impl std::fmt::Display for Hash {
+impl Display for Hash {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}:{}", self.0.algorithm, self.0.digest)
     }
@@ -4249,21 +4249,21 @@ enum LockErrorKind {
     DistributionRelativePath(
         /// The inner error we forward.
         #[source]
-        std::io::Error,
+        io::Error,
     ),
     /// An error that occurs when converting an index URL to a relative path
     #[error("Could not compute relative path between workspace and index")]
     IndexRelativePath(
         /// The inner error we forward.
         #[source]
-        std::io::Error,
+        io::Error,
     ),
     /// An error that occurs when converting a lockfile path from relative to absolute.
     #[error("Could not compute absolute path from workspace root and lockfile path")]
     AbsolutePath(
         /// The inner error we forward.
         #[source]
-        std::io::Error,
+        io::Error,
     ),
     /// An error that occurs when an ambiguous `package.dependency` is
     /// missing a `version` field.
@@ -4290,7 +4290,7 @@ enum LockErrorKind {
     RequirementRelativePath(
         /// The inner error we forward.
         #[source]
-        std::io::Error,
+        io::Error,
     ),
     /// An error that occurs when parsing an existing requirement.
     #[error("Could not convert between URL and path")]
@@ -4368,7 +4368,7 @@ struct HashParseError(&'static str);
 
 impl std::error::Error for HashParseError {}
 
-impl std::fmt::Display for HashParseError {
+impl Display for HashParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         Display::fmt(self.0, f)
     }

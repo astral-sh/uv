@@ -53,7 +53,7 @@ pub enum MarkerValueVersion {
 }
 
 impl Display for MarkerValueVersion {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::ImplementationVersion => f.write_str("implementation_version"),
             Self::PythonFullVersion => f.write_str("python_full_version"),
@@ -97,7 +97,7 @@ pub enum MarkerValueString {
 
 impl Display for MarkerValueString {
     /// Normalizes deprecated names to the proper ones
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::ImplementationName => f.write_str("implementation_name"),
             Self::OsName | Self::OsNameDeprecated => f.write_str("os_name"),
@@ -175,7 +175,7 @@ impl FromStr for MarkerValue {
 }
 
 impl Display for MarkerValue {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::MarkerEnvVersion(marker_value_version) => marker_value_version.fmt(f),
             Self::MarkerEnvString(marker_value_string) => marker_value_string.fmt(f),
@@ -341,7 +341,7 @@ impl FromStr for MarkerOperator {
 }
 
 impl Display for MarkerOperator {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::Equal => "==",
             Self::NotEqual => "!=",
@@ -386,7 +386,7 @@ impl FromStr for StringVersion {
 }
 
 impl Display for StringVersion {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.string.fmt(f)
     }
 }
@@ -446,7 +446,7 @@ impl MarkerValueExtra {
 }
 
 impl Display for MarkerValueExtra {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Extra(extra) => extra.fmt(f),
             Self::Arbitrary(string) => string.fmt(f),
@@ -538,7 +538,7 @@ impl ExtraOperator {
 }
 
 impl Display for ExtraOperator {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::Equal => "==",
             Self::NotEqual => "!=",
@@ -590,7 +590,7 @@ impl MarkerExpression {
 }
 
 impl Display for MarkerExpression {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             MarkerExpression::Version { key, specifier } => {
                 let (op, version) = (specifier.operator(), specifier.version());
@@ -1198,7 +1198,7 @@ impl MarkerTree {
         MarkerTreeDebugRaw { marker: self }
     }
 
-    fn fmt_graph(self, f: &mut fmt::Formatter<'_>, level: usize) -> fmt::Result {
+    fn fmt_graph(self, f: &mut Formatter<'_>, level: usize) -> fmt::Result {
         match self.kind() {
             MarkerTreeKind::True => return write!(f, "true"),
             MarkerTreeKind::False => return write!(f, "false"),
@@ -1296,7 +1296,7 @@ pub struct MarkerTreeDebugGraph<'a> {
 }
 
 impl fmt::Debug for MarkerTreeDebugGraph<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.marker.fmt_graph(f, 0)
     }
 }
@@ -1313,7 +1313,7 @@ pub struct MarkerTreeDebugRaw<'a> {
 }
 
 impl fmt::Debug for MarkerTreeDebugRaw<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let node = INTERNER.shared.node(self.marker.0);
         f.debug_tuple("MarkerTreeDebugRaw").field(node).finish()
     }

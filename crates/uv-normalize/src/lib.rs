@@ -95,7 +95,7 @@ fn is_normalized(name: impl AsRef<str>) -> Result<bool, InvalidNameError> {
     Ok(true)
 }
 
-/// Invalid [`crate::PackageName`] or [`crate::ExtraName`].
+/// Invalid [`PackageName`] or [`ExtraName`].
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InvalidNameError(String);
 
