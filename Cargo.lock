@@ -4454,6 +4454,7 @@ dependencies = [
  "thiserror 2.0.9",
  "tokio",
  "toml",
+ "toml_edit",
  "tracing",
  "tracing-durations-export",
  "tracing-subscriber",

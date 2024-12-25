@@ -78,6 +78,9 @@ pub(crate) enum ProjectError {
     #[error("Failed to parse `uv.lock`, which uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.")]
     UnparsableLockVersion(u32, u32, #[source] toml::de::Error),
 
+    #[error("Failed to serialize `uv.lock`")]
+    LockSerialization(#[from] toml_edit::ser::Error),
+
     #[error("The current Python version ({0}) is not compatible with the locked Python requirement: `{1}`")]
     LockedPythonIncompatibility(Version, RequiresPython),
 
