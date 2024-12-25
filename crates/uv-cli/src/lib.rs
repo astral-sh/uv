@@ -3651,6 +3651,14 @@ pub struct ExportArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
+    /// Export the dependencies for the specified PEP 723 Python script, rather than the current
+    /// project.
+    ///
+    /// If provided, uv will resolve the dependencies based on its inline metadata table, in
+    /// adherence with PEP 723.
+    #[arg(long, conflicts_with_all = ["all_packages", "package", "no_emit_project", "no_emit_workspace"])]
+    pub script: Option<PathBuf>,
+
     /// The Python interpreter to use during resolution.
     ///
     /// A Python interpreter is required for building source distributions to
