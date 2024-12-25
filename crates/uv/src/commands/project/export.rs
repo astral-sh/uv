@@ -137,7 +137,7 @@ pub(crate) async fn export(
     // Lock the project.
     let lock = match do_safe_lock(
         mode,
-        project.workspace(),
+        project.workspace().into(),
         settings.as_ref(),
         LowerBound::Warn,
         &state,

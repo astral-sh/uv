@@ -37,7 +37,7 @@ use uv_pypi_types::{
     Requirement, RequirementSource,
 };
 use uv_types::{BuildContext, HashStrategy};
-use uv_workspace::Workspace;
+use uv_workspace::WorkspaceMember;
 
 use crate::fork_strategy::ForkStrategy;
 pub use crate::lock::installable::Installable;
@@ -916,7 +916,8 @@ impl Lock {
     /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
     pub async fn satisfies<Context: BuildContext>(
         &self,
-        workspace: &Workspace,
+        root: &Path,
+        packages: &BTreeMap<PackageName, WorkspaceMember>,
         members: &[PackageName],
         requirements: &[Requirement],
         constraints: &[Requirement],
@@ -944,7 +945,7 @@ impl Lock {
         // Validate that the member sources have not changed.
         {
             // E.g., that they've switched from virtual to non-virtual or vice versa.
-            for (name, member) in workspace.packages() {
+            for (name, member) in packages {
                 let expected = !member.pyproject_toml().is_package();
                 let actual = self
                     .find_by_name(name)
@@ -957,7 +958,7 @@ impl Lock {
             }
 
             // E.g., that the version has changed.
-            for (name, member) in workspace.packages() {
+            for (name, member) in packages {
                 let Some(expected) = member
                     .pyproject_toml()
                     .project
@@ -986,14 +987,14 @@ impl Lock {
             let expected: BTreeSet<_> = requirements
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, workspace))
+                .map(|requirement| normalize_requirement(requirement, root))
                 .collect::<Result<_, _>>()?;
             let actual: BTreeSet<_> = self
                 .manifest
                 .requirements
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, workspace))
+                .map(|requirement| normalize_requirement(requirement, root))
                 .collect::<Result<_, _>>()?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedConstraints(expected, actual));
@@ -1005,14 +1006,14 @@ impl Lock {
             let expected: BTreeSet<_> = constraints
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, workspace))
+                .map(|requirement| normalize_requirement(requirement, root))
                 .collect::<Result<_, _>>()?;
             let actual: BTreeSet<_> = self
                 .manifest
                 .constraints
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, workspace))
+                .map(|requirement| normalize_requirement(requirement, root))
                 .collect::<Result<_, _>>()?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedConstraints(expected, actual));
@@ -1024,14 +1025,14 @@ impl Lock {
             let expected: BTreeSet<_> = overrides
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, workspace))
+                .map(|requirement| normalize_requirement(requirement, root))
                 .collect::<Result<_, _>>()?;
             let actual: BTreeSet<_> = self
                 .manifest
                 .overrides
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, workspace))
+                .map(|requirement| normalize_requirement(requirement, root))
                 .collect::<Result<_, _>>()?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedOverrides(expected, actual));
@@ -1049,7 +1050,7 @@ impl Lock {
                         requirements
                             .iter()
                             .cloned()
-                            .map(|requirement| normalize_requirement(requirement, workspace))
+                            .map(|requirement| normalize_requirement(requirement, root))
                             .collect::<Result<_, _>>()?,
                     ))
                 })
@@ -1065,7 +1066,7 @@ impl Lock {
                         requirements
                             .iter()
                             .cloned()
-                            .map(|requirement| normalize_requirement(requirement, workspace))
+                            .map(|requirement| normalize_requirement(requirement, root))
                             .collect::<Result<_, _>>()?,
                     ))
                 })
@@ -1111,7 +1112,7 @@ impl Lock {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => None,
                     IndexUrl::Path(url) => {
                         let path = url.to_file_path().ok()?;
-                        let path = relative_to(&path, workspace.install_path())
+                        let path = relative_to(&path, root)
                             .or_else(|_| std::path::absolute(path))
                             .ok()?;
                         Some(path)
@@ -1121,7 +1122,7 @@ impl Lock {
         });
 
         // Add the workspace packages to the queue.
-        for root_name in workspace.packages().keys() {
+        for root_name in packages.keys() {
             let root = self
                 .find_by_name(root_name)
                 .expect("found too many packages matching root");
@@ -1170,7 +1171,7 @@ impl Lock {
 
             // Get the metadata for the distribution.
             let dist = package.to_dist(
-                workspace.install_path(),
+                root,
                 // When validating, it's okay to use wheels that don't match the current platform.
                 TagPolicy::Preferred(tags),
                 // When validating, it's okay to use (e.g.) a source distribution with `--no-build`.
@@ -1233,14 +1234,14 @@ impl Lock {
                 let expected: BTreeSet<_> = metadata
                     .requires_dist
                     .into_iter()
-                    .map(|requirement| normalize_requirement(requirement, workspace))
+                    .map(|requirement| normalize_requirement(requirement, root))
                     .collect::<Result<_, _>>()?;
                 let actual: BTreeSet<_> = package
                     .metadata
                     .requires_dist
                     .iter()
                     .cloned()
-                    .map(|requirement| normalize_requirement(requirement, workspace))
+                    .map(|requirement| normalize_requirement(requirement, root))
                     .collect::<Result<_, _>>()?;
 
                 if expected != actual {
@@ -1264,7 +1265,7 @@ impl Lock {
                             group,
                             requirements
                                 .into_iter()
-                                .map(|requirement| normalize_requirement(requirement, workspace))
+                                .map(|requirement| normalize_requirement(requirement, root))
                                 .collect::<Result<_, _>>()?,
                         ))
                     })
@@ -1280,7 +1281,7 @@ impl Lock {
                             requirements
                                 .iter()
                                 .cloned()
-                                .map(|requirement| normalize_requirement(requirement, workspace))
+                                .map(|requirement| normalize_requirement(requirement, root))
                                 .collect::<Result<_, _>>()?,
                         ))
                     })
@@ -1465,23 +1466,23 @@ impl ResolverManifest {
     }
 
     /// Convert the manifest to a relative form using the given workspace.
-    pub fn relative_to(self, workspace: &Workspace) -> Result<Self, io::Error> {
+    pub fn relative_to(self, root: &Path) -> Result<Self, io::Error> {
         Ok(Self {
             members: self.members,
             requirements: self
                 .requirements
                 .into_iter()
-                .map(|requirement| requirement.relative_to(workspace.install_path()))
+                .map(|requirement| requirement.relative_to(root))
                 .collect::<Result<BTreeSet<_>, _>>()?,
             constraints: self
                 .constraints
                 .into_iter()
-                .map(|requirement| requirement.relative_to(workspace.install_path()))
+                .map(|requirement| requirement.relative_to(root))
                 .collect::<Result<BTreeSet<_>, _>>()?,
             overrides: self
                 .overrides
                 .into_iter()
-                .map(|requirement| requirement.relative_to(workspace.install_path()))
+                .map(|requirement| requirement.relative_to(root))
                 .collect::<Result<BTreeSet<_>, _>>()?,
             dependency_groups: self
                 .dependency_groups
@@ -1491,7 +1492,7 @@ impl ResolverManifest {
                         group,
                         requirements
                             .into_iter()
-                            .map(|requirement| requirement.relative_to(workspace.install_path()))
+                            .map(|requirement| requirement.relative_to(root))
                             .collect::<Result<BTreeSet<_>, _>>()?,
                     ))
                 })
@@ -3874,10 +3875,7 @@ fn normalize_url(mut url: Url) -> UrlString {
 /// 2. Ensures that the lock and install paths are appropriately framed with respect to the
 ///    current [`Workspace`].
 /// 3. Removes the `origin` field, which is only used in `requirements.txt`.
-fn normalize_requirement(
-    requirement: Requirement,
-    workspace: &Workspace,
-) -> Result<Requirement, LockError> {
+fn normalize_requirement(requirement: Requirement, root: &Path) -> Result<Requirement, LockError> {
     match requirement.source {
         RequirementSource::Git {
             mut repository,
@@ -3919,8 +3917,7 @@ fn normalize_requirement(
             ext,
             url: _,
         } => {
-            let install_path =
-                uv_fs::normalize_path_buf(workspace.install_path().join(&install_path));
+            let install_path = uv_fs::normalize_path_buf(root.join(&install_path));
             let url = VerbatimUrl::from_absolute_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
@@ -3943,8 +3940,7 @@ fn normalize_requirement(
             r#virtual,
             url: _,
         } => {
-            let install_path =
-                uv_fs::normalize_path_buf(workspace.install_path().join(&install_path));
+            let install_path = uv_fs::normalize_path_buf(root.join(&install_path));
             let url = VerbatimUrl::from_absolute_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
