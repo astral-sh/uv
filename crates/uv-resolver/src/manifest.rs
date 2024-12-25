@@ -57,7 +57,7 @@ impl Manifest {
         overrides: Overrides,
         preferences: Preferences,
         project: Option<PackageName>,
-        workspace_members: Option<BTreeSet<PackageName>>,
+        workspace_members: BTreeSet<PackageName>,
         exclusions: Exclusions,
         lookaheads: Vec<RequestedRequirements>,
     ) -> Self {
@@ -67,7 +67,7 @@ impl Manifest {
             overrides,
             preferences,
             project,
-            workspace_members: workspace_members.unwrap_or_default(),
+            workspace_members,
             exclusions,
             lookaheads,
         }

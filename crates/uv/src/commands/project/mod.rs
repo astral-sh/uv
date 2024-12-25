@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
@@ -1259,7 +1260,7 @@ pub(crate) async fn resolve_environment<'a>(
         overrides,
         source_trees,
         project,
-        None,
+        BTreeSet::default(),
         &extras,
         preferences,
         EmptyInstalledPackages,
@@ -1604,7 +1605,7 @@ pub(crate) async fn update_environment(
         overrides,
         source_trees,
         project,
-        None,
+        BTreeSet::default(),
         &extras,
         preferences,
         site_packages.clone(),

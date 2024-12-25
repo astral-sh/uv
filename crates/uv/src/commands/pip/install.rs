@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use itertools::Itertools;
@@ -403,7 +404,7 @@ pub(crate) async fn pip_install(
         overrides,
         source_trees,
         project,
-        None,
+        BTreeSet::default(),
         extras,
         preferences,
         site_packages.clone(),

@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::env;
 use std::path::Path;
 
@@ -376,7 +377,7 @@ pub(crate) async fn pip_compile(
         overrides,
         source_trees,
         project,
-        None,
+        BTreeSet::default(),
         &extras,
         preferences,
         EmptyInstalledPackages,
