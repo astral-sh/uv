@@ -990,9 +990,27 @@ fn resolve_requirement(
     Ok((processed_requirement, source))
 }
 
+/// A Python [`Interpreter`] or [`PythonEnvironment`] for a project.
+#[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
+pub(super) enum PythonTarget {
+    Interpreter(Interpreter),
+    Environment(PythonEnvironment),
+}
+
+impl PythonTarget {
+    /// Return the [`Interpreter`] for the project.
+    fn interpreter(&self) -> &Interpreter {
+        match self {
+            Self::Interpreter(interpreter) => interpreter,
+            Self::Environment(venv) => venv.interpreter(),
+        }
+    }
+}
+
 /// Represents the destination where dependencies are added, either to a project or a script.
 #[derive(Debug, Clone)]
-enum AddTarget {
+pub(super) enum AddTarget {
     /// A PEP 723 script, with inline metadata.
     Script(Pep723Script, Box<Interpreter>),
 
@@ -1011,7 +1029,7 @@ impl<'lock> From<&'lock AddTarget> for LockTarget<'lock> {
 
 impl AddTarget {
     /// Returns the [`Interpreter`] for the target.
-    fn interpreter(&self) -> &Interpreter {
+    pub(super) fn interpreter(&self) -> &Interpreter {
         match self {
             Self::Script(_, interpreter) => interpreter,
             Self::Project(_, venv) => venv.interpreter(),
@@ -1127,24 +1145,6 @@ impl AddTargetSnapshot {
                 }
                 Ok(())
             }
-        }
-    }
-}
-
-/// A Python [`Interpreter`] or [`PythonEnvironment`] for a project.
-#[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
-enum PythonTarget {
-    Interpreter(Interpreter),
-    Environment(PythonEnvironment),
-}
-
-impl PythonTarget {
-    /// Return the [`Interpreter`] for the project.
-    fn interpreter(&self) -> &Interpreter {
-        match self {
-            Self::Interpreter(interpreter) => interpreter,
-            Self::Environment(venv) => venv.interpreter(),
         }
     }
 }
