@@ -253,75 +253,8 @@ pub(crate) async fn add(
     let RequirementsSpecification { requirements, .. } =
         RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
 
-    // TODO(charlie): These are all default values. We should consider whether we want to make them
-    // optional on the downstream APIs.
-    let bounds = LowerBound::default();
-    let build_constraints = Constraints::default();
-    let build_hasher = HashStrategy::default();
-    let hasher = HashStrategy::default();
-    let sources = SourceStrategy::Enabled;
-
-    // Add all authenticated sources to the cache.
-    for index in settings.index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
-            uv_auth::store_credentials(index.raw_url(), credentials);
-        }
-    }
-
-    // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .index_urls(settings.index_locations.index_urls())
-        .index_strategy(settings.index_strategy)
-        .markers(target.interpreter().markers())
-        .platform(target.interpreter().platform())
-        .build();
-
-    // Determine whether to enable build isolation.
-    let environment;
-    let build_isolation = if settings.no_build_isolation {
-        environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
-        BuildIsolation::Shared(&environment)
-    } else if settings.no_build_isolation_package.is_empty() {
-        BuildIsolation::Isolated
-    } else {
-        environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
-        BuildIsolation::SharedPackage(&environment, &settings.no_build_isolation_package)
-    };
-
     // Initialize any shared state.
     let state = SharedState::default();
-
-    // Resolve the flat indexes from `--find-links`.
-    let flat_index = {
-        let client = FlatIndexClient::new(&client, cache);
-        let entries = client
-            .fetch(settings.index_locations.flat_indexes().map(Index::url))
-            .await?;
-        FlatIndex::from_entries(entries, None, &hasher, &settings.build_options)
-    };
-
-    // Create a build dispatch.
-    let build_dispatch = BuildDispatch::new(
-        &client,
-        cache,
-        build_constraints,
-        target.interpreter(),
-        &settings.index_locations,
-        &flat_index,
-        &settings.dependency_metadata,
-        state.clone(),
-        settings.index_strategy,
-        &settings.config_setting,
-        build_isolation,
-        settings.link_mode,
-        &settings.build_options,
-        &build_hasher,
-        settings.exclude_newer,
-        bounds,
-        sources,
-        concurrency,
-        preview,
-    );
 
     // Resolve any unnamed requirements.
     let requirements = {
@@ -345,6 +278,72 @@ pub(crate) async fn add(
 
         // Resolve any unnamed requirements.
         if !unnamed.is_empty() {
+            // TODO(charlie): These are all default values. We should consider whether we want to
+            // make them optional on the downstream APIs.
+            let build_constraints = Constraints::default();
+            let build_hasher = HashStrategy::default();
+            let hasher = HashStrategy::default();
+            let sources = SourceStrategy::Enabled;
+
+            // Add all authenticated sources to the cache.
+            for index in settings.index_locations.allowed_indexes() {
+                if let Some(credentials) = index.credentials() {
+                    uv_auth::store_credentials(index.raw_url(), credentials);
+                }
+            }
+
+            // Initialize the registry client.
+            let client = RegistryClientBuilder::try_from(client_builder)?
+                .index_urls(settings.index_locations.index_urls())
+                .index_strategy(settings.index_strategy)
+                .markers(target.interpreter().markers())
+                .platform(target.interpreter().platform())
+                .build();
+
+            // Determine whether to enable build isolation.
+            let environment;
+            let build_isolation = if settings.no_build_isolation {
+                environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
+                BuildIsolation::Shared(&environment)
+            } else if settings.no_build_isolation_package.is_empty() {
+                BuildIsolation::Isolated
+            } else {
+                environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
+                BuildIsolation::SharedPackage(&environment, &settings.no_build_isolation_package)
+            };
+
+            // Resolve the flat indexes from `--find-links`.
+            let flat_index = {
+                let client = FlatIndexClient::new(&client, cache);
+                let entries = client
+                    .fetch(settings.index_locations.flat_indexes().map(Index::url))
+                    .await?;
+                FlatIndex::from_entries(entries, None, &hasher, &settings.build_options)
+            };
+
+            // Create a build dispatch.
+            let build_dispatch = BuildDispatch::new(
+                &client,
+                cache,
+                build_constraints,
+                target.interpreter(),
+                &settings.index_locations,
+                &flat_index,
+                &settings.dependency_metadata,
+                state.clone(),
+                settings.index_strategy,
+                &settings.config_setting,
+                build_isolation,
+                settings.link_mode,
+                &settings.build_options,
+                &build_hasher,
+                settings.exclude_newer,
+                LowerBound::default(),
+                sources,
+                concurrency,
+                preview,
+            );
+
             requirements.extend(
                 NamedRequirementsResolver::new(
                     &hasher,
@@ -654,7 +653,6 @@ pub(crate) async fn add(
         &dependency_type,
         raw_sources,
         settings.as_ref(),
-        bounds,
         installer_metadata,
         connectivity,
         concurrency,
@@ -698,7 +696,6 @@ async fn lock_and_sync(
     dependency_type: &DependencyType,
     raw_sources: bool,
     settings: ResolverInstallerSettingsRef<'_>,
-    bounds: LowerBound,
     installer_metadata: bool,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -718,7 +715,7 @@ async fn lock_and_sync(
         mode,
         project.workspace().into(),
         settings.into(),
-        bounds,
+        LowerBound::default(),
         &state,
         Box::new(DefaultResolveLogger),
         connectivity,
@@ -837,7 +834,7 @@ async fn lock_and_sync(
                 mode,
                 project.workspace().into(),
                 settings.into(),
-                bounds,
+                LowerBound::default(),
                 &state,
                 Box::new(SummaryResolveLogger),
                 connectivity,
