@@ -790,7 +790,7 @@ impl PythonInstallSettings {
     /// Resolve the [`PythonInstallSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: PythonInstallArgs, filesystem: Option<FilesystemOptions>) -> Self {
-        let options = filesystem.map(uv_settings::FilesystemOptions::into_options);
+        let options = filesystem.map(FilesystemOptions::into_options);
         let (python_mirror, pypy_mirror) = match options {
             Some(options) => (
                 options.install_mirrors.python_install_mirror,

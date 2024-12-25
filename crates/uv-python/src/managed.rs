@@ -83,7 +83,7 @@ pub enum Error {
     #[error("Failed to read managed Python directory name: {0}")]
     NameError(String),
     #[error("Failed to construct absolute path to managed Python directory: {}", _0.user_display())]
-    AbsolutePath(PathBuf, #[source] std::io::Error),
+    AbsolutePath(PathBuf, #[source] io::Error),
     #[error(transparent)]
     NameParseError(#[from] installation::PythonInstallationKeyError),
     #[error(transparent)]
@@ -443,7 +443,7 @@ impl ManagedPythonInstallation {
                 continue;
             }
 
-            match uv_fs::symlink_or_copy_file(&python, &executable) {
+            match symlink_or_copy_file(&python, &executable) {
                 Ok(()) => {
                     debug!(
                         "Created link {} -> {}",

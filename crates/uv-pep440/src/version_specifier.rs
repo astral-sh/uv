@@ -491,7 +491,7 @@ impl VersionSpecifier {
             Operator::ExactEqual => {
                 #[cfg(feature = "tracing")]
                 {
-                    tracing::warn!("Using arbitrary equality (`===`) is discouraged");
+                    warn!("Using arbitrary equality (`===`) is discouraged");
                 }
                 self.version.to_string() == version.to_string()
             }

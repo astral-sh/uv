@@ -1341,20 +1341,12 @@ mod test {
     /// Ensure that we don't accidentally grow the `Dist` sizes.
     #[test]
     fn dist_size() {
+        assert!(size_of::<Dist>() <= 336, "{}", size_of::<Dist>());
+        assert!(size_of::<BuiltDist>() <= 336, "{}", size_of::<BuiltDist>());
         assert!(
-            std::mem::size_of::<Dist>() <= 336,
+            size_of::<SourceDist>() <= 264,
             "{}",
-            std::mem::size_of::<Dist>()
-        );
-        assert!(
-            std::mem::size_of::<BuiltDist>() <= 336,
-            "{}",
-            std::mem::size_of::<BuiltDist>()
-        );
-        assert!(
-            std::mem::size_of::<SourceDist>() <= 264,
-            "{}",
-            std::mem::size_of::<SourceDist>()
+            size_of::<SourceDist>()
         );
     }
 

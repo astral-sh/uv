@@ -118,7 +118,7 @@ impl FileLocation {
 }
 
 impl Display for FileLocation {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::RelativeUrl(_base, url) => Display::fmt(&url, f),
             Self::AbsoluteUrl(url) => Display::fmt(&url.0, f),

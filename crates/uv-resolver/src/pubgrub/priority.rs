@@ -221,7 +221,7 @@ pub(crate) enum PubGrubPriority {
     ///
     /// N.B.: URLs need to have priority over registry distributions for correctly matching registry
     /// distributions to URLs, see [`PubGrubPackage::from_package`] an
-    /// [`crate::fork_urls::ForkUrls`].
+    /// [`ForkUrls`].
     DirectUrl(Reverse<usize>),
 
     /// The package is the root package.

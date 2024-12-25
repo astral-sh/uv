@@ -1908,7 +1908,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         }
                         if !requirement.evaluate_markers(
                             env.marker_environment(),
-                            std::slice::from_ref(source_extra),
+                            slice::from_ref(source_extra),
                         ) {
                             return None;
                         }
@@ -2016,7 +2016,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 Some(source_extra) => {
                                     if !constraint.evaluate_markers(
                                         env.marker_environment(),
-                                        std::slice::from_ref(source_extra),
+                                        slice::from_ref(source_extra),
                                     ) {
                                         return None;
                                     }

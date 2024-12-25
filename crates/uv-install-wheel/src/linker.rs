@@ -469,7 +469,7 @@ fn copy_wheel_files(
     let mut count = 0usize;
 
     // Walk over the directory.
-    for entry in walkdir::WalkDir::new(&wheel) {
+    for entry in WalkDir::new(&wheel) {
         let entry = entry?;
         let path = entry.path();
 
@@ -499,7 +499,7 @@ fn hardlink_wheel_files(
     let mut count = 0usize;
 
     // Walk over the directory.
-    for entry in walkdir::WalkDir::new(&wheel) {
+    for entry in WalkDir::new(&wheel) {
         let entry = entry?;
         let path = entry.path();
 
