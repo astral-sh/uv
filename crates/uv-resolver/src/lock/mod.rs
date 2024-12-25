@@ -11,6 +11,7 @@ use itertools::Itertools;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use rustc_hash::{FxHashMap, FxHashSet};
+use serde::Serializer;
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
 
@@ -617,7 +618,7 @@ impl Lock {
     }
 
     /// Returns the TOML representation of this lockfile.
-    pub fn to_toml(&self) -> anyhow::Result<String> {
+    pub fn to_toml(&self) -> Result<String, toml_edit::ser::Error> {
         // We construct a TOML document manually instead of going through Serde to enable
         // the use of inline tables.
         let mut doc = toml_edit::DocumentMut::new();
@@ -2085,7 +2086,7 @@ impl Package {
         &self,
         requires_python: &RequiresPython,
         dist_count_by_name: &FxHashMap<PackageName, u64>,
-    ) -> anyhow::Result<Table> {
+    ) -> Result<Table, toml_edit::ser::Error> {
         let mut table = Table::new();
 
         self.id.to_toml(None, &mut table);
@@ -2149,7 +2150,7 @@ impl Package {
                 self.wheels
                     .iter()
                     .map(Wheel::to_toml)
-                    .collect::<anyhow::Result<Vec<_>>>()?
+                    .collect::<Result<Vec<_>, _>>()?
                     .into_iter(),
             );
             table.insert("wheels", value(wheels));
@@ -3224,7 +3225,7 @@ enum SourceDistWire {
 
 impl SourceDist {
     /// Returns the TOML representation of this source distribution.
-    fn to_toml(&self) -> anyhow::Result<InlineTable> {
+    fn to_toml(&self) -> Result<InlineTable, toml_edit::ser::Error> {
         let mut table = InlineTable::new();
         match &self {
             SourceDist::Metadata { .. } => {}
@@ -3239,7 +3240,10 @@ impl SourceDist {
             table.insert("hash", Value::from(hash.to_string()));
         }
         if let Some(size) = self.size() {
-            table.insert("size", Value::from(i64::try_from(size)?));
+            table.insert(
+                "size",
+                toml_edit::ser::ValueSerializer::new().serialize_u64(size)?,
+            );
         }
         Ok(table)
     }
@@ -3612,7 +3616,7 @@ enum WheelWireSource {
 
 impl Wheel {
     /// Returns the TOML representation of this wheel.
-    fn to_toml(&self) -> anyhow::Result<InlineTable> {
+    fn to_toml(&self) -> Result<InlineTable, toml_edit::ser::Error> {
         let mut table = InlineTable::new();
         match &self.url {
             WheelWireSource::Url { url } => {
@@ -3629,7 +3633,10 @@ impl Wheel {
             table.insert("hash", Value::from(hash.to_string()));
         }
         if let Some(size) = self.size {
-            table.insert("size", Value::from(i64::try_from(size)?));
+            table.insert(
+                "size",
+                toml_edit::ser::ValueSerializer::new().serialize_u64(size)?,
+            );
         }
         Ok(table)
     }
