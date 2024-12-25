@@ -1,9 +1,9 @@
-use anyhow::{Context, Result};
 use std::fmt::Write;
 use std::path::Path;
-use uv_settings::PythonInstallMirrors;
 
+use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
+
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{
@@ -15,8 +15,8 @@ use uv_fs::Simplified;
 use uv_normalize::DEV_DEPENDENCIES;
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
-use uv_resolver::InstallTarget;
 use uv_scripts::Pep723Script;
+use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
@@ -24,6 +24,7 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
+use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::{default_dependency_groups, ProjectError};
 use crate::commands::{diagnostics, project, ExitStatus};

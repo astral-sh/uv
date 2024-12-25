@@ -1,5 +1,6 @@
 use std::collections::hash_map::Entry;
 use std::collections::VecDeque;
+use std::path::Path;
 
 use either::Either;
 use petgraph::Graph;
@@ -11,83 +12,25 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_platform_tags::Tags;
 use uv_pypi_types::ResolverMarkerEnvironment;
-use uv_workspace::Workspace;
 
 use crate::lock::{LockErrorKind, Package, TagPolicy};
 use crate::{Lock, LockError};
 
-/// A target that can be installed from a lockfile.
-#[derive(Debug, Copy, Clone)]
-pub enum InstallTarget<'env> {
-    /// A project (which could be a workspace root or member).
-    Project {
-        workspace: &'env Workspace,
-        name: &'env PackageName,
-        lock: &'env Lock,
-    },
-    /// An entire workspace.
-    Workspace {
-        workspace: &'env Workspace,
-        lock: &'env Lock,
-    },
-    /// An entire workspace with a (legacy) non-project root.
-    NonProjectWorkspace {
-        workspace: &'env Workspace,
-        lock: &'env Lock,
-    },
-}
+pub trait Installable<'lock> {
+    /// Return the root install path.
+    fn install_path(&self) -> &'lock Path;
 
-impl<'env> InstallTarget<'env> {
-    /// Return the [`Workspace`] of the target.
-    pub fn workspace(&self) -> &'env Workspace {
-        match self {
-            Self::Project { workspace, .. } => workspace,
-            Self::Workspace { workspace, .. } => workspace,
-            Self::NonProjectWorkspace { workspace, .. } => workspace,
-        }
-    }
+    /// Return the [`Lock`] to install.
+    fn lock(&self) -> &'lock Lock;
 
-    /// Return the [`Lock`] of the target.
-    pub fn lock(&self) -> &'env Lock {
-        match self {
-            Self::Project { lock, .. } => lock,
-            Self::Workspace { lock, .. } => lock,
-            Self::NonProjectWorkspace { lock, .. } => lock,
-        }
-    }
-
-    /// Return the [`PackageName`] of the target.
-    pub fn packages(&self) -> impl Iterator<Item = &PackageName> {
-        match self {
-            Self::Project { name, .. } => Either::Right(Either::Left(std::iter::once(*name))),
-            Self::NonProjectWorkspace { lock, .. } => Either::Left(lock.members().iter()),
-            Self::Workspace { lock, .. } => {
-                // Identify the workspace members.
-                //
-                // The members are encoded directly in the lockfile, unless the workspace contains a
-                // single member at the root, in which case, we identify it by its source.
-                if lock.members().is_empty() {
-                    Either::Right(Either::Right(
-                        lock.root().into_iter().map(|package| &package.id.name),
-                    ))
-                } else {
-                    Either::Left(lock.members().iter())
-                }
-            }
-        }
-    }
+    /// Return the [`PackageName`] of the root packages in the target.
+    fn roots(&self) -> impl Iterator<Item = &PackageName>;
 
     /// Return the [`PackageName`] of the target, if available.
-    pub fn project_name(&self) -> Option<&PackageName> {
-        match self {
-            Self::Project { name, .. } => Some(name),
-            Self::Workspace { .. } => None,
-            Self::NonProjectWorkspace { .. } => None,
-        }
-    }
+    fn project_name(&self) -> Option<&PackageName>;
 
     /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
-    pub fn to_resolution(
+    fn to_resolution(
         &self,
         marker_env: &ResolverMarkerEnvironment,
         tags: &Tags,
@@ -108,7 +51,7 @@ impl<'env> InstallTarget<'env> {
         let root = petgraph.add_node(Node::Root);
 
         // Add the workspace packages to the queue.
-        for root_name in self.packages() {
+        for root_name in self.roots() {
             let dist = self
                 .lock()
                 .find_by_name(root_name)
@@ -397,7 +340,7 @@ impl<'env> InstallTarget<'env> {
         build_options: &BuildOptions,
     ) -> Result<Node, LockError> {
         let dist = package.to_dist(
-            self.workspace().install_path(),
+            self.install_path(),
             TagPolicy::Required(tags),
             build_options,
         )?;
@@ -414,7 +357,7 @@ impl<'env> InstallTarget<'env> {
     /// Create a non-installable [`Node`] from a [`Package`].
     fn non_installable_node(&self, package: &Package, tags: &Tags) -> Result<Node, LockError> {
         let dist = package.to_dist(
-            self.workspace().install_path(),
+            self.install_path(),
             TagPolicy::Preferred(tags),
             &BuildOptions::default(),
         )?;

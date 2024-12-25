@@ -53,6 +53,7 @@ pub(crate) mod add;
 pub(crate) mod environment;
 pub(crate) mod export;
 pub(crate) mod init;
+mod install_target;
 pub(crate) mod lock;
 pub(crate) mod remove;
 pub(crate) mod run;
