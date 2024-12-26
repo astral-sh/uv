@@ -197,6 +197,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }) = &**command
         {
             Pep723Script::read(&script).await?.map(Pep723Item::Script)
+        } else if let ProjectCommand::Export(uv_cli::ExportArgs {
+            script: Some(script),
+            ..
+        }) = &**command
+        {
+            Pep723Script::read(&script).await?.map(Pep723Item::Script)
         } else {
             None
         }
@@ -1679,7 +1685,14 @@ async fn run_project(
             // Initialize the cache.
             let cache = cache.init()?;
 
-            commands::export(
+            // Unwrap the script.
+            let script = script.map(|script| match script {
+                Pep723Item::Script(script) => script,
+                Pep723Item::Stdin(_) => unreachable!("`uv export` does not support stdin"),
+                Pep723Item::Remote(_) => unreachable!("`uv export` does not support remote files"),
+            });
+
+            Box::pin(commands::export(
                 project_dir,
                 args.format,
                 args.all_packages,
@@ -1694,6 +1707,7 @@ async fn run_project(
                 args.locked,
                 args.frozen,
                 args.include_header,
+                script,
                 args.python,
                 args.install_mirrors,
                 args.settings,
@@ -1708,7 +1722,7 @@ async fn run_project(
                 &cache,
                 printer,
                 globals.preview,
-            )
+            ))
             .await
         }
     }
