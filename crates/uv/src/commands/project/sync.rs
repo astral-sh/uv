@@ -16,7 +16,7 @@ use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
     DirectorySourceDist, Dist, Index, Resolution, ResolvedDist, SourceDist,
 };
-use uv_installer::SitePackages;
+use uv_installer::InstalledPackages;
 use uv_normalize::PackageName;
 use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
 use uv_pypi_types::{
@@ -433,12 +433,12 @@ pub(super) async fn do_sync(
         preview,
     );
 
-    let site_packages = SitePackages::from_environment(venv)?;
+    let installed_packages = InstalledPackages::from_environment(venv)?;
 
     // Sync the environment.
     operations::install(
         &resolution,
-        site_packages,
+        installed_packages,
         modifications,
         reinstall,
         build_options,
