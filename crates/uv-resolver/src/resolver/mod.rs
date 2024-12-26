@@ -31,7 +31,7 @@ use uv_distribution_types::{
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{release_specifiers_to_ranges, Version, VersionSpecifiers, MIN_VERSION};
-use uv_pep508::MarkerTree;
+use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ConflictItem, ConflictItemRef, Conflicts, Requirement, VerbatimParsedUrl};
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
@@ -1372,7 +1372,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         };
 
         // ...and the non-local version has greater platform support...
-        let remainder = {
+        let mut remainder = {
             let mut remainder = base_dist.implied_markers();
             remainder.and(dist.implied_markers().negate());
             remainder
@@ -1413,6 +1413,27 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(Some(ResolverVersion::Unforked(
                 base_candidate.version().clone(),
             )));
+        }
+
+        // If the implied markers includes _some_ macOS environments, but the remainder doesn't,
+        // then we can extend the implied markers to include _all_ macOS environments. Same goes for
+        // Linux and Windows.
+        //
+        // The idea here is that the base version could support (e.g.) ARM macOS, but not Intel
+        // macOS. But if _neither_ version supports Intel macOS, we'd rather use `sys_platform == 'darwin'`
+        // instead of `sys_platform == 'darwin' and platform_machine == 'arm64'`, since it's much
+        // simpler, and _neither_ version will succeed with Intel macOS anyway.
+        for sys_platform in &["darwin", "linux", "win32"] {
+            let sys_platform = MarkerTree::expression(MarkerExpression::String {
+                key: MarkerValueString::SysPlatform,
+                operator: MarkerOperator::Equal,
+                value: (*sys_platform).to_string(),
+            });
+            if dist.implied_markers().is_disjoint(sys_platform)
+                && !remainder.is_disjoint(sys_platform)
+            {
+                remainder.or(sys_platform);
+            }
         }
 
         // Otherwise, we need to fork.
