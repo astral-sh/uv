@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.5.12
+
+### Enhancements
+
+- Support `uv export` for non-project workspaces ([#10144](https://github.com/astral-sh/uv/pull/10144))
+- Set glibc versions for standalone installers ([#10142](https://github.com/astral-sh/uv/pull/10142))
+- Allow environment variables to be included in cache keys ([#10170](https://github.com/astral-sh/uv/pull/10170))
+
+### Preview features
+
+- Include extras in `uv-build` `Requires-Dist` metadata ([#10110](https://github.com/astral-sh/uv/pull/10110))
+- Use `shutil.which` for the build backend ([#10028](https://github.com/astral-sh/uv/pull/10028))
+
+### Bug fixes
+
+- Always write slash paths to RECORD file ([#10164](https://github.com/astral-sh/uv/pull/10164))
+- Add support for subdirectories in direct URLs in `uv.lock` ([#10068](https://github.com/astral-sh/uv/pull/10068))
+- Avoid duplicating backslashes in sysconfig parser ([#10063](https://github.com/astral-sh/uv/pull/10063))
+- Avoid erroring when subdirectories are provided in `uv add` ([#10095](https://github.com/astral-sh/uv/pull/10095))
+- Backtrack to non-local versions when wheels are missing platform support ([#10046](https://github.com/astral-sh/uv/pull/10046))
+- Fix mirror script to handle newer metadata format ([#10050](https://github.com/astral-sh/uv/pull/10050))
+- Preserve sort when deciding on requirement placement ([#10078](https://github.com/astral-sh/uv/pull/10078))
+- Remove redundant alias in `uv init` CLI ([#10124](https://github.com/astral-sh/uv/pull/10124))
+- Respect sources credentials in non-project workspaces ([#10125](https://github.com/astral-sh/uv/pull/10125))
+- Show non-project dependencies in `uv tree` ([#10149](https://github.com/astral-sh/uv/pull/10149))
+- Strip fragment when storing direct URL ([#10093](https://github.com/astral-sh/uv/pull/10093))
+- Include hashes for local source archives ([#10080](https://github.com/astral-sh/uv/pull/10080))
+
+### Documentation
+
+- Fix invalid syntax in some sources examples ([#10127](https://github.com/astral-sh/uv/pull/10127))
+
 ## 0.5.11
 
 ### Enhancements
