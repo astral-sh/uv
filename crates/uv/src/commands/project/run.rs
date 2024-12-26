@@ -185,7 +185,7 @@ pub(crate) async fn run(
 
         // Discover the interpreter for the script.
         let interpreter = ScriptInterpreter::discover(
-            &script,
+            (&script).into(),
             python.as_deref().map(PythonRequest::parse),
             python_preference,
             python_downloads,
