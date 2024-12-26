@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.13
+
+### Bug fixes
+
+- Avoid enforcing URL check on initial publish ([#10182](https://github.com/astral-sh/uv/pull/10182))
+- Fix incorrect mismatched constraints reference ([#10184](https://github.com/astral-sh/uv/pull/10184))
+- Revert "Update `reqwest` (#10178)" ([#10187](https://github.com/astral-sh/uv/pull/10187))
+
 ## 0.5.12
 
 ### Enhancements
