@@ -79,6 +79,11 @@ pub struct Options {
     /// to include the current Git commit hash in the cache key (in addition to the
     /// `pyproject.toml`). Git tags are also supported via `cache-keys = [{ git = { commit = true, tags = true } }]`.
     ///
+    /// Cache keys can also include environment variables. For example, if a project relies on
+    /// `MACOSX_DEPLOYMENT_TARGET` or other environment variables to determine its behavior, you can
+    /// specify `cache-keys = [{ env = "MACOSX_DEPLOYMENT_TARGET" }]` to invalidate the cache
+    /// whenever the environment variable changes.
+    ///
     /// Cache keys only affect the project defined by the `pyproject.toml` in which they're
     /// specified (as opposed to, e.g., affecting all members in a workspace), and all paths and
     /// globs are interpreted as relative to the project directory.
