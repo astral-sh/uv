@@ -3826,6 +3826,75 @@ fn invalidate_path_on_commit() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn invalidate_path_on_env_var() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a local package.
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"[project]
+        name = "example"
+        version = "0.0.0"
+        dependencies = ["anyio==4.0.0"]
+        requires-python = ">=3.8"
+
+        [tool.uv]
+        cache-keys = [{ env = "FOO" }]
+"#,
+    )?;
+
+    // Install the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(".")
+        .env_remove("FOO"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + example==0.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    // Installing again should be a no-op.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(".")
+        .env_remove("FOO"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Installing again should update the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(".")
+        .env("FOO", "BAR"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ example==0.0.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    Ok(())
+}
+
 /// Install from a direct path (wheel) with changed versions in the file name.
 #[test]
 fn path_name_version_change() {

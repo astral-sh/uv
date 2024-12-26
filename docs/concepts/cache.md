@@ -75,6 +75,14 @@ cache-keys = [{ file = "**/*.toml" }]
     The use of globs can be expensive, as uv may need to walk the filesystem to determine whether any files have changed.
     This may, in turn, requiring traversal of large or deeply nested directories.
 
+Similarly, if a project relies on an environment variable, you can add the following to the
+project's `pyproject.toml` to invalidate the cache whenever the environment variable changes:
+
+```toml title="pyproject.toml"
+[tool.uv]
+cache-keys = [{ env = "MY_ENV_VAR" }]
+```
+
 As an escape hatch, if a project uses `dynamic` metadata that isn't covered by `tool.uv.cache-keys`,
 you can instruct uv to _always_ rebuild and reinstall it by adding the project to the
 `tool.uv.reinstall-package` list:
