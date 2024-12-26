@@ -604,7 +604,7 @@ pub(crate) fn write_file_recorded(
     let hash = Sha256::new().chain_update(content.as_ref()).finalize();
     let encoded_hash = format!("sha256={}", BASE64URL_NOPAD.encode(&hash));
     record.push(RecordEntry {
-        path: relative_path.display().to_string(),
+        path: relative_path.portable_display().to_string(),
         hash: Some(encoded_hash),
         size: Some(content.as_ref().len() as u64),
     });
@@ -741,7 +741,8 @@ mod test {
     use crate::Error;
 
     use super::{
-        get_script_executable, parse_email_message_file, parse_wheel_file, read_record_file, Script,
+        get_script_executable, parse_email_message_file, parse_wheel_file, read_record_file,
+        write_installer_metadata, RecordEntry, Script,
     };
 
     #[test]
@@ -1015,5 +1016,37 @@ mod test {
         assert_eq!(script_path, dot_python_exe.to_path_buf());
 
         Ok(())
+    }
+
+    #[test]
+    fn test_write_installer_metadata() {
+        let temp_dir = assert_fs::TempDir::new().unwrap();
+        let site_packages = temp_dir.path();
+        let mut record: Vec<RecordEntry> = Vec::new();
+        temp_dir
+            .child("foo-0.1.0.dist-info")
+            .create_dir_all()
+            .unwrap();
+        write_installer_metadata(
+            site_packages,
+            "foo-0.1.0",
+            true,
+            None,
+            None,
+            Some("uv"),
+            &mut record,
+        )
+        .unwrap();
+        let expected = [
+            "foo-0.1.0.dist-info/REQUESTED",
+            "foo-0.1.0.dist-info/INSTALLER",
+        ]
+        .map(ToString::to_string)
+        .to_vec();
+        let actual = record
+            .into_iter()
+            .map(|entry| entry.path)
+            .collect::<Vec<String>>();
+        assert_eq!(expected, actual);
     }
 }
