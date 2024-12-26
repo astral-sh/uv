@@ -998,7 +998,7 @@ impl Lock {
                 .map(|requirement| normalize_requirement(requirement, root))
                 .collect::<Result<_, _>>()?;
             if expected != actual {
-                return Ok(SatisfiesResult::MismatchedConstraints(expected, actual));
+                return Ok(SatisfiesResult::MismatchedRequirements(expected, actual));
             }
         }
 
