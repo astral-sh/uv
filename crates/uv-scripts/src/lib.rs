@@ -56,6 +56,47 @@ impl Pep723Item {
     }
 }
 
+/// A reference to a PEP 723 item.
+#[derive(Debug)]
+pub enum Pep723ItemRef<'item> {
+    /// A PEP 723 script read from disk.
+    Script(&'item Pep723Script),
+    /// A PEP 723 script provided via `stdin`.
+    Stdin(&'item Pep723Metadata),
+    /// A PEP 723 script provided via a remote URL.
+    Remote(&'item Pep723Metadata),
+}
+
+impl Pep723ItemRef<'_> {
+    /// Return the [`Pep723Metadata`] associated with the item.
+    pub fn metadata(&self) -> &Pep723Metadata {
+        match self {
+            Self::Script(script) => &script.metadata,
+            Self::Stdin(metadata) => metadata,
+            Self::Remote(metadata) => metadata,
+        }
+    }
+
+    /// Return the path of the PEP 723 item, if any.
+    pub fn path(&self) -> Option<&Path> {
+        match self {
+            Self::Script(script) => Some(&script.path),
+            Self::Stdin(_) => None,
+            Self::Remote(_) => None,
+        }
+    }
+}
+
+impl<'item> From<&'item Pep723Item> for Pep723ItemRef<'item> {
+    fn from(item: &'item Pep723Item) -> Self {
+        match item {
+            Pep723Item::Script(script) => Self::Script(script),
+            Pep723Item::Stdin(metadata) => Self::Stdin(metadata),
+            Pep723Item::Remote(metadata) => Self::Remote(metadata),
+        }
+    }
+}
+
 /// A PEP 723 script, including its [`Pep723Metadata`].
 #[derive(Debug, Clone)]
 pub struct Pep723Script {

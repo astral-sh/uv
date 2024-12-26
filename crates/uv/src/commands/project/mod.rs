@@ -35,7 +35,7 @@ use uv_resolver::{
     FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolverEnvironment,
     ResolverOutput,
 };
-use uv_scripts::Pep723Item;
+use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -444,7 +444,7 @@ pub(crate) struct ScriptInterpreter(Interpreter);
 impl ScriptInterpreter {
     /// Discover the interpreter to use for the current [`Pep723Item`].
     pub(crate) async fn discover(
-        script: &Pep723Item,
+        script: Pep723ItemRef<'_>,
         python_request: Option<PythonRequest>,
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
@@ -795,7 +795,7 @@ impl ScriptPython {
     pub(crate) async fn from_request(
         python_request: Option<PythonRequest>,
         workspace: Option<&Workspace>,
-        script: &Pep723Item,
+        script: Pep723ItemRef<'_>,
         no_config: bool,
     ) -> Result<Self, ProjectError> {
         // First, discover a requirement from the workspace
