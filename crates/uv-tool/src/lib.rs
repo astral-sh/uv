@@ -418,12 +418,11 @@ pub fn entrypoint_paths(
         };
 
         let absolute_path = layout.scheme.scripts.join(path_in_scripts);
-        let script_name = entry
-            .path
-            .rsplit('/')
-            .next()
-            .unwrap_or(&entry.path)
-            .to_string();
+        let script_name = relative_path
+            .file_name()
+            .and_then(|filename| filename.to_str())
+            .map(ToString::to_string)
+            .unwrap_or(entry.path);
         entrypoints.push((script_name, absolute_path));
     }
 
