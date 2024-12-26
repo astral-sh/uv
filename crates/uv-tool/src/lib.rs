@@ -420,7 +420,7 @@ pub fn entrypoint_paths(
         let absolute_path = layout.scheme.scripts.join(path_in_scripts);
         let script_name = entry
             .path
-            .rsplit(std::path::MAIN_SEPARATOR)
+            .rsplit('/')
             .next()
             .unwrap_or(&entry.path)
             .to_string();
