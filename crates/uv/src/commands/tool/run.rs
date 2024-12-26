@@ -621,7 +621,7 @@ async fn get_or_create_environment(
     // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
     // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
 
-    let environment = CachedEnvironment::get_or_create(
+    let environment = CachedEnvironment::from_spec(
         EnvironmentSpecification::from(spec),
         interpreter,
         settings,
