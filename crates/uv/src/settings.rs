@@ -197,6 +197,7 @@ pub(crate) struct InitSettings {
     pub(crate) no_workspace: bool,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
+    pub(crate) description: Option<String>,
 }
 
 impl InitSettings {
@@ -219,6 +220,7 @@ impl InitSettings {
             no_pin_python,
             no_workspace,
             python,
+            description,
         } = args;
 
         let kind = match (app, lib, script) {
@@ -249,6 +251,7 @@ impl InitSettings {
             no_workspace,
             python: python.and_then(Maybe::into_option),
             install_mirrors,
+            description,
         }
     }
 }

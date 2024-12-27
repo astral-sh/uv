@@ -58,6 +58,7 @@ pub(crate) async fn init(
     cache: &Cache,
     printer: Printer,
     preview: PreviewMode,
+    description: Option<String>,
 ) -> Result<ExitStatus> {
     if build_backend == Some(ProjectBuildBackend::Uv) && preview.is_disabled() {
         warn_user_once!("The uv build backend is experimental and may change without warning");
@@ -145,6 +146,7 @@ pub(crate) async fn init(
                 no_config,
                 cache,
                 printer,
+                description,
             )
             .await?;
 
@@ -286,6 +288,7 @@ async fn init_project(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
+    description: Option<String>,
 ) -> Result<()> {
     // Discover the current workspace, if it exists.
     let workspace = {
@@ -569,6 +572,7 @@ async fn init_project(
         author_from,
         no_readme,
         package,
+        description,
     )?;
 
     if let Some(workspace) = workspace {
@@ -692,6 +696,7 @@ impl InitProjectKind {
         author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
+        description: Option<String>,
     ) -> Result<()> {
         match self {
             InitProjectKind::Application => InitProjectKind::init_application(
@@ -703,6 +708,7 @@ impl InitProjectKind {
                 author_from,
                 no_readme,
                 package,
+                description,
             ),
             InitProjectKind::Library => InitProjectKind::init_library(
                 name,
@@ -713,6 +719,7 @@ impl InitProjectKind {
                 author_from,
                 no_readme,
                 package,
+                description,
             ),
         }
     }
@@ -727,6 +734,7 @@ impl InitProjectKind {
         author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
+        description: Option<String>,
     ) -> Result<()> {
         fs_err::create_dir_all(path)?;
 
@@ -741,7 +749,13 @@ impl InitProjectKind {
         let author = get_author_info(path, author_from);
 
         // Create the `pyproject.toml`
-        let mut pyproject = pyproject_project(name, requires_python, author.as_ref(), no_readme);
+        let mut pyproject = pyproject_project(
+            name,
+            requires_python,
+            author.as_ref(),
+            no_readme,
+            description.as_deref(),
+        );
 
         // Include additional project configuration for packaged applications
         if package {
@@ -793,6 +807,7 @@ impl InitProjectKind {
         author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
+        description: Option<String>,
     ) -> Result<()> {
         if !package {
             return Err(anyhow!("Library projects must be packaged"));
@@ -803,7 +818,13 @@ impl InitProjectKind {
         let author = get_author_info(path, author_from.unwrap_or_default());
 
         // Create the `pyproject.toml`
-        let mut pyproject = pyproject_project(name, requires_python, author.as_ref(), no_readme);
+        let mut pyproject = pyproject_project(
+            name,
+            requires_python,
+            author.as_ref(),
+            no_readme,
+            description.as_deref(),
+        );
 
         // Always include a build system if the project is packaged.
         let build_backend = build_backend.unwrap_or_default();
@@ -848,18 +869,20 @@ fn pyproject_project(
     requires_python: &RequiresPython,
     author: Option<&Author>,
     no_readme: bool,
+    description: Option<&str>,
 ) -> String {
     indoc::formatdoc! {r#"
         [project]
         name = "{name}"
         version = "0.1.0"
-        description = "Add your description here"{readme}{authors}
+        description = "{description}"{readme}{authors}
         requires-python = "{requires_python}"
         dependencies = []
     "#,
         readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
         authors = author.map_or_else(String::new, |author| format!("\nauthors = [\n    {}\n]", author.to_toml_string())),
         requires_python = requires_python.specifiers(),
+        description = description.unwrap_or("Add your description here"),
     }
 }
 

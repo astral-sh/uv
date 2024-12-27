@@ -2623,6 +2623,15 @@ pub struct InitArgs {
         value_parser = parse_maybe_string,
     )]
     pub python: Option<Maybe<String>>,
+
+    /// Set the description of the project.
+    #[arg(
+        long,
+        value_name = "DESCRIPTION",
+        help_heading = "Project options",
+        help = "Set the project description in the pyproject.toml"
+    )]
+    pub description: Option<String>,
 }
 
 #[derive(Args)]
