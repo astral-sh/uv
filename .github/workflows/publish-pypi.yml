@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: "Install uv"
         uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.5.11"
       - uses: actions/download-artifact@v4
         with:
           pattern: wheels-*
