@@ -1704,7 +1704,7 @@ async fn run_project(
 /// uv binary interface is the official public API. When using this entry
 /// point, uv assumes it is running in a process it controls and that the
 /// entire process lifetime is managed by uv. Unexpected behavior may be
-/// encountered if this entry pointis called multiple times in a single process.
+/// encountered if this entry point is called multiple times in a single process.
 pub fn main<I, T>(args: I) -> ExitCode
 where
     I: IntoIterator<Item = T>,
