@@ -621,6 +621,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             &self.indexes,
                             dependencies.clone(),
                             &self.git,
+                            &self.workspace_members,
                             self.selector.resolution_strategy(),
                         )?;
 
@@ -861,6 +862,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.indexes,
                     fork.dependencies.clone(),
                     &self.git,
+                    &self.workspace_members,
                     self.selector.resolution_strategy(),
                 )?;
                 // Emit a request to fetch the metadata for each registry package.
@@ -2498,6 +2500,7 @@ impl ForkState {
         indexes: &Indexes,
         dependencies: Vec<PubGrubDependency>,
         git: &GitResolver,
+        workspace_members: &BTreeSet<PackageName>,
         resolution_strategy: &ResolutionStrategy,
     ) -> Result<(), ResolveError> {
         for dependency in &dependencies {
@@ -2524,12 +2527,15 @@ impl ForkState {
                 }
             }
 
-            if let Some(name) = self.pubgrub.package_store[for_package].name_no_root() {
+            if let Some(name) = self.pubgrub.package_store[for_package]
+                .name_no_root()
+                .filter(|name| !workspace_members.contains(name))
+            {
                 debug!(
                     "Adding transitive dependency for {name}=={for_version}: {package}{version}"
                 );
             } else {
-                // A dependency from the root package or requirements.txt.
+                // A dependency from the root package or `requirements.txt`.
                 debug!("Adding direct dependency: {package}{version}");
 
                 // Warn the user if a direct dependency lacks a lower bound in `--lowest` resolution.

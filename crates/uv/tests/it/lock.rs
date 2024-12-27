@@ -6957,7 +6957,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
     Ok(())
 }
 
-/// When locking with `--resolution-mode=lowest`, we shouldn't warn on unbounded direct
+/// When locking with `--resolution-mode=lowest`, we should warn on unbounded direct
 /// dependencies.
 #[test]
 fn lock_unsafe_lowest() -> Result<()> {
@@ -6988,6 +6988,7 @@ fn lock_unsafe_lowest() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The direct dependency `iniconfig` is unpinned. Consider setting a lower bound when using `--resolution lowest` to avoid using outdated versions.
     Resolved 2 packages in [TIME]
     "###);
 
@@ -14860,7 +14861,7 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG Solving with target Python version: >=3.12
     DEBUG Adding direct dependency: project*
     DEBUG Searching for a compatible version of project @ file://[TEMP_DIR]/ (*)
-    DEBUG Adding transitive dependency for project==0.1.0: anyio*
+    DEBUG Adding direct dependency: anyio*
     DEBUG Searching for a compatible version of anyio (*)
     DEBUG No compatible version found for: anyio
     DEBUG Recording unit propagation conflict of anyio from incompatibility of (project)
