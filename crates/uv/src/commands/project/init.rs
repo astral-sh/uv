@@ -572,7 +572,7 @@ async fn init_project(
         author_from,
         no_readme,
         package,
-        description,
+        description.as_ref(),
     )?;
 
     if let Some(workspace) = workspace {
@@ -696,7 +696,7 @@ impl InitProjectKind {
         author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
-        description: Option<String>,
+        description: Option<&String>,
     ) -> Result<()> {
         match self {
             InitProjectKind::Application => InitProjectKind::init_application(
@@ -734,7 +734,7 @@ impl InitProjectKind {
         author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
-        description: Option<String>,
+        description: Option<&String>,
     ) -> Result<()> {
         fs_err::create_dir_all(path)?;
 
@@ -754,7 +754,7 @@ impl InitProjectKind {
             requires_python,
             author.as_ref(),
             no_readme,
-            description.as_deref(),
+            description.map(String::as_str),
         );
 
         // Include additional project configuration for packaged applications
@@ -807,7 +807,7 @@ impl InitProjectKind {
         author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
-        description: Option<String>,
+        description: Option<&String>,
     ) -> Result<()> {
         if !package {
             return Err(anyhow!("Library projects must be packaged"));
@@ -823,7 +823,7 @@ impl InitProjectKind {
             requires_python,
             author.as_ref(),
             no_readme,
-            description.as_deref(),
+            description.map(String::as_str),
         );
 
         // Always include a build system if the project is packaged.
