@@ -196,7 +196,8 @@ fn run_args() -> Result<()> {
     Ok(())
 }
 
-/// Run without specifying any argunments.
+/// Run without specifying any arguments.
+///
 /// This should list the available scripts.
 #[test]
 fn run_no_args() -> Result<()> {
@@ -802,6 +803,75 @@ fn run_managed_false() -> Result<()> {
     Python 3.12.[X]
 
     ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_exact() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["iniconfig"]
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    // Remove `iniconfig`.
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio"]
+        "#
+    })?;
+
+    // By default, `uv run` uses inexact semantics, so both `iniconfig` and `anyio` should still be available.
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import iniconfig; import anyio"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    // But under `--exact`, `iniconfig` should not be available.
+    uv_snapshot!(context.filters(), context.run().arg("--exact").arg("python").arg("-c").arg("import iniconfig"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - iniconfig==2.0.0
+    Traceback (most recent call last):
+      File "<string>", line 1, in <module>
+    ModuleNotFoundError: No module named 'iniconfig'
     "###);
 
     Ok(())

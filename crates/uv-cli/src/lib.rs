@@ -2718,6 +2718,17 @@ pub struct RunArgs {
     #[arg(long)]
     pub no_editable: bool,
 
+    /// Do not remove extraneous packages present in the environment.
+    #[arg(long, overrides_with("exact"), alias = "no-exact", hide = true)]
+    pub inexact: bool,
+
+    /// Perform an exact sync, removing extraneous packages.
+    ///
+    /// When enabled, uv will remove any extraneous packages from the environment.
+    /// By default, `uv run` will make the minimum necessary changes to satisfy the requirements.
+    #[arg(long, overrides_with("inexact"))]
+    pub exact: bool,
+
     /// Load environment variables from a `.env` file.
     ///
     /// Can be provided multiple times, with subsequent files overriding values defined in

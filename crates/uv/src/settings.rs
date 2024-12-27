@@ -262,6 +262,7 @@ pub(crate) struct RunSettings {
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: DevGroupsSpecification,
     pub(crate) editable: EditableMode,
+    pub(crate) modifications: Modifications,
     pub(crate) with: Vec<String>,
     pub(crate) with_editable: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
@@ -297,6 +298,8 @@ impl RunSettings {
             module: _,
             only_dev,
             no_editable,
+            inexact,
+            exact,
             script: _,
             gui_script: _,
             command: _,
@@ -336,6 +339,11 @@ impl RunSettings {
                 dev, no_dev, only_dev, group, no_group, only_group, all_groups,
             ),
             editable: EditableMode::from_args(no_editable),
+            modifications: if flag(exact, inexact).unwrap_or(false) {
+                Modifications::Exact
+            } else {
+                Modifications::Sufficient
+            },
             with: with
                 .into_iter()
                 .flat_map(CommaSeparatedRequirements::into_iter)
