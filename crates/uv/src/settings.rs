@@ -1981,8 +1981,8 @@ pub(crate) struct PipTreeSettings {
     pub(crate) package: Vec<PackageName>,
     pub(crate) no_dedupe: bool,
     pub(crate) invert: bool,
-    // CLI-only settings.
-    pub(crate) shared: PipSettings,
+    pub(crate) outdated: bool,
+    pub(crate) settings: PipSettings,
 }
 
 impl PipTreeSettings {
@@ -1993,6 +1993,7 @@ impl PipTreeSettings {
             tree,
             strict,
             no_strict,
+            fetch,
             python,
             system,
             no_system,
@@ -2006,13 +2007,13 @@ impl PipTreeSettings {
             no_dedupe: tree.no_dedupe,
             invert: tree.invert,
             package: tree.package,
-            // Shared settings.
-            shared: PipSettings::combine(
+            outdated: tree.outdated,
+            settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     strict: flag(strict, no_strict),
-                    ..PipOptions::default()
+                    ..PipOptions::from(fetch)
                 },
                 filesystem,
             ),

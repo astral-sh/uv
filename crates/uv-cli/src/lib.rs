@@ -2112,6 +2112,9 @@ pub struct PipTreeArgs {
     #[arg(long, overrides_with("strict"), hide = true)]
     pub no_strict: bool,
 
+    #[command(flatten)]
+    pub fetch: FetchArgs,
+
     /// The Python interpreter for which packages should be listed.
     ///
     /// By default, uv lists packages in a virtual environment but will show
