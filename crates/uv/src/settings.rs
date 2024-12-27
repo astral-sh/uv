@@ -189,6 +189,7 @@ pub(crate) struct InitSettings {
     pub(crate) name: Option<PackageName>,
     pub(crate) package: bool,
     pub(crate) kind: InitKind,
+    pub(crate) description: Option<String>,
     pub(crate) vcs: Option<VersionControlSystem>,
     pub(crate) build_backend: Option<ProjectBuildBackend>,
     pub(crate) no_readme: bool,
@@ -197,7 +198,6 @@ pub(crate) struct InitSettings {
     pub(crate) no_workspace: bool,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
-    pub(crate) description: Option<String>,
 }
 
 impl InitSettings {
@@ -213,6 +213,7 @@ impl InitSettings {
             app,
             lib,
             script,
+            description,
             vcs,
             build_backend,
             no_readme,
@@ -220,7 +221,6 @@ impl InitSettings {
             no_pin_python,
             no_workspace,
             python,
-            description,
         } = args;
 
         let kind = match (app, lib, script) {
@@ -243,6 +243,7 @@ impl InitSettings {
             name,
             package,
             kind,
+            description,
             vcs,
             build_backend,
             no_readme,
@@ -251,7 +252,6 @@ impl InitSettings {
             no_workspace,
             python: python.and_then(Maybe::into_option),
             install_mirrors,
-            description,
         }
     }
 }

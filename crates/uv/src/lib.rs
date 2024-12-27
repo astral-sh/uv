@@ -1360,6 +1360,7 @@ async fn run_project(
                 args.name,
                 args.package,
                 args.kind,
+                args.description,
                 args.vcs,
                 args.build_backend,
                 args.no_readme,
@@ -1377,7 +1378,6 @@ async fn run_project(
                 &cache,
                 printer,
                 globals.preview,
-                args.description,
             )
             .await
         }

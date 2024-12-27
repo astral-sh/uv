@@ -41,6 +41,7 @@ pub(crate) async fn init(
     name: Option<PackageName>,
     package: bool,
     init_kind: InitKind,
+    description: Option<String>,
     vcs: Option<VersionControlSystem>,
     build_backend: Option<ProjectBuildBackend>,
     no_readme: bool,
@@ -58,7 +59,6 @@ pub(crate) async fn init(
     cache: &Cache,
     printer: Printer,
     preview: PreviewMode,
-    description: Option<String>,
 ) -> Result<ExitStatus> {
     if build_backend == Some(ProjectBuildBackend::Uv) && preview.is_disabled() {
         warn_user_once!("The uv build backend is experimental and may change without warning");
@@ -130,6 +130,7 @@ pub(crate) async fn init(
                 &name,
                 package,
                 project_kind,
+                description,
                 vcs,
                 build_backend,
                 no_readme,
@@ -146,7 +147,6 @@ pub(crate) async fn init(
                 no_config,
                 cache,
                 printer,
-                description,
             )
             .await?;
 
@@ -272,6 +272,7 @@ async fn init_project(
     name: &PackageName,
     package: bool,
     project_kind: InitProjectKind,
+    description: Option<String>,
     vcs: Option<VersionControlSystem>,
     build_backend: Option<ProjectBuildBackend>,
     no_readme: bool,
@@ -288,7 +289,6 @@ async fn init_project(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    description: Option<String>,
 ) -> Result<()> {
     // Discover the current workspace, if it exists.
     let workspace = {
@@ -567,12 +567,12 @@ async fn init_project(
         name,
         path,
         &requires_python,
+        description.as_deref(),
         vcs,
         build_backend,
         author_from,
         no_readme,
         package,
-        description.as_ref(),
     )?;
 
     if let Some(workspace) = workspace {
@@ -691,35 +691,35 @@ impl InitProjectKind {
         name: &PackageName,
         path: &Path,
         requires_python: &RequiresPython,
+        description: Option<&str>,
         vcs: Option<VersionControlSystem>,
         build_backend: Option<ProjectBuildBackend>,
         author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
-        description: Option<&String>,
     ) -> Result<()> {
         match self {
             InitProjectKind::Application => InitProjectKind::init_application(
                 name,
                 path,
                 requires_python,
+                description,
                 vcs,
                 build_backend,
                 author_from,
                 no_readme,
                 package,
-                description,
             ),
             InitProjectKind::Library => InitProjectKind::init_library(
                 name,
                 path,
                 requires_python,
+                description,
                 vcs,
                 build_backend,
                 author_from,
                 no_readme,
                 package,
-                description,
             ),
         }
     }
@@ -729,12 +729,12 @@ impl InitProjectKind {
         name: &PackageName,
         path: &Path,
         requires_python: &RequiresPython,
+        description: Option<&str>,
         vcs: Option<VersionControlSystem>,
         build_backend: Option<ProjectBuildBackend>,
         author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
-        description: Option<&String>,
     ) -> Result<()> {
         fs_err::create_dir_all(path)?;
 
@@ -753,8 +753,8 @@ impl InitProjectKind {
             name,
             requires_python,
             author.as_ref(),
+            description,
             no_readme,
-            description.map(String::as_str),
         );
 
         // Include additional project configuration for packaged applications
@@ -802,12 +802,12 @@ impl InitProjectKind {
         name: &PackageName,
         path: &Path,
         requires_python: &RequiresPython,
+        description: Option<&str>,
         vcs: Option<VersionControlSystem>,
         build_backend: Option<ProjectBuildBackend>,
         author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
-        description: Option<&String>,
     ) -> Result<()> {
         if !package {
             return Err(anyhow!("Library projects must be packaged"));
@@ -822,8 +822,8 @@ impl InitProjectKind {
             name,
             requires_python,
             author.as_ref(),
+            description,
             no_readme,
-            description.map(String::as_str),
         );
 
         // Always include a build system if the project is packaged.
@@ -868,8 +868,8 @@ fn pyproject_project(
     name: &PackageName,
     requires_python: &RequiresPython,
     author: Option<&Author>,
-    no_readme: bool,
     description: Option<&str>,
+    no_readme: bool,
 ) -> String {
     indoc::formatdoc! {r#"
         [project]
