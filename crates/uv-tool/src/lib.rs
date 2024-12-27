@@ -184,8 +184,16 @@ impl InstalledTools {
             environment_path.user_display()
         );
 
-        // TODO(charlie): On Windows, if the current executable is in the directory,
-        // we need to use `safe_delete`.
+        // On Windows, if the current executable is in the directory, guard against self-deletion.
+        #[cfg(windows)]
+        if let Ok(itself) = std::env::current_exe() {
+            let target = std::path::absolute(&environment_path)?;
+            if itself.starts_with(&target) {
+                debug!("Detected self-delete of executable: {}", itself.display());
+                self_replace::self_delete_outside_path(&environment_path)?;
+            }
+        }
+
         fs_err::remove_dir_all(environment_path)?;
 
         Ok(())
