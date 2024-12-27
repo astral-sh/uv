@@ -1414,6 +1414,7 @@ async fn run_project(
                 args.extras,
                 args.dev,
                 args.editable,
+                args.modifications,
                 args.python,
                 args.install_mirrors,
                 args.settings,

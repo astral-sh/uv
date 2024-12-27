@@ -74,6 +74,7 @@ pub(crate) async fn run(
     extras: ExtrasSpecification,
     dev: DevGroupsSpecification,
     editable: EditableMode,
+    modifications: Modifications,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
@@ -705,7 +706,7 @@ pub(crate) async fn run(
                     &dev.with_defaults(defaults),
                     editable,
                     install_options,
-                    Modifications::Sufficient,
+                    modifications,
                     settings.as_ref().into(),
                     if show_resolution {
                         Box::new(DefaultInstallLogger)
