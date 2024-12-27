@@ -24,12 +24,14 @@
 //! CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //! ```
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::LazyLock;
 
+use itertools::{Either, Itertools};
 use tracing::trace;
 
 use crate::sysconfig::parser::{Error as ParseError, SysconfigData, Value};
@@ -163,6 +165,25 @@ pub(crate) fn update_sysconfig(
     file.write_all(contents.as_bytes())?;
     file.sync_data()?;
 
+    // Find the `pkgconfig` files in the Python installation.
+    for pkgconfig in find_pkgconfigs(&real_prefix)? {
+        let pkgconfig = pkgconfig?;
+        trace!("Discovered `pkgconfig` data at: {}", pkgconfig.display());
+
+        // Update the `pkgconfig` file in-memory.
+        let contents = fs_err::read_to_string(&pkgconfig)?;
+        let contents = patch_pkgconfig(&contents, &real_prefix);
+
+        // Write the updated `pkgconfig` file.
+        let mut file = fs_err::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(&pkgconfig)?;
+        file.write_all(contents.as_bytes())?;
+        file.sync_data()?;
+    }
+
     Ok(())
 }
 
@@ -280,6 +301,57 @@ fn patch_sysconfigdata(mut data: SysconfigData, real_prefix: &Path) -> Sysconfig
     data
 }
 
+/// Find the location of all `pkg-config` files in a Python installation.
+///
+/// Specifically, searches for files under `lib/pkgconfig` with the `.pc` extension.
+fn find_pkgconfigs(
+    install_root: &Path,
+) -> Result<impl Iterator<Item = Result<PathBuf, std::io::Error>>, std::io::Error> {
+    let pkgconfig = install_root.join("lib").join("pkgconfig");
+
+    let read_dir = match pkgconfig.read_dir() {
+        Ok(read_dir) => read_dir,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(Either::Left(std::iter::empty()));
+        }
+        Err(err) => return Err(err),
+    };
+
+    Ok(Either::Right(
+        read_dir
+            .filter_ok(|entry| entry.path().extension().is_some_and(|ext| ext == "pc"))
+            .filter_ok(|entry| entry.file_type().is_ok_and(|file_type| file_type.is_file()))
+            .map_ok(|entry| entry.path()),
+    ))
+}
+
+/// Patch the given `pkgconfig` contents.
+///
+/// Returns the updated contents.
+fn patch_pkgconfig(contents: &str, real_prefix: &Path) -> String {
+    contents
+        .lines()
+        .map(|line| {
+            // Given, e.g., `prefix=/install`, replace with `prefix=/real/prefix`.
+            let Some((prefix, suffix)) = line.split_once('=') else {
+                return Cow::Borrowed(line);
+            };
+
+            // The content before the `=` must be an ASCII alphabetic string.
+            if !prefix.chars().all(|c| c.is_ascii_alphabetic()) {
+                return Cow::Borrowed(line);
+            }
+
+            // The content after the `=` must be equal to the expected prefix.
+            if suffix != "/install" {
+                return Cow::Borrowed(line);
+            }
+
+            Cow::Owned(format!("{}={}", prefix, real_prefix.display()))
+        })
+        .join("\n")
+}
+
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error(transparent)]
@@ -298,6 +370,7 @@ pub enum Error {
 #[cfg(unix)]
 mod tests {
     use super::*;
+    use indoc::indoc;
 
     #[test]
     fn update_real_prefix() -> Result<(), Error> {
@@ -384,5 +457,45 @@ mod tests {
         "###);
 
         Ok(())
+    }
+
+    #[test]
+    fn update_pkgconfig() {
+        let pkgconfig = indoc! {
+            r"
+            # See: man pkg-config
+            prefix=/install
+            exec_prefix=${prefix}
+            libdir=${exec_prefix}/lib
+            includedir=${prefix}/include
+
+            Name: Python
+            Description: Build a C extension for Python
+            Requires:
+            Version: 3.10
+            Libs.private: -ldl   -framework CoreFoundation
+            Libs:
+            Cflags: -I${includedir}/python3.10
+            "
+        };
+
+        let real_prefix = Path::new("/real/prefix");
+        let pkgconfig = patch_pkgconfig(pkgconfig, real_prefix);
+
+        insta::assert_snapshot!(pkgconfig, @r###"
+        # See: man pkg-config
+        prefix=/real/prefix
+        exec_prefix=${prefix}
+        libdir=${exec_prefix}/lib
+        includedir=${prefix}/include
+
+        Name: Python
+        Description: Build a C extension for Python
+        Requires:
+        Version: 3.10
+        Libs.private: -ldl   -framework CoreFoundation
+        Libs:
+        Cflags: -I${includedir}/python3.10
+        "###);
     }
 }
