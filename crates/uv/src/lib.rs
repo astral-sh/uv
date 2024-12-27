@@ -671,12 +671,23 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &args.package,
                 args.no_dedupe,
                 args.invert,
-                args.shared.strict,
-                args.shared.python.as_deref(),
-                args.shared.system,
+                args.outdated,
+                args.settings.prerelease,
+                args.settings.index_locations,
+                args.settings.index_strategy,
+                args.settings.keyring_provider,
+                globals.allow_insecure_host,
+                globals.connectivity,
+                globals.concurrency,
+                args.settings.strict,
+                args.settings.exclude_newer,
+                args.settings.python.as_deref(),
+                args.settings.system,
+                globals.native_tls,
                 &cache,
                 printer,
             )
+            .await
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Check(args),
