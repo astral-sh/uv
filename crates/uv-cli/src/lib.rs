@@ -2568,8 +2568,12 @@ pub struct InitArgs {
     ///
     /// By default, adds a requirement on the system Python version; use `--python` to specify an
     /// alternative Python version requirement.
-    #[arg(long, conflicts_with_all=["app", "lib", "package", "build_backend"])]
+    #[arg(long, conflicts_with_all=["app", "lib", "package", "build_backend", "description"])]
     pub r#script: bool,
+
+    /// Set the project description.
+    #[arg(long, conflicts_with = "script")]
+    pub description: Option<String>,
 
     /// Initialize a version control system for the project.
     ///
