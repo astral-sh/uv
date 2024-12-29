@@ -5558,6 +5558,7 @@ version = "0.0.1"
 dependencies = [
  "fs-err 3.0.0",
  "pathdiff",
+ "self-replace",
  "serde",
  "thiserror 2.0.9",
  "toml",
@@ -5624,6 +5625,7 @@ dependencies = [
  "fs-err 3.0.0",
  "itertools 0.13.0",
  "pathdiff",
+ "self-replace",
  "thiserror 2.0.9",
  "tracing",
  "uv-fs",

@@ -105,9 +105,19 @@ pub(crate) fn create(
                 if allow_existing {
                     debug!("Allowing existing directory");
                 } else if location.join("pyvenv.cfg").is_file() {
-                    // TODO(charlie): On Windows, if the current executable is in the directory,
-                    // we need to use `safe_delete`.
                     debug!("Removing existing directory");
+
+                    // On Windows, if the current executable is in the directory, guard against
+                    // self-deletion.
+                    #[cfg(windows)]
+                    if let Ok(itself) = std::env::current_exe() {
+                        let target = std::path::absolute(location)?;
+                        if itself.starts_with(&target) {
+                            debug!("Detected self-delete of executable: {}", itself.display());
+                            self_replace::self_delete_outside_path(location)?;
+                        }
+                    }
+
                     fs::remove_dir_all(location)?;
                     fs::create_dir_all(location)?;
                 } else if location
