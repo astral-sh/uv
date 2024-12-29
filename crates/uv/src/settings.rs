@@ -4,6 +4,9 @@ use std::path::PathBuf;
 use std::process;
 use std::str::FromStr;
 
+use crate::commands::ToolRunCommand;
+use crate::commands::{pip::operations::Modifications, InitKind, InitProjectKind};
+use tracing::debug;
 use url::Url;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
@@ -42,9 +45,6 @@ use uv_settings::{
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
-use tracing::debug;
-use crate::commands::ToolRunCommand;
-use crate::commands::{pip::operations::Modifications, InitKind, InitProjectKind};
 
 /// The default publish URL.
 const PYPI_PUBLISH_URL: &str = "https://upload.pypi.org/legacy/";
@@ -797,7 +797,7 @@ pub(crate) struct PythonInstallSettings {
     pub(crate) default: bool,
 }
 
-/// Get targets from UV_PYTHON environment variable
+/// Get targets from `UV_PYTHON` environment variable
 fn get_env_targets(targets: Vec<String>) -> Vec<String> {
     match std::env::var("UV_PYTHON") {
         Ok(python_version) if !python_version.is_empty() => {
