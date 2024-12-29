@@ -876,3 +876,27 @@ fn python_install_preview_broken_link() {
         );
     });
 }
+
+#[test]
+fn python_install_with_uv_python_env() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix();
+
+    // Set the UV_PYTHON environment variable to 3.12
+    std::env::set_var("UV_PYTHON", "3.12");
+
+    // Install the version specified by the UV_PYTHON environment variable
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.8 in [TIME]
+     + cpython-3.12.8-[PLATFORM] (python3.12)
+    "###);
+
+    // Clean up the environment variable
+    std::env::remove_var("UV_PYTHON");
+}

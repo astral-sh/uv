@@ -42,7 +42,7 @@ use uv_settings::{
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
-
+use tracing::debug;
 use crate::commands::ToolRunCommand;
 use crate::commands::{pip::operations::Modifications, InitKind, InitProjectKind};
 
@@ -797,6 +797,16 @@ pub(crate) struct PythonInstallSettings {
     pub(crate) default: bool,
 }
 
+/// Get targets from UV_PYTHON environment variable
+fn get_env_targets(targets: Vec<String>) -> Vec<String> {
+    match std::env::var("UV_PYTHON") {
+        Ok(python_version) if !python_version.is_empty() => {
+            debug!("Using Python version from UV_PYTHON: {}", python_version);
+            vec![python_version]
+        }
+        _ => targets,
+    }
+}
 impl PythonInstallSettings {
     /// Resolve the [`PythonInstallSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
@@ -821,6 +831,9 @@ impl PythonInstallSettings {
             pypy_mirror: _,
             default,
         } = args;
+
+        // Check UV_PYTHON environment variable
+        let targets = get_env_targets(targets);
 
         Self {
             install_dir,
@@ -855,6 +868,9 @@ impl PythonUninstallSettings {
             targets,
             all,
         } = args;
+
+        // Check UV_PYTHON environment variable
+        let targets = get_env_targets(targets);
 
         Self {
             install_dir,
