@@ -1851,6 +1851,13 @@
           ]
         },
         {
+          "description": "An `x86_64` target for the `manylinux2014` platform. Equivalent to `x86_64-manylinux_2_17`.",
+          "type": "string",
+          "enum": [
+            "x86_64-manylinux2014"
+          ]
+        },
+        {
           "description": "An `x86_64` target for the `manylinux_2_17` platform.",
           "type": "string",
           "enum": [
@@ -1932,6 +1939,13 @@
           "type": "string",
           "enum": [
             "x86_64-manylinux_2_40"
+          ]
+        },
+        {
+          "description": "An ARM64 target for the `manylinux2014` platform. Equivalent to `aarch64-manylinux_2_17`.",
+          "type": "string",
+          "enum": [
+            "aarch64-manylinux2014"
           ]
         },
         {
