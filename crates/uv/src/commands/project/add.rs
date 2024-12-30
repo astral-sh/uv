@@ -253,7 +253,6 @@ pub(crate) async fn add(
     let RequirementsSpecification { requirements, .. } =
         RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
 
-
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let bounds = LowerBound::default();
@@ -323,7 +322,7 @@ pub(crate) async fn add(
 
             // Add all authenticated sources to the cache.
             for index in settings.index_locations.allowed_indexes() {
-                if let Some(credentials) = index.credentials() {
+                if let Some(credentials) = index.credentials(settings.keyring_provider.to_provider()) {
                     uv_auth::store_credentials(index.raw_url(), credentials);
                 }
             }
