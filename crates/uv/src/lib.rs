@@ -1286,11 +1286,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let IndexSettings {
                 name,
                 username,
+                password,
                 keyring_provider,
                 index,
             } = IndexSettings::resolve(args, filesystem);
 
-            let _ = add_credentials(name, username, keyring_provider, index).await;
+            let _ = add_credentials(name, username, password, keyring_provider, index).await;
             return Ok(ExitStatus::Success);
         }
     };

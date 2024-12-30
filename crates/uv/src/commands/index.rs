@@ -10,17 +10,18 @@ use uv_distribution_types::Index;
 pub(crate) async fn add_credentials(
     name: String,
     username: Option<String>,
+    password: Option<String>,
     keyring_provider: KeyringProviderType,
-    index: Vec<Index>,
+    indexes: Vec<Index>,
 ) -> Result<()> {
-    let index_for_name = index.iter().find(|idx| {
+    let index = indexes.iter().find(|idx| {
         idx.name
             .as_ref()
             .map(|n| n.to_string() == name)
             .unwrap_or(false)
     });
 
-    let index_for_name = match index_for_name {
+    let index = match index {
         Some(obj) => obj,
         None => panic!("No index found with the name '{}'", name),
     };
@@ -33,15 +34,17 @@ pub(crate) async fn add_credentials(
         },
     };
 
-    let password = match prompt_password_input()? {
+    let password = match password {
         Some(p) => p,
-        None => panic!("Could not read password from user input"),
+        None => match prompt_password_input()? {
+            Some(p) => p,
+            None => panic!("Could not read password from user input"),
+        },
     };
 
-    let url = index_for_name.raw_url();
+    let url = index.raw_url();
     debug!(
-        "Will store password for index {} with URL {} and user {} in keyring",
-        name, url, username
+        "Will store password for index {name} with URL {url} and user {username} in keyring"
     );
     keyring_provider
         .to_provider()
@@ -50,9 +53,7 @@ pub(crate) async fn add_credentials(
         .await;
 
     debug!(
-        "Will add index {} and user {} to index auth config in {:?}",
-        name,
-        url,
+        "Will add index {name} and user {username} to index auth config in {:?}",
         AuthConfig::path()?
     );
     let mut auth_config =

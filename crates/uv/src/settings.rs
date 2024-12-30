@@ -2886,6 +2886,7 @@ pub(crate) struct IndexSettings {
     // CLI only settings
     pub(crate) name: String,
     pub(crate) username: Option<String>,
+    pub(crate) password: Option<String>,
 
     // CLI and Filesystem settings
     pub(crate) keyring_provider: KeyringProviderType,
@@ -2913,6 +2914,7 @@ impl IndexSettings {
         Self {
             name: args.name,
             username: args.username,
+            password: args.password,
             keyring_provider: args
                 .keyring_provider
                 .combine(keyring_provider)

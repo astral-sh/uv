@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use anyhow::{anyhow, Result};
 use clap::builder::styling::{AnsiColor, Effects, Style};
-use clap::builder::{Str, Styles};
+use clap::builder::Styles;
 use clap::{Args, Parser, Subcommand};
 
 use url::Url;
@@ -5274,6 +5274,10 @@ pub struct IndexCredentialsArgs {
     /// The username that should be used for the index
     #[arg(long, required(false))]
     pub username: Option<String>,
+
+    /// The password that should be user for the index
+    #[arg(long, required(false))]
+    pub password: Option<String>,
 
     /// Attempt to use `keyring` for authentication for remote requirements files.
     ///
