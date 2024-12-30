@@ -322,7 +322,9 @@ pub(crate) async fn add(
 
             // Add all authenticated sources to the cache.
             for index in settings.index_locations.allowed_indexes() {
-                if let Some(credentials) = index.credentials(settings.keyring_provider.to_provider()) {
+                if let Some(credentials) =
+                    index.credentials(settings.keyring_provider.to_provider())
+                {
                     uv_auth::store_credentials(index.raw_url(), credentials);
                 }
             }
