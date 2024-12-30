@@ -4,7 +4,7 @@ An official pre-commit hook is provided at
 [`astral-sh/uv-pre-commit`](https://github.com/astral-sh/uv-pre-commit).
 
 To make sure your `uv.lock` file is up to date even if your `pyproject.toml` file was changed via
-pre-commit, add the following to the `.pre-commit-config.yaml`:
+pre-commit, append the following to the `repos` list in the `.pre-commit-config.yaml`:
 
 ```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
@@ -14,7 +14,7 @@ pre-commit, add the following to the `.pre-commit-config.yaml`:
     - id: uv-lock
 ```
 
-To keep your `requirements.txt` file updated using pre-commit:
+To keep your `requirements.txt` file updated using pre-commit append to the `repos` list:
 
 ```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
@@ -24,7 +24,8 @@ To keep your `requirements.txt` file updated using pre-commit:
     - id: uv-export
 ```
 
-To compile requirements via pre-commit, add the following to the `.pre-commit-config.yaml`:
+To compile requirements via pre-commit, add the following to the `repos` list in the
+`.pre-commit-config.yaml`:
 
 ```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
@@ -36,7 +37,7 @@ To compile requirements via pre-commit, add the following to the `.pre-commit-co
       args: [requirements.in, -o, requirements.txt]
 ```
 
-To compile alternative files, modify `args` and `files`:
+To compile alternative files, modify `args` and `files` append to the `repos` list:
 
 ```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
@@ -49,7 +50,7 @@ To compile alternative files, modify `args` and `files`:
       files: ^requirements-dev\.(in|txt)$
 ```
 
-To run the hook over multiple files at the same time:
+To run the hook over multiple files at the same time append to the `repos` list:
 
 ```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
