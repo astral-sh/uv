@@ -58,6 +58,7 @@ def _have_compatible_abi(executable: str, archs: Sequence[str]) -> bool:
     if "i686" in archs:
         return _is_linux_i686(executable)
     allowed_archs = {
+        "armv5te",
         "x86_64",
         "aarch64",
         "ppc64",

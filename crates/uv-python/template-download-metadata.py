@@ -69,6 +69,8 @@ def prepare_arch(arch: dict) -> tuple[str, str]:
             family = "X86_32(target_lexicon::X86_32Architecture::I686)"
         case "aarch64":
             family = "Aarch64(target_lexicon::Aarch64Architecture::Aarch64)"
+        case "armv5tel":
+            family = "Arm(target_lexicon::ArmArchitecture::Armv5te)"
         case "armv7":
             family = "Arm(target_lexicon::ArmArchitecture::Armv7)"
         case value:
