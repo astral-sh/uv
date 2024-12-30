@@ -10,8 +10,7 @@ use rustc_hash::FxHashMap;
 use tracing::trace;
 
 use uv_distribution_types::{
-    DerivationChain, Dist, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl,
-    InstalledDist, InstalledDistError,
+    DerivationChain, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl, RequestedDist,
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{LocalVersionSlice, Version};
@@ -98,13 +97,10 @@ pub enum ResolveError {
     #[error("{0} `{1}`")]
     Dist(
         DistErrorKind,
-        Box<Dist>,
+        Box<RequestedDist>,
         DerivationChain,
         #[source] Arc<uv_distribution::Error>,
     ),
-
-    #[error("Failed to read metadata from installed package `{0}`")]
-    ReadInstalled(Box<InstalledDist>, #[source] InstalledDistError),
 
     #[error(transparent)]
     NoSolution(#[from] NoSolutionError),

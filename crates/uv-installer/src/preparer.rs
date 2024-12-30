@@ -230,7 +230,7 @@ impl Error {
         let chain =
             DerivationChain::from_resolution(resolution, (&dist).into()).unwrap_or_default();
         Self::Dist(
-            DistErrorKind::from_dist_and_err(&dist, &err),
+            DistErrorKind::from_dist(&dist, &err),
             Box::new(dist),
             chain,
             err,

@@ -21,7 +21,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, info, instrument, trace, warn, Level};
 
 use uv_configuration::{Constraints, Overrides};
-use uv_distribution::{ArchiveMetadata, DistributionDatabase};
+use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
@@ -33,9 +33,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{release_specifiers_to_ranges, Version, VersionSpecifiers, MIN_VERSION};
 use uv_pep508::MarkerTree;
 use uv_platform_tags::Tags;
-use uv_pypi_types::{
-    ConflictItem, ConflictItemRef, Conflicts, Requirement, ResolutionMetadata, VerbatimParsedUrl,
-};
+use uv_pypi_types::{ConflictItem, ConflictItemRef, Conflicts, Requirement, VerbatimParsedUrl};
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 use uv_warnings::warn_user_once;
 
@@ -1097,11 +1095,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .insert(name.clone(), reason.into());
                 return Ok(None);
             }
+            // TODO(charlie): Add derivation chain for URL dependencies. In practice, this isn't
+            // critical since we fetch URL dependencies _prior_ to invoking the resolver.
             MetadataResponse::Error(dist, err) => {
-                // TODO(charlie): Add derivation chain for URL dependencies. In practice, this isn't
-                // critical since we fetch URL dependencies _prior_ to invoking the resolver.
                 return Err(ResolveError::Dist(
-                    DistErrorKind::from_dist_and_err(dist, &**err),
+                    DistErrorKind::from_requested_dist(dist, &**err),
                     dist.clone(),
                     DerivationChain::default(),
                     err.clone(),
@@ -1642,7 +1640,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         let chain = DerivationChainBuilder::from_state(id, version, pubgrub)
                             .unwrap_or_default();
                         return Err(ResolveError::Dist(
-                            DistErrorKind::from_dist_and_err(dist, &**err),
+                            DistErrorKind::from_requested_dist(dist, &**err),
                             dist.clone(),
                             chain,
                             err.clone(),
@@ -2068,12 +2066,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
                 Some(Response::Installed { dist, metadata }) => {
                     trace!("Received installed distribution metadata for: {dist}");
-                    self.index.distributions().done(
-                        dist.version_id(),
-                        Arc::new(MetadataResponse::Found(ArchiveMetadata::from_metadata23(
-                            metadata,
-                        ))),
-                    );
+                    self.index
+                        .distributions()
+                        .done(dist.version_id(), Arc::new(metadata));
                 }
                 Some(Response::Dist { dist, metadata }) => {
                     let dist_kind = match dist {
@@ -2134,10 +2129,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
 
             Request::Installed(dist) => {
-                // TODO(charlie): This should be return a `MetadataResponse`.
-                let metadata = dist
-                    .metadata()
-                    .map_err(|err| ResolveError::ReadInstalled(Box::new(dist.clone()), err))?;
+                let metadata = provider.get_installed_metadata(&dist).boxed_local().await?;
+
                 Ok(Some(Response::Installed { dist, metadata }))
             }
 
@@ -2251,9 +2244,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             Response::Dist { dist, metadata }
                         }
                         ResolvedDist::Installed { dist } => {
-                            let metadata = dist.metadata().map_err(|err| {
-                                ResolveError::ReadInstalled(Box::new(dist.clone()), err)
-                            })?;
+                            let metadata =
+                                provider.get_installed_metadata(&dist).boxed_local().await?;
+
                             Response::Installed { dist, metadata }
                         }
                     };
@@ -3079,7 +3072,7 @@ enum Response {
     /// The returned metadata for an already-installed distribution.
     Installed {
         dist: InstalledDist,
-        metadata: ResolutionMetadata,
+        metadata: MetadataResponse,
     },
 }
 

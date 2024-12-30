@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
-use uv_distribution_types::{Dist, IndexCapabilities, IndexUrl};
+use uv_distribution_types::{Dist, IndexCapabilities, IndexUrl, InstalledDist, RequestedDist};
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::Tags;
@@ -37,7 +37,7 @@ pub enum MetadataResponse {
     /// A non-fatal error.
     Unavailable(MetadataUnavailable),
     /// The distribution could not be built or downloaded, a fatal error.
-    Error(Box<Dist>, Arc<uv_distribution::Error>),
+    Error(Box<RequestedDist>, Arc<uv_distribution::Error>),
 }
 
 /// Non-fatal metadata fetching error.
@@ -83,12 +83,18 @@ pub trait ResolverProvider {
 
     /// Get the metadata for a distribution.
     ///
-    /// For a wheel, this is done by querying it's (remote) metadata, for a source dist we
+    /// For a wheel, this is done by querying it (remote) metadata. For a source distribution, we
     /// (fetch and) build the source distribution and return the metadata from the built
     /// distribution.
     fn get_or_build_wheel_metadata<'io>(
         &'io self,
         dist: &'io Dist,
+    ) -> impl Future<Output = WheelMetadataResult> + 'io;
+
+    /// Get the metadata for an installed distribution.
+    fn get_installed_metadata<'io>(
+        &'io self,
+        dist: &'io InstalledDist,
     ) -> impl Future<Output = WheelMetadataResult> + 'io;
 
     /// Set the [`uv_distribution::Reporter`] to use for this installer.
@@ -246,10 +252,24 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                     ))
                 }
                 err => Ok(MetadataResponse::Error(
-                    Box::new(dist.clone()),
+                    Box::new(RequestedDist::Installable(dist.clone())),
                     Arc::new(err),
                 )),
             },
+        }
+    }
+
+    /// Return the metadata for an installed distribution.
+    async fn get_installed_metadata<'io>(
+        &'io self,
+        dist: &'io InstalledDist,
+    ) -> WheelMetadataResult {
+        match self.fetcher.get_installed_metadata(dist).await {
+            Ok(metadata) => Ok(MetadataResponse::Found(metadata)),
+            Err(err) => Ok(MetadataResponse::Error(
+                Box::new(RequestedDist::Installed(dist.clone())),
+                Arc::new(err),
+            )),
         }
     }
 
