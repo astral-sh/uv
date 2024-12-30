@@ -297,7 +297,6 @@ targets = [
   "aarch64-unknown-linux-gnu",
   "aarch64-unknown-linux-musl",
   "arm-unknown-linux-musleabihf",
-  "armv5te-unknown-linux-gnueabi",
   "armv7-unknown-linux-gnueabihf",
   "armv7-unknown-linux-musleabihf",
   "i686-pc-windows-msvc",

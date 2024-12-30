@@ -288,10 +288,7 @@ impl Lock {
             if platform_tags.iter().all(|tag| {
                 linux_tags.into_iter().any(|linux_tag| {
                     // These two linux tags are allowed by warehouse.
-                    tag.starts_with(linux_tag)
-                        || tag == "linux_armv5te"
-                        || tag == "linux_armv6l"
-                        || tag == "linux_armv7l"
+                    tag.starts_with(linux_tag) || tag == "linux_armv6l" || tag == "linux_armv7l"
                 })
             }) {
                 !graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS)
