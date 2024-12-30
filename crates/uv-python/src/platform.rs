@@ -54,7 +54,7 @@ impl Libc {
                     // Checks if the CPU supports hardware floating-point operations.
                     // Depending on the result, it selects either the `gnueabihf` (hard-float) or `gnueabi` (soft-float) environment.
                     // download-metadata.json only includes armv7.
-                    "arm" | "armv7" => match detect_hardware_floating_point_support() {
+                    "arm" | "armv5te" | "armv7" => match detect_hardware_floating_point_support() {
                         Ok(true) => target_lexicon::Environment::Gnueabihf,
                         Ok(false) => target_lexicon::Environment::Gnueabi,
                         Err(_) => target_lexicon::Environment::Gnu,
@@ -238,6 +238,10 @@ impl From<&uv_platform_tags::Arch> for Arch {
                 family: target_lexicon::Architecture::Aarch64(
                     target_lexicon::Aarch64Architecture::Aarch64,
                 ),
+                variant: None,
+            },
+            uv_platform_tags::Arch::Armv5TEL => Self {
+                family: target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv5te),
                 variant: None,
             },
             uv_platform_tags::Arch::Armv6L => Self {

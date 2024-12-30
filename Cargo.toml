@@ -80,7 +80,7 @@ axoupdater = { version = "0.9.0", default-features = false }
 backoff = { version = "0.4.0" }
 base64 = { version = "0.22.1" }
 bitflags = { version = "2.6.0" }
-boxcar = { version = "0.2.5" }
+boxcar = { version = "0.2.8" }
 bytecheck = { version = "0.8.0" }
 cachedir = { version = "0.3.1" }
 cargo-util = { version = "0.2.14" }
