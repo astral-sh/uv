@@ -56,12 +56,6 @@ fn transformers() -> Result<()> {
 // Source: https://github.com/konstin/warehouse/blob/baae127d90417104c8dee3fdd3855e2ba17aa428/pyproject.toml
 #[test]
 fn warehouse() -> Result<()> {
-    // This build requires running `pg_config`. We could
-    // probably stub it out, but for now, we just skip the
-    // test if we can't run `pg_config`.
-    if std::process::Command::new("pg_config").output().is_err() {
-        return Ok(());
-    }
     // Also, takes too long on non-Linux in CI.
     if !cfg!(target_os = "linux") && std::env::var_os(EnvVars::CI).is_some() {
         return Ok(());

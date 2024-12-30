@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
@@ -34,7 +35,7 @@ use uv_resolver::{
     FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolverEnvironment,
     ResolverOutput,
 };
-use uv_scripts::Pep723Item;
+use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -53,7 +54,9 @@ pub(crate) mod add;
 pub(crate) mod environment;
 pub(crate) mod export;
 pub(crate) mod init;
+mod install_target;
 pub(crate) mod lock;
+mod lock_target;
 pub(crate) mod remove;
 pub(crate) mod run;
 pub(crate) mod sync;
@@ -74,6 +77,9 @@ pub(crate) enum ProjectError {
 
     #[error("Failed to parse `uv.lock`, which uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.")]
     UnparsableLockVersion(u32, u32, #[source] toml::de::Error),
+
+    #[error("Failed to serialize `uv.lock`")]
+    LockSerialization(#[from] toml_edit::ser::Error),
 
     #[error("The current Python version ({0}) is not compatible with the locked Python requirement: `{1}`")]
     LockedPythonIncompatibility(Version, RequiresPython),
@@ -315,8 +321,11 @@ pub(crate) fn find_requires_python(workspace: &Workspace) -> Option<RequiresPyth
 }
 
 /// Returns an error if the [`Interpreter`] does not satisfy the [`Workspace`] `requires-python`.
+///
+/// If no [`Workspace`] is provided, the `requires-python` will be validated against the originating
+/// source (e.g., a `.python-version` file or a `--python` command-line argument).
 #[allow(clippy::result_large_err)]
-pub(crate) fn validate_requires_python(
+pub(crate) fn validate_project_requires_python(
     interpreter: &Interpreter,
     workspace: Option<&Workspace>,
     requires_python: &RequiresPython,
@@ -397,25 +406,15 @@ pub(crate) fn validate_requires_python(
 
 /// Returns an error if the [`Interpreter`] does not satisfy script or workspace `requires-python`.
 #[allow(clippy::result_large_err)]
-pub(crate) fn validate_script_requires_python(
+fn validate_script_requires_python(
     interpreter: &Interpreter,
-    workspace: Option<&Workspace>,
     requires_python: &RequiresPython,
-    requires_python_source: &RequiresPythonSource,
-    request_source: &PythonRequestSource,
+    source: &PythonRequestSource,
 ) -> Result<(), ProjectError> {
-    match requires_python_source {
-        RequiresPythonSource::Project => {
-            validate_requires_python(interpreter, workspace, requires_python, request_source)?;
-        }
-        RequiresPythonSource::Script => {}
-    };
-
     if requires_python.contains(interpreter.python_version()) {
         return Ok(());
     }
-
-    match request_source {
+    match source {
         PythonRequestSource::UserRequest => {
             Err(ProjectError::RequestedPythonScriptIncompatibility(
                 interpreter.python_version().clone(),
@@ -438,6 +437,76 @@ pub(crate) fn validate_script_requires_python(
     }
 }
 
+/// An interpreter suitable for a PEP 723 script.
+#[derive(Debug, Clone)]
+pub(crate) struct ScriptInterpreter(Interpreter);
+
+impl ScriptInterpreter {
+    /// Discover the interpreter to use for the current [`Pep723Item`].
+    pub(crate) async fn discover(
+        script: Pep723ItemRef<'_>,
+        python_request: Option<PythonRequest>,
+        python_preference: PythonPreference,
+        python_downloads: PythonDownloads,
+        connectivity: Connectivity,
+        native_tls: bool,
+        allow_insecure_host: &[TrustedHost],
+        install_mirrors: &PythonInstallMirrors,
+        no_config: bool,
+        cache: &Cache,
+        printer: Printer,
+    ) -> Result<Self, ProjectError> {
+        // For now, we assume that scripts are never evaluated in the context of a workspace.
+        let workspace = None;
+
+        let ScriptPython {
+            source,
+            python_request,
+            requires_python,
+        } = ScriptPython::from_request(python_request, workspace, script, no_config).await?;
+
+        let client_builder = BaseClientBuilder::new()
+            .connectivity(connectivity)
+            .native_tls(native_tls)
+            .allow_insecure_host(allow_insecure_host.to_vec());
+
+        let reporter = PythonDownloadReporter::single(printer);
+
+        let interpreter = PythonInstallation::find_or_download(
+            python_request.as_ref(),
+            EnvironmentPreference::Any,
+            python_preference,
+            python_downloads,
+            &client_builder,
+            cache,
+            Some(&reporter),
+            install_mirrors.python_install_mirror.as_deref(),
+            install_mirrors.pypy_install_mirror.as_deref(),
+        )
+        .await?
+        .into_interpreter();
+
+        if let Err(err) = match requires_python {
+            Some((requires_python, RequiresPythonSource::Project)) => {
+                validate_project_requires_python(&interpreter, workspace, &requires_python, &source)
+            }
+            Some((requires_python, RequiresPythonSource::Script)) => {
+                validate_script_requires_python(&interpreter, &requires_python, &source)
+            }
+            None => Ok(()),
+        } {
+            warn_user!("{err}");
+        }
+
+        Ok(Self(interpreter))
+    }
+
+    /// Consume the [`PythonInstallation`] and return the [`Interpreter`].
+    pub(crate) fn into_interpreter(self) -> Interpreter {
+        self.0
+    }
+}
+
 /// An interpreter suitable for the project.
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
@@ -446,6 +515,170 @@ pub(crate) enum ProjectInterpreter {
     Interpreter(Interpreter),
     /// An interpreter from an existing project virtual environment.
     Environment(PythonEnvironment),
+}
+
+impl ProjectInterpreter {
+    /// Discover the interpreter to use in the current [`Workspace`].
+    pub(crate) async fn discover(
+        workspace: &Workspace,
+        project_dir: &Path,
+        python_request: Option<PythonRequest>,
+        python_preference: PythonPreference,
+        python_downloads: PythonDownloads,
+        connectivity: Connectivity,
+        native_tls: bool,
+        allow_insecure_host: &[TrustedHost],
+        install_mirrors: &PythonInstallMirrors,
+        no_config: bool,
+        cache: &Cache,
+        printer: Printer,
+    ) -> Result<Self, ProjectError> {
+        // Resolve the Python request and requirement for the workspace.
+        let WorkspacePython {
+            source,
+            python_request,
+            requires_python,
+        } = WorkspacePython::from_request(python_request, Some(workspace), project_dir, no_config)
+            .await?;
+
+        // Read from the virtual environment first.
+        let venv = workspace.venv();
+        match PythonEnvironment::from_root(&venv, cache) {
+            Ok(venv) => {
+                if python_request.as_ref().map_or(true, |request| {
+                    if request.satisfied(venv.interpreter(), cache) {
+                        debug!(
+                            "The virtual environment's Python version satisfies `{}`",
+                            request.to_canonical_string()
+                        );
+                        true
+                    } else {
+                        debug!(
+                            "The virtual environment's Python version does not satisfy `{}`",
+                            request.to_canonical_string()
+                        );
+                        false
+                    }
+                }) {
+                    if let Some(requires_python) = requires_python.as_ref() {
+                        if requires_python.contains(venv.interpreter().python_version()) {
+                            return Ok(Self::Environment(venv));
+                        }
+                        debug!(
+                            "The virtual environment's Python version does not meet the project's Python requirement: `{requires_python}`"
+                        );
+                    } else {
+                        return Ok(Self::Environment(venv));
+                    }
+                }
+            }
+            Err(uv_python::Error::MissingEnvironment(_)) => {}
+            Err(uv_python::Error::InvalidEnvironment(inner)) => {
+                // If there's an invalid environment with existing content, we error instead of
+                // deleting it later on
+                match inner.kind {
+                    InvalidEnvironmentKind::NotDirectory => {
+                        return Err(ProjectError::InvalidProjectEnvironmentDir(
+                            venv,
+                            inner.kind.to_string(),
+                        ))
+                    }
+                    InvalidEnvironmentKind::MissingExecutable(_) => {
+                        if fs_err::read_dir(&venv).is_ok_and(|mut dir| dir.next().is_some()) {
+                            return Err(ProjectError::InvalidProjectEnvironmentDir(
+                                venv,
+                                "it is not a valid Python environment (no Python executable was found)"
+                                    .to_string(),
+                            ));
+                        }
+                    }
+                    // If the environment is an empty directory, it's fine to use
+                    InvalidEnvironmentKind::Empty => {}
+                };
+            }
+            Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(path))) => {
+                if path.is_symlink() {
+                    let target_path = fs_err::read_link(&path)?;
+                    warn_user!(
+                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
+                        path.user_display().cyan(),
+                        target_path.user_display().cyan(),
+                    );
+                }
+            }
+            Err(err) => return Err(err.into()),
+        };
+
+        let client_builder = BaseClientBuilder::default()
+            .connectivity(connectivity)
+            .native_tls(native_tls)
+            .allow_insecure_host(allow_insecure_host.to_vec());
+
+        let reporter = PythonDownloadReporter::single(printer);
+
+        // Locate the Python interpreter to use in the environment.
+        let python = PythonInstallation::find_or_download(
+            python_request.as_ref(),
+            EnvironmentPreference::OnlySystem,
+            python_preference,
+            python_downloads,
+            &client_builder,
+            cache,
+            Some(&reporter),
+            install_mirrors.python_install_mirror.as_deref(),
+            install_mirrors.pypy_install_mirror.as_deref(),
+        )
+        .await?;
+
+        let managed = python.source().is_managed();
+        let implementation = python.implementation();
+        let interpreter = python.into_interpreter();
+
+        if managed {
+            writeln!(
+                printer.stderr(),
+                "Using {} {}",
+                implementation.pretty(),
+                interpreter.python_version().cyan()
+            )?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "Using {} {} interpreter at: {}",
+                implementation.pretty(),
+                interpreter.python_version(),
+                interpreter.sys_executable().user_display().cyan()
+            )?;
+        }
+
+        if let Some(requires_python) = requires_python.as_ref() {
+            validate_project_requires_python(
+                &interpreter,
+                Some(workspace),
+                requires_python,
+                &source,
+            )?;
+        }
+
+        Ok(Self::Interpreter(interpreter))
+    }
+
+    /// Convert the [`ProjectInterpreter`] into an [`Interpreter`].
+    pub(crate) fn into_interpreter(self) -> Interpreter {
+        match self {
+            ProjectInterpreter::Interpreter(interpreter) => interpreter,
+            ProjectInterpreter::Environment(venv) => venv.into_interpreter(),
+        }
+    }
+}
+
+/// The source of a `Requires-Python` specifier.
+#[derive(Debug, Clone)]
+pub(crate) enum RequiresPythonSource {
+    /// From the PEP 723 inline script metadata.
+    Script,
+    /// From a `pyproject.toml` in a workspace.
+    Project,
 }
 
 #[derive(Debug, Clone)]
@@ -543,15 +776,6 @@ impl WorkspacePython {
     }
 }
 
-/// The source of a `Requires-Python` specifier.
-#[derive(Debug, Clone)]
-pub(crate) enum RequiresPythonSource {
-    /// From the PEP 723 inline script metadata.
-    Script,
-    /// From a `pyproject.toml` in a workspace.
-    Project,
-}
-
 /// The resolved Python request and requirement for a [`Pep723Script`]
 #[derive(Debug, Clone)]
 pub(crate) struct ScriptPython {
@@ -571,7 +795,7 @@ impl ScriptPython {
     pub(crate) async fn from_request(
         python_request: Option<PythonRequest>,
         workspace: Option<&Workspace>,
-        script: &Pep723Item,
+        script: Pep723ItemRef<'_>,
         no_config: bool,
     ) -> Result<Self, ProjectError> {
         // First, discover a requirement from the workspace
@@ -617,161 +841,11 @@ impl ScriptPython {
     }
 }
 
-impl ProjectInterpreter {
-    /// Discover the interpreter to use in the current [`Workspace`].
-    pub(crate) async fn discover(
-        workspace: &Workspace,
-        project_dir: &Path,
-        python_request: Option<PythonRequest>,
-        python_preference: PythonPreference,
-        python_downloads: PythonDownloads,
-        connectivity: Connectivity,
-        native_tls: bool,
-        allow_insecure_host: &[TrustedHost],
-        install_mirrors: PythonInstallMirrors,
-        no_config: bool,
-        cache: &Cache,
-        printer: Printer,
-    ) -> Result<Self, ProjectError> {
-        // Resolve the Python request and requirement for the workspace.
-        let WorkspacePython {
-            source,
-            python_request,
-            requires_python,
-        } = WorkspacePython::from_request(python_request, Some(workspace), project_dir, no_config)
-            .await?;
-
-        // Read from the virtual environment first.
-        let venv = workspace.venv();
-        match PythonEnvironment::from_root(&venv, cache) {
-            Ok(venv) => {
-                if python_request.as_ref().map_or(true, |request| {
-                    if request.satisfied(venv.interpreter(), cache) {
-                        debug!(
-                            "The virtual environment's Python version satisfies `{}`",
-                            request.to_canonical_string()
-                        );
-                        true
-                    } else {
-                        debug!(
-                            "The virtual environment's Python version does not satisfy `{}`",
-                            request.to_canonical_string()
-                        );
-                        false
-                    }
-                }) {
-                    if let Some(requires_python) = requires_python.as_ref() {
-                        if requires_python.contains(venv.interpreter().python_version()) {
-                            return Ok(Self::Environment(venv));
-                        }
-                        debug!(
-                            "The virtual environment's Python version does not meet the project's Python requirement: `{requires_python}`"
-                        );
-                    } else {
-                        return Ok(Self::Environment(venv));
-                    }
-                }
-            }
-            Err(uv_python::Error::MissingEnvironment(_)) => {}
-            Err(uv_python::Error::InvalidEnvironment(inner)) => {
-                // If there's an invalid environment with existing content, we error instead of
-                // deleting it later on
-                match inner.kind {
-                    InvalidEnvironmentKind::NotDirectory => {
-                        return Err(ProjectError::InvalidProjectEnvironmentDir(
-                            venv,
-                            inner.kind.to_string(),
-                        ))
-                    }
-                    InvalidEnvironmentKind::MissingExecutable(_) => {
-                        if fs_err::read_dir(&venv).is_ok_and(|mut dir| dir.next().is_some()) {
-                            return Err(ProjectError::InvalidProjectEnvironmentDir(
-                                venv,
-                                "it is not a valid Python environment (no Python executable was found)"
-                                    .to_string(),
-                            ));
-                        }
-                    }
-                    // If the environment is an empty directory, it's fine to use
-                    InvalidEnvironmentKind::Empty => {}
-                };
-            }
-            Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(path))) => {
-                if path.is_symlink() {
-                    let target_path = fs_err::read_link(&path)?;
-                    warn_user!(
-                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
-                        path.user_display().cyan(),
-                        target_path.user_display().cyan(),
-                    );
-                }
-            }
-            Err(err) => return Err(err.into()),
-        };
-
-        let client_builder = BaseClientBuilder::default()
-            .connectivity(connectivity)
-            .native_tls(native_tls)
-            .allow_insecure_host(allow_insecure_host.to_vec());
-
-        let reporter = PythonDownloadReporter::single(printer);
-
-        // Locate the Python interpreter to use in the environment
-        let python = PythonInstallation::find_or_download(
-            python_request.as_ref(),
-            EnvironmentPreference::OnlySystem,
-            python_preference,
-            python_downloads,
-            &client_builder,
-            cache,
-            Some(&reporter),
-            install_mirrors.python_install_mirror.as_deref(),
-            install_mirrors.pypy_install_mirror.as_deref(),
-        )
-        .await?;
-
-        let managed = python.source().is_managed();
-        let implementation = python.implementation();
-        let interpreter = python.into_interpreter();
-
-        if managed {
-            writeln!(
-                printer.stderr(),
-                "Using {} {}",
-                implementation.pretty(),
-                interpreter.python_version().cyan()
-            )?;
-        } else {
-            writeln!(
-                printer.stderr(),
-                "Using {} {} interpreter at: {}",
-                implementation.pretty(),
-                interpreter.python_version(),
-                interpreter.sys_executable().user_display().cyan()
-            )?;
-        }
-
-        if let Some(requires_python) = requires_python.as_ref() {
-            validate_requires_python(&interpreter, Some(workspace), requires_python, &source)?;
-        }
-
-        Ok(Self::Interpreter(interpreter))
-    }
-
-    /// Convert the [`ProjectInterpreter`] into an [`Interpreter`].
-    pub(crate) fn into_interpreter(self) -> Interpreter {
-        match self {
-            ProjectInterpreter::Interpreter(interpreter) => interpreter,
-            ProjectInterpreter::Environment(venv) => venv.into_interpreter(),
-        }
-    }
-}
-
 /// Initialize a virtual environment for the current project.
 pub(crate) async fn get_or_init_environment(
     workspace: &Workspace,
     python: Option<PythonRequest>,
-    install_mirrors: PythonInstallMirrors,
+    install_mirrors: &PythonInstallMirrors,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
@@ -921,6 +995,7 @@ pub(crate) async fn resolve_names(
         keyring_provider,
         resolution: _,
         prerelease: _,
+        fork_strategy: _,
         dependency_metadata,
         config_setting,
         no_build_isolation,
@@ -1057,6 +1132,7 @@ pub(crate) async fn resolve_environment<'a>(
         keyring_provider,
         resolution,
         prerelease,
+        fork_strategy,
         dependency_metadata,
         config_setting,
         no_build_isolation,
@@ -1117,8 +1193,10 @@ pub(crate) async fn resolve_environment<'a>(
     let options = OptionsBuilder::new()
         .resolution_mode(resolution)
         .prerelease_mode(prerelease)
+        .fork_strategy(fork_strategy)
         .exclude_newer(exclude_newer)
         .index_strategy(index_strategy)
+        .build_options(build_options.clone())
         .build();
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
@@ -1185,7 +1263,7 @@ pub(crate) async fn resolve_environment<'a>(
         overrides,
         source_trees,
         project,
-        None,
+        BTreeSet::default(),
         &extras,
         preferences,
         EmptyInstalledPackages,
@@ -1386,6 +1464,7 @@ pub(crate) async fn update_environment(
         keyring_provider,
         resolution,
         prerelease,
+        fork_strategy,
         dependency_metadata,
         config_setting,
         no_build_isolation,
@@ -1471,8 +1550,10 @@ pub(crate) async fn update_environment(
     let options = OptionsBuilder::new()
         .resolution_mode(*resolution)
         .prerelease_mode(*prerelease)
+        .fork_strategy(*fork_strategy)
         .exclude_newer(*exclude_newer)
         .index_strategy(*index_strategy)
+        .build_options(build_options.clone())
         .build();
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
@@ -1527,7 +1608,7 @@ pub(crate) async fn update_environment(
         overrides,
         source_trees,
         project,
-        None,
+        BTreeSet::default(),
         &extras,
         preferences,
         site_packages.clone(),
@@ -1591,7 +1672,7 @@ pub(crate) async fn update_environment(
 /// Determine the [`RequiresPython`] requirement for a new PEP 723 script.
 pub(crate) async fn init_script_python_requirement(
     python: Option<&str>,
-    install_mirrors: PythonInstallMirrors,
+    install_mirrors: &PythonInstallMirrors,
     directory: &Path,
     no_pin_python: bool,
     python_preference: PythonPreference,

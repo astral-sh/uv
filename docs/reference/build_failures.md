@@ -12,22 +12,23 @@ unsupported version of Python:
 ```console
 $ uv pip install -p 3.13 'numpy<1.20'
 Resolved 1 package in 62ms
-  × Failed to download and build `numpy==1.19.5`
-  ├─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+  × Failed to build `numpy==1.19.5`
+  ├─▶ The build backend returned an error
+  ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel()` failed (exit status: 1)
 
-  │   [stderr]
-  │   Traceback (most recent call last):
-  │     File "<string>", line 8, in <module>
-  │       from setuptools.build_meta import __legacy__ as backend
-  │     File "/Users/example/.cache/uv/builds-v0/.tmp96A0WB/lib/python3.13/site-packages/setuptools/__init__.py", line 9, in <module>
-  │       import distutils.core
-  │   ModuleNotFoundError: No module named 'distutils'
+      [stderr]
+      Traceback (most recent call last):
+        File "<string>", line 8, in <module>
+          from setuptools.build_meta import __legacy__ as backend
+        File "/home/konsti/.cache/uv/builds-v0/.tmpi4bgKb/lib/python3.13/site-packages/setuptools/__init__.py", line 9, in <module>
+          import distutils.core
+      ModuleNotFoundError: No module named 'distutils'
 
-  ╰─▶ distutils was removed from the standard library in Python 3.12. Consider adding a constraint
-      (like `numpy >1.19.5`) to avoid building a version of numpy that depends on distutils.
+      hint: `distutils` was removed from the standard library in Python 3.12. Consider adding a constraint (like `numpy >1.19.5`) to avoid building a version of `numpy` that depends
+      on `distutils`.
 ```
 
-Notice that the error message is prefaced by "Build backend failed to determine requirements".
+Notice that the error message is prefaced by "The build backend returned an error".
 
 The build failure includes the `[stderr]` (and `[stdout]`, if present) from the build backend that
 was used for the build. The error logs are not from uv itself.
@@ -78,7 +79,7 @@ ModuleNotFoundError: No module named 'distutils'
 !!! important
 
     The `--use-pep517` flag should be included with the `pip install` invocation to ensure the same
-    build isolation behavior. uv always uses [build isolation by default](https://docs.astral.sh/uv/pip/compatibility.md#pep-517-build-isolation).
+    build isolation behavior. uv always uses [build isolation by default](../pip/compatibility.md#pep-517-build-isolation).
 
     We also recommend including the `--force-reinstall` and `--no-cache` options when reproducing
     failures.
@@ -118,8 +119,9 @@ If the build error mentions a missing command, for example, `gcc`:
 <!-- docker run --platform linux/x86_64 -it ghcr.io/astral-sh/uv:python3.10-bookworm-slim /bin/bash -c "uv pip install --system pysha3==1.0.2" -->
 
 ```hl_lines="17"
-× Failed to download and build `pysha3==1.0.2`
-╰─▶ Build backend failed to build wheel through `build_wheel` (exit status: 1)
+× Failed to build `pysha3==1.0.2`
+├─▶ The build backend returned an error
+╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
     [stdout]
     running bdist_wheel
@@ -130,8 +132,8 @@ If the build error mentions a missing command, for example, `gcc`:
     running build_ext
     building '_pysha3' extension
     creating build/temp.linux-x86_64-cpython-310/Modules/_sha3
-    gcc -Wno-unused-result -Wsign-compare -DNDEBUG -g -fwrapv -O3 -Wall -fPIC -DPY_WITH_KECCAK=1 -I/root/.cache/uv/builds-v0/.tmpxAJdUa/include -I/usr/local/include/python3.10 -c Modules/_sha3/sha3module.c -o
-    build/temp.linux-x86_64-cpython-310/Modules/_sha3/sha3module.o
+    gcc -Wno-unused-result -Wsign-compare -DNDEBUG -g -fwrapv -O3 -Wall -fPIC -DPY_WITH_KECCAK=1 -I/root/.cache/uv/builds-v0/.tmp8V4iEk/include -I/usr/local/include/python3.10 -c
+    Modules/_sha3/sha3module.c -o build/temp.linux-x86_64-cpython-310/Modules/_sha3/sha3module.o
 
     [stderr]
     error: command 'gcc' failed: No such file or directory
@@ -165,8 +167,9 @@ For example, installing `pygraphviz` requires Graphviz to be installed:
 <!-- docker run --platform linux/x86_64 -it ghcr.io/astral-sh/uv:python3.12-bookworm /bin/bash -c "uv pip install --system 'pygraphviz'" -->
 
 ```hl_lines="18-19"
-× Failed to download and build `pygraphviz==1.14`
-╰─▶ Build backend failed to build wheel through `build_wheel` (exit status: 1)
+× Failed to build `pygraphviz==1.14`
+├─▶ The build backend returned an error
+╰─▶ Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
 
   [stdout]
   running bdist_wheel
@@ -215,8 +218,9 @@ dependency:
 <!-- docker run --platform linux/x86_64 -it ghcr.io/astral-sh/uv:python3.12-bookworm-slim /bin/bash -c "uv pip install --system chumpy" -->
 
 ```hl_lines="7"
-× Failed to download and build `chumpy==0.70`
-╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+  × Failed to build `chumpy==0.70`
+  ├─▶ The build backend returned an error
+  ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
     [stderr]
     Traceback (most recent call last):
@@ -270,8 +274,9 @@ apache-beam<=2.49.0
 <!-- docker run --platform linux/x86_64 -it ghcr.io/astral-sh/uv:python3.10-bookworm-slim /bin/bash -c "printf 'dill<0.3.9,>=0.2.2\napache-beam<=2.49.0' | uv pip compile -" -->
 
 ```hl_lines="1"
-× Failed to download and build `apache-beam==2.0.0`
-╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+× Failed to build `apache-beam==2.0.0`
+├─▶ The build backend returned an error
+╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
     [stderr]
     ...
@@ -304,6 +309,6 @@ numpy<1.23; python_version < "3.10"
 ### Package is only usable on a specific platform
 
 If locking fails due to building a package that is only usable on another platform, you can
-[provide dependency metadata manually](https://docs.astral.sh/uv/reference/settings.md#dependency-metadata)
-to skip the build. uv can not verify this information, so it is important to specify correct
-metadata when using this override.
+[provide dependency metadata manually](./settings.md#dependency-metadata) to skip the build. uv can
+not verify this information, so it is important to specify correct metadata when using this
+override.

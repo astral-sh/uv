@@ -103,7 +103,7 @@ pub enum VersionOrUrlRef<'a, T: Pep508Url = VerbatimUrl> {
     Url(&'a T),
 }
 
-impl<'a, T: Pep508Url> VersionOrUrlRef<'a, T> {
+impl<T: Pep508Url> VersionOrUrlRef<'_, T> {
     /// If it is a URL, return its value.
     pub fn url(&self) -> Option<&T> {
         match self {
@@ -140,7 +140,7 @@ pub enum InstalledVersion<'a> {
     Url(&'a Url, &'a Version),
 }
 
-impl<'a> InstalledVersion<'a> {
+impl InstalledVersion<'_> {
     /// If it is a URL, return its value.
     pub fn url(&self) -> Option<&Url> {
         match self {
@@ -1341,20 +1341,12 @@ mod test {
     /// Ensure that we don't accidentally grow the `Dist` sizes.
     #[test]
     fn dist_size() {
+        assert!(size_of::<Dist>() <= 336, "{}", size_of::<Dist>());
+        assert!(size_of::<BuiltDist>() <= 336, "{}", size_of::<BuiltDist>());
         assert!(
-            std::mem::size_of::<Dist>() <= 336,
+            size_of::<SourceDist>() <= 264,
             "{}",
-            std::mem::size_of::<Dist>()
-        );
-        assert!(
-            std::mem::size_of::<BuiltDist>() <= 336,
-            "{}",
-            std::mem::size_of::<BuiltDist>()
-        );
-        assert!(
-            std::mem::size_of::<SourceDist>() <= 264,
-            "{}",
-            std::mem::size_of::<SourceDist>()
+            size_of::<SourceDist>()
         );
     }
 

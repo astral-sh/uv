@@ -93,7 +93,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     overrides: Vec<UnresolvedRequirementSpecification>,
     source_trees: Vec<PathBuf>,
     mut project: Option<PackageName>,
-    workspace_members: Option<BTreeSet<PackageName>>,
+    workspace_members: BTreeSet<PackageName>,
     extras: &ExtrasSpecification,
     preferences: Vec<Preference>,
     installed_packages: InstalledPackages,

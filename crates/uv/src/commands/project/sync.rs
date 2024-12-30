@@ -23,7 +23,7 @@ use uv_pypi_types::{
     LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, VerbatimParsedUrl,
 };
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
-use uv_resolver::{FlatIndex, InstallTarget};
+use uv_resolver::{FlatIndex, Installable};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user;
@@ -33,6 +33,7 @@ use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace}
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
+use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::{
     default_dependency_groups, detect_conflicts, DependencyGroupsTarget, ProjectError,
@@ -120,7 +121,7 @@ pub(crate) async fn sync(
     let venv = project::get_or_init_environment(
         project.workspace(),
         python.as_deref().map(PythonRequest::parse),
-        install_mirrors,
+        &install_mirrors,
         python_preference,
         python_downloads,
         connectivity,
@@ -146,7 +147,7 @@ pub(crate) async fn sync(
 
     let lock = match do_safe_lock(
         mode,
-        project.workspace(),
+        project.workspace().into(),
         settings.as_ref().into(),
         LowerBound::Warn,
         &state,
@@ -526,6 +527,57 @@ fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolu
 /// These credentials can come from any of `tool.uv.sources`, `tool.uv.dev-dependencies`,
 /// `project.dependencies`, and `project.optional-dependencies`.
 fn store_credentials_from_workspace(workspace: &Workspace) {
+    // Iterate over any sources in the workspace root.
+    for source in workspace.sources().values().flat_map(Sources::iter) {
+        match source {
+            Source::Git { git, .. } => {
+                uv_git::store_credentials_from_url(git);
+            }
+            Source::Url { url, .. } => {
+                uv_auth::store_credentials_from_url(url);
+            }
+            _ => {}
+        }
+    }
+
+    // Iterate over any dependencies defined in the workspace root.
+    for requirement in &workspace.requirements() {
+        let Some(VersionOrUrl::Url(url)) = &requirement.version_or_url else {
+            continue;
+        };
+        match &url.parsed_url {
+            ParsedUrl::Git(ParsedGitUrl { url, .. }) => {
+                uv_git::store_credentials_from_url(url.repository());
+            }
+            ParsedUrl::Archive(ParsedArchiveUrl { url, .. }) => {
+                uv_auth::store_credentials_from_url(url);
+            }
+            _ => {}
+        }
+    }
+
+    // Iterate over any dependency groups defined in the workspace root.
+    for requirement in workspace
+        .dependency_groups()
+        .ok()
+        .iter()
+        .flat_map(|groups| groups.values().flat_map(|group| group.iter()))
+    {
+        let Some(VersionOrUrl::Url(url)) = &requirement.version_or_url else {
+            continue;
+        };
+        match &url.parsed_url {
+            ParsedUrl::Git(ParsedGitUrl { url, .. }) => {
+                uv_git::store_credentials_from_url(url.repository());
+            }
+            ParsedUrl::Archive(ParsedArchiveUrl { url, .. }) => {
+                uv_auth::store_credentials_from_url(url);
+            }
+            _ => {}
+        }
+    }
+
+    // Iterate over each workspace member.
     for member in workspace.packages().values() {
         // Iterate over the `tool.uv.sources`.
         for source in member

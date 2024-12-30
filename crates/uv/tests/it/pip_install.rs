@@ -80,6 +80,41 @@ fn missing_pyproject_toml() {
 }
 
 #[test]
+fn missing_find_links() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("flask")?;
+
+    let error = regex::escape("The system cannot find the path specified. (os error 3)");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(std::iter::once((
+            error.as_str(),
+            "No such file or directory (os error 2)",
+        )))
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--find-links")
+        .arg("./missing")
+        .arg("--strict"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to read `--find-links` directory: [TEMP_DIR]/missing
+      Caused by: No such file or directory (os error 2)
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
 fn invalid_pyproject_toml_syntax() -> Result<()> {
     let context = TestContext::new("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -132,8 +167,7 @@ fn invalid_pyproject_toml_project_schema() -> Result<()> {
       |
     1 | [project]
       | ^^^^^^^^^
-    missing field `name`
-
+    `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
     "###
     );
 
@@ -250,6 +284,7 @@ fn invalid_pyproject_toml_requirement_indirect() -> Result<()> {
     pyproject_toml.write_str(
         r#"[project]
 name = "project"
+version = "0.1.0"
 dependencies = ["flask==1.0.x"]
 "#,
     )?;
@@ -268,7 +303,8 @@ dependencies = ["flask==1.0.x"]
 
     ----- stderr -----
       × Failed to build `project @ file://[TEMP_DIR]/path_dep`
-      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
           [stdout]
           configuration error: `project.dependencies[0]` must be pep508
@@ -320,6 +356,8 @@ dependencies = ["flask==1.0.x"]
               raise ValueError(f"{error}/n{summary}") from None
           ValueError: invalid pyproject.toml config: `project.dependencies[0]`.
           configuration error: `project.dependencies[0]` must be pep508
+
+          hint: This usually indicates a problem with the package or the build environment.
     "###
     );
 
@@ -2134,28 +2172,11 @@ fn install_only_binary_all_and_no_binary_all() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of anyio are available:
-              anyio>=1.0.0,<=1.4.0
-              anyio>=2.0.0,<=2.2.0
-              anyio>=3.0.0,<=3.6.2
-              anyio>=3.7.0,<=3.7.1
-              anyio>=4.0.0
-          and all of:
-              anyio>=1.0.0,<=1.4.0
-              anyio>=2.0.0,<=2.2.0
-              anyio>=3.0.0,<=3.6.2
-              anyio>=3.7.0,<=3.7.1
-              anyio>=4.0.0
-          have no usable wheels and building from source is disabled, we can conclude that all of:
-              anyio<1.1.0
-              anyio>1.4.0,<2.0.0
-              anyio>2.2.0,<3.0.0
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because you require anyio, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because all versions of anyio have no usable wheels and you require anyio, we can conclude that your requirements are unsatisfiable.
 
           hint: Pre-releases are available for `anyio` in the requested range (e.g., 4.0.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+
+          hint: Wheels are required for `anyio` because building from source is disabled for all packages (i.e., with `--no-build`)
     "###
     );
 
@@ -2246,7 +2267,9 @@ fn only_binary_requirements_txt() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because django-allauth==0.51.0 has no usable wheels and building from source is disabled and you require django-allauth==0.51.0, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because django-allauth==0.51.0 has no usable wheels and you require django-allauth==0.51.0, we can conclude that your requirements are unsatisfiable.
+
+          hint: Wheels are required for `django-allauth` because building from source is disabled for `django-allauth` (i.e., with `--no-build-package django-allauth`)
     "###
     );
 }
@@ -3803,6 +3826,75 @@ fn invalidate_path_on_commit() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn invalidate_path_on_env_var() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a local package.
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"[project]
+        name = "example"
+        version = "0.0.0"
+        dependencies = ["anyio==4.0.0"]
+        requires-python = ">=3.8"
+
+        [tool.uv]
+        cache-keys = [{ env = "FOO" }]
+"#,
+    )?;
+
+    // Install the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(".")
+        .env_remove("FOO"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + example==0.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    // Installing again should be a no-op.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(".")
+        .env_remove("FOO"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Installing again should update the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(".")
+        .env("FOO", "BAR"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ example==0.0.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    Ok(())
+}
+
 /// Install from a direct path (wheel) with changed versions in the file name.
 #[test]
 fn path_name_version_change() {
@@ -4020,13 +4112,16 @@ fn no_build_isolation() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
-      ╰─▶ Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
+      × Failed to build `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta.prepare_metadata_for_build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'setuptools'
+
+          hint: This usually indicates a problem with the package or the build environment.
     "###
     );
 
@@ -4088,13 +4183,16 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
-      ╰─▶ Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
+      × Failed to build `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta.prepare_metadata_for_build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'setuptools'
+
+          hint: This usually indicates a problem with the package or the build environment.
     "###
     );
 
@@ -7085,13 +7183,16 @@ fn install_build_isolation_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
-      ╰─▶ Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
+      × Failed to build `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `hatchling.build.prepare_metadata_for_build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
+
+          hint: This usually indicates a problem with the package or the build environment.
     "###
     );
 
@@ -7344,8 +7445,9 @@ fn sklearn() {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `sklearn==0.0.post12`
-      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+      × Failed to build `sklearn==0.0.post12`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
           [stderr]
           The 'sklearn' PyPI package is deprecated, use 'scikit-learn'
@@ -7364,6 +7466,7 @@ fn sklearn() {
           More information is available at
           https://github.com/scikit-learn/sklearn-pypi-package
 
+          hint: This usually indicates a problem with the package or the build environment.
       help: `sklearn` is often confused for `scikit-learn` Did you mean to install `scikit-learn` instead?
     "###
     );
@@ -7400,8 +7503,9 @@ fn resolve_derivation_chain() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `wsgiref==0.1.2`
-      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+      × Failed to build `wsgiref==0.1.2`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
@@ -7421,6 +7525,7 @@ fn resolve_derivation_chain() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
+          hint: This usually indicates a problem with the package or the build environment.
       help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
     "###
     );
@@ -7553,4 +7658,69 @@ fn build_tag() {
 
     ----- stderr -----
     "###);
+}
+
+#[test]
+fn missing_git_prefix() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test`
+      Caused by: Direct URL (`https://github.com/astral-sh/workspace-in-root-test`) references a Git repository, but is missing the `git+` prefix (e.g., `git+https://github.com/astral-sh/workspace-in-root-test`)
+    workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn missing_subdirectory_git() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("workspace-in-root-test @ git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `workspace-in-root-test @ git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing`
+      ╰─▶ The source distribution `git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing` has no subdirectory `missing`
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn missing_subdirectory_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing`
+      ╰─▶ The source distribution `https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing` has no subdirectory `missing`
+    "###
+    );
+
+    Ok(())
 }

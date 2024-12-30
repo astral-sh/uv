@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.39/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.42/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi", unix))]
 
@@ -334,10 +334,11 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of package-a are available:
+      ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
               package-a==1.0.0
-              package-a>2.0.0,<=3.0.0
-          and package-a==1.0.0 depends on package-b==1.0.0, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
+              package-a>2.0.0
+          we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
+          And because only package-a<=3.0.0 is available, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
 
           Because only the following versions of package-c are available:
               package-c==1.0.0
@@ -445,10 +446,11 @@ fn dependency_excludes_range_of_compatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of package-a are available:
+      ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
               package-a==1.0.0
-              package-a>2.0.0,<=3.0.0
-          and package-a==1.0.0 depends on package-b==1.0.0, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
+              package-a>2.0.0
+          we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
+          And because only package-a<=3.0.0 is available, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
 
           Because only the following versions of package-c are available:
               package-c==1.0.0
@@ -3021,7 +3023,8 @@ fn package_prereleases_global_boundary() {
 /// │   └── python3.8
 /// ├── root
 /// │   └── requires a<0.2.0a2
-/// │       └── satisfied by a-0.1.0
+/// │       ├── satisfied by a-0.1.0
+/// │       └── satisfied by a-0.2.0a1
 /// └── a
 ///     ├── a-0.1.0
 ///     ├── a-0.2.0
@@ -3162,7 +3165,8 @@ fn requires_package_prerelease_and_final_any() {
 /// │   ├── requires a
 /// │   │   └── satisfied by a-0.1.0
 /// │   └── requires b>0.0.0a1
-/// │       └── satisfied by b-0.1.0
+/// │       ├── satisfied by b-0.1.0
+/// │       └── satisfied by b-1.0.0a1
 /// ├── a
 /// │   └── a-0.1.0
 /// │       └── requires b>0.1
@@ -3329,7 +3333,15 @@ fn transitive_package_only_prereleases() {
 /// ├── a
 /// │   └── a-1.0.0
 /// │       └── requires c!=2.0.0a5,!=2.0.0a6,!=2.0.0a7,!=2.0.0b1,<2.0.0b5,>1.0.0
-/// │           └── unsatisfied: no matching version
+/// │           ├── satisfied by c-2.0.0a1
+/// │           ├── satisfied by c-2.0.0a2
+/// │           ├── satisfied by c-2.0.0a3
+/// │           ├── satisfied by c-2.0.0a4
+/// │           ├── satisfied by c-2.0.0a8
+/// │           ├── satisfied by c-2.0.0a9
+/// │           ├── satisfied by c-2.0.0b2
+/// │           ├── satisfied by c-2.0.0b3
+/// │           └── satisfied by c-2.0.0b4
 /// ├── b
 /// │   └── b-1.0.0
 /// │       └── requires c<=3.0.0,>=1.0.0
@@ -3722,19 +3734,14 @@ fn python_greater_than_current_excluded() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10,<3.11 and the current Python version (3.9.[X]) does not satisfy Python>=3.12, we can conclude that all of:
-              Python>=3.10,<3.11
-              Python>=3.12
-           are incompatible.
-          And because the current Python version (3.9.[X]) does not satisfy Python>=3.11,<3.12, we can conclude that Python>=3.10 is incompatible.
-          And because package-a==2.0.0 depends on Python>=3.10 and only the following versions of package-a are available:
+      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and package-a==2.0.0 depends on Python>=3.10, we can conclude that package-a==2.0.0 cannot be used.
+          And because only the following versions of package-a are available:
               package-a<=2.0.0
               package-a==3.0.0
               package-a==4.0.0
           we can conclude that package-a>=2.0.0,<3.0.0 cannot be used. (1)
 
-          Because the current Python version (3.9.[X]) does not satisfy Python>=3.11,<3.12 and the current Python version (3.9.[X]) does not satisfy Python>=3.12, we can conclude that Python>=3.11 is incompatible.
-          And because package-a==3.0.0 depends on Python>=3.11, we can conclude that package-a==3.0.0 cannot be used.
+          Because the current Python version (3.9.[X]) does not satisfy Python>=3.11 and package-a==3.0.0 depends on Python>=3.11, we can conclude that package-a==3.0.0 cannot be used.
           And because we know from (1) that package-a>=2.0.0,<3.0.0 cannot be used, we can conclude that package-a>=2.0.0,<4.0.0 cannot be used. (2)
 
           Because the current Python version (3.9.[X]) does not satisfy Python>=3.12 and package-a==4.0.0 depends on Python>=3.12, we can conclude that package-a==4.0.0 cannot be used.
@@ -4202,8 +4209,10 @@ fn no_wheels_no_build() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no usable wheels and building from source is disabled, we can conclude that all versions of package-a cannot be used.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no usable wheels, we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
+
+          hint: Wheels are required for `package-a` because building from source is disabled for `package-a` (i.e., with `--no-build-package package-a`)
     "###);
 
     assert_not_installed(&context.venv, "no_wheels_no_build_a", &context.temp_dir);
@@ -4310,8 +4319,10 @@ fn only_wheels_no_binary() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no source distribution and using wheels is disabled, we can conclude that all versions of package-a cannot be used.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no source distribution, we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
+
+          hint: A source distribution is required for `package-a` because using pre-built wheels is disabled for `package-a` (i.e., with `--no-binary-package package-a`)
     "###);
 
     assert_not_installed(&context.venv, "only_wheels_no_binary_a", &context.temp_dir);

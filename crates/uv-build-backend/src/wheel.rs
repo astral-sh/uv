@@ -175,7 +175,7 @@ fn write_wheel(
     debug!("Visited {files_visited} files for wheel build");
 
     // Add the license files
-    if let Some(license_files) = &pyproject_toml.license_files() {
+    if pyproject_toml.license_files_wheel().next().is_some() {
         debug!("Adding license files");
         let license_dir = format!(
             "{}-{}.dist-info/licenses/",
@@ -186,7 +186,7 @@ fn write_wheel(
         wheel_subdir_from_globs(
             source_tree,
             &license_dir,
-            license_files,
+            pyproject_toml.license_files_wheel(),
             &mut wheel_writer,
             "project.license-files",
         )?;
@@ -429,14 +429,15 @@ pub(crate) fn build_exclude_matcher(
 fn wheel_subdir_from_globs(
     src: &Path,
     target: &str,
-    globs: &[String],
+    globs: impl IntoIterator<Item = impl AsRef<str>>,
     wheel_writer: &mut impl DirectoryWriter,
     // For error messages
     globs_field: &str,
 ) -> Result<(), Error> {
     let license_files_globs: Vec<_> = globs
-        .iter()
+        .into_iter()
         .map(|license_files| {
+            let license_files = license_files.as_ref();
             trace!(
                 "Including {} at `{}` with `{}`",
                 globs_field,
@@ -595,12 +596,17 @@ impl ZipDirectoryWriter {
     }
 
     /// Add a file with the given name and return a writer for it.
-    fn new_writer<'slf>(&'slf mut self, path: &str) -> Result<Box<dyn Write + 'slf>, Error> {
-        // TODO(konsti): We need to preserve permissions, at least the executable bit.
-        self.writer.start_file(
-            path,
-            zip::write::FileOptions::default().compression_method(self.compression),
-        )?;
+    fn new_writer<'slf>(
+        &'slf mut self,
+        path: &str,
+        executable_bit: bool,
+    ) -> Result<Box<dyn Write + 'slf>, Error> {
+        // 644 is the default of the zip crate.
+        let permissions = if executable_bit { 775 } else { 664 };
+        let options = zip::write::FileOptions::default()
+            .unix_permissions(permissions)
+            .compression_method(self.compression);
+        self.writer.start_file(path, options)?;
         Ok(Box::new(&mut self.writer))
     }
 }
@@ -625,7 +631,16 @@ impl DirectoryWriter for ZipDirectoryWriter {
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
         trace!("Adding {} from {}", path, file.user_display());
         let mut reader = BufReader::new(File::open(file)?);
-        let mut writer = self.new_writer(path)?;
+        // Preserve the executable bit, especially for scripts
+        #[cfg(unix)]
+        let executable_bit = {
+            use std::os::unix::fs::PermissionsExt;
+            file.metadata()?.permissions().mode() & 0o111 != 0
+        };
+        // Windows has no executable bit
+        #[cfg(not(unix))]
+        let executable_bit = false;
+        let mut writer = self.new_writer(path, executable_bit)?;
         let record = write_hashed(path, &mut reader, &mut writer)?;
         drop(writer);
         self.record.push(record);
@@ -643,7 +658,11 @@ impl DirectoryWriter for ZipDirectoryWriter {
         let record_path = format!("{dist_info_dir}/RECORD");
         trace!("Adding {record_path}");
         let record = mem::take(&mut self.record);
-        write_record(&mut self.new_writer(&record_path)?, dist_info_dir, record)?;
+        write_record(
+            &mut self.new_writer(&record_path, false)?,
+            dist_info_dir,
+            record,
+        )?;
 
         trace!("Adding central directory");
         self.writer.finish()?;

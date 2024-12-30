@@ -25,7 +25,7 @@ use crate::libc::LibcDetectionError;
 use crate::platform::Error as PlatformError;
 use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
-use crate::{PythonRequest, PythonVariant};
+use crate::{sysconfig, PythonRequest, PythonVariant};
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
@@ -40,6 +40,8 @@ pub enum Error {
     InvalidPythonVersion(String),
     #[error(transparent)]
     ExtractError(#[from] uv_extract::Error),
+    #[error(transparent)]
+    SysconfigError(#[from] sysconfig::Error),
     #[error("Failed to copy to: {0}", to.user_display())]
     CopyError {
         to: PathBuf,
@@ -81,7 +83,7 @@ pub enum Error {
     #[error("Failed to read managed Python directory name: {0}")]
     NameError(String),
     #[error("Failed to construct absolute path to managed Python directory: {}", _0.user_display())]
-    AbsolutePath(PathBuf, #[source] std::io::Error),
+    AbsolutePath(PathBuf, #[source] io::Error),
     #[error(transparent)]
     NameParseError(#[from] installation::PythonInstallationKeyError),
     #[error(transparent)]
@@ -107,11 +109,15 @@ impl ManagedPythonInstallations {
     }
 
     /// Prefer, in order:
-    /// 1. The specific Python directory specified by the user, i.e., `UV_PYTHON_INSTALL_DIR`
-    /// 2. A directory in the system-appropriate user-level data directory, e.g., `~/.local/uv/python`
-    /// 3. A directory in the local data directory, e.g., `./.uv/python`
-    pub fn from_settings() -> Result<Self, Error> {
-        if let Some(install_dir) = std::env::var_os(EnvVars::UV_PYTHON_INSTALL_DIR) {
+    ///
+    /// 1. The specific Python directory passed via the `install_dir` argument.
+    /// 2. The specific Python directory specified with the `UV_PYTHON_INSTALL_DIR` environment variable.
+    /// 3. A directory in the system-appropriate user-level data directory, e.g., `~/.local/uv/python`.
+    /// 4. A directory in the local data directory, e.g., `./.uv/python`.
+    pub fn from_settings(install_dir: Option<PathBuf>) -> Result<Self, Error> {
+        if let Some(install_dir) = install_dir {
+            Ok(Self::from_path(install_dir))
+        } else if let Some(install_dir) = std::env::var_os(EnvVars::UV_PYTHON_INSTALL_DIR) {
             Ok(Self::from_path(install_dir))
         } else {
             Ok(Self::from_path(
@@ -127,9 +133,9 @@ impl ManagedPythonInstallations {
         ))
     }
 
-    /// Return the location of the cache directory for managed Python installations.
-    pub fn cache(&self) -> PathBuf {
-        self.root.join(".cache")
+    /// Return the location of the scratch directory for managed Python installations.
+    pub fn scratch(&self) -> PathBuf {
+        self.root.join(".temp")
     }
 
     /// Initialize the Python installation directory.
@@ -156,9 +162,9 @@ impl ManagedPythonInstallations {
         // Create the directory, if it doesn't exist.
         fs::create_dir_all(root)?;
 
-        // Create the cache directory, if it doesn't exist.
-        let cache = self.cache();
-        fs::create_dir_all(&cache)?;
+        // Create the scratch directory, if it doesn't exist.
+        let scratch = self.scratch();
+        fs::create_dir_all(&scratch)?;
 
         // Add a .gitignore.
         match fs::OpenOptions::new()
@@ -207,10 +213,18 @@ impl ManagedPythonInstallations {
                 })
             }
         };
-        let cache = self.cache();
+        let scratch = self.scratch();
         Ok(dirs
             .into_iter()
-            .filter(|path| *path != cache)
+            // Ignore the scratch directory
+            .filter(|path| *path != scratch)
+            // Ignore any `.` prefixed directories
+            .filter(|path| {
+                path.file_name()
+                    .and_then(OsStr::to_str)
+                    .map(|name| !name.starts_with('.'))
+                    .unwrap_or(true)
+            })
             .filter_map(|path| {
                 ManagedPythonInstallation::new(path)
                     .inspect_err(|err| {
@@ -227,7 +241,7 @@ impl ManagedPythonInstallations {
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation>, Error> {
         let platform_key = platform_key_from_env()?;
 
-        let iter = ManagedPythonInstallations::from_settings()?
+        let iter = ManagedPythonInstallations::from_settings(None)?
             .find_all()?
             .filter(move |installation| {
                 installation
@@ -429,7 +443,7 @@ impl ManagedPythonInstallation {
                 continue;
             }
 
-            match uv_fs::symlink_or_copy_file(&python, &executable) {
+            match symlink_or_copy_file(&python, &executable) {
                 Ok(()) => {
                     debug!(
                         "Created link {} -> {}",
@@ -476,6 +490,21 @@ impl ManagedPythonInstallation {
         let file = stdlib.join("EXTERNALLY-MANAGED");
         fs_err::write(file, EXTERNALLY_MANAGED)?;
 
+        Ok(())
+    }
+
+    /// Ensure that the `sysconfig` data is patched to match the installation path.
+    pub fn ensure_sysconfig_patched(&self) -> Result<(), Error> {
+        if cfg!(unix) {
+            if *self.implementation() == ImplementationName::CPython {
+                sysconfig::update_sysconfig(
+                    self.path(),
+                    self.key.major,
+                    self.key.minor,
+                    self.key.variant.suffix(),
+                )?;
+            }
+        }
         Ok(())
     }
 

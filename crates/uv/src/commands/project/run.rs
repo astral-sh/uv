@@ -31,7 +31,7 @@ use uv_python::{
     PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_resolver::{InstallTarget, Lock};
+use uv_resolver::Lock;
 use uv_scripts::Pep723Item;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
@@ -43,10 +43,12 @@ use crate::commands::pip::loggers::{
 };
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
+use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
+use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, validate_requires_python, validate_script_requires_python,
-    DependencyGroupsTarget, EnvironmentSpecification, ProjectError, ScriptPython, WorkspacePython,
+    default_dependency_groups, validate_project_requires_python, DependencyGroupsTarget,
+    EnvironmentSpecification, ProjectError, ScriptInterpreter, WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{diagnostics, project, ExitStatus};
@@ -72,6 +74,7 @@ pub(crate) async fn run(
     extras: ExtrasSpecification,
     dev: DevGroupsSpecification,
     editable: EditableMode,
+    modifications: Modifications,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
@@ -181,51 +184,22 @@ pub(crate) async fn run(
             }
         }
 
-        let ScriptPython {
-            source,
-            python_request,
-            requires_python,
-        } = ScriptPython::from_request(
+        // Discover the interpreter for the script.
+        let interpreter = ScriptInterpreter::discover(
+            (&script).into(),
             python.as_deref().map(PythonRequest::parse),
-            None,
-            &script,
-            no_config,
-        )
-        .await?;
-
-        let client_builder = BaseClientBuilder::new()
-            .connectivity(connectivity)
-            .native_tls(native_tls)
-            .allow_insecure_host(allow_insecure_host.to_vec());
-
-        let interpreter = PythonInstallation::find_or_download(
-            python_request.as_ref(),
-            EnvironmentPreference::Any,
             python_preference,
             python_downloads,
-            &client_builder,
+            connectivity,
+            native_tls,
+            allow_insecure_host,
+            &install_mirrors,
+            no_config,
             cache,
-            Some(&download_reporter),
-            install_mirrors.python_install_mirror.as_deref(),
-            install_mirrors.pypy_install_mirror.as_deref(),
+            printer,
         )
         .await?
         .into_interpreter();
-
-        if let Some((requires_python, requires_python_source)) = requires_python {
-            match validate_script_requires_python(
-                &interpreter,
-                None,
-                &requires_python,
-                &requires_python_source,
-                &source,
-            ) {
-                Ok(()) => {}
-                Err(err) => {
-                    warn_user!("{err}");
-                }
-            }
-        }
 
         // Determine the working directory for the script.
         let script_dir = match &script {
@@ -567,7 +541,7 @@ pub(crate) async fn run(
                 .into_interpreter();
 
                 if let Some(requires_python) = requires_python.as_ref() {
-                    validate_requires_python(
+                    validate_project_requires_python(
                         &interpreter,
                         Some(project.workspace()),
                         requires_python,
@@ -592,7 +566,7 @@ pub(crate) async fn run(
                 project::get_or_init_environment(
                     project.workspace(),
                     python.as_deref().map(PythonRequest::parse),
-                    install_mirrors,
+                    &install_mirrors,
                     python_preference,
                     python_downloads,
                     connectivity,
@@ -611,7 +585,8 @@ pub(crate) async fn run(
                 // If we're not syncing, we should still attempt to respect the locked preferences
                 // in any `--with` requirements.
                 if !isolated && !requirements.is_empty() {
-                    lock = project::lock::read(project.workspace())
+                    lock = LockTarget::from(project.workspace())
+                        .read()
                         .await
                         .ok()
                         .flatten()
@@ -649,7 +624,7 @@ pub(crate) async fn run(
 
                 let result = match project::lock::do_safe_lock(
                     mode,
-                    project.workspace(),
+                    project.workspace().into(),
                     settings.as_ref().into(),
                     LowerBound::Allow,
                     &state,
@@ -731,7 +706,7 @@ pub(crate) async fn run(
                     &dev.with_defaults(defaults),
                     editable,
                     install_options,
-                    Modifications::Sufficient,
+                    modifications,
                     settings.as_ref().into(),
                     if show_resolution {
                         Box::new(DefaultInstallLogger)
@@ -1173,7 +1148,7 @@ pub(crate) enum RunCommand {
     /// Search `sys.path` for the named module and execute its contents as the `__main__` module.
     /// Equivalent to `python -m module`.
     PythonModule(OsString, Vec<OsString>),
-    /// Execute a `pythonw` script (Windows only).
+    /// Execute a `pythonw` GUI script.
     PythonGuiScript(PathBuf, Vec<OsString>),
     /// Execute a Python package containing a `__main__.py` file.
     PythonPackage(PathBuf, Vec<OsString>),
@@ -1181,7 +1156,9 @@ pub(crate) enum RunCommand {
     /// [zipapp]: <https://docs.python.org/3/library/zipapp.html>
     PythonZipapp(PathBuf, Vec<OsString>),
     /// Execute a `python` script provided via `stdin`.
-    PythonStdin(Vec<u8>),
+    PythonStdin(Vec<u8>, Vec<OsString>),
+    /// Execute a `pythonw` script provided via `stdin`.
+    PythonGuiStdin(Vec<u8>, Vec<OsString>),
     /// Execute a Python script provided via a remote URL.
     PythonRemote(tempfile::NamedTempFile, Vec<OsString>),
     /// Execute an external command.
@@ -1201,8 +1178,21 @@ impl RunCommand {
             | Self::PythonRemote(..)
             | Self::Empty => Cow::Borrowed("python"),
             Self::PythonModule(..) => Cow::Borrowed("python -m"),
-            Self::PythonGuiScript(..) => Cow::Borrowed("pythonw"),
-            Self::PythonStdin(_) => Cow::Borrowed("python -c"),
+            Self::PythonGuiScript(..) => {
+                if cfg!(windows) {
+                    Cow::Borrowed("pythonw")
+                } else {
+                    Cow::Borrowed("python")
+                }
+            }
+            Self::PythonStdin(..) => Cow::Borrowed("python -c"),
+            Self::PythonGuiStdin(..) => {
+                if cfg!(windows) {
+                    Cow::Borrowed("pythonw -c")
+                } else {
+                    Cow::Borrowed("python -c")
+                }
+            }
             Self::External(executable, _) => executable.to_string_lossy(),
         }
     }
@@ -1255,7 +1245,7 @@ impl RunCommand {
                 process.args(args);
                 process
             }
-            Self::PythonStdin(script) => {
+            Self::PythonStdin(script, args) => {
                 let mut process = Command::new(interpreter.sys_executable());
                 process.arg("-c");
 
@@ -1270,6 +1260,39 @@ impl RunCommand {
                     let script = String::from_utf8(script.clone()).expect("script is valid UTF-8");
                     process.arg(script);
                 }
+                process.args(args);
+
+                process
+            }
+            Self::PythonGuiStdin(script, args) => {
+                let python_executable = interpreter.sys_executable();
+
+                // Use `pythonw.exe` if it exists, otherwise fall back to `python.exe`.
+                // See `install-wheel-rs::get_script_executable`.gd
+                let pythonw_executable = python_executable
+                    .file_name()
+                    .map(|name| {
+                        let new_name = name.to_string_lossy().replace("python", "pythonw");
+                        python_executable.with_file_name(new_name)
+                    })
+                    .filter(|path| path.is_file())
+                    .unwrap_or_else(|| python_executable.to_path_buf());
+
+                let mut process = Command::new(&pythonw_executable);
+                process.arg("-c");
+
+                #[cfg(unix)]
+                {
+                    use std::os::unix::ffi::OsStringExt;
+                    process.arg(OsString::from_vec(script.clone()));
+                }
+
+                #[cfg(not(unix))]
+                {
+                    let script = String::from_utf8(script.clone()).expect("script is valid UTF-8");
+                    process.arg(script);
+                }
+                process.args(args);
 
                 process
             }
@@ -1321,6 +1344,10 @@ impl std::fmt::Display for RunCommand {
                 write!(f, "python -c")?;
                 Ok(())
             }
+            Self::PythonGuiStdin(..) => {
+                write!(f, "pythonw -c")?;
+                Ok(())
+            }
             Self::External(executable, args) => {
                 write!(f, "{}", executable.to_string_lossy())?;
                 for arg in args {
@@ -1338,10 +1365,12 @@ impl std::fmt::Display for RunCommand {
 
 impl RunCommand {
     /// Determine the [`RunCommand`] for a given set of arguments.
+    #[allow(clippy::fn_params_excessive_bools)]
     pub(crate) async fn from_args(
         command: &ExternalCommand,
         module: bool,
         script: bool,
+        gui_script: bool,
         connectivity: Connectivity,
         native_tls: bool,
         allow_insecure_host: &[TrustedHost],
@@ -1350,6 +1379,19 @@ impl RunCommand {
         let Some(target) = target else {
             return Ok(Self::Empty);
         };
+
+        if target.eq_ignore_ascii_case("-") {
+            let mut buf = Vec::with_capacity(1024);
+            std::io::stdin().read_to_end(&mut buf)?;
+
+            return if module {
+                Err(anyhow!("Cannot run a Python module from stdin"))
+            } else if gui_script {
+                Ok(Self::PythonGuiStdin(buf, args.to_vec()))
+            } else {
+                Ok(Self::PythonStdin(buf, args.to_vec()))
+            };
+        }
 
         let target_path = PathBuf::from(target);
 
@@ -1393,6 +1435,8 @@ impl RunCommand {
 
         if module {
             return Ok(Self::PythonModule(target.clone(), args.to_vec()));
+        } else if gui_script {
+            return Ok(Self::PythonGuiScript(target.clone().into(), args.to_vec()));
         } else if script {
             return Ok(Self::PythonScript(target.clone().into(), args.to_vec()));
         }
@@ -1401,11 +1445,7 @@ impl RunCommand {
         let is_file = metadata.as_ref().map_or(false, std::fs::Metadata::is_file);
         let is_dir = metadata.as_ref().map_or(false, std::fs::Metadata::is_dir);
 
-        if target.eq_ignore_ascii_case("-") {
-            let mut buf = Vec::with_capacity(1024);
-            std::io::stdin().read_to_end(&mut buf)?;
-            Ok(Self::PythonStdin(buf))
-        } else if target.eq_ignore_ascii_case("python") {
+        if target.eq_ignore_ascii_case("python") {
             Ok(Self::Python(args.to_vec()))
         } else if target_path
             .extension()
@@ -1413,10 +1453,9 @@ impl RunCommand {
             && is_file
         {
             Ok(Self::PythonScript(target_path, args.to_vec()))
-        } else if cfg!(windows)
-            && target_path
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("pyw"))
+        } else if target_path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("pyw"))
             && is_file
         {
             Ok(Self::PythonGuiScript(target_path, args.to_vec()))

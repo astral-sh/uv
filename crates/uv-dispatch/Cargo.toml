@@ -28,6 +28,7 @@ uv-distribution-types = { workspace = true }
 uv-git = { workspace = true }
 uv-install-wheel = { workspace = true }
 uv-installer = { workspace = true }
+uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-resolver = { workspace = true }
@@ -38,5 +39,6 @@ anyhow = { workspace = true }
 futures = { workspace = true }
 itertools = { workspace = true }
 rustc-hash = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

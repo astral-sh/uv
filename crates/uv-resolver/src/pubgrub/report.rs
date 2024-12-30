@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Bound;
@@ -8,8 +7,11 @@ use owo_colors::OwoColorize;
 use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Term};
 use rustc_hash::FxHashMap;
 
-use uv_configuration::IndexStrategy;
-use uv_distribution_types::{Index, IndexCapabilities, IndexLocations, IndexUrl};
+use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
+use uv_distribution_types::{
+    IncompatibleDist, IncompatibleSource, IncompatibleWheel, Index, IndexCapabilities,
+    IndexLocations, IndexUrl,
+};
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 
@@ -18,7 +20,9 @@ use crate::error::ErrorTree;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
 use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
-use crate::resolver::{IncompletePackage, UnavailablePackage, UnavailableReason};
+use crate::resolver::{
+    MetadataUnavailable, UnavailablePackage, UnavailableReason, UnavailableVersion,
+};
 use crate::{Flexibility, Options, RequiresPython, ResolverEnvironment};
 
 use super::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
@@ -69,9 +73,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                     );
                 }
 
-                let set = self.simplify_set(set, package);
-
-                if set.as_ref() == &Range::full() {
+                if set == &Range::full() {
                     format!("there are no versions of {package}")
                 } else if set.as_singleton().is_some() {
                     format!("there is no version of {package}{set}")
@@ -109,8 +111,6 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 } else {
                     match reason {
                         UnavailableReason::Package(reason) => {
-                            // While there may be a term attached, this error applies to the entire
-                            // package, so we show it for the entire package
                             format!(
                                 "{}{}",
                                 Padded::new("", &package, " "),
@@ -118,8 +118,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                             )
                         }
                         UnavailableReason::Version(reason) => {
-                            let set = self.simplify_set(set, package);
-                            let range = self.compatible_range(package, &set);
+                            let range = self.compatible_range(package, set);
                             let reason = if range.plural() {
                                 reason.plural_message()
                             } else {
@@ -131,18 +130,25 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 }
             }
             External::FromDependencyOf(package, package_set, dependency, dependency_set) => {
-                let package_set = self.simplify_set(package_set, package);
-                let dependency_set = self.simplify_set(dependency_set, dependency);
+                if package.name_no_root() == dependency.name_no_root() {
+                    if let Some(member) = self.format_workspace_member(package) {
+                        return format!(
+                            "{member} depends on itself at an incompatible version ({})",
+                            PackageRange::dependency(dependency, dependency_set, None)
+                        );
+                    }
+                }
+
                 if let Some(root) = self.format_root_requires(package) {
                     return format!(
                         "{root} {}",
-                        self.dependency_range(dependency, &dependency_set)
+                        self.dependency_range(dependency, dependency_set)
                     );
                 }
                 format!(
                     "{}",
-                    self.compatible_range(package, &package_set)
-                        .depends_on(dependency, &dependency_set),
+                    self.compatible_range(package, package_set)
+                        .depends_on(dependency, dependency_set),
                 )
             }
         }
@@ -163,18 +169,16 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
             [(package, Term::Positive(range))]
                 if matches!(&**(*package), PubGrubPackageInner::Package { .. }) =>
             {
-                let range = self.simplify_set(range, package);
                 if let Some(member) = self.format_workspace_member(package) {
                     format!("{member}'s requirements are unsatisfiable")
                 } else {
-                    format!("{} cannot be used", self.compatible_range(package, &range))
+                    format!("{} cannot be used", self.compatible_range(package, range))
                 }
             }
             [(package, Term::Negative(range))]
                 if matches!(&**(*package), PubGrubPackageInner::Package { .. }) =>
             {
-                let range = self.simplify_set(range, package);
-                format!("{} must be used", self.compatible_range(package, &range))
+                format!("{} must be used", self.compatible_range(package, range))
             }
             [(p1, Term::Positive(r1)), (p2, Term::Negative(r2))] => self.format_external(
                 &External::FromDependencyOf((*p1).clone(), r1.clone(), (*p2).clone(), r2.clone()),
@@ -200,12 +204,8 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                         _ => (),
                     }
                 }
-                if let [(p, t)] = slice {
-                    if PackageTerm::new(p, t, self).plural() {
-                        result.push_str(" are incompatible");
-                    } else {
-                        result.push_str(" is incompatible");
-                    }
+                if slice.len() == 1 {
+                    result.push_str(" cannot be used");
                 } else {
                     result.push_str(" are incompatible");
                 }
@@ -407,6 +407,24 @@ impl PubGrubReportFormatter<'_> {
         }
     }
 
+    /// Return whether the given package is the root package.
+    fn is_root(package: &PubGrubPackage) -> bool {
+        matches!(&**package, PubGrubPackageInner::Root(_))
+    }
+
+    /// Return whether the given package is a workspace member.
+    fn is_single_project_workspace_member(&self, package: &PubGrubPackage) -> bool {
+        match &**package {
+            // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
+            PubGrubPackageInner::Package {
+                name, extra, dev, ..
+            } if self.workspace_members.contains(name) => {
+                self.is_single_project_workspace() && extra.is_none() && dev.is_none()
+            }
+            _ => false,
+        }
+    }
+
     /// Create a [`PackageRange::compatibility`] display with this formatter attached.
     fn compatible_range<'a>(
         &'a self,
@@ -445,11 +463,8 @@ impl PubGrubReportFormatter<'_> {
                 External::FromDependencyOf(package1, package_set1, dependency1, dependency_set1),
                 External::FromDependencyOf(package2, _, dependency2, dependency_set2),
             ) if package1 == package2 => {
-                let dependency_set1 = self.simplify_set(dependency_set1, dependency1);
-                let dependency1 = self.dependency_range(dependency1, &dependency_set1);
-
-                let dependency_set2 = self.simplify_set(dependency_set2, dependency2);
-                let dependency2 = self.dependency_range(dependency2, &dependency_set2);
+                let dependency1 = self.dependency_range(dependency1, dependency_set1);
+                let dependency2 = self.dependency_range(dependency2, dependency_set2);
 
                 if let Some(root) = self.format_root_requires(package1) {
                     return format!(
@@ -458,14 +473,25 @@ impl PubGrubReportFormatter<'_> {
                         dependency2,
                     );
                 }
-                let package_set = self.simplify_set(package_set1, package1);
 
                 format!(
                     "{}",
-                    self.compatible_range(package1, &package_set)
-                        .depends_on(dependency1.package, &dependency_set1)
-                        .and(dependency2.package, &dependency_set2),
+                    self.compatible_range(package1, package_set1)
+                        .depends_on(dependency1.package, dependency_set1)
+                        .and(dependency2.package, dependency_set2),
                 )
+            }
+            (.., External::FromDependencyOf(package, _, dependency, _))
+                if Self::is_root(package)
+                    && self.is_single_project_workspace_member(dependency) =>
+            {
+                self.format_external(external1)
+            }
+            (External::FromDependencyOf(package, _, dependency, _), ..)
+                if Self::is_root(package)
+                    && self.is_single_project_workspace_member(dependency) =>
+            {
+                self.format_external(external2)
             }
             _ => {
                 let external1 = self.format_external(external1);
@@ -477,22 +503,6 @@ impl PubGrubReportFormatter<'_> {
                     &external2,
                 )
             }
-        }
-    }
-
-    /// Simplify a [`Range`] of versions using the available versions for a package.
-    fn simplify_set<'a>(
-        &self,
-        set: &'a Range<Version>,
-        package: &PubGrubPackage,
-    ) -> Cow<'a, Range<Version>> {
-        let Some(name) = package.name() else {
-            return Cow::Borrowed(set);
-        };
-        if set == &Range::full() {
-            Cow::Borrowed(set)
-        } else {
-            Cow::Owned(set.simplify(self.available_versions.get(name).into_iter().flatten()))
         }
     }
 
@@ -508,17 +518,68 @@ impl PubGrubReportFormatter<'_> {
         index_capabilities: &IndexCapabilities,
         available_indexes: &FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
-        incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
+        incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, MetadataUnavailable>>,
         fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
         workspace_members: &BTreeSet<PackageName>,
-        options: Options,
+        options: &Options,
         output_hints: &mut IndexSet<PubGrubHint>,
     ) {
         match derivation_tree {
-            DerivationTree::External(
-                External::Custom(package, set, _) | External::NoVersions(package, set),
-            ) => {
+            DerivationTree::External(External::Custom(package, set, reason)) => {
+                if let PubGrubPackageInner::Package { name, .. } = &**package {
+                    // Check for no versions due to pre-release options.
+                    if options.flexibility == Flexibility::Configurable {
+                        if !fork_urls.contains_key(name) {
+                            self.prerelease_available_hint(
+                                package,
+                                name,
+                                set,
+                                selector,
+                                env,
+                                output_hints,
+                            );
+                        }
+                    }
+
+                    // Check for no versions due to no `--find-links` flat index.
+                    Self::index_hints(
+                        package,
+                        name,
+                        set,
+                        selector,
+                        index_locations,
+                        index_capabilities,
+                        available_indexes,
+                        unavailable_packages,
+                        incomplete_packages,
+                        output_hints,
+                    );
+                }
+
+                // Check for unavailable versions due to `--no-build` or `--no-binary`.
+                if let UnavailableReason::Version(UnavailableVersion::IncompatibleDist(
+                    incompatibility,
+                )) = reason
+                {
+                    match incompatibility {
+                        IncompatibleDist::Wheel(IncompatibleWheel::NoBinary) => {
+                            output_hints.insert(PubGrubHint::NoBinary {
+                                package: package.clone(),
+                                option: options.build_options.no_binary().clone(),
+                            });
+                        }
+                        IncompatibleDist::Source(IncompatibleSource::NoBuild) => {
+                            output_hints.insert(PubGrubHint::NoBuild {
+                                package: package.clone(),
+                                option: options.build_options.no_build().clone(),
+                            });
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            DerivationTree::External(External::NoVersions(package, set)) => {
                 if let PubGrubPackageInner::Package { name, .. } = &**package {
                     // Check for no versions due to pre-release options.
                     if options.flexibility == Flexibility::Configurable {
@@ -570,6 +631,17 @@ impl PubGrubReportFormatter<'_> {
                             workspace: self.is_workspace() && !self.is_single_project_workspace(),
                         });
                     }
+
+                    if package_name == dependency_name
+                        && (dependency.extra().is_none() || package.extra() == dependency.extra())
+                        && (dependency.dev().is_none() || dependency.dev() == package.dev())
+                        && workspace_members.contains(package_name)
+                    {
+                        output_hints.insert(PubGrubHint::DependsOnItself {
+                            package: package_name.clone(),
+                            workspace: self.is_workspace() && !self.is_single_project_workspace(),
+                        });
+                    }
                 }
                 // Check for no versions due to `Requires-Python`.
                 if matches!(
@@ -580,7 +652,7 @@ impl PubGrubReportFormatter<'_> {
                         source: self.python_requirement.source(),
                         requires_python: self.python_requirement.target().clone(),
                         package: package.clone(),
-                        package_set: self.simplify_set(package_set, package).into_owned(),
+                        package_set: package_set.clone(),
                         package_requires_python: dependency_set.clone(),
                     });
                 }
@@ -628,7 +700,7 @@ impl PubGrubReportFormatter<'_> {
         index_capabilities: &IndexCapabilities,
         available_indexes: &FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
-        incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
+        incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, MetadataUnavailable>>,
         hints: &mut IndexSet<PubGrubHint>,
     ) {
         let no_find_links = index_locations.flat_indexes().peekable().peek().is_none();
@@ -642,11 +714,6 @@ impl PubGrubReportFormatter<'_> {
             }
             Some(UnavailablePackage::Offline) => {
                 hints.insert(PubGrubHint::Offline);
-            }
-            Some(UnavailablePackage::MissingMetadata) => {
-                hints.insert(PubGrubHint::MissingPackageMetadata {
-                    package: package.clone(),
-                });
             }
             Some(UnavailablePackage::InvalidMetadata(reason)) => {
                 hints.insert(PubGrubHint::InvalidPackageMetadata {
@@ -669,37 +736,31 @@ impl PubGrubReportFormatter<'_> {
             for (version, incomplete) in versions.iter().rev() {
                 if set.contains(version) {
                     match incomplete {
-                        IncompletePackage::Offline => {
+                        MetadataUnavailable::Offline => {
                             hints.insert(PubGrubHint::Offline);
                         }
-                        IncompletePackage::MissingMetadata => {
-                            hints.insert(PubGrubHint::MissingVersionMetadata {
-                                package: package.clone(),
-                                version: version.clone(),
-                            });
-                        }
-                        IncompletePackage::InvalidMetadata(reason) => {
+                        MetadataUnavailable::InvalidMetadata(reason) => {
                             hints.insert(PubGrubHint::InvalidVersionMetadata {
                                 package: package.clone(),
                                 version: version.clone(),
-                                reason: reason.clone(),
+                                reason: reason.to_string(),
                             });
                         }
-                        IncompletePackage::InconsistentMetadata(reason) => {
+                        MetadataUnavailable::InconsistentMetadata(reason) => {
                             hints.insert(PubGrubHint::InconsistentVersionMetadata {
                                 package: package.clone(),
                                 version: version.clone(),
-                                reason: reason.clone(),
+                                reason: reason.to_string(),
                             });
                         }
-                        IncompletePackage::InvalidStructure(reason) => {
+                        MetadataUnavailable::InvalidStructure(reason) => {
                             hints.insert(PubGrubHint::InvalidVersionStructure {
                                 package: package.clone(),
                                 version: version.clone(),
-                                reason: reason.clone(),
+                                reason: reason.to_string(),
                             });
                         }
-                        IncompletePackage::RequiresPython(requires_python, python_version) => {
+                        MetadataUnavailable::RequiresPython(requires_python, python_version) => {
                             hints.insert(PubGrubHint::IncompatibleBuildRequirement {
                                 package: package.clone(),
                                 version: version.clone(),
@@ -743,6 +804,12 @@ impl PubGrubReportFormatter<'_> {
                 });
             }
             if index_capabilities.forbidden(&index.url) {
+                // If the index is a PyTorch index (e.g., `https://download.pytorch.org/whl/cu118`),
+                // avoid noting the lack of credentials. PyTorch returns a 403 (Forbidden) status
+                // code for any package that does not exist.
+                if index.url.url().host_str() == Some("download.pytorch.org") {
+                    continue;
+                }
                 hints.insert(PubGrubHint::ForbiddenIndex {
                     index: index.url.clone(),
                 });
@@ -778,7 +845,7 @@ impl PubGrubReportFormatter<'_> {
             if selector.prerelease_strategy().allows(name, env) != AllowPrerelease::Yes {
                 hints.insert(PubGrubHint::PrereleaseRequested {
                     package: package.clone(),
-                    range: self.simplify_set(set, package).into_owned(),
+                    range: set.clone(),
                 });
             }
         } else if let Some(version) = package
@@ -825,8 +892,6 @@ pub(crate) enum PubGrubHint {
     NoIndex,
     /// A package was not found in the registry, but network access was disabled.
     Offline,
-    /// Metadata for a package could not be found.
-    MissingPackageMetadata { package: PubGrubPackage },
     /// Metadata for a package could not be parsed.
     InvalidPackageMetadata {
         package: PubGrubPackage,
@@ -838,12 +903,6 @@ pub(crate) enum PubGrubHint {
         package: PubGrubPackage,
         // excluded from `PartialEq` and `Hash`
         reason: String,
-    },
-    /// Metadata for a package version could not be found.
-    MissingVersionMetadata {
-        package: PubGrubPackage,
-        // excluded from `PartialEq` and `Hash`
-        version: Version,
     },
     /// Metadata for a package version could not be parsed.
     InvalidVersionMetadata {
@@ -899,8 +958,13 @@ pub(crate) enum PubGrubHint {
         dependency: PubGrubPackage,
         workspace: bool,
     },
+    /// A package depends on itself at an incompatible version.
+    DependsOnItself {
+        package: PackageName,
+        workspace: bool,
+    },
     /// A package was available on an index, but not at the correct version, and at least one
-    /// subsequent index was not queried. As such, a compatible version may be available on an
+    /// subsequent index was not queried. As such, a compatible version may be available on
     /// one of the remaining indexes.
     UncheckedIndex {
         package: PubGrubPackage,
@@ -910,6 +974,18 @@ pub(crate) enum PubGrubHint {
         found_index: IndexUrl,
         // excluded from `PartialEq` and `Hash`
         next_index: IndexUrl,
+    },
+    /// No wheels are available for a package, and using source distributions was disabled.
+    NoBuild {
+        package: PubGrubPackage,
+        // excluded from `PartialEq` and `Hash`
+        option: NoBuild,
+    },
+    /// No source distributions are available for a package, and using pre-built wheels was disabled.
+    NoBinary {
+        package: PubGrubPackage,
+        // excluded from `PartialEq` and `Hash`
+        option: NoBinary,
     },
     /// An index returned an Unauthorized (401) response.
     UnauthorizedIndex { index: IndexUrl },
@@ -930,16 +1006,10 @@ enum PubGrubHintCore {
     },
     NoIndex,
     Offline,
-    MissingPackageMetadata {
-        package: PubGrubPackage,
-    },
     InvalidPackageMetadata {
         package: PubGrubPackage,
     },
     InvalidPackageStructure {
-        package: PubGrubPackage,
-    },
-    MissingVersionMetadata {
         package: PubGrubPackage,
     },
     InvalidVersionMetadata {
@@ -963,6 +1033,10 @@ enum PubGrubHintCore {
         dependency: PubGrubPackage,
         workspace: bool,
     },
+    DependsOnItself {
+        package: PackageName,
+        workspace: bool,
+    },
     UncheckedIndex {
         package: PubGrubPackage,
     },
@@ -971,6 +1045,12 @@ enum PubGrubHintCore {
     },
     ForbiddenIndex {
         index: IndexUrl,
+    },
+    NoBuild {
+        package: PubGrubPackage,
+    },
+    NoBinary {
+        package: PubGrubPackage,
     },
 }
 
@@ -986,17 +1066,11 @@ impl From<PubGrubHint> for PubGrubHintCore {
             }
             PubGrubHint::NoIndex => Self::NoIndex,
             PubGrubHint::Offline => Self::Offline,
-            PubGrubHint::MissingPackageMetadata { package, .. } => {
-                Self::MissingPackageMetadata { package }
-            }
             PubGrubHint::InvalidPackageMetadata { package, .. } => {
                 Self::InvalidPackageMetadata { package }
             }
             PubGrubHint::InvalidPackageStructure { package, .. } => {
                 Self::InvalidPackageStructure { package }
-            }
-            PubGrubHint::MissingVersionMetadata { package, .. } => {
-                Self::MissingVersionMetadata { package }
             }
             PubGrubHint::InvalidVersionMetadata { package, .. } => {
                 Self::InvalidVersionMetadata { package }
@@ -1027,9 +1101,14 @@ impl From<PubGrubHint> for PubGrubHintCore {
                 dependency,
                 workspace,
             },
+            PubGrubHint::DependsOnItself { package, workspace } => {
+                Self::DependsOnItself { package, workspace }
+            }
             PubGrubHint::UncheckedIndex { package, .. } => Self::UncheckedIndex { package },
             PubGrubHint::UnauthorizedIndex { index } => Self::UnauthorizedIndex { index },
             PubGrubHint::ForbiddenIndex { index } => Self::ForbiddenIndex { index },
+            PubGrubHint::NoBuild { package, .. } => Self::NoBuild { package },
+            PubGrubHint::NoBinary { package, .. } => Self::NoBinary { package },
         }
     }
 }
@@ -1093,15 +1172,6 @@ impl std::fmt::Display for PubGrubHint {
                     ":".bold(),
                 )
             }
-            Self::MissingPackageMetadata { package } => {
-                write!(
-                    f,
-                    "{}{} Metadata for `{}` could not be found, as the wheel is missing a `METADATA` file",
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    package.bold()
-                )
-            }
             Self::InvalidPackageMetadata { package, reason } => {
                 write!(
                     f,
@@ -1120,16 +1190,6 @@ impl std::fmt::Display for PubGrubHint {
                     ":".bold(),
                     package.cyan(),
                     textwrap::indent(reason, "  ")
-                )
-            }
-            Self::MissingVersionMetadata { package, version } => {
-                write!(
-                    f,
-                    "{}{} Metadata for `{}` ({}) could not be found, as the wheel is missing a `METADATA` file",
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    package.cyan(),
-                    format!("v{version}").cyan(),
                 )
             }
             Self::InvalidVersionMetadata {
@@ -1269,6 +1329,22 @@ impl std::fmt::Display for PubGrubHint {
                     dependency.cyan(),
                 )
             }
+            Self::DependsOnItself { package, workspace } => {
+                let project = if *workspace {
+                    "workspace member"
+                } else {
+                    "project"
+                };
+                write!(
+                    f,
+                    "{}{} The {project} `{}` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `{}`, consider renaming the {project} `{}` to avoid creating a conflict.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.cyan(),
+                    package.cyan(),
+                    package.cyan(),
+                )
+            }
             Self::UncheckedIndex {
                 package,
                 range,
@@ -1305,6 +1381,38 @@ impl std::fmt::Display for PubGrubHint {
                     ":".bold(),
                     index.redacted().cyan(),
                     "403 Forbidden".red(),
+                )
+            }
+            Self::NoBuild { package, option } => {
+                let option = match option {
+                    NoBuild::All => "for all packages (i.e., with `--no-build`)".to_string(),
+                    NoBuild::Packages(_) => {
+                        format!("for `{package}` (i.e., with `--no-build-package {package}`)",)
+                    }
+                    NoBuild::None => unreachable!(),
+                };
+                write!(
+                    f,
+                    "{}{} Wheels are required for `{}` because building from source is disabled {option}",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.cyan(),
+                )
+            }
+            Self::NoBinary { package, option } => {
+                let option = match option {
+                    NoBinary::All => "for all packages (i.e., with `--no-binary`)".to_string(),
+                    NoBinary::Packages(_) => {
+                        format!("for `{package}` (i.e., with `--no-binary-package {package}`)",)
+                    }
+                    NoBinary::None => unreachable!(),
+                };
+                write!(
+                    f,
+                    "{}{} A source distribution is required for `{}` because using pre-built wheels is disabled {option}",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.cyan(),
                 )
             }
         }
@@ -1354,22 +1462,6 @@ impl PackageTerm<'_> {
             package,
             term,
             formatter,
-        }
-    }
-
-    /// Returns `true` if the predicate following this package term should be singular or plural.
-    fn plural(&self) -> bool {
-        match self.term {
-            Term::Positive(set) => self.formatter.compatible_range(self.package, set).plural(),
-            Term::Negative(set) => {
-                if set.as_singleton().is_some() {
-                    false
-                } else {
-                    self.formatter
-                        .compatible_range(self.package, &set.complement())
-                        .plural()
-                }
-            }
         }
     }
 }

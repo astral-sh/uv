@@ -25,7 +25,7 @@ uv provides a standalone installer to download and install uv:
     Request a specific version by including it in the URL:
 
     ```console
-    $ curl -LsSf https://astral.sh/uv/0.5.7/install.sh | sh
+    $ curl -LsSf https://astral.sh/uv/0.5.13/install.sh | sh
     ```
 
 === "Windows"
@@ -41,7 +41,7 @@ uv provides a standalone installer to download and install uv:
     Request a specific version by including it in the URL:
 
     ```console
-    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.5.7/install.ps1 | iex"
+    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.5.13/install.ps1 | iex"
     ```
 
 !!! tip
@@ -190,24 +190,9 @@ Then restart the shell or source the shell config file.
 
 ## Uninstallation
 
-If you need to remove uv from your system, just remove the `uv` and `uvx` binaries:
+If you need to remove uv from your system, follow these steps:
 
-=== "macOS and Linux"
-
-    ```console
-    $ rm ~/.local/bin/uv ~/.local/bin/uvx
-    ```
-
-=== "Windows"
-
-    ```powershell
-    $ rm $HOME\.local\bin\uv.exe
-    $ rm $HOME\.local\bin\uvx.exe
-    ```
-
-!!! tip
-
-    You may want to remove data that uv has stored before removing the binaries:
+1.  Clean up stored data (optional):
 
     ```console
     $ uv cache clean
@@ -215,11 +200,30 @@ If you need to remove uv from your system, just remove the `uv` and `uvx` binari
     $ rm -r "$(uv tool dir)"
     ```
 
-!!! note
+    !!! tip
 
-    Prior to 0.5.0, uv was installed into `~/.cargo/bin`. The binaries can be removed from there to
-    uninstall. Upgrading from an older version will not automatically remove the binaries from
-    `~/.cargo/bin`.
+        Before removing the binaries, you may want to remove any data that uv has stored.
+
+2.  Remove the uv and uvx binaries:
+
+    === "macOS and Linux"
+
+        ```console
+        $ rm ~/.local/bin/uv ~/.local/bin/uvx
+        ```
+
+    === "Windows"
+
+        ```powershell
+        $ rm $HOME\.local\bin\uv.exe
+        $ rm $HOME\.local\bin\uvx.exe
+        ```
+
+    !!! note
+
+        Prior to 0.5.0, uv was installed into `~/.cargo/bin`. The binaries can be removed from there to
+        uninstall. Upgrading from an older version will not automatically remove the binaries from
+        `~/.cargo/bin`.
 
 ## Next steps
 

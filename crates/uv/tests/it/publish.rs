@@ -1,7 +1,9 @@
 use crate::common::{uv_snapshot, venv_bin_path, TestContext};
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::{FileTouch, PathChild};
+use assert_fs::fixture::{FileTouch, FileWriteStr, PathChild};
+use indoc::indoc;
 use std::env;
+use std::env::current_dir;
 use uv_static::EnvVars;
 
 #[test]
@@ -239,8 +241,9 @@ fn check_keyring_behaviours() {
     ----- stderr -----
     warning: `uv publish` is experimental and may change without warning
     Publishing 1 file to https://test.pypi.org/legacy/?ok
-    error: Failed to query check URL
-      Caused by: Package `ok` was not found in the registry
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
+      Caused by: Upload failed with status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "###
     );
 
@@ -263,7 +266,7 @@ fn check_keyring_behaviours() {
     ----- stderr -----
     warning: `uv publish` is experimental and may change without warning
     Publishing 1 file to https://test.pypi.org/legacy/?ok
-    warning: Using `--keyring-provider` with a password or token and no check url has no effect
+    warning: Using `--keyring-provider` with a password or token and no check URL has no effect
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
     error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
       Caused by: Upload failed with status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
@@ -293,8 +296,11 @@ fn check_keyring_behaviours() {
     Request for dummy@https://test.pypi.org/legacy/?ok
     Request for dummy@test.pypi.org
     warning: Keyring has no password for URL `https://test.pypi.org/legacy/?ok` and username `dummy`
-    error: Failed to query check URL
-      Caused by: Package `ok` was not found in the registry
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    Request for dummy@https://test.pypi.org/legacy/?ok
+    Request for dummy@test.pypi.org
+    error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
+      Caused by: Upload failed with status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "###
     );
 
@@ -321,6 +327,75 @@ fn check_keyring_behaviours() {
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
     error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
       Caused by: Upload failed with status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+    "###
+    );
+}
+
+#[test]
+fn invalid_index() {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+
+        [[tool.uv.index]]
+        explicit = true
+        name = "foo"
+        url = "https://example.com"
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "https://internal.example.org"
+    "#};
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)
+        .unwrap();
+
+    let ok_wheel = current_dir()
+        .unwrap()
+        .join("../../scripts/links/ok-1.0.0-py3-none-any.whl");
+
+    // No such index
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("-u")
+        .arg("__token__")
+        .arg("-p")
+        .arg("dummy")
+        .arg("--index")
+        .arg("bar")
+        .arg(&ok_wheel)
+        .current_dir(context.temp_dir.path()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv publish` is experimental and may change without warning
+    error: Index not found: `bar`. Found indexes: `foo`, `internal`
+    "###
+    );
+
+    // Index does not have a publish URL
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("-u")
+        .arg("__token__")
+        .arg("-p")
+        .arg("dummy")
+        .arg("--index")
+        .arg("foo")
+        .arg(&ok_wheel)
+        .current_dir(context.temp_dir.path()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv publish` is experimental and may change without warning
+    error: Index is missing a publish URL: `foo`
     "###
     );
 }

@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::env::consts::ARCH;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
@@ -45,7 +46,7 @@ pub struct Interpreter {
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
     stdlib: PathBuf,
-    sysconfig_prefix: Option<PathBuf>,
+    standalone: bool,
     tags: OnceLock<Tags>,
     target: Option<Target>,
     prefix: Option<Prefix>,
@@ -79,7 +80,7 @@ impl Interpreter {
             sys_executable: info.sys_executable,
             sys_path: info.sys_path,
             stdlib: info.stdlib,
-            sysconfig_prefix: info.sysconfig_prefix,
+            standalone: info.standalone,
             tags: OnceLock::new(),
             target: None,
             prefix: None,
@@ -367,11 +368,6 @@ impl Interpreter {
         &self.stdlib
     }
 
-    /// Return the `prefix` path for this Python interpreter, as returned by `sysconfig.get_config_var("prefix")`.
-    pub fn sysconfig_prefix(&self) -> Option<&Path> {
-        self.sysconfig_prefix.as_deref()
-    }
-
     /// Return the `purelib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
     pub fn purelib(&self) -> &Path {
         &self.scheme.purelib
@@ -438,10 +434,9 @@ impl Interpreter {
     /// `python-build-standalone`; if it returns `false`, the interpreter is definitely _not_ from
     /// `python-build-standalone`.
     ///
-    /// See: <https://github.com/indygreg/python-build-standalone/issues/382>
+    /// See: <https://github.com/astral-sh/python-build-standalone/issues/382>
     pub fn is_standalone(&self) -> bool {
-        self.sysconfig_prefix()
-            .is_some_and(|prefix| prefix == Path::new("/install"))
+        self.standalone
     }
 
     /// Return the [`Layout`] environment used to install wheels into this interpreter.
@@ -603,7 +598,7 @@ enum InterpreterInfoResult {
 pub enum InterpreterInfoError {
     #[error("Could not detect a glibc or a musl libc (while running on Linux)")]
     LibcNotFound,
-    #[error("Unknown operation system: `{operating_system}`")]
+    #[error("Unknown operating system: `{operating_system}`")]
     UnknownOperatingSystem { operating_system: String },
     #[error("Python {python_version} is not supported. Please use Python 3.8 or newer.")]
     UnsupportedPythonVersion { python_version: String },
@@ -625,7 +620,7 @@ struct InterpreterInfo {
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
     stdlib: PathBuf,
-    sysconfig_prefix: Option<PathBuf>,
+    standalone: bool,
     pointer_size: PointerSize,
     gil_disabled: bool,
 }
@@ -746,7 +741,9 @@ impl InterpreterInfo {
 
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
-            "",
+            // Shard interpreter metadata by host architecture, to avoid cache collisions when
+            // running universal binaries under Rosetta.
+            ARCH,
             // We use the absolute path for the cache entry to avoid cache collisions for relative
             // paths. But we don't to query the executable with symbolic links resolved.
             format!("{}.msgpack", cache_digest(&absolute)),
@@ -851,6 +848,7 @@ mod tests {
                 "arch": "x86_64"
             },
             "manylinux_compatible": false,
+            "standalone": false,
             "markers": {
                 "implementation_name": "cpython",
                 "implementation_version": "3.12.0",

@@ -24,7 +24,7 @@ impl Conflicts {
     }
 
     /// Returns an iterator over all sets of conflicting sets.
-    pub fn iter(&self) -> impl Iterator<Item = &'_ ConflictSet> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = &'_ ConflictSet> + Clone + '_ {
         self.0.iter()
     }
 
@@ -75,7 +75,7 @@ impl ConflictSet {
     }
 
     /// Returns an iterator over all conflicting items.
-    pub fn iter(&self) -> impl Iterator<Item = &'_ ConflictItem> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = &'_ ConflictItem> + Clone + '_ {
         self.0.iter()
     }
 
@@ -243,7 +243,7 @@ impl<'a> From<(&'a PackageName, &'a GroupName)> for ConflictItemRef<'a> {
     }
 }
 
-impl<'a> hashbrown::Equivalent<ConflictItem> for ConflictItemRef<'a> {
+impl hashbrown::Equivalent<ConflictItem> for ConflictItemRef<'_> {
     fn equivalent(&self, key: &ConflictItem) -> bool {
         key.as_ref() == *self
     }
@@ -335,7 +335,7 @@ impl<'a> From<&'a GroupName> for ConflictPackageRef<'a> {
     }
 }
 
-impl<'a> PartialEq<ConflictPackage> for ConflictPackageRef<'a> {
+impl PartialEq<ConflictPackage> for ConflictPackageRef<'_> {
     fn eq(&self, other: &ConflictPackage) -> bool {
         other.as_ref() == *self
     }
@@ -347,7 +347,7 @@ impl<'a> PartialEq<ConflictPackageRef<'a>> for ConflictPackage {
     }
 }
 
-impl<'a> hashbrown::Equivalent<ConflictPackage> for ConflictPackageRef<'a> {
+impl hashbrown::Equivalent<ConflictPackage> for ConflictPackageRef<'_> {
     fn equivalent(&self, key: &ConflictPackage) -> bool {
         key.as_ref() == *self
     }

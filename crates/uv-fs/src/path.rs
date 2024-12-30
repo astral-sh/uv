@@ -6,8 +6,13 @@ use either::Either;
 use path_slash::PathExt;
 
 /// The current working directory.
-pub static CWD: LazyLock<PathBuf> =
-    LazyLock::new(|| std::env::current_dir().expect("The current directory must exist"));
+#[allow(clippy::exit, clippy::print_stderr)]
+pub static CWD: LazyLock<PathBuf> = LazyLock::new(|| {
+    std::env::current_dir().unwrap_or_else(|_e| {
+        eprintln!("Current directory does not exist");
+        std::process::exit(1);
+    })
+});
 
 pub trait Simplified {
     /// Simplify a [`Path`].
@@ -383,6 +388,16 @@ impl std::fmt::Display for PortablePathBuf {
             write!(f, ".")
         } else {
             write!(f, "{path}")
+        }
+    }
+}
+
+impl From<&str> for PortablePathBuf {
+    fn from(path: &str) -> Self {
+        if path == "." {
+            Self(PathBuf::new())
+        } else {
+            Self(PathBuf::from(path))
         }
     }
 }

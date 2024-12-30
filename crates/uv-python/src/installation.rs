@@ -89,7 +89,7 @@ impl PythonInstallation {
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
     ) -> Result<Self, Error> {
-        let request = request.unwrap_or_else(|| &PythonRequest::Default);
+        let request = request.unwrap_or(&PythonRequest::Default);
 
         // Search for the installation
         match Self::find(request, environments, preference, cache) {
@@ -135,9 +135,9 @@ impl PythonInstallation {
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
     ) -> Result<Self, Error> {
-        let installations = ManagedPythonInstallations::from_settings()?.init()?;
+        let installations = ManagedPythonInstallations::from_settings(None)?.init()?;
         let installations_dir = installations.root();
-        let cache_dir = installations.cache();
+        let scratch_dir = installations.scratch();
         let _lock = installations.lock().await?;
 
         let download = ManagedPythonDownload::from_request(&request)?;
@@ -148,7 +148,7 @@ impl PythonInstallation {
             .fetch_with_retry(
                 &client,
                 installations_dir,
-                &cache_dir,
+                &scratch_dir,
                 false,
                 python_install_mirror,
                 pypy_install_mirror,
@@ -163,6 +163,7 @@ impl PythonInstallation {
 
         let installed = ManagedPythonInstallation::new(path)?;
         installed.ensure_externally_managed()?;
+        installed.ensure_sysconfig_patched()?;
         installed.ensure_canonical_executables()?;
 
         Ok(Self {
@@ -228,6 +229,7 @@ impl PythonInstallation {
         &self.interpreter
     }
 
+    /// Consume the [`PythonInstallation`] and return the [`Interpreter`].
     pub fn into_interpreter(self) -> Interpreter {
         self.interpreter
     }

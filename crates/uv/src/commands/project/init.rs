@@ -41,6 +41,7 @@ pub(crate) async fn init(
     name: Option<PackageName>,
     package: bool,
     init_kind: InitKind,
+    description: Option<String>,
     vcs: Option<VersionControlSystem>,
     build_backend: Option<ProjectBuildBackend>,
     no_readme: bool,
@@ -129,6 +130,7 @@ pub(crate) async fn init(
                 &name,
                 package,
                 project_kind,
+                description,
                 vcs,
                 build_backend,
                 no_readme,
@@ -242,7 +244,7 @@ async fn init_script(
 
     let requires_python = init_script_python_requirement(
         python.as_deref(),
-        install_mirrors,
+        &install_mirrors,
         &CWD,
         no_pin_python,
         python_preference,
@@ -270,6 +272,7 @@ async fn init_project(
     name: &PackageName,
     package: bool,
     project_kind: InitProjectKind,
+    description: Option<String>,
     vcs: Option<VersionControlSystem>,
     build_backend: Option<ProjectBuildBackend>,
     no_readme: bool,
@@ -564,6 +567,7 @@ async fn init_project(
         name,
         path,
         &requires_python,
+        description.as_deref(),
         vcs,
         build_backend,
         author_from,
@@ -687,6 +691,7 @@ impl InitProjectKind {
         name: &PackageName,
         path: &Path,
         requires_python: &RequiresPython,
+        description: Option<&str>,
         vcs: Option<VersionControlSystem>,
         build_backend: Option<ProjectBuildBackend>,
         author_from: Option<AuthorFrom>,
@@ -698,6 +703,7 @@ impl InitProjectKind {
                 name,
                 path,
                 requires_python,
+                description,
                 vcs,
                 build_backend,
                 author_from,
@@ -708,6 +714,7 @@ impl InitProjectKind {
                 name,
                 path,
                 requires_python,
+                description,
                 vcs,
                 build_backend,
                 author_from,
@@ -722,6 +729,7 @@ impl InitProjectKind {
         name: &PackageName,
         path: &Path,
         requires_python: &RequiresPython,
+        description: Option<&str>,
         vcs: Option<VersionControlSystem>,
         build_backend: Option<ProjectBuildBackend>,
         author_from: Option<AuthorFrom>,
@@ -741,7 +749,13 @@ impl InitProjectKind {
         let author = get_author_info(path, author_from);
 
         // Create the `pyproject.toml`
-        let mut pyproject = pyproject_project(name, requires_python, author.as_ref(), no_readme);
+        let mut pyproject = pyproject_project(
+            name,
+            requires_python,
+            author.as_ref(),
+            description,
+            no_readme,
+        );
 
         // Include additional project configuration for packaged applications
         if package {
@@ -788,6 +802,7 @@ impl InitProjectKind {
         name: &PackageName,
         path: &Path,
         requires_python: &RequiresPython,
+        description: Option<&str>,
         vcs: Option<VersionControlSystem>,
         build_backend: Option<ProjectBuildBackend>,
         author_from: Option<AuthorFrom>,
@@ -803,7 +818,13 @@ impl InitProjectKind {
         let author = get_author_info(path, author_from.unwrap_or_default());
 
         // Create the `pyproject.toml`
-        let mut pyproject = pyproject_project(name, requires_python, author.as_ref(), no_readme);
+        let mut pyproject = pyproject_project(
+            name,
+            requires_python,
+            author.as_ref(),
+            description,
+            no_readme,
+        );
 
         // Always include a build system if the project is packaged.
         let build_backend = build_backend.unwrap_or_default();
@@ -847,19 +868,21 @@ fn pyproject_project(
     name: &PackageName,
     requires_python: &RequiresPython,
     author: Option<&Author>,
+    description: Option<&str>,
     no_readme: bool,
 ) -> String {
     indoc::formatdoc! {r#"
         [project]
         name = "{name}"
         version = "0.1.0"
-        description = "Add your description here"{readme}{authors}
+        description = "{description}"{readme}{authors}
         requires-python = "{requires_python}"
         dependencies = []
     "#,
         readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
         authors = author.map_or_else(String::new, |author| format!("\nauthors = [\n    {}\n]", author.to_toml_string())),
         requires_python = requires_python.specifiers(),
+        description = description.unwrap_or("Add your description here"),
     }
 }
 

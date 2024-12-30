@@ -1,4 +1,4 @@
-//! Convert [`VersionSpecifiers`] to [`version_ranges::Ranges`].
+//! Convert [`VersionSpecifiers`] to [`Ranges`].
 
 use version_ranges::Ranges;
 

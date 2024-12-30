@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use anyhow::Result;
@@ -339,6 +340,7 @@ pub(crate) async fn pip_sync(
         .dependency_mode(dependency_mode)
         .exclude_newer(exclude_newer)
         .index_strategy(index_strategy)
+        .build_options(build_options.clone())
         .build();
 
     let resolution = match operations::resolve(
@@ -347,7 +349,7 @@ pub(crate) async fn pip_sync(
         overrides,
         source_trees,
         project,
-        None,
+        BTreeSet::default(),
         &extras,
         preferences,
         site_packages.clone(),

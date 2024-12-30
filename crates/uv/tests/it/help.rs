@@ -57,7 +57,7 @@ fn help() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -137,7 +137,7 @@ fn help_flag() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -216,7 +216,7 @@ fn help_short_flag() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -374,6 +374,8 @@ fn help_subcommand() {
               Disable network access.
               
               When disabled, uv will only use locally cached data and locally available files.
+              
+              [env: UV_OFFLINE=]
 
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host.
@@ -450,7 +452,7 @@ fn help_subcommand() {
 fn help_subsubcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("python").arg("install"), @r##"
+    uv_snapshot!(context.filters(), context.help().arg("python").arg("install"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -458,8 +460,8 @@ fn help_subsubcommand() {
 
     Multiple Python versions may be requested.
 
-    Supports CPython and PyPy. CPython distributions are downloaded from the `python-build-standalone`
-    project. PyPy distributions are downloaded from `python.org`.
+    Supports CPython and PyPy. CPython distributions are downloaded from the Astral
+    `python-build-standalone` project. PyPy distributions are downloaded from `python.org`.
 
     Python versions are installed into the uv Python directory, which can be retrieved with `uv python
     dir`.
@@ -483,12 +485,23 @@ fn help_subsubcommand() {
               See `uv help python` to view supported request formats.
 
     Options:
+      -i, --install-dir <INSTALL_DIR>
+              The directory to store the Python installation in.
+              
+              If provided, `UV_PYTHON_INSTALL_DIR` will need to be set for subsequent operations for uv
+              to discover the Python installation.
+              
+              See `uv python dir` to view the current Python installation directory. Defaults to
+              `~/.local/share/uv/python`.
+              
+              [env: UV_PYTHON_INSTALL_DIR=]
+
           --mirror <MIRROR>
               Set the URL to use as the source for downloading Python installations.
               
               The provided URL will replace
-              `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g.,
-              `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+              `https://github.com/astral-sh/python-build-standalone/releases/download` in, e.g.,
+              `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
               
               Distributions can be read from a local directory by using the `file://` URL scheme.
               
@@ -527,8 +540,7 @@ fn help_subsubcommand() {
               3.13+freethreaded with `--default` will include in `python3t` and `pythont`, not `python3`
               and `python`.
               
-              If multiple Python versions are requested during the installation, the first request will
-              be the default.
+              If multiple Python versions are requested, uv will exit with an error.
 
     Cache options:
       -n, --no-cache
@@ -606,6 +618,8 @@ fn help_subsubcommand() {
               Disable network access.
               
               When disabled, uv will only use locally cached data and locally available files.
+              
+              [env: UV_OFFLINE=]
 
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host.
@@ -673,7 +687,7 @@ fn help_subsubcommand() {
 
 
     ----- stderr -----
-    "##);
+    "###);
 }
 
 #[test]
@@ -719,7 +733,7 @@ fn help_flag_subcommand() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -759,6 +773,8 @@ fn help_flag_subsubcommand() {
       [TARGETS]...  The Python version(s) to install
 
     Options:
+      -i, --install-dir <INSTALL_DIR>  The directory to store the Python installation in [env:
+                                       UV_PYTHON_INSTALL_DIR=]
           --mirror <MIRROR>            Set the URL to use as the source for downloading Python
                                        installations [env: UV_PYTHON_INSTALL_MIRROR=]
           --pypy-mirror <PYPY_MIRROR>  Set the URL to use as the source for downloading PyPy
@@ -790,7 +806,7 @@ fn help_flag_subsubcommand() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -947,7 +963,7 @@ fn help_with_global_option() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -1063,7 +1079,7 @@ fn help_with_no_pager() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress

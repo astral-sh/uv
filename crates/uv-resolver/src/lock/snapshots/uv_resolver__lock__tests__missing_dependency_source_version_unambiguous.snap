@@ -33,6 +33,7 @@ Ok(
         options: ResolverOptions {
             resolution_mode: Highest,
             prerelease_mode: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             exclude_newer: None,
         },
         packages: [
@@ -135,10 +136,7 @@ Ok(
                         simplified_marker: SimplifiedMarkerTree(
                             true,
                         ),
-                        complexified_marker: UniversalMarker {
-                            pep508_marker: python_full_version >= '3.12',
-                            conflict_marker: true,
-                        },
+                        complexified_marker: python_full_version >= '3.12',
                     },
                 ],
                 optional_dependencies: {},
@@ -180,6 +178,7 @@ Ok(
         manifest: ResolverManifest {
             members: {},
             requirements: {},
+            dependency_groups: {},
             constraints: {},
             overrides: {},
             dependency_metadata: {},

@@ -44,7 +44,7 @@ The dependency will include a constraint, e.g., `>=0.27.2`, for the most recent,
 of the package. An alternative constraint can be provided:
 
 ```console
-$ uv add 'httpx>=0.20'
+$ uv add "httpx>=0.20"
 ```
 
 When adding a dependency from a source other than a package registry, uv will add an entry in the
@@ -71,7 +71,7 @@ httpx = { git = "https://github.com/encode/httpx" }
 If a dependency cannot be used, uv will display an error.:
 
 ```console
-$ uv add 'httpx>9999'
+$ uv add "httpx>9999"
   × No solution found when resolving dependencies:
   ╰─▶ Because only httpx<=1.0.0b0 is available and your project depends on httpx>9999,
       we can conclude that your project's requirements are unsatisfiable.
@@ -96,7 +96,7 @@ references to the dependency, it will also be removed.
 To change an existing dependency, e.g., to use a different constraint for `httpx`:
 
 ```console
-$ uv add 'httpx>0.1.0'
+$ uv add "httpx>0.1.0"
 ```
 
 !!! note
@@ -106,7 +106,7 @@ $ uv add 'httpx>0.1.0'
     constraints. To force the package version to update to the latest within the constraints, use `--upgrade-package <name>`, e.g.:
 
     ```console
-    $ uv add 'httpx>0.1.0' --upgrade-package httpx
+    $ uv add "httpx>0.1.0" --upgrade-package httpx
     ```
 
     See the [lockfile](./sync.md#upgrading-locked-package-versions) documentation for more details
@@ -127,7 +127,7 @@ use [environment markers](https://peps.python.org/pep-0508/#environment-markers)
 For example, to install `jax` on Linux, but not on Windows or macOS:
 
 ```console
-$ uv add 'jax; sys_platform == "linux"'
+$ uv add "jax; sys_platform == 'linux'"
 ```
 
 The resulting `pyproject.toml` will then include the environment marker in the dependency
@@ -144,7 +144,7 @@ dependencies = ["jax; sys_platform == 'linux'"]
 Similarly, to include `numpy` on Python 3.11 and later:
 
 ```console
-$ uv add 'numpy; python_version >= "3.11"'
+$ uv add "numpy; python_version >= '3.11'"
 ```
 
 See Python's [environment marker](https://peps.python.org/pep-0508/#environment-markers)
@@ -290,10 +290,7 @@ $ uv add git+https://github.com/encode/httpx --tag 0.27.0
 dependencies = ["httpx"]
 
 [tool.uv.sources]
-httpx = {
-  git = "https://github.com/encode/httpx",
-  tag = "0.27.0"
-}
+httpx = { git = "https://github.com/encode/httpx", tag = "0.27.0" }
 ```
 
 Or, a branch:
@@ -307,10 +304,7 @@ $ uv add git+https://github.com/encode/httpx --branch main
 dependencies = ["httpx"]
 
 [tool.uv.sources]
-httpx = {
-  git = "https://github.com/encode/httpx",
-  branch = "main"
-}
+httpx = { git = "https://github.com/encode/httpx", branch = "main" }
 ```
 
 Or, a revision (commit):
@@ -324,10 +318,7 @@ $ uv add git+https://github.com/encode/httpx --rev 326b9431c761e1ef1e00b9f760d1f
 dependencies = ["httpx"]
 
 [tool.uv.sources]
-httpx = {
-  git = "https://github.com/encode/httpx",
-  rev = "326b9431c761e1ef1e00b9f760d1f654c8db48c6"
-}
+httpx = { git = "https://github.com/encode/httpx", rev = "326b9431c761e1ef1e00b9f760d1f654c8db48c6" }
 ```
 
 A `subdirectory` may be specified if the package isn't in the repository root.
@@ -438,11 +429,7 @@ For example, to pull `httpx` from GitHub, but only on macOS, use the following:
 dependencies = ["httpx"]
 
 [tool.uv.sources]
-httpx = {
-  git = "https://github.com/encode/httpx",
-  tag = "0.27.2",
-  marker = "sys_platform == 'darwin'"
-}
+httpx = { git = "https://github.com/encode/httpx", tag = "0.27.2", marker = "sys_platform == 'darwin'" }
 ```
 
 By specifying the marker on the source, uv will still include `httpx` on all platforms, but will
@@ -462,16 +449,8 @@ dependencies = ["httpx"]
 
 [tool.uv.sources]
 httpx = [
-  {
-    git = "https://github.com/encode/httpx",
-    tag = "0.27.2",
-    marker = "sys_platform == 'darwin'"
-  },
-  {
-    git = "https://github.com/encode/httpx",
-    tag = "0.24.1",
-    marker = "sys_platform == 'linux'"
-  },
+  { git = "https://github.com/encode/httpx", tag = "0.27.2", marker = "sys_platform == 'darwin'" },
+  { git = "https://github.com/encode/httpx", tag = "0.24.1", marker = "sys_platform == 'linux'" },
 ]
 ```
 

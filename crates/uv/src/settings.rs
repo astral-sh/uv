@@ -32,7 +32,9 @@ use uv_normalize::PackageName;
 use uv_pep508::{ExtraName, RequirementOrigin};
 use uv_pypi_types::{Requirement, SupportedEnvironments};
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
-use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};
+use uv_resolver::{
+    AnnotationStyle, DependencyMode, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode,
+};
 use uv_settings::{
     Combine, FilesystemOptions, Options, PipOptions, PublishOptions, PythonInstallMirrors,
     ResolverInstallerOptions, ResolverOptions,
@@ -187,6 +189,7 @@ pub(crate) struct InitSettings {
     pub(crate) name: Option<PackageName>,
     pub(crate) package: bool,
     pub(crate) kind: InitKind,
+    pub(crate) description: Option<String>,
     pub(crate) vcs: Option<VersionControlSystem>,
     pub(crate) build_backend: Option<ProjectBuildBackend>,
     pub(crate) no_readme: bool,
@@ -210,6 +213,7 @@ impl InitSettings {
             app,
             lib,
             script,
+            description,
             vcs,
             build_backend,
             no_readme,
@@ -239,6 +243,7 @@ impl InitSettings {
             name,
             package,
             kind,
+            description,
             vcs,
             build_backend,
             no_readme,
@@ -260,6 +265,7 @@ pub(crate) struct RunSettings {
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: DevGroupsSpecification,
     pub(crate) editable: EditableMode,
+    pub(crate) modifications: Modifications,
     pub(crate) with: Vec<String>,
     pub(crate) with_editable: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
@@ -295,7 +301,10 @@ impl RunSettings {
             module: _,
             only_dev,
             no_editable,
+            inexact,
+            exact,
             script: _,
+            gui_script: _,
             command: _,
             with,
             with_editable,
@@ -333,6 +342,11 @@ impl RunSettings {
                 dev, no_dev, only_dev, group, no_group, only_group, all_groups,
             ),
             editable: EditableMode::from_args(no_editable),
+            modifications: if flag(exact, inexact).unwrap_or(false) {
+                Modifications::Exact
+            } else {
+                Modifications::Sufficient
+            },
             with: with
                 .into_iter()
                 .flat_map(CommaSeparatedRequirements::into_iter)
@@ -573,6 +587,7 @@ impl ToolUpgradeSettings {
             resolution,
             prerelease,
             pre,
+            fork_strategy,
             config_setting,
             no_build_isolation,
             no_build_isolation_package,
@@ -606,6 +621,7 @@ impl ToolUpgradeSettings {
             resolution,
             prerelease,
             pre,
+            fork_strategy,
             config_setting,
             no_build_isolation,
             no_build_isolation_package,
@@ -703,6 +719,9 @@ impl ToolDirSettings {
 pub(crate) enum PythonListKinds {
     #[default]
     Default,
+    /// Only list version downloads.
+    Downloads,
+    /// Only list installed versions.
     Installed,
 }
 
@@ -712,7 +731,9 @@ pub(crate) enum PythonListKinds {
 pub(crate) struct PythonListSettings {
     pub(crate) kinds: PythonListKinds,
     pub(crate) all_platforms: bool,
+    pub(crate) all_arches: bool,
     pub(crate) all_versions: bool,
+    pub(crate) show_urls: bool,
 }
 
 impl PythonListSettings {
@@ -722,11 +743,16 @@ impl PythonListSettings {
         let PythonListArgs {
             all_versions,
             all_platforms,
+            all_arches,
             only_installed,
+            only_downloads,
+            show_urls,
         } = args;
 
         let kinds = if only_installed {
             PythonListKinds::Installed
+        } else if only_downloads {
+            PythonListKinds::Downloads
         } else {
             PythonListKinds::default()
         };
@@ -734,7 +760,9 @@ impl PythonListSettings {
         Self {
             kinds,
             all_platforms,
+            all_arches,
             all_versions,
+            show_urls,
         }
     }
 }
@@ -760,6 +788,7 @@ impl PythonDirSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PythonInstallSettings {
+    pub(crate) install_dir: Option<PathBuf>,
     pub(crate) targets: Vec<String>,
     pub(crate) reinstall: bool,
     pub(crate) force: bool,
@@ -772,7 +801,7 @@ impl PythonInstallSettings {
     /// Resolve the [`PythonInstallSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: PythonInstallArgs, filesystem: Option<FilesystemOptions>) -> Self {
-        let options = filesystem.map(uv_settings::FilesystemOptions::into_options);
+        let options = filesystem.map(FilesystemOptions::into_options);
         let (python_mirror, pypy_mirror) = match options {
             Some(options) => (
                 options.install_mirrors.python_install_mirror,
@@ -784,6 +813,7 @@ impl PythonInstallSettings {
         let pypy_mirror = args.pypy_mirror.or(pypy_mirror);
 
         let PythonInstallArgs {
+            install_dir,
             targets,
             reinstall,
             force,
@@ -793,6 +823,7 @@ impl PythonInstallSettings {
         } = args;
 
         Self {
+            install_dir,
             targets,
             reinstall,
             force,
@@ -807,6 +838,7 @@ impl PythonInstallSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PythonUninstallSettings {
+    pub(crate) install_dir: Option<PathBuf>,
     pub(crate) targets: Vec<String>,
     pub(crate) all: bool,
 }
@@ -818,9 +850,17 @@ impl PythonUninstallSettings {
         args: PythonUninstallArgs,
         _filesystem: Option<FilesystemOptions>,
     ) -> Self {
-        let PythonUninstallArgs { targets, all } = args;
+        let PythonUninstallArgs {
+            install_dir,
+            targets,
+            all,
+        } = args;
 
-        Self { targets, all }
+        Self {
+            install_dir,
+            targets,
+            all,
+        }
     }
 }
 
@@ -990,8 +1030,8 @@ impl LockSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: LockArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let LockArgs {
-            locked,
-            frozen,
+            check,
+            check_exists,
             dry_run,
             resolver,
             build,
@@ -1005,8 +1045,8 @@ impl LockSettings {
             .unwrap_or_default();
 
         Self {
-            locked,
-            frozen,
+            locked: check,
+            frozen: check_exists,
             dry_run,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
@@ -1952,8 +1992,8 @@ pub(crate) struct PipTreeSettings {
     pub(crate) package: Vec<PackageName>,
     pub(crate) no_dedupe: bool,
     pub(crate) invert: bool,
-    // CLI-only settings.
-    pub(crate) shared: PipSettings,
+    pub(crate) outdated: bool,
+    pub(crate) settings: PipSettings,
 }
 
 impl PipTreeSettings {
@@ -1964,6 +2004,7 @@ impl PipTreeSettings {
             tree,
             strict,
             no_strict,
+            fetch,
             python,
             system,
             no_system,
@@ -1977,13 +2018,13 @@ impl PipTreeSettings {
             no_dedupe: tree.no_dedupe,
             invert: tree.invert,
             package: tree.package,
-            // Shared settings.
-            shared: PipSettings::combine(
+            outdated: tree.outdated,
+            settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     strict: flag(strict, no_strict),
-                    ..PipOptions::default()
+                    ..PipOptions::from(fetch)
                 },
                 filesystem,
             ),
@@ -2190,6 +2231,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
+    pub(crate) fork_strategy: ForkStrategy,
     pub(crate) dependency_metadata: DependencyMetadata,
     pub(crate) config_setting: ConfigSettings,
     pub(crate) no_build_isolation: bool,
@@ -2208,6 +2250,7 @@ pub(crate) struct ResolverSettingsRef<'a> {
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
+    pub(crate) fork_strategy: ForkStrategy,
     pub(crate) dependency_metadata: &'a DependencyMetadata,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) no_build_isolation: bool,
@@ -2239,6 +2282,7 @@ impl ResolverSettings {
             keyring_provider: self.keyring_provider,
             resolution: self.resolution,
             prerelease: self.prerelease,
+            fork_strategy: self.fork_strategy,
             dependency_metadata: &self.dependency_metadata,
             config_setting: &self.config_setting,
             no_build_isolation: self.no_build_isolation,
@@ -2273,6 +2317,7 @@ impl From<ResolverOptions> for ResolverSettings {
             ),
             resolution: value.resolution.unwrap_or_default(),
             prerelease: value.prerelease.unwrap_or_default(),
+            fork_strategy: value.fork_strategy.unwrap_or_default(),
             dependency_metadata: DependencyMetadata::from_entries(
                 value.dependency_metadata.into_iter().flatten(),
             ),
@@ -2308,6 +2353,7 @@ pub(crate) struct ResolverInstallerSettingsRef<'a> {
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
+    pub(crate) fork_strategy: ForkStrategy,
     pub(crate) dependency_metadata: &'a DependencyMetadata,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) no_build_isolation: bool,
@@ -2334,6 +2380,7 @@ pub(crate) struct ResolverInstallerSettings {
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
+    pub(crate) fork_strategy: ForkStrategy,
     pub(crate) dependency_metadata: DependencyMetadata,
     pub(crate) config_setting: ConfigSettings,
     pub(crate) no_build_isolation: bool,
@@ -2370,6 +2417,7 @@ impl ResolverInstallerSettings {
             keyring_provider: self.keyring_provider,
             resolution: self.resolution,
             prerelease: self.prerelease,
+            fork_strategy: self.fork_strategy,
             dependency_metadata: &self.dependency_metadata,
             config_setting: &self.config_setting,
             no_build_isolation: self.no_build_isolation,
@@ -2406,6 +2454,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
             ),
             resolution: value.resolution.unwrap_or_default(),
             prerelease: value.prerelease.unwrap_or_default(),
+            fork_strategy: value.fork_strategy.unwrap_or_default(),
             dependency_metadata: DependencyMetadata::from_entries(
                 value.dependency_metadata.into_iter().flatten(),
             ),
@@ -2464,6 +2513,7 @@ pub(crate) struct PipSettings {
     pub(crate) dependency_mode: DependencyMode,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
+    pub(crate) fork_strategy: ForkStrategy,
     pub(crate) dependency_metadata: DependencyMetadata,
     pub(crate) output_file: Option<PathBuf>,
     pub(crate) no_strip_extras: bool,
@@ -2530,6 +2580,7 @@ impl PipSettings {
             allow_empty_requirements,
             resolution,
             prerelease,
+            fork_strategy,
             dependency_metadata,
             output_file,
             no_strip_extras,
@@ -2571,6 +2622,7 @@ impl PipSettings {
             keyring_provider: top_level_keyring_provider,
             resolution: top_level_resolution,
             prerelease: top_level_prerelease,
+            fork_strategy: top_level_fork_strategy,
             dependency_metadata: top_level_dependency_metadata,
             config_settings: top_level_config_settings,
             no_build_isolation: top_level_no_build_isolation,
@@ -2602,6 +2654,7 @@ impl PipSettings {
         let keyring_provider = keyring_provider.combine(top_level_keyring_provider);
         let resolution = resolution.combine(top_level_resolution);
         let prerelease = prerelease.combine(top_level_prerelease);
+        let fork_strategy = fork_strategy.combine(top_level_fork_strategy);
         let dependency_metadata = dependency_metadata.combine(top_level_dependency_metadata);
         let config_settings = config_settings.combine(top_level_config_settings);
         let no_build_isolation = no_build_isolation.combine(top_level_no_build_isolation);
@@ -2647,6 +2700,10 @@ impl PipSettings {
             },
             resolution: args.resolution.combine(resolution).unwrap_or_default(),
             prerelease: args.prerelease.combine(prerelease).unwrap_or_default(),
+            fork_strategy: args
+                .fork_strategy
+                .combine(fork_strategy)
+                .unwrap_or_default(),
             dependency_metadata: DependencyMetadata::from_entries(
                 args.dependency_metadata
                     .combine(dependency_metadata)
@@ -2788,6 +2845,7 @@ impl<'a> From<ResolverInstallerSettingsRef<'a>> for ResolverSettingsRef<'a> {
             keyring_provider: settings.keyring_provider,
             resolution: settings.resolution,
             prerelease: settings.prerelease,
+            fork_strategy: settings.fork_strategy,
             dependency_metadata: settings.dependency_metadata,
             config_setting: settings.config_setting,
             no_build_isolation: settings.no_build_isolation,
@@ -2829,12 +2887,16 @@ pub(crate) struct PublishSettings {
     pub(crate) files: Vec<String>,
     pub(crate) username: Option<String>,
     pub(crate) password: Option<String>,
+    pub(crate) index: Option<String>,
 
     // Both CLI and configuration.
     pub(crate) publish_url: Url,
     pub(crate) trusted_publishing: TrustedPublishing,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) check_url: Option<IndexUrl>,
+
+    // Configuration only
+    pub(crate) index_locations: IndexLocations,
 }
 
 impl PublishSettings {
@@ -2852,7 +2914,11 @@ impl PublishSettings {
             check_url,
         } = publish;
         let ResolverInstallerOptions {
-            keyring_provider, ..
+            keyring_provider,
+            index,
+            extra_index_url,
+            index_url,
+            ..
         } = top_level;
 
         // Tokens are encoded in the same way as username/password
@@ -2878,6 +2944,17 @@ impl PublishSettings {
                 .combine(keyring_provider)
                 .unwrap_or_default(),
             check_url: args.check_url.combine(check_url),
+            index: args.index,
+            index_locations: IndexLocations::new(
+                index
+                    .into_iter()
+                    .flatten()
+                    .chain(extra_index_url.into_iter().flatten().map(Index::from))
+                    .chain(index_url.into_iter().map(Index::from))
+                    .collect(),
+                Vec::new(),
+                false,
+            ),
         }
     }
 }

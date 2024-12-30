@@ -11,6 +11,7 @@ use std::fs::FileType;
 use std::io;
 use std::path::{Path, PathBuf, StripPrefixError};
 use thiserror::Error;
+use tracing::debug;
 use uv_fs::Simplified;
 use uv_globfilter::PortableGlobError;
 
@@ -139,26 +140,22 @@ fn check_metadata_directory(
         return Ok(());
     };
 
-    let dist_info_dir = format!(
-        "{}-{}.dist-info",
-        pyproject_toml.name().as_dist_info_name(),
-        pyproject_toml.version()
+    debug!(
+        "Checking metadata directory {}",
+        metadata_directory.user_display()
     );
 
     // `METADATA` is a mandatory file.
     let current = pyproject_toml
         .to_metadata(source_tree)?
         .core_metadata_format();
-    let previous =
-        fs_err::read_to_string(metadata_directory.join(&dist_info_dir).join("METADATA"))?;
+    let previous = fs_err::read_to_string(metadata_directory.join("METADATA"))?;
     if previous != current {
         return Err(Error::InconsistentSteps("METADATA"));
     }
 
     // `entry_points.txt` is not written if it would be empty.
-    let entrypoints_path = metadata_directory
-        .join(&dist_info_dir)
-        .join("entry_points.txt");
+    let entrypoints_path = metadata_directory.join("entry_points.txt");
     match pyproject_toml.to_entry_points()? {
         None => {
             if entrypoints_path.is_file() {
@@ -180,9 +177,10 @@ mod tests {
     use super::*;
     use flate2::bufread::GzDecoder;
     use fs_err::File;
+    use indoc::indoc;
     use insta::assert_snapshot;
     use itertools::Itertools;
-    use std::io::BufReader;
+    use std::io::{BufReader, Read};
     use tempfile::TempDir;
     use uv_fs::{copy_dir_all, relative_to};
 
@@ -390,5 +388,138 @@ mod tests {
             fs_err::read(direct_output_dir.path().join(wheel_filename)).unwrap(),
             fs_err::read(indirect_output_dir.path().join(wheel_filename)).unwrap()
         );
+    }
+
+    /// Test that `license = { file = "LICENSE" }` is supported.
+    #[test]
+    fn license_file_pre_pep639() {
+        let src = TempDir::new().unwrap();
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            indoc! {r#"
+            [project]
+            name = "pep-pep639-license"
+            version = "1.0.0"
+            license = { file = "license.txt" }
+
+            [build-system]
+            requires = ["uv>=0.5.15,<0.6"]
+            build-backend = "uv"
+        "#
+            },
+        )
+        .unwrap();
+        fs_err::create_dir_all(src.path().join("src").join("pep_pep639_license")).unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("pep_pep639_license")
+                .join("__init__.py"),
+        )
+        .unwrap();
+        fs_err::write(
+            src.path().join("license.txt"),
+            "Copy carefully.\nSincerely, the authors",
+        )
+        .unwrap();
+
+        // Build a wheel from a source distribution
+        let output_dir = TempDir::new().unwrap();
+        build_source_dist(src.path(), output_dir.path(), "0.5.15").unwrap();
+        let sdist_tree = TempDir::new().unwrap();
+        let source_dist_path = output_dir.path().join("pep_pep639_license-1.0.0.tar.gz");
+        let sdist_reader = BufReader::new(File::open(&source_dist_path).unwrap());
+        let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
+        source_dist.unpack(sdist_tree.path()).unwrap();
+        build_wheel(
+            &sdist_tree.path().join("pep_pep639_license-1.0.0"),
+            output_dir.path(),
+            None,
+            "0.5.15",
+        )
+        .unwrap();
+        let wheel = output_dir
+            .path()
+            .join("pep_pep639_license-1.0.0-py3-none-any.whl");
+        let mut wheel = zip::ZipArchive::new(File::open(wheel).unwrap()).unwrap();
+
+        let mut metadata = String::new();
+        wheel
+            .by_name("pep_pep639_license-1.0.0.dist-info/METADATA")
+            .unwrap()
+            .read_to_string(&mut metadata)
+            .unwrap();
+
+        assert_snapshot!(metadata, @r###"
+        Metadata-Version: 2.3
+        Name: pep-pep639-license
+        Version: 1.0.0
+        License: Copy carefully.
+                 Sincerely, the authors
+        "###);
+    }
+
+    /// Test that `build_wheel` works after the `prepare_metadata_for_build_wheel` hook.
+    #[test]
+    fn prepare_metadata_then_build_wheel() {
+        let src = TempDir::new().unwrap();
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            indoc! {r#"
+            [project]
+            name = "two-step-build"
+            version = "1.0.0"
+
+            [build-system]
+            requires = ["uv>=0.5.15,<0.6"]
+            build-backend = "uv"
+        "#
+            },
+        )
+        .unwrap();
+        fs_err::create_dir_all(src.path().join("src").join("two_step_build")).unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("two_step_build")
+                .join("__init__.py"),
+        )
+        .unwrap();
+
+        // Prepare the metadata.
+        let metadata_dir = TempDir::new().unwrap();
+        let dist_info_dir = metadata(src.path(), metadata_dir.path(), "0.5.15").unwrap();
+        let metadata_prepared =
+            fs_err::read_to_string(metadata_dir.path().join(&dist_info_dir).join("METADATA"))
+                .unwrap();
+
+        // Build the wheel, using the prepared metadata directory.
+        let output_dir = TempDir::new().unwrap();
+        build_wheel(
+            src.path(),
+            output_dir.path(),
+            Some(&metadata_dir.path().join(&dist_info_dir)),
+            "0.5.15",
+        )
+        .unwrap();
+        let wheel = output_dir
+            .path()
+            .join("two_step_build-1.0.0-py3-none-any.whl");
+        let mut wheel = zip::ZipArchive::new(File::open(wheel).unwrap()).unwrap();
+
+        let mut metadata_wheel = String::new();
+        wheel
+            .by_name("two_step_build-1.0.0.dist-info/METADATA")
+            .unwrap()
+            .read_to_string(&mut metadata_wheel)
+            .unwrap();
+
+        assert_eq!(metadata_prepared, metadata_wheel);
+
+        assert_snapshot!(metadata_wheel, @r###"
+        Metadata-Version: 2.3
+        Name: two-step-build
+        Version: 1.0.0
+        "###);
     }
 }

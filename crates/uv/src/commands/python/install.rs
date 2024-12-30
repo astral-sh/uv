@@ -47,7 +47,10 @@ impl InstallRequest {
         // Make sure the request is a valid download request and fill platform information
         let download_request = PythonDownloadRequest::from_request(&request)
             .ok_or_else(|| {
-                anyhow::anyhow!("Cannot download managed Python for request: {request}")
+                anyhow::anyhow!(
+                    "`{}` is not a valid Python download request; see `uv help python` for supported formats and `uv python list --only-downloads` for available versions",
+                    request.to_canonical_string()
+                )
             })?
             .fill()?;
 
@@ -121,6 +124,7 @@ impl Changelog {
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn install(
     project_dir: &Path,
+    install_dir: Option<PathBuf>,
     targets: Vec<String>,
     reinstall: bool,
     force: bool,
@@ -178,9 +182,9 @@ pub(crate) async fn install(
     };
 
     // Read the existing installations, lock the directory for the duration
-    let installations = ManagedPythonInstallations::from_settings()?.init()?;
+    let installations = ManagedPythonInstallations::from_settings(install_dir)?.init()?;
     let installations_dir = installations.root();
-    let cache_dir = installations.cache();
+    let scratch_dir = installations.scratch();
     let _lock = installations.lock().await?;
     let existing_installations: Vec<_> = installations
         .find_all()?
@@ -259,7 +263,7 @@ pub(crate) async fn install(
                     .fetch_with_retry(
                         &client,
                         installations_dir,
-                        &cache_dir,
+                        &scratch_dir,
                         reinstall,
                         python_install_mirror.as_deref(),
                         pypy_install_mirror.as_deref(),
@@ -306,6 +310,7 @@ pub(crate) async fn install(
     // installations that match the request
     for installation in &installations {
         installation.ensure_externally_managed()?;
+        installation.ensure_sysconfig_patched()?;
         installation.ensure_canonical_executables()?;
 
         if preview.is_disabled() {
@@ -354,32 +359,50 @@ pub(crate) async fn install(
                         target.simplified_display()
                     );
 
+                    // Check if the existing link is valid
+                    let valid_link = target
+                        .read_link()
+                        .and_then(|target| target.try_exists())
+                        .inspect_err(|err| debug!("Failed to inspect executable with error: {err}"))
+                        .unwrap_or(true);
+
                     // Figure out what installation it references, if any
-                    let existing = find_matching_bin_link(
-                        installations
-                            .iter()
-                            .copied()
-                            .chain(existing_installations.iter()),
-                        &target,
-                    );
+                    let existing = valid_link
+                        .then(|| {
+                            find_matching_bin_link(
+                                installations
+                                    .iter()
+                                    .copied()
+                                    .chain(existing_installations.iter()),
+                                &target,
+                            )
+                        })
+                        .flatten();
 
                     match existing {
                         None => {
                             // There's an existing executable we don't manage, require `--force`
-                            if !force {
-                                errors.push((
-                                    installation.key(),
-                                    anyhow::anyhow!(
-                                        "Executable already exists at `{}` but is not managed by uv; use `--force` to replace it",
-                                        to.simplified_display()
-                                    ),
-                                ));
-                                continue;
+                            if valid_link {
+                                if !force {
+                                    errors.push((
+                                        installation.key(),
+                                        anyhow::anyhow!(
+                                            "Executable already exists at `{}` but is not managed by uv; use `--force` to replace it",
+                                            to.simplified_display()
+                                        ),
+                                    ));
+                                    continue;
+                                }
+                                debug!(
+                                    "Replacing existing executable at `{}` due to `--force`",
+                                    target.simplified_display()
+                                );
+                            } else {
+                                debug!(
+                                    "Replacing broken symlink at `{}`",
+                                    target.simplified_display()
+                                );
                             }
-                            debug!(
-                                "Replacing existing executable at `{}` due to `--force`",
-                                target.simplified_display()
-                            );
                         }
                         Some(existing) if existing == *installation => {
                             // The existing link points to the same installation, so we're done unless

@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::env;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::stdout;
@@ -8,7 +7,7 @@ use std::process::ExitCode;
 use std::sync::atomic::Ordering;
 
 use anstream::eprintln;
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
 use commands::add_credentials;
@@ -145,6 +144,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: Some(command),
             module,
             script,
+            gui_script,
             ..
         }) = &mut **command
         {
@@ -154,6 +154,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     command,
                     *module,
                     *script,
+                    *gui_script,
                     settings.connectivity,
                     settings.native_tls,
                     &settings.allow_insecure_host,
@@ -177,9 +178,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 Some(RunCommand::PythonRemote(script, _)) => {
                     Pep723Metadata::read(&script).await?.map(Pep723Item::Remote)
                 }
-                Some(RunCommand::PythonStdin(contents)) => {
-                    Pep723Metadata::parse(contents)?.map(Pep723Item::Stdin)
-                }
+                Some(
+                    RunCommand::PythonStdin(contents, _) | RunCommand::PythonGuiStdin(contents, _),
+                ) => Pep723Metadata::parse(contents)?.map(Pep723Item::Stdin),
                 _ => None,
             }
         } else if let ProjectCommand::Remove(uv_cli::RemoveArgs {
@@ -223,6 +224,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             2.. => logging::Level::ExtraVerbose,
         },
         duration_layer,
+        globals.color,
     )?;
 
     // Configure the `Printer`, which controls user-facing output in the CLI.
@@ -340,6 +342,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.output_file.as_deref(),
                 args.settings.resolution,
                 args.settings.prerelease,
+                args.settings.fork_strategy,
                 args.settings.dependency_mode,
                 args.settings.upgrade,
                 args.settings.generate_hashes,
@@ -672,12 +675,23 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &args.package,
                 args.no_dedupe,
                 args.invert,
-                args.shared.strict,
-                args.shared.python.as_deref(),
-                args.shared.system,
+                args.outdated,
+                args.settings.prerelease,
+                args.settings.index_locations,
+                args.settings.index_strategy,
+                args.settings.keyring_provider,
+                globals.allow_insecure_host,
+                globals.connectivity,
+                globals.concurrency,
+                args.settings.strict,
+                args.settings.exclude_newer,
+                args.settings.python.as_deref(),
+                args.settings.system,
+                globals.native_tls,
                 &cache,
                 printer,
             )
+            .await
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Check(args),
@@ -1091,6 +1105,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.kinds,
                 args.all_versions,
                 args.all_platforms,
+                args.all_arches,
+                args.show_urls,
                 globals.python_preference,
                 globals.python_downloads,
                 &cache,
@@ -1107,6 +1123,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             commands::python_install(
                 &project_dir,
+                args.install_dir,
                 args.targets,
                 args.reinstall,
                 args.force,
@@ -1130,7 +1147,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::PythonUninstallSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::python_uninstall(args.targets, args.all, printer).await
+            commands::python_uninstall(args.install_dir, args.targets, args.all, printer).await
         }
         Commands::Python(PythonNamespace {
             command: PythonCommand::Find(args),
@@ -1208,7 +1225,45 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 trusted_publishing,
                 keyring_provider,
                 check_url,
+                index,
+                index_locations,
             } = PublishSettings::resolve(args, filesystem);
+
+            let (publish_url, check_url) = if let Some(index_name) = index {
+                debug!("Publishing with index {index_name}");
+                let index = index_locations
+                    .simple_indexes()
+                    .find(|index| {
+                        index
+                            .name
+                            .as_ref()
+                            .is_some_and(|name| name.as_ref() == index_name)
+                    })
+                    .with_context(|| {
+                        let mut index_names: Vec<String> = index_locations
+                            .simple_indexes()
+                            .filter_map(|index| index.name.as_ref())
+                            .map(ToString::to_string)
+                            .collect();
+                        index_names.sort();
+                        if index_names.is_empty() {
+                            format!("No indexes were found, can't use index: `{index_name}`")
+                        } else {
+                            let index_names = index_names.join("`, `");
+                            format!(
+                                "Index not found: `{index_name}`. Found indexes: `{index_names}`"
+                            )
+                        }
+                    })?;
+                let publish_url = index
+                    .publish_url
+                    .clone()
+                    .with_context(|| format!("Index is missing a publish URL: `{index_name}`"))?;
+                let check_url = index.url.clone();
+                (publish_url, Some(check_url))
+            } else {
+                (publish_url, check_url)
+            };
 
             commands::publish(
                 files,
@@ -1341,6 +1396,7 @@ async fn run_project(
                 args.name,
                 args.package,
                 args.kind,
+                args.description,
                 args.vcs,
                 args.build_backend,
                 args.no_readme,
@@ -1406,6 +1462,7 @@ async fn run_project(
                 args.extras,
                 args.dev,
                 args.editable,
+                args.modifications,
                 args.python,
                 args.install_mirrors,
                 args.settings,
@@ -1684,7 +1741,7 @@ async fn run_project(
 /// uv binary interface is the official public API. When using this entry
 /// point, uv assumes it is running in a process it controls and that the
 /// entire process lifetime is managed by uv. Unexpected behavior may be
-/// encountered if this entry pointis called multiple times in a single process.
+/// encountered if this entry point is called multiple times in a single process.
 pub fn main<I, T>(args: I) -> ExitCode
 where
     I: IntoIterator<Item = T>,

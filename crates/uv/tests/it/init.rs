@@ -3271,3 +3271,89 @@ fn init_application_package_uv() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn init_with_description() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.join("foo");
+    fs_err::create_dir_all(&child)?;
+
+    // Initialize the project with a description
+    context
+        .init()
+        .current_dir(&child)
+        .arg("--description")
+        .arg("A sample project description")
+        .arg("--lib")
+        .assert()
+        .success();
+
+    // Read the generated pyproject.toml
+    let pyproject = fs_err::read_to_string(child.join("pyproject.toml"))?;
+
+    // Verify the description in pyproject.toml
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "A sample project description"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn init_without_description() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.join("bar");
+    fs_err::create_dir_all(&child)?;
+
+    // Initialize the project without a description
+    context
+        .init()
+        .current_dir(&child)
+        .arg("--lib")
+        .assert()
+        .success();
+
+    // Read the generated pyproject.toml
+    let pyproject = fs_err::read_to_string(child.join("pyproject.toml"))?;
+
+    // Verify the default description in pyproject.toml
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#
+        );
+    });
+
+    Ok(())
+}

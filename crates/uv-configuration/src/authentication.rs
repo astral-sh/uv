@@ -19,7 +19,7 @@ pub enum KeyringProviderType {
 // See <https://pip.pypa.io/en/stable/topics/authentication/#keyring-support> for details.
 
 impl KeyringProviderType {
-    pub fn to_provider(&self) -> Option<uv_auth::KeyringProvider> {
+    pub fn to_provider(&self) -> Option<KeyringProvider> {
         match self {
             Self::Disabled => None,
             Self::Subprocess => Some(KeyringProvider::subprocess()),

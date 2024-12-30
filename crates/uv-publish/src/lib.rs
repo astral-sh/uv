@@ -21,7 +21,7 @@ use std::{env, fmt, io};
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, BufReader};
 use tokio_util::io::ReaderStream;
-use tracing::{debug, enabled, trace, Level};
+use tracing::{debug, enabled, trace, warn, Level};
 use url::Url;
 use uv_client::{BaseClient, OwnedArchive, RegistryClientBuilder, UvRetryableStrategy};
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
@@ -469,10 +469,24 @@ pub async fn check_url(
         .wrap_existing(client);
 
     debug!("Checking for {filename} in the registry");
-    let response = registry_client
+    let response = match registry_client
         .simple(filename.name(), Some(index_url), index_capabilities)
         .await
-        .map_err(PublishError::CheckUrlIndex)?;
+    {
+        Ok(response) => response,
+        Err(err) => {
+            return match err.into_kind() {
+                uv_client::ErrorKind::PackageNotFound(_) => {
+                    // The package doesn't exist, so we can't have uploaded it.
+                    warn!(
+                        "Package not found in the registry; skipping upload check for {filename}"
+                    );
+                    Ok(false)
+                }
+                kind => Err(PublishError::CheckUrlIndex(kind.into())),
+            };
+        }
+    };
     let [(_, simple_metadata)] = response.as_slice() else {
         unreachable!("We queried a single index, we must get a single response");
     };

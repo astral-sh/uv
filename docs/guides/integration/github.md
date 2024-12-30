@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v5
 ```
 
 It is considered best practice to pin to a specific uv version, e.g., with:
@@ -37,10 +37,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v5
         with:
           # Install a specific version of uv.
-          version: "0.5.7"
+          version: "0.5.13"
 ```
 
 ## Setting up Python
@@ -59,44 +59,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v5
 
       - name: Set up Python
         run: uv python install
 ```
 
 This will respect the Python version pinned in the project.
-
-Or, when using a matrix, as in:
-
-```yaml title="example.yml"
-strategy:
-  matrix:
-    python-version:
-      - "3.10"
-      - "3.11"
-      - "3.12"
-```
-
-Provide the version to the `python install` invocation:
-
-```yaml title="example.yml" hl_lines="14 15"
-name: Example
-
-jobs:
-  uv-example:
-    name: python
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        run: uv python install ${{ matrix.python-version }}
-```
 
 Alternatively, the official GitHub `setup-python` action can be used. This can be faster, because
 GitHub caches the Python versions alongside the runner.
@@ -117,7 +86,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v5
 
       - name: "Set up Python"
         uses: actions/setup-python@v5
@@ -140,12 +109,58 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v5
 
       - name: "Set up Python"
         uses: actions/setup-python@v5
         with:
           python-version-file: "pyproject.toml"
+```
+
+## Multiple Python versions
+
+When using a matrix test test multiple Python versions, set the Python version using
+`astral-sh/setup-uv`, which will override the Python version specification in the `pyproject.toml`
+or `.python-version` files:
+
+```yaml title="example.yml" hl_lines="17 18"
+jobs:
+  build:
+    name: continuous-integration
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - "3.10"
+          - "3.11"
+          - "3.12"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv and set the python version
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+```
+
+If not using the `setup-uv` action, you can set the `UV_PYTHON` environment variable:
+
+```yaml title="example.yml" hl_lines="12"
+jobs:
+  build:
+    name: continuous-integration
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - "3.10"
+          - "3.11"
+          - "3.12"
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+    steps:
+      - uses: actions/checkout@v4
 ```
 
 ## Syncing and running
@@ -165,7 +180,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v5
 
       - name: Set up Python
         run: uv python install
@@ -193,7 +208,7 @@ persisting the cache:
 
 ```yaml title="example.yml"
 - name: Enable caching
-  uses: astral-sh/setup-uv@v4
+  uses: astral-sh/setup-uv@v5
   with:
     enable-cache: true
 ```
@@ -202,7 +217,7 @@ You can configure the action to use a custom cache directory on the runner:
 
 ```yaml title="example.yml"
 - name: Define a custom uv cache path
-  uses: astral-sh/setup-uv@v4
+  uses: astral-sh/setup-uv@v5
   with:
     enable-cache: true
     cache-local-path: "/path/to/cache"
@@ -212,7 +227,7 @@ Or invalidate it when the lockfile changes:
 
 ```yaml title="example.yml"
 - name: Define a cache dependency glob
-  uses: astral-sh/setup-uv@v4
+  uses: astral-sh/setup-uv@v5
   with:
     enable-cache: true
     cache-dependency-glob: "uv.lock"
@@ -222,7 +237,7 @@ Or when any requirements file changes:
 
 ```yaml title="example.yml"
 - name: Define a cache dependency glob
-  uses: astral-sh/setup-uv@v4
+  uses: astral-sh/setup-uv@v5
   with:
     enable-cache: true
     cache-dependency-glob: "requirements**.txt"

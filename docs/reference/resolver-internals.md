@@ -63,6 +63,9 @@ involved packages.
     For more details on the PubGrub algorithm, see [Internals of the PubGrub
     algorithm](https://pubgrub-rs-guide.pages.dev/internals/intro).
 
+In addition to PubGrub's base algorithm, we also use a heuristic that backtracks and switches the
+order of two packages if they have been conflicting too much.
+
 ## Forking
 
 Python resolvers historically didn't support backtracking, and even with backtracking, resolution
@@ -70,7 +73,7 @@ was usually limited to single environment, which one specific architecture, oper
 version, and Python implementation. Some packages use contradictory requirements for different
 environments, for example:
 
-```python
+```
 numpy>=2,<3 ; python_version >= "3.11"
 numpy>=1.16,<2 ; python_version < "3.11"
 ```
@@ -85,7 +88,7 @@ In the above example, the partial solution would be split into two resolutions, 
 If markers overlap or are missing a part of the marker space, the resolver splits additional times —
 there can be many forks per package. For example, given:
 
-```python
+```
 flask > 1 ; sys_platform == 'darwin'
 flask > 2 ; sys_platform == 'win32'
 flask

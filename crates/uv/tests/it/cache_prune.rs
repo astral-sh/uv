@@ -257,14 +257,7 @@ fn prune_unzipped() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of iniconfig are available:
-              iniconfig<=0.1
-              iniconfig>=1.0.0
-          and all of:
-              iniconfig<=0.1
-              iniconfig>=1.0.0
-          need to be downloaded from a registry, we can conclude that iniconfig<1.0.0 cannot be used.
-          And because you require iniconfig, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because all versions of iniconfig need to be downloaded from a registry and you require iniconfig, we can conclude that your requirements are unsatisfiable.
 
           hint: Pre-releases are available for `iniconfig` in the requested range (e.g., 0.2.dev0), but pre-releases weren't enabled (try: `--prerelease=allow`)
 

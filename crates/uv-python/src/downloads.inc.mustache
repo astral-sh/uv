@@ -3,6 +3,7 @@
 
 use uv_pep440::{Prerelease, PrereleaseKind};
 use crate::PythonVariant;
+use crate::platform::ArchVariant;
 
 pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
     {{#versions}}
@@ -13,7 +14,10 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: {{value.patch}},
             prerelease: {{value.prerelease}},
             implementation: LenientImplementationName::Known(ImplementationName::{{value.name}}),
-            arch: Arch(target_lexicon::Architecture::{{value.arch}}),
+            arch: Arch{
+                family: target_lexicon::Architecture::{{value.arch_family}},
+                variant: {{value.arch_variant}},
+            },
             os: Os(target_lexicon::OperatingSystem::{{value.os}}),
             {{#value.libc}}
             libc: Libc::Some(target_lexicon::Environment::{{.}}),

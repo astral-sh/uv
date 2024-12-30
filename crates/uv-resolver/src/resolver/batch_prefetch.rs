@@ -39,13 +39,32 @@ enum BatchPrefetchStrategy {
 /// have to fetch the metadata for a lot of versions.
 ///
 /// Note that these all heuristics that could totally prefetch lots of irrelevant versions.
-#[derive(Default)]
+#[derive(Clone)]
 pub(crate) struct BatchPrefetcher {
+    // Internal types.
     tried_versions: FxHashMap<PackageName, usize>,
     last_prefetch: FxHashMap<PackageName, usize>,
+    // Shared (e.g., `Arc`) types.
+    capabilities: IndexCapabilities,
+    index: InMemoryIndex,
+    request_sink: Sender<Request>,
 }
 
 impl BatchPrefetcher {
+    pub(crate) fn new(
+        capabilities: IndexCapabilities,
+        index: InMemoryIndex,
+        request_sink: Sender<Request>,
+    ) -> Self {
+        Self {
+            tried_versions: FxHashMap::default(),
+            last_prefetch: FxHashMap::default(),
+            capabilities,
+            index,
+            request_sink,
+        }
+    }
+
     /// Prefetch a large number of versions if we already unsuccessfully tried many versions.
     pub(crate) fn prefetch_batches(
         &mut self,
@@ -55,9 +74,6 @@ impl BatchPrefetcher {
         current_range: &Range<Version>,
         unchangeable_constraints: Option<&Term<Range<Version>>>,
         python_requirement: &PythonRequirement,
-        request_sink: &Sender<Request>,
-        in_memory: &InMemoryIndex,
-        capabilities: &IndexCapabilities,
         selector: &CandidateSelector,
         env: &ResolverEnvironment,
     ) -> anyhow::Result<(), ResolveError> {
@@ -79,12 +95,12 @@ impl BatchPrefetcher {
 
         // This is immediate, we already fetched the version map.
         let versions_response = if let Some(index) = index {
-            in_memory
+            self.index
                 .explicit()
                 .wait_blocking(&(name.clone(), index.clone()))
                 .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?
         } else {
-            in_memory
+            self.index
                 .implicit()
                 .wait_blocking(name)
                 .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?
@@ -166,7 +182,7 @@ impl BatchPrefetcher {
             // Avoid prefetching built distributions that don't support _either_ PEP 658 (`.metadata`)
             // or range requests.
             if !(wheel.file.dist_info_metadata
-                || capabilities.supports_range_requests(&wheel.index))
+                || self.capabilities.supports_range_requests(&wheel.index))
             {
                 debug!("Abandoning prefetch for {wheel} due to missing registry capabilities");
                 return Ok(());
@@ -214,13 +230,17 @@ impl BatchPrefetcher {
             );
             prefetch_count += 1;
 
-            if in_memory.distributions().register(candidate.version_id()) {
+            if self.index.distributions().register(candidate.version_id()) {
                 let request = Request::from(dist);
-                request_sink.blocking_send(request)?;
+                self.request_sink.blocking_send(request)?;
             }
         }
 
-        debug!("Prefetching {prefetch_count} {name} versions");
+        match prefetch_count {
+            0 => debug!("No `{name}` versions to prefetch"),
+            1 => debug!("Prefetched 1 `{name}` version"),
+            _ => debug!("Prefetched {prefetch_count} `{name}` versions"),
+        }
 
         self.last_prefetch.insert(name.clone(), num_tried);
         Ok(())

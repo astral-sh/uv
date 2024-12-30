@@ -11,6 +11,7 @@ use crate::{IndexUrl, IndexUrlError};
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case")]
 pub struct Index {
     /// The name of the index.
     ///
@@ -67,6 +68,19 @@ pub struct Index {
     // /// can point to either local or remote resources.
     // #[serde(default)]
     // pub r#type: IndexKind,
+    /// The URL of the upload endpoint.
+    ///
+    /// When using `uv publish --index <name>`, this URL is used for publishing.
+    ///
+    /// A configuration for the default index PyPI would look as follows:
+    ///
+    /// ```toml
+    /// [[tool.uv.index]]
+    /// name = "pypi"
+    /// url = "https://pypi.org/simple"
+    /// publish-url = "https://upload.pypi.org/legacy/"
+    /// ```
+    pub publish_url: Option<Url>,
 }
 
 // #[derive(
@@ -90,6 +104,7 @@ impl Index {
             explicit: false,
             default: true,
             origin: None,
+            publish_url: None,
         }
     }
 
@@ -101,6 +116,7 @@ impl Index {
             explicit: false,
             default: false,
             origin: None,
+            publish_url: None,
         }
     }
 
@@ -112,6 +128,7 @@ impl Index {
             explicit: false,
             default: false,
             origin: None,
+            publish_url: None,
         }
     }
 
@@ -175,6 +192,7 @@ impl FromStr for Index {
                     explicit: false,
                     default: false,
                     origin: None,
+                    publish_url: None,
                 });
             }
         }
@@ -187,6 +205,7 @@ impl FromStr for Index {
             explicit: false,
             default: false,
             origin: None,
+            publish_url: None,
         })
     }
 }

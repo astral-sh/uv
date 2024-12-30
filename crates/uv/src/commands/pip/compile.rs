@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::env;
 use std::path::Path;
 
@@ -31,7 +32,7 @@ use uv_requirements::{
     upgrade::read_requirements_txt, RequirementsSource, RequirementsSpecification,
 };
 use uv_resolver::{
-    AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex,
+    AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex, ForkStrategy,
     InMemoryIndex, OptionsBuilder, PrereleaseMode, PythonRequirement, RequiresPython,
     ResolutionMode, ResolverEnvironment,
 };
@@ -57,6 +58,7 @@ pub(crate) async fn pip_compile(
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PrereleaseMode,
+    fork_strategy: ForkStrategy,
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
     generate_hashes: bool,
@@ -361,9 +363,11 @@ pub(crate) async fn pip_compile(
     let options = OptionsBuilder::new()
         .resolution_mode(resolution_mode)
         .prerelease_mode(prerelease_mode)
+        .fork_strategy(fork_strategy)
         .dependency_mode(dependency_mode)
         .exclude_newer(exclude_newer)
         .index_strategy(index_strategy)
+        .build_options(build_options.clone())
         .build();
 
     // Resolve the requirements.
@@ -373,7 +377,7 @@ pub(crate) async fn pip_compile(
         overrides,
         source_trees,
         project,
-        None,
+        BTreeSet::default(),
         &extras,
         preferences,
         EmptyInstalledPackages,
@@ -631,6 +635,18 @@ fn cmd(
 
             // Always skip the `--verbose` flag.
             if arg == "--verbose" || arg == "-v" {
+                *skip_next = None;
+                return Some(None);
+            }
+
+            // Always skip the `--no-progress` flag.
+            if arg == "--no-progress" {
+                *skip_next = None;
+                return Some(None);
+            }
+
+            // Always skip the `--native-tls` flag.
+            if arg == "--native-tls" {
                 *skip_next = None;
                 return Some(None);
             }

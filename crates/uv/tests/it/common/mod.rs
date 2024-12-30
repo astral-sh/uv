@@ -32,16 +32,22 @@ use uv_static::EnvVars;
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 
-pub const PACKSE_VERSION: &str = "0.3.39";
+pub const PACKSE_VERSION: &str = "0.3.42";
 
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
 pub fn build_vendor_links_url() -> String {
-    format!("https://raw.githubusercontent.com/astral-sh/packse/{PACKSE_VERSION}/vendor/links.html")
+    env::var(EnvVars::UV_TEST_VENDOR_LINKS_URL)
+        .ok()
+        .unwrap_or(format!(
+            "https://raw.githubusercontent.com/astral-sh/packse/{PACKSE_VERSION}/vendor/links.html"
+        ))
 }
 
 pub fn packse_index_url() -> String {
-    format!("https://astral-sh.github.io/packse/{PACKSE_VERSION}/simple-html/")
+    env::var(EnvVars::UV_TEST_INDEX_URL).ok().unwrap_or(format!(
+        "https://astral-sh.github.io/packse/{PACKSE_VERSION}/simple-html/"
+    ))
 }
 
 #[doc(hidden)] // Macro and test context only, don't use directly.
@@ -59,7 +65,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"uv\.exe", "uv"),
     // uv version display
     (
-        r"uv(-.*)? \d+\.\d+\.\d+( \(.*\))?",
+        r"uv(-.*)? \d+\.\d+\.\d+(\+\d+)?( \(.*\))?",
         r"uv [VERSION] ([COMMIT] DATE)",
     ),
     // The exact message is host language dependent
@@ -285,7 +291,7 @@ impl TestContext {
 
         // The workspace root directory is not available without walking up the tree
         // https://github.com/rust-lang/cargo/issues/3946
-        let workspace_root = Path::new(&std::env::var(EnvVars::CARGO_MANIFEST_DIR).unwrap())
+        let workspace_root = Path::new(&env::var(EnvVars::CARGO_MANIFEST_DIR).unwrap())
             .parent()
             .expect("CARGO_MANIFEST_DIR should be nested in workspace")
             .parent()
@@ -666,7 +672,7 @@ impl TestContext {
             .env(EnvVars::UV_PYTHON_BIN_DIR, bin.as_os_str())
             .env(
                 EnvVars::PATH,
-                std::env::join_paths(std::iter::once(bin).chain(std::env::split_paths(
+                env::join_paths(std::iter::once(bin).chain(env::split_paths(
                     &env::var(EnvVars::PATH).unwrap_or_default(),
                 )))
                 .unwrap(),
@@ -886,7 +892,7 @@ impl TestContext {
     pub fn python_path(&self) -> OsString {
         if cfg!(unix) {
             // On Unix, we needed to normalize the Python executable names to `python3` for the tests
-            std::env::join_paths(
+            env::join_paths(
                 self.python_versions
                     .iter()
                     .map(|(version, _)| self.python_dir.join(version.to_string())),
@@ -894,7 +900,7 @@ impl TestContext {
             .unwrap()
         } else {
             // On Windows, just join the parent directories of the executables
-            std::env::join_paths(
+            env::join_paths(
                 self.python_versions
                     .iter()
                     .map(|(_, executable)| executable.parent().unwrap().to_path_buf()),
@@ -982,7 +988,7 @@ impl TestContext {
             change(self),
             self.filters(),
             "diff_lock",
-            Some(crate::common::WindowsFilters::Platform),
+            Some(WindowsFilters::Platform),
         );
         assert!(status.success(), "{snapshot}");
         let new_lock = fs_err::read_to_string(&lock_path).unwrap();
@@ -1075,7 +1081,7 @@ pub fn venv_to_interpreter(venv: &Path) -> PathBuf {
 
 /// Get the path to the python interpreter for a specific python version.
 pub fn get_python(version: &PythonVersion) -> PathBuf {
-    ManagedPythonInstallations::from_settings()
+    ManagedPythonInstallations::from_settings(None)
         .map(|installed_pythons| {
             installed_pythons
                 .find_version(version)
@@ -1091,11 +1097,7 @@ pub fn get_python(version: &PythonVersion) -> PathBuf {
 }
 
 /// Create a virtual environment at the given path.
-pub fn create_venv_from_executable<P: AsRef<std::path::Path>>(
-    path: P,
-    cache_dir: &ChildPath,
-    python: &Path,
-) {
+pub fn create_venv_from_executable<P: AsRef<Path>>(path: P, cache_dir: &ChildPath, python: &Path) {
     assert_cmd::Command::new(get_bin())
         .arg("venv")
         .arg(path.as_ref().as_os_str())
@@ -1123,7 +1125,7 @@ pub fn python_path_with_versions(
     temp_dir: &ChildPath,
     python_versions: &[&str],
 ) -> anyhow::Result<OsString> {
-    Ok(std::env::join_paths(
+    Ok(env::join_paths(
         python_installations_for_versions(temp_dir, python_versions)?
             .into_iter()
             .map(|path| path.parent().unwrap().to_path_buf()),
@@ -1365,7 +1367,7 @@ pub fn decode_token(content: &[&str]) -> String {
 /// certificate verification, passing through the `BaseClient`
 #[tokio::main(flavor = "current_thread")]
 pub async fn download_to_disk(url: &str, path: &Path) {
-    let trusted_hosts: Vec<_> = std::env::var(EnvVars::UV_INSECURE_HOST)
+    let trusted_hosts: Vec<_> = env::var(EnvVars::UV_INSECURE_HOST)
         .unwrap_or_default()
         .split(' ')
         .map(|h| uv_configuration::TrustedHost::from_str(h).unwrap())
