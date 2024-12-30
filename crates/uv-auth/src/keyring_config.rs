@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::PathBuf;
+use std::sync::Mutex;
 use thiserror::Error;
 use toml;
 
@@ -21,6 +22,9 @@ pub enum ConfigError {
     TomlSerializationError(#[from] toml::ser::Error),
 }
 
+#[cfg(test)]
+static CONFIG_PATH: Mutex<Option<PathBuf>> = Mutex::new(None);
+
 pub trait ConfigFile {
     fn path() -> Result<PathBuf, ConfigError>;
 
@@ -33,6 +37,15 @@ pub trait ConfigFile {
 
 impl ConfigFile for AuthConfig {
     fn path() -> Result<PathBuf, ConfigError> {
+        #[cfg(test)]
+        {
+            // Lock the mutex safely and access the path
+            let path_guard = CONFIG_PATH.lock().unwrap();
+            if let Some(ref path) = *path_guard {
+                return Ok(path.clone());
+            }
+        }
+
         let cache_dir = uv_dirs::user_cache_dir().ok_or(ConfigError::InvalidPath)?;
         Ok(cache_dir.join("auth.toml"))
     }
@@ -85,6 +98,18 @@ impl AuthConfig {
         file.write_all(contents.as_bytes())?;
         Ok(())
     }
+}
+
+#[cfg(test)]
+pub(crate) fn set_test_config_path(path: PathBuf) {
+    let mut path_guard = CONFIG_PATH.lock().unwrap();
+    *path_guard = Some(path);
+}
+
+#[cfg(test)]
+pub(crate) fn reset_config_path() {
+    let mut path_guard = CONFIG_PATH.lock().unwrap();
+    *path_guard = None;
 }
 
 #[cfg(test)]

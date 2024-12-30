@@ -291,6 +291,9 @@ impl Credentials {
 mod tests {
 
     use insta::assert_debug_snapshot;
+    use tempfile::tempdir;
+
+    use crate::keyring_config::{reset_config_path, set_test_config_path};
 
     use super::*;
 
@@ -399,34 +402,32 @@ mod tests {
 
     #[test]
     fn from_keyring() {
-        // let service_name = "example.com";
-        // let username = "user1";
-        // let index = "index1";
+        let username = "user";
+        let password = "password";
+        let index = "test_index";
 
-        // let child = Command::new("keyring")
-        //     .arg("set")
-        //     .arg(service_name)
-        //     .arg(username)
-        //     .stdin(Stdio::null())
-        //     .stdout(Stdio::piped())
-        //     .stderr(Stdio::inherit())
-        //     .spawn()
-        //     .inspect_err(|err| eprint!("Failure running `keyring` command: {err}"))
-        //     .ok()?;
+        let url = Url::parse("https://example.com").unwrap();
+        let keyring = KeyringProvider::dummy([((url.host_str().unwrap(), username), password)]);
+        let temp_dir = tempdir().unwrap();
+        let auth_config_path = temp_dir.into_path().join("test_auth.toml");
 
-        // let output = executor::block_on(child.wait_with_output())
-        //     .inspect_err(|err| eprintln!("Failed to wait for `keyring` output: {err}"))
-        //     .ok()?;
+        set_test_config_path(auth_config_path);
 
-        // assert!(output.status.success());
+        let mut auth_config = AuthConfig::load().unwrap();
+        auth_config.add_entry(index.to_string(), username.to_string());
+        auth_config.store().unwrap();
 
-        // let keyring_provider = KeyringProvider::subprocess();
+        // Act
+        let credentials = Credentials::from_keyring(index.to_string(), &url, Some(keyring));
 
-        // let mut auth_config = AuthConfig::load()?;
-        // auth_config.add_entry(index.to_string(), username.to_string());
-        // auth_config.store();
+        assert_eq!(
+            credentials,
+            Some(Credentials::new(
+                Some(username.to_string()),
+                Some(password.to_string())
+            ))
+        );
 
-        // // Act
-        // let credentials = Credentials::from_keyring(index.to_string(), "example.com".to_string(), Some(keyring_provider));
+        reset_config_path();
     }
 }
