@@ -9,7 +9,7 @@ pre-commit, add the following to the `.pre-commit-config.yaml`:
 ```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
   # uv version.
-  rev: 0.5.8
+  rev: 0.5.13
   hooks:
     - id: uv-lock
 ```
@@ -19,7 +19,7 @@ To keep your `requirements.txt` file updated using pre-commit:
 ```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
   # uv version.
-  rev: 0.5.8
+  rev: 0.5.13
   hooks:
     - id: uv-export
 ```
