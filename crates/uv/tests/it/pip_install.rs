@@ -7724,3 +7724,137 @@ fn missing_subdirectory_url() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn static_metadata_pyproject_toml() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "example"
+        version = "0.0.0"
+        dependencies = [
+          "anyio==3.7.0"
+        ]
+
+        [[tool.uv.dependency-metadata]]
+        name = "anyio"
+        version = "3.7.0"
+        requires-dist = ["typing-extensions"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("pyproject.toml"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + anyio==3.7.0
+     + typing-extensions==4.10.0
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn static_metadata_source_tree() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "example"
+        version = "0.0.0"
+        dependencies = [
+          "anyio==3.7.0"
+        ]
+
+        [[tool.uv.dependency-metadata]]
+        name = "anyio"
+        version = "3.7.0"
+        requires-dist = ["typing-extensions"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-e")
+        .arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + example==0.0.0 (from file://[TEMP_DIR]/)
+     + typing-extensions==4.10.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Regression test for: <https://github.com/astral-sh/uv/issues/10239#issuecomment-2565663046>
+#[test]
+fn static_metadata_already_installed() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "example"
+        version = "0.0.0"
+        dependencies = [
+          "anyio==3.7.0"
+        ]
+
+        [[tool.uv.dependency-metadata]]
+        name = "anyio"
+        version = "3.7.0"
+        requires-dist = ["typing-extensions"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("pyproject.toml"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + anyio==3.7.0
+     + typing-extensions==4.10.0
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-e")
+        .arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + example==0.0.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    Ok(())
+}

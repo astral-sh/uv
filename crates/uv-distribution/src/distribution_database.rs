@@ -21,7 +21,8 @@ use uv_client::{
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    BuildableSource, BuiltDist, Dist, FileLocation, HashPolicy, Hashed, Name, SourceDist,
+    BuildableSource, BuiltDist, Dist, FileLocation, HashPolicy, Hashed, InstalledDist, Name,
+    SourceDist,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
@@ -113,6 +114,32 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             Dist::Built(built) => self.get_wheel(built, hashes).await,
             Dist::Source(source) => self.build_wheel(source, tags, hashes).await,
         }
+    }
+
+    /// Either fetch the only wheel metadata (directly from the index or with range requests) or
+    /// fetch and build the source distribution.
+    ///
+    /// While hashes will be generated in some cases, hash-checking is only enforced for source
+    /// distributions, and should be enforced by the caller for wheels.
+    #[instrument(skip_all, fields(%dist))]
+    pub async fn get_installed_metadata(
+        &self,
+        dist: &InstalledDist,
+    ) -> Result<ArchiveMetadata, Error> {
+        // If the metadata was provided by the user directly, prefer it.
+        if let Some(metadata) = self
+            .build_context
+            .dependency_metadata()
+            .get(dist.name(), Some(dist.version()))
+        {
+            return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
+        }
+
+        let metadata = dist
+            .metadata()
+            .map_err(|err| Error::ReadInstalled(Box::new(dist.clone()), err))?;
+
+        Ok(ArchiveMetadata::from_metadata23(metadata))
     }
 
     /// Either fetch the only wheel metadata (directly from the index or with range requests) or

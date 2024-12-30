@@ -8,7 +8,7 @@ use zip::result::ZipError;
 use crate::metadata::MetadataError;
 use uv_client::WrappedReqwestError;
 use uv_distribution_filename::WheelFilenameError;
-use uv_distribution_types::IsBuildBackendError;
+use uv_distribution_types::{InstalledDist, InstalledDistError, IsBuildBackendError};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
@@ -82,6 +82,8 @@ pub enum Error {
     Metadata(#[from] uv_pypi_types::MetadataError),
     #[error("Failed to read metadata: `{}`", _0.user_display())]
     WheelMetadata(PathBuf, #[source] Box<uv_metadata::Error>),
+    #[error("Failed to read metadata from installed package `{0}`")]
+    ReadInstalled(Box<InstalledDist>, #[source] InstalledDistError),
     #[error("Failed to read zip archive from built wheel")]
     Zip(#[from] ZipError),
     #[error("Source distribution directory contains neither readable `pyproject.toml` nor `setup.py`: `{}`", _0.user_display())]
