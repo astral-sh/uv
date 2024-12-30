@@ -138,7 +138,7 @@ impl KeyringProvider {
 
         match &mut self.backend {
             KeyringProviderBackend::Subprocess => {
-                self.set_subprocess(&host.to_string(), &username, &password)
+                self.set_subprocess(&host.to_string(), username, password)
                     .await
             }
             #[cfg(test)]
