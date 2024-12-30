@@ -3,9 +3,7 @@ use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::PathBuf;
-use std::sync::Mutex;
 use thiserror::Error;
-use toml;
 
 #[derive(Error, Debug)]
 pub enum ConfigError {
@@ -23,7 +21,7 @@ pub enum ConfigError {
 }
 
 #[cfg(test)]
-static CONFIG_PATH: Mutex<Option<PathBuf>> = Mutex::new(None);
+static CONFIG_PATH: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
 
 pub trait ConfigFile {
     fn path() -> Result<PathBuf, ConfigError>;
@@ -52,12 +50,12 @@ impl ConfigFile for AuthConfig {
 
     fn load() -> Result<Self, ConfigError> {
         let path = AuthConfig::path()?;
-        return AuthConfig::load_from_path(&path);
+        AuthConfig::load_from_path(&path)
     }
 
     fn store(&self) -> Result<(), ConfigError> {
         let path = AuthConfig::path()?;
-        return self.store_to_path(&path);
+        self.store_to_path(&path)
     }
 }
 

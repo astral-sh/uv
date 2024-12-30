@@ -166,7 +166,7 @@ impl Index {
 
             // Otherwise try to read the credentials from keyring.
             if let Some(credentials) =
-                Credentials::from_keyring(name.to_string(), self.url.url(), keyring_provider)
+                Credentials::from_keyring(name, self.url.url(), keyring_provider)
             {
                 return Some(credentials);
             }

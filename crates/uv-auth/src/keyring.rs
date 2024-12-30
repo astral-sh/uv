@@ -146,7 +146,7 @@ impl KeyringProvider {
                 let username_static: &'static str = Box::leak(username.to_owned().into_boxed_str());
                 let password_static: &'static str = Box::leak(password.to_owned().into_boxed_str());
 
-                Self::set_dummy(store, &host.to_string(), &username_static, &password_static)
+                Self::set_dummy(store, &host.to_string(), username_static, password_static)
             }
         };
     }
@@ -198,7 +198,7 @@ impl KeyringProvider {
             debug!("Could not save password in keyring");
         };
 
-        return None;
+        None
     }
 
     #[cfg(test)]
@@ -220,7 +220,7 @@ impl KeyringProvider {
         password: &'static str,
     ) -> Option<()> {
         store.insert((service_name.to_string(), username), password);
-        return None;
+        None
     }
 
     /// Create a new provider with [`KeyringProviderBackend::Dummy`].

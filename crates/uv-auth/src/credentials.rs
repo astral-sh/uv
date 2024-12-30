@@ -168,7 +168,7 @@ impl Credentials {
     /// Look up the username stored for the named source in the user-level config.
     /// Load the credentials from keyring for the service and username.
     pub fn from_keyring(
-        name: String,
+        name: &str,
         url: &Url,
         keyring_provider: Option<KeyringProvider>,
     ) -> Option<Self> {
@@ -186,15 +186,12 @@ impl Credentials {
             }
         };
 
-        let index = match auth_config.find_entry(&name) {
-            Some(i) => i,
-            None => {
-                warn!("Could not find entry for {name}");
-                return None;
-            }
+        let index = if let Some(i) = auth_config.find_entry(&name) { i } else {
+            warn!("Could not find entry for {name}");
+            return None;
         };
 
-        return executor::block_on(keyring_provider.unwrap().fetch(&url, &index.username));
+        executor::block_on(keyring_provider.unwrap().fetch(url, &index.username))
     }
 
     /// Parse [`Credentials`] from an HTTP request, if any.
@@ -418,7 +415,7 @@ mod tests {
         auth_config.store().unwrap();
 
         // Act
-        let credentials = Credentials::from_keyring(index.to_string(), &url, Some(keyring));
+        let credentials = Credentials::from_keyring(index, &url, Some(keyring));
 
         assert_eq!(
             credentials,
