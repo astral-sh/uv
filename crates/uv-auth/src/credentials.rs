@@ -186,7 +186,9 @@ impl Credentials {
             }
         };
 
-        let index = if let Some(i) = auth_config.find_entry(&name) { i } else {
+        let index = if let Some(i) = auth_config.find_entry(&name) {
+            i
+        } else {
             warn!("Could not find entry for {name}");
             return None;
         };
