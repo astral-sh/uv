@@ -132,11 +132,14 @@ impl KeyringProvider {
         );
 
         let host = url.host().expect("Url should contain a host!");
-        trace!("Creating entry in keyring for host {host} (from url {url}) and username {username}");
+        trace!(
+            "Creating entry in keyring for host {host} (from url {url}) and username {username}"
+        );
 
         match &mut self.backend {
             KeyringProviderBackend::Subprocess => {
-                self.set_subprocess(&host.to_string(), &username, &password).await
+                self.set_subprocess(&host.to_string(), &username, &password)
+                    .await
             }
             #[cfg(test)]
             KeyringProviderBackend::Dummy(ref mut store) => {
@@ -386,7 +389,7 @@ mod tests {
 
         let credentials = keyring.fetch(&url, "foo").await;
         assert_eq!(
-            credentials, 
+            credentials,
             Some(Credentials::new(
                 Some("foo".to_string()),
                 Some("password".to_string())
@@ -399,11 +402,13 @@ mod tests {
         let url = Url::parse("https://example.com").unwrap();
         let mut keyring = KeyringProvider::dummy([((url.host_str().unwrap(), "user"), "password")]);
 
-        keyring.set(&url.join("test").unwrap(), "foo", "password").await;
+        keyring
+            .set(&url.join("test").unwrap(), "foo", "password")
+            .await;
 
         let credentials = keyring.fetch(&url, "foo").await;
         assert_eq!(
-            credentials, 
+            credentials,
             Some(Credentials::new(
                 Some("foo".to_string()),
                 Some("password".to_string())

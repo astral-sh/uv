@@ -139,12 +139,15 @@ impl Index {
 
     /// Retrieve the credentials for the index, either from the environment, or from the URL itself.
     pub fn credentials(&self, keyring_provider: Option<KeyringProvider>) -> Option<Credentials> {
-        // If the index is named, and credentials are provided via the environment, prefer those.
+        // If the index is named, try to load credentials for the named index.
+
         if let Some(name) = self.name.as_ref() {
+            // If credentials are provided via the environment, prefer those.
             if let Some(credentials) = Credentials::from_env(name.to_env_var()) {
                 return Some(credentials);
             }
 
+            // Otherwise try to read the credentials from keyring.
             if let Some(credentials) =
                 Credentials::from_keyring(name.to_string(), self.url.url(), keyring_provider)
             {

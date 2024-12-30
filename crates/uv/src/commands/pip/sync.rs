@@ -246,7 +246,7 @@ pub(crate) async fn pip_sync(
 
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials(None) {
+        if let Some(credentials) = index.credentials(keyring_provider.to_provider()) {
             uv_auth::store_credentials(index.raw_url(), credentials);
         }
     }

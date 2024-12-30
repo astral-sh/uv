@@ -9,6 +9,7 @@ use reqwest::Request;
 use futures::executor;
 use std::io::Read;
 use std::io::Write;
+use tracing::{debug, error, trace, warn};
 
 use url::Url;
 
@@ -162,7 +163,7 @@ impl Credentials {
         }
     }
 
-    /// Extracte the [`Credentials`] from keyring, given a named source.
+    /// Extract the [`Credentials`] from keyring, given a named source.
     ///
     /// Look up the username stored for the named source in the user-level config.
     /// Load the credentials from keyring for the service and username.
@@ -171,14 +172,16 @@ impl Credentials {
         url: &Url,
         keyring_provider: Option<KeyringProvider>,
     ) -> Option<Self> {
+        debug!("Trying to read credentials for index {name} with url {url}");
         if keyring_provider.is_none() {
+            trace!("No keyring provider available");
             return None;
         }
 
         let auth_config = match AuthConfig::load() {
             Ok(auth_config) => auth_config,
-            Err(_) => {
-                eprintln!("Error loading auth config");
+            Err(e) => {
+                error!("Error loading auth config: {e}");
                 return None;
             }
         };
@@ -186,7 +189,7 @@ impl Credentials {
         let index = match auth_config.find_entry(&name) {
             Some(i) => i,
             None => {
-                eprintln!("Could not find entry for {name}");
+                warn!("Could not find entry for {name}");
                 return None;
             }
         };

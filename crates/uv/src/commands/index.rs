@@ -43,9 +43,7 @@ pub(crate) async fn add_credentials(
     };
 
     let url = index.raw_url();
-    debug!(
-        "Will store password for index {name} with URL {url} and user {username} in keyring"
-    );
+    debug!("Will store password for index {name} with URL {url} and user {username} in keyring");
     keyring_provider
         .to_provider()
         .expect("Keyring Provider is not available")
