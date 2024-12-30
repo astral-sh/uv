@@ -612,7 +612,8 @@ pub enum PipCommand {
     /// List, in tabular format, packages installed in an environment.
     #[command(
         after_help = "Use `uv help pip list` for more details.",
-        after_long_help = ""
+        after_long_help = "",
+        alias = "ls"
     )]
     List(PipListArgs),
     /// Show information about one or more installed packages.
@@ -3716,6 +3717,7 @@ pub enum ToolCommand {
     #[command(alias = "update")]
     Upgrade(ToolUpgradeArgs),
     /// List installed tools.
+    #[command(alias = "ls")]
     List(ToolListArgs),
     /// Uninstall a tool.
     Uninstall(ToolUninstallArgs),
@@ -4195,6 +4197,7 @@ pub enum PythonCommand {
     /// Use `--all-versions` to view all available patch versions.
     ///
     /// Use `--only-installed` to omit available downloads.
+    #[command(alias = "ls")]
     List(PythonListArgs),
 
     /// Download and install Python versions.
