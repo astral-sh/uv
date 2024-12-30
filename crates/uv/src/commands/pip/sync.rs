@@ -35,7 +35,6 @@ use crate::commands::pip::operations::{report_interpreter, report_target_environ
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::{diagnostics, ExitStatus};
 use crate::printer::Printer;
-use crate::settings;
 
 /// Install a set of locked requirements into the current Python environment.
 #[allow(clippy::fn_params_excessive_bools)]

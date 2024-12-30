@@ -116,7 +116,7 @@ impl KeyringProvider {
 
     /// Set credentials for the given [`Url`] from the keyring.
     #[instrument(skip_all, fields(url = % url.to_string(), username))]
-    pub async fn set(&self, url: &Url, username: &str, password: &str) {
+    pub async fn set(&mut self, url: &Url, username: &str, password: &str) {
         // Validate the request
         debug_assert!(
             url.host_str().is_some(),
@@ -131,18 +131,19 @@ impl KeyringProvider {
             "Should only use keyring with a username"
         );
 
-        // Check the full URL first
-        // <https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/network/auth.py#L376C1-L379C14>
-        trace!("Creating entry in keyring for URL {url} and username {username}");
+        let host = url.host().expect("Url should contain a host!");
+        trace!("Creating entry in keyring for host {host} (from url {url}) and username {username}");
 
-        match self.backend {
+        match &mut self.backend {
             KeyringProviderBackend::Subprocess => {
-                self.set_subprocess(url.as_str(), username, password).await
+                self.set_subprocess(&host.to_string(), &username, &password).await
             }
             #[cfg(test)]
-            KeyringProviderBackend::Dummy(ref store) => {
-                let test = password;
-                None
+            KeyringProviderBackend::Dummy(ref mut store) => {
+                let username_static: &'static str = Box::leak(username.to_owned().into_boxed_str());
+                let password_static: &'static str = Box::leak(password.to_owned().into_boxed_str());
+
+                Self::set_dummy(store, &host.to_string(), &username_static, &password_static)
             }
         };
     }
@@ -210,13 +211,13 @@ impl KeyringProvider {
 
     #[cfg(test)]
     fn set_dummy(
-        store: &mut std::collections::HashMap<(String, &str), &str>,
+        store: &mut std::collections::HashMap<(String, &'static str), &'static str>,
         service_name: &str,
-        username: &str,
-        password: &str,
+        username: &'static str,
+        password: &'static str,
     ) -> Option<()> {
-        // store.insert((service_name.to_string(), username), password);
-        None
+        store.insert((service_name.to_string(), username), password);
+        return None;
     }
 
     /// Create a new provider with [`KeyringProviderBackend::Dummy`].
@@ -246,6 +247,7 @@ impl KeyringProvider {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use futures::FutureExt;
 
@@ -373,5 +375,39 @@ mod tests {
         let url = Url::parse("https://foo@example.com").unwrap();
         let credentials = keyring.fetch(&url, "bar").await;
         assert_eq!(credentials, None);
+    }
+
+    #[tokio::test]
+    async fn set_url() {
+        let url = Url::parse("https://example.com").unwrap();
+        let mut keyring = KeyringProvider::dummy([((url.host_str().unwrap(), "user"), "password")]);
+
+        keyring.set(&url, "foo", "password").await;
+
+        let credentials = keyring.fetch(&url, "foo").await;
+        assert_eq!(
+            credentials, 
+            Some(Credentials::new(
+                Some("foo".to_string()),
+                Some("password".to_string())
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn set_url_with_path() {
+        let url = Url::parse("https://example.com").unwrap();
+        let mut keyring = KeyringProvider::dummy([((url.host_str().unwrap(), "user"), "password")]);
+
+        keyring.set(&url.join("test").unwrap(), "foo", "password").await;
+
+        let credentials = keyring.fetch(&url, "foo").await;
+        assert_eq!(
+            credentials, 
+            Some(Credentials::new(
+                Some("foo".to_string()),
+                Some("password".to_string())
+            ))
+        );
     }
 }

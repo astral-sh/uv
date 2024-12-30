@@ -38,4 +38,3 @@ tokio = { workspace = true }
 wiremock = { workspace = true }
 insta = { version = "1.40.0" }
 test-log = { version = "0.2.16", features = ["trace"], default-features = false }
-mockall = "0.13.1"
