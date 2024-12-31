@@ -4772,6 +4772,7 @@ dependencies = [
  "uv-cache-info",
  "uv-cache-key",
  "uv-normalize",
+ "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
  "uv-pypi-types",

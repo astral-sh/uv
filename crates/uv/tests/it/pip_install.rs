@@ -218,8 +218,8 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
 
     let mut filters = context.filters();
     filters.push((
-        "expected one of `native-tls`, `offline`, .*",
-        "expected one of `native-tls`, `offline`, [...]",
+        "expected one of `required-version`, `native-tls`, .*",
+        "expected one of `required-version`, `native-tls`, [...]",
     ));
 
     uv_snapshot!(filters, context.pip_install()
@@ -235,7 +235,7 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
         |
       2 | unknown = "field"
         | ^^^^^^^
-      unknown field `unknown`, expected one of `native-tls`, `offline`, [...]
+      unknown field `unknown`, expected one of `required-version`, `native-tls`, [...]
 
     Resolved in [TIME]
     Audited in [TIME]

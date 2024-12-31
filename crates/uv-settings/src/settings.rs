@@ -3,8 +3,8 @@ use std::{fmt::Debug, num::NonZeroUsize, path::PathBuf};
 use url::Url;
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
-    TrustedHost, TrustedPublishing,
+    ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, RequiredVersion,
+    TargetTriple, TrustedHost, TrustedPublishing,
 };
 use uv_distribution_types::{
     Index, IndexUrl, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
@@ -149,6 +149,20 @@ impl Options {
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct GlobalOptions {
+    /// Enforce a requirement on the version of uv.
+    ///
+    /// If the version of uv does not meet the requirement at runtime, uv will exit
+    /// with an error.
+    ///
+    /// Accepts a [PEP 440](https://peps.python.org/pep-0440/) specifier, like `==0.5.0` or `>=0.5.0`.
+    #[option(
+        default = "null",
+        value_type = "str",
+        example = r#"
+            required-version = ">=0.5.0"
+        "#
+    )]
+    pub required_version: Option<RequiredVersion>,
     /// Whether to load TLS certificates from the platform's native certificate store.
     ///
     /// By default, uv loads certificates from the bundled `webpki-roots` crate. The
@@ -1623,6 +1637,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
 pub struct OptionsWire {
     // #[serde(flatten)]
     // globals: GlobalOptions
+    required_version: Option<RequiredVersion>,
     native_tls: Option<bool>,
     offline: Option<bool>,
     no_cache: Option<bool>,
@@ -1704,6 +1719,7 @@ pub struct OptionsWire {
 impl From<OptionsWire> for Options {
     fn from(value: OptionsWire) -> Self {
         let OptionsWire {
+            required_version,
             native_tls,
             offline,
             no_cache,
@@ -1764,6 +1780,7 @@ impl From<OptionsWire> for Options {
 
         Self {
             globals: GlobalOptions {
+                required_version,
                 native_tls,
                 offline,
                 no_cache,
