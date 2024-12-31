@@ -275,3 +275,35 @@ pub enum ToUrlError {
         path: String,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn base_str() {
+        let url = UrlString("https://example.com/path?query#fragment".to_string());
+        assert_eq!(url.base_str(), "https://example.com/path");
+
+        let url = UrlString("https://example.com/path#fragment".to_string());
+        assert_eq!(url.base_str(), "https://example.com/path");
+
+        let url = UrlString("https://example.com/path".to_string());
+        assert_eq!(url.base_str(), "https://example.com/path");
+    }
+
+    #[test]
+    fn without_fragment() {
+        let url = UrlString("https://example.com/path?query#fragment".to_string());
+        assert_eq!(
+            url.without_fragment(),
+            UrlString("https://example.com/path?query".to_string())
+        );
+
+        let url = UrlString("https://example.com/path#fragment".to_string());
+        assert_eq!(url.base_str(), "https://example.com/path");
+
+        let url = UrlString("https://example.com/path".to_string());
+        assert_eq!(url.base_str(), "https://example.com/path");
+    }
+}
