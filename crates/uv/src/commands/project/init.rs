@@ -121,7 +121,10 @@ pub(crate) async fn init(
                         .and_then(|path| path.to_str())
                         .context("Missing directory name")?;
 
-                    PackageName::new(name.to_string())?
+                    // Pre-normalize the package name by removing any leading or trailing
+                    // whitespace, and replacing any internal whitespace with hyphens.
+                    let name = name.trim().replace(' ', "-");
+                    PackageName::new(name)?
                 }
             };
 
