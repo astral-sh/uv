@@ -3862,15 +3862,14 @@ impl<'de> serde::Deserialize<'de> for Hash {
 /// Convert a [`FileLocation`] into a normalized [`UrlString`].
 fn normalize_file_location(location: &FileLocation) -> Result<UrlString, ToUrlError> {
     match location {
-        FileLocation::AbsoluteUrl(ref absolute) => Ok(absolute.as_base_url()),
+        FileLocation::AbsoluteUrl(ref absolute) => Ok(absolute.without_fragment()),
         FileLocation::RelativeUrl(_, _) => Ok(normalize_url(location.to_url()?)),
     }
 }
 
-/// Convert a [`Url`] into a normalized [`UrlString`].
+/// Convert a [`Url`] into a normalized [`UrlString`] by removing the fragment.
 fn normalize_url(mut url: Url) -> UrlString {
     url.set_fragment(None);
-    url.set_query(None);
     UrlString::from(url)
 }
 
@@ -3995,9 +3994,8 @@ fn normalize_requirement(requirement: Requirement, root: &Path) -> Result<Requir
             // Redact the credentials.
             redact_credentials(&mut location);
 
-            // Remove the fragment and query from the URL; they're already present in the source.
+            // Remove the fragment from the URL; it's already present in the source.
             location.set_fragment(None);
-            location.set_query(None);
 
             // Reconstruct the PEP 508 URL from the underlying data.
             let url = Url::from(ParsedArchiveUrl {
