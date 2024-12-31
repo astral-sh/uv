@@ -274,6 +274,10 @@ impl From<&uv_platform_tags::Arch> for Arch {
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
+            uv_platform_tags::Arch::LoongArch64 => Self {
+                family: target_lexicon::Architecture::LoongArch64,
+                variant: None,
+            },
             uv_platform_tags::Arch::Riscv64 => Self {
                 family: target_lexicon::Architecture::Riscv64(
                     target_lexicon::Riscv64Architecture::Riscv64,
