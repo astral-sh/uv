@@ -497,6 +497,36 @@ pub struct ToolUv {
     )]
     pub environments: Option<SupportedEnvironments>,
 
+    /// A list of required platforms, for packages that lack source distributions.
+    ///
+    /// When a package does not have a source distribution, it's availability will be limited to
+    /// the platforms supported by its built distributions (wheels). For example, if a package only
+    /// publishes wheels for Linux, then it won't be installable on macOS or Windows.
+    ///
+    /// By default, uv requires each package to include at least one wheel that is compatible with
+    /// the designated Python version. The `required-platforms` setting can be used to ensure that
+    /// the resulting resolution contains wheels for specific platforms, or fails if no such wheels
+    /// are available.
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(
+            with = "Option<Vec<String>>",
+            description = "A list of environment markers, e.g., `sys_platform == 'darwin'."
+        )
+    )]
+    #[option(
+        default = "[]",
+        value_type = "str | list[str]",
+        example = r#"
+            # Require that the package is available for macOS ARM and x86 (Intel).
+            required-platforms = [
+                "sys_platform == 'darwin' and platform_machine == 'arm64'",
+                "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+            ]
+        "#
+    )]
+    pub required_platforms: Option<SupportedEnvironments>,
+
     /// Conflicting extras or groups may be declared here.
     ///
     /// It's useful to declare conflicts when, for example, two or more extras

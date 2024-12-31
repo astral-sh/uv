@@ -443,6 +443,16 @@
         "$ref": "#/definitions/PackageName"
       }
     },
+    "required-platforms": {
+      "description": "A list of environment markers, e.g., `sys_platform == 'darwin'.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
     "resolution": {
       "description": "The strategy to use when selecting between the different compatible versions for a given package requirement.\n\nBy default, uv will use the latest compatible version of each package (`highest`).",
       "anyOf": [
