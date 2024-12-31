@@ -1522,6 +1522,35 @@ Reinstall a specific package, regardless of whether it's already installed. Impl
 
 ---
 
+### [`required-version`](#required-version) {: #required-version }
+
+Enforce a requirement on the version of uv.
+
+If the version of uv does not meet the requirement at runtime, uv will exit
+with an error.
+
+Accepts a [PEP 440](https://peps.python.org/pep-0440/) specifier, like `==0.5.0` or `>=0.5.0`.
+
+**Default value**: `null`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    required-version = ">=0.5.0"
+    ```
+=== "uv.toml"
+
+    ```toml
+    required-version = ">=0.5.0"
+    ```
+
+---
+
 ### [`resolution`](#resolution) {: #resolution }
 
 The strategy to use when selecting between the different compatible versions for a given

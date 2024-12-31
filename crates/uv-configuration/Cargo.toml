@@ -21,6 +21,7 @@ uv-cache = { workspace = true }
 uv-cache-info = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-normalize = { workspace = true }
+uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true, features = ["schemars"] }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }

@@ -443,6 +443,17 @@
         "$ref": "#/definitions/PackageName"
       }
     },
+    "required-version": {
+      "description": "Enforce a requirement on the version of uv.\n\nIf the version of uv does not meet the requirement at runtime, uv will exit with an error.\n\nAccepts a [PEP 440](https://peps.python.org/pep-0440/) specifier, like `==0.5.0` or `>=0.5.0`.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/RequiredVersion"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "resolution": {
       "description": "The strategy to use when selecting between the different compatible versions for a given package requirement.\n\nBy default, uv will use the latest compatible version of each package (`highest`).",
       "anyOf": [
@@ -1408,6 +1419,10 @@
       "description": "A Python version specifier, e.g. `3.11` or `3.12.4`.",
       "type": "string",
       "pattern": "^3\\.\\d+(\\.\\d+)?$"
+    },
+    "RequiredVersion": {
+      "description": "A version specifier, e.g. `>=0.5.0` or `==0.5.0`.",
+      "type": "string"
     },
     "Requirement": {
       "description": "A PEP 508 dependency specifier, e.g., `ruff >= 0.6.0`",
