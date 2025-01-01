@@ -474,7 +474,7 @@ impl RegistryClient {
                         }
                     }
                     FileLocation::AbsoluteUrl(url) => {
-                        let url = url.to_url();
+                        let url = url.to_url().map_err(ErrorKind::InvalidUrl)?;
                         if url.scheme() == "file" {
                             let path = url
                                 .to_file_path()

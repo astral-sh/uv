@@ -103,7 +103,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     FileLocation::RelativeUrl(base, url) => {
                         uv_pypi_types::base_url_join_relative(base, url)?
                     }
-                    FileLocation::AbsoluteUrl(url) => url.to_url(),
+                    FileLocation::AbsoluteUrl(url) => url.to_url()?,
                 };
 
                 // If the URL is a file URL, use the local path directly.
@@ -252,7 +252,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     FileLocation::RelativeUrl(base, url) => {
                         uv_pypi_types::base_url_join_relative(base, url)?
                     }
-                    FileLocation::AbsoluteUrl(url) => url.to_url(),
+                    FileLocation::AbsoluteUrl(url) => url.to_url()?,
                 };
 
                 // If the URL is a file URL, use the local path directly.

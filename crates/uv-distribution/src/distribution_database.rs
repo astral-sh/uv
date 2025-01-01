@@ -178,7 +178,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     FileLocation::RelativeUrl(base, url) => {
                         uv_pypi_types::base_url_join_relative(base, url)?
                     }
-                    FileLocation::AbsoluteUrl(url) => url.to_url(),
+                    FileLocation::AbsoluteUrl(url) => url.to_url()?,
                 };
 
                 // Create a cache entry for the wheel.
