@@ -119,6 +119,10 @@ with the default build system.
     installable. Similarly, if you add a dependency on a local package or install it with `uv pip`,
     uv will always attempt to build and install it.
 
+!!! tip
+
+    To utilize build-system-specific features (e.g., including or excluding files in the distribution), refer to the documentation of your chosen build system (build backend).
+
 ## Project packaging
 
 As discussed in [build systems](#build-systems), a Python project must be built to be installed.
