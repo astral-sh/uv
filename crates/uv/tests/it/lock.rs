@@ -20592,7 +20592,7 @@ fn lock_no_build_dynamic_metadata() -> Result<()> {
 
     ----- stderr -----
       × Failed to build `dummy @ file://[TEMP_DIR]/`
-      ╰─▶ Building source distributions for dummy is disabled
+      ╰─▶ Building source distributions for `dummy` is disabled
     "###);
 
     Ok(())

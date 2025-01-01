@@ -75,7 +75,6 @@ impl IsBuildBackendError for BuildDispatchError {
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
 /// documentation.
-#[derive(Clone)]
 pub struct BuildDispatch<'a> {
     client: &'a RegistryClient,
     cache: &'a Cache,
@@ -226,8 +225,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 .build(),
             &python_requirement,
             ResolverEnvironment::specific(marker_env),
-            // Conflicting groups only make sense when doing
-            // universal resolution.
+            // Conflicting groups only make sense when doing universal resolution.
             Conflicts::empty(),
             Some(tags),
             self.flat_index,
@@ -236,7 +234,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self,
             EmptyInstalledPackages,
             DistributionDatabase::new(self.client, self, self.concurrency.downloads)
-                .with_build_stack(&build_stack),
+                .with_build_stack(build_stack),
         )?;
         let resolution = Resolution::from(resolver.resolve().await.with_context(|| {
             format!(
