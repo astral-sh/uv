@@ -220,6 +220,8 @@ pub enum Error {
         DerivationChain,
         #[source] uv_distribution::Error,
     ),
+    #[error("Cyclic build dependency detected for `{0}`")]
+    CyclicBuildDependency(PackageName),
     #[error("Unzip failed in another thread: {0}")]
     Thread(String),
 }

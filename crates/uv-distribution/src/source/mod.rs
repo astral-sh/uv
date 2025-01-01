@@ -38,7 +38,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{release_specifiers_to_ranges, Version};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata12, RequiresTxt, ResolutionMetadata};
-use uv_types::{BuildContext, SourceBuildTrait};
+use uv_types::{BuildContext, BuildStack, SourceBuildTrait};
 use zip::ZipArchive;
 
 mod built_wheel_metadata;
@@ -47,6 +47,7 @@ mod revision;
 /// Fetch and build a source distribution from a remote source, or from a local cache.
 pub(crate) struct SourceDistributionBuilder<'a, T: BuildContext> {
     build_context: &'a T,
+    build_stack: Option<&'a BuildStack>,
     reporter: Option<Arc<dyn Reporter>>,
 }
 
@@ -67,11 +68,21 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     pub(crate) fn new(build_context: &'a T) -> Self {
         Self {
             build_context,
+            build_stack: None,
             reporter: None,
         }
     }
 
-    /// Set the [`Reporter`] to use for this source distribution fetcher.
+    /// Set the [`BuildStack`] to use for the [`SourceDistributionBuilder`].
+    #[must_use]
+    pub(crate) fn with_build_stack(self, build_stack: &'a BuildStack) -> Self {
+        Self {
+            build_stack: Some(build_stack),
+            ..self
+        }
+    }
+
+    /// Set the [`Reporter`] to use for the [`SourceDistributionBuilder`].
     #[must_use]
     pub(crate) fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
@@ -1898,6 +1909,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         BuildKind::Wheel
                     },
                     BuildOutput::Debug,
+                    self.build_stack.cloned().unwrap_or_default(),
                 )
                 .await
                 .map_err(|err| Error::Build(err.into()))?
@@ -1974,6 +1986,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     BuildKind::Wheel
                 },
                 BuildOutput::Debug,
+                self.build_stack.cloned().unwrap_or_default(),
             )
             .await
             .map_err(|err| Error::Build(err.into()))?;

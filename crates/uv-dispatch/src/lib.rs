@@ -23,8 +23,8 @@ use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
-    Resolution, SourceDist, VersionOrUrlRef,
+    CachedDist, DependencyMetadata, Identifier, IndexCapabilities, IndexLocations,
+    IsBuildBackendError, Name, Resolution, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
@@ -35,7 +35,8 @@ use uv_resolver::{
     PythonRequirement, Resolver, ResolverEnvironment,
 };
 use uv_types::{
-    AnyErrorBuild, BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight,
+    AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages, HashStrategy,
+    InFlight,
 };
 
 #[derive(Debug, Error)]
@@ -208,6 +209,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
     async fn resolve<'data>(
         &'data self,
         requirements: &'data [Requirement],
+        build_stack: &'data BuildStack,
     ) -> Result<Resolution, BuildDispatchError> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
         let marker_env = self.interpreter.resolver_marker_environment();
@@ -223,8 +225,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 .build(),
             &python_requirement,
             ResolverEnvironment::specific(marker_env),
-            // Conflicting groups only make sense when doing
-            // universal resolution.
+            // Conflicting groups only make sense when doing universal resolution.
             Conflicts::empty(),
             Some(tags),
             self.flat_index,
@@ -232,7 +233,8 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.hasher,
             self,
             EmptyInstalledPackages,
-            DistributionDatabase::new(self.client, self, self.concurrency.downloads),
+            DistributionDatabase::new(self.client, self, self.concurrency.downloads)
+                .with_build_stack(build_stack),
         )?;
         let resolution = Resolution::from(resolver.resolve().await.with_context(|| {
             format!(
@@ -257,6 +259,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         &'data self,
         resolution: &'data Resolution,
         venv: &'data PythonEnvironment,
+        build_stack: &'data BuildStack,
     ) -> Result<Vec<CachedDist>, BuildDispatchError> {
         debug!(
             "Installing in {} in {}",
@@ -296,17 +299,27 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             return Ok(vec![]);
         }
 
+        // Verify that none of the missing distributions are already in the build stack.
+        for dist in &remote {
+            let id = dist.distribution_id();
+            if build_stack.contains(&id) {
+                return Err(BuildDispatchError::BuildFrontend(
+                    uv_build_frontend::Error::CyclicBuildDependency(dist.name().clone()).into(),
+                ));
+            }
+        }
+
         // Download any missing distributions.
         let wheels = if remote.is_empty() {
             vec![]
         } else {
-            // TODO(konstin): Check that there is no endless recursion.
             let preparer = Preparer::new(
                 self.cache,
                 tags,
                 self.hasher,
                 self.build_options,
-                DistributionDatabase::new(self.client, self, self.concurrency.downloads),
+                DistributionDatabase::new(self.client, self, self.concurrency.downloads)
+                    .with_build_stack(build_stack),
             );
 
             debug!(
@@ -367,6 +380,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         sources: SourceStrategy,
         build_kind: BuildKind,
         build_output: BuildOutput,
+        mut build_stack: BuildStack,
     ) -> Result<SourceBuild, uv_build_frontend::Error> {
         let dist_name = dist.map(uv_distribution_types::Name::name);
         let dist_version = dist
@@ -392,6 +406,11 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             return Err(err);
         }
 
+        // Push the current distribution onto the build stack, to prevent cyclic dependencies.
+        if let Some(dist) = dist {
+            build_stack.insert(dist.distribution_id());
+        }
+
         let builder = SourceBuild::setup(
             source,
             subdirectory,
@@ -406,6 +425,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             sources,
             self.config_settings.clone(),
             self.build_isolation,
+            &build_stack,
             build_kind,
             self.build_extra_env_vars.clone(),
             build_output,

@@ -2,17 +2,18 @@ use std::fmt::{Debug, Display, Formatter};
 use std::future::Future;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use uv_distribution_filename::DistFilename;
 
 use anyhow::Result;
+use rustc_hash::FxHashSet;
 
 use uv_cache::Cache;
 use uv_configuration::{
     BuildKind, BuildOptions, BuildOutput, ConfigSettings, LowerBound, SourceStrategy,
 };
+use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, InstalledDist,
-    IsBuildBackendError, Resolution, SourceDist,
+    CachedDist, DependencyMetadata, DistributionId, IndexCapabilities, IndexLocations,
+    InstalledDist, IsBuildBackendError, Resolution, SourceDist,
 };
 use uv_git::GitResolver;
 use uv_pep508::PackageName;
@@ -96,6 +97,7 @@ pub trait BuildContext {
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
+        build_stack: &'a BuildStack,
     ) -> impl Future<Output = Result<Resolution, impl IsBuildBackendError>> + 'a;
 
     /// Install the given set of package versions into the virtual environment. The environment must
@@ -104,6 +106,7 @@ pub trait BuildContext {
         &'a self,
         resolution: &'a Resolution,
         venv: &'a PythonEnvironment,
+        build_stack: &'a BuildStack,
     ) -> impl Future<Output = Result<Vec<CachedDist>, impl IsBuildBackendError>> + 'a;
 
     /// Set up a source distribution build by installing the required dependencies. A wrapper for
@@ -123,6 +126,7 @@ pub trait BuildContext {
         sources: SourceStrategy,
         build_kind: BuildKind,
         build_output: BuildOutput,
+        build_stack: BuildStack,
     ) -> impl Future<Output = Result<Self::SourceDistBuilder, impl IsBuildBackendError>> + 'a;
 
     /// Build by calling directly into the uv build backend without PEP 517, if possible.
@@ -242,5 +246,25 @@ impl Deref for AnyErrorBuild {
 
     fn deref(&self) -> &Self::Target {
         &*self.0
+    }
+}
+
+/// The stack of packages being built.
+#[derive(Debug, Clone, Default)]
+pub struct BuildStack(FxHashSet<DistributionId>);
+
+impl BuildStack {
+    /// Return an empty stack.
+    pub fn empty() -> Self {
+        Self(FxHashSet::default())
+    }
+
+    pub fn contains(&self, id: &DistributionId) -> bool {
+        self.0.contains(id)
+    }
+
+    /// Push a package onto the stack.
+    pub fn insert(&mut self, id: DistributionId) -> bool {
+        self.0.insert(id)
     }
 }
