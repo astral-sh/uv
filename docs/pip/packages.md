@@ -62,7 +62,7 @@ for installation from a private repository.
 
 ## Editable packages
 
-Editable packages do not need to be reinstalled for change to their source code to be active.
+Editable packages do not need to be reinstalled for changes to their source code to be active.
 
 To install the current project as an editable package
 
