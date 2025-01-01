@@ -21,10 +21,10 @@ pub enum Error {
     NoBuild,
 
     // Network error
-    #[error("Failed to parse URL: {0}")]
-    Url(String, #[source] url::ParseError),
     #[error("Expected an absolute path, but received: {}", _0.user_display())]
     RelativePath(PathBuf),
+    #[error(transparent)]
+    InvalidUrl(#[from] uv_distribution_types::ToUrlError),
     #[error(transparent)]
     ParsedUrl(#[from] ParsedUrlError),
     #[error(transparent)]

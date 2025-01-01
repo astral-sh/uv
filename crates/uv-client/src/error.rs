@@ -139,7 +139,7 @@ impl From<ErrorKind> for Error {
 #[derive(Debug, thiserror::Error)]
 pub enum ErrorKind {
     #[error(transparent)]
-    UrlParse(#[from] url::ParseError),
+    InvalidUrl(#[from] uv_distribution_types::ToUrlError),
 
     #[error(transparent)]
     JoinRelativeUrl(#[from] uv_pypi_types::JoinRelativeError),
