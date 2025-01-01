@@ -84,10 +84,12 @@ pub enum Error {
     #[error("Failed to build PATH for build script")]
     BuildScriptPath(#[source] env::JoinPathsError),
     // For the convenience of typing `setup_build` properly.
-    #[error("Building source distributions for {0} is disabled")]
+    #[error("Building source distributions for `{0}` is disabled")]
     NoSourceDistBuild(PackageName),
     #[error("Building source distributions is disabled")]
     NoSourceDistBuilds,
+    #[error("Cyclic build dependency detected for `{0}`")]
+    CyclicBuildDependency(PackageName),
 }
 
 impl IsBuildBackendError for Error {
@@ -103,7 +105,8 @@ impl IsBuildBackendError for Error {
             | Self::RequirementsInstall(_, _)
             | Self::Virtualenv(_)
             | Self::NoSourceDistBuild(_)
-            | Self::NoSourceDistBuilds => false,
+            | Self::NoSourceDistBuilds
+            | Self::CyclicBuildDependency(_) => false,
             Self::CommandFailed(_, _)
             | Self::BuildBackend(_)
             | Self::MissingHeader(_)

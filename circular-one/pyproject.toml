@@ -1,0 +1,22 @@
+[project]
+name = "circular-one"
+version = "0.2.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Charlie Marsh", email = "charlie.r.marsh@gmail.com" }
+]
+requires-python = ">=3.13.0"
+dependencies = []
+
+[build-system]
+requires = ["hatchling", "circular-two"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+only-packages = true
+
+# [tool.uv]
+# no-binary-package = ["circular-one"]
+# no-build = true
+# package = true

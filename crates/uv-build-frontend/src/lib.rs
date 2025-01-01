@@ -35,7 +35,7 @@ use uv_pep508::PackageName;
 use uv_pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
-use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, SourceBuildTrait};
+use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, SourceBuildTrait};
 
 pub use crate::error::{Error, MissingHeaderCause};
 
@@ -255,6 +255,7 @@ impl SourceBuild {
         source_strategy: SourceStrategy,
         config_settings: ConfigSettings,
         build_isolation: BuildIsolation<'_>,
+        build_stack: &BuildStack,
         build_kind: BuildKind,
         mut environment_variables: FxHashMap<OsString, OsString>,
         level: BuildOutput,
@@ -318,11 +319,12 @@ impl SourceBuild {
                 source_build_context,
                 &default_backend,
                 &pep517_backend,
+                build_stack,
             )
             .await?;
 
             build_context
-                .install(&resolved_requirements, &venv)
+                .install(&resolved_requirements, &venv, build_stack)
                 .await
                 .map_err(|err| Error::RequirementsInstall("`build-system.requires`", err.into()))?;
         } else {
@@ -378,6 +380,7 @@ impl SourceBuild {
                 version_id,
                 locations,
                 source_strategy,
+                build_stack,
                 build_kind,
                 level,
                 &config_settings,
@@ -412,6 +415,7 @@ impl SourceBuild {
         source_build_context: SourceBuildContext,
         default_backend: &Pep517Backend,
         pep517_backend: &Pep517Backend,
+        build_stack: &BuildStack,
     ) -> Result<Resolution, Error> {
         Ok(
             if pep517_backend.requirements == default_backend.requirements {
@@ -420,7 +424,7 @@ impl SourceBuild {
                     resolved_requirements.clone()
                 } else {
                     let resolved_requirements = build_context
-                        .resolve(&default_backend.requirements)
+                        .resolve(&default_backend.requirements, build_stack)
                         .await
                         .map_err(|err| {
                             Error::RequirementsResolve("`setup.py` build", err.into())
@@ -430,7 +434,7 @@ impl SourceBuild {
                 }
             } else {
                 build_context
-                    .resolve(&pep517_backend.requirements)
+                    .resolve(&pep517_backend.requirements, build_stack)
                     .await
                     .map_err(|err| {
                         Error::RequirementsResolve("`build-system.requires`", err.into())
@@ -806,6 +810,7 @@ async fn create_pep517_build_environment(
     version_id: Option<&str>,
     locations: &IndexLocations,
     source_strategy: SourceStrategy,
+    build_stack: &BuildStack,
     build_kind: BuildKind,
     level: BuildOutput,
     config_settings: &ConfigSettings,
@@ -929,12 +934,15 @@ async fn create_pep517_build_environment(
             .cloned()
             .chain(extra_requires)
             .collect();
-        let resolution = build_context.resolve(&requirements).await.map_err(|err| {
-            Error::RequirementsResolve("`build-system.requires`", AnyErrorBuild::from(err))
-        })?;
+        let resolution = build_context
+            .resolve(&requirements, build_stack)
+            .await
+            .map_err(|err| {
+                Error::RequirementsResolve("`build-system.requires`", AnyErrorBuild::from(err))
+            })?;
 
         build_context
-            .install(&resolution, venv)
+            .install(&resolution, venv, build_stack)
             .await
             .map_err(|err| {
                 Error::RequirementsInstall("`build-system.requires`", AnyErrorBuild::from(err))

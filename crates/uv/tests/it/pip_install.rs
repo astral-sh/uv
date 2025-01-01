@@ -7858,3 +7858,55 @@ fn static_metadata_already_installed() -> Result<()> {
 
     Ok(())
 }
+
+/// `circular-one` depends on `circular-two` as a build dependency, but `circular-two` depends on
+/// `circular-one` was a runtime dependency.
+#[test]
+fn cyclic_build_dependency() {
+    static EXCLUDE_NEWER: &str = "2025-01-02T00:00:00Z";
+
+    let context = TestContext::new("3.13");
+
+    // Installing with `--no-binary circular-one` should fail, since we'll end up in a recursive
+    // build.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
+        .arg("circular-one")
+        .arg("--extra-index-url")
+        .arg("https://test.pypi.org/simple")
+        .arg("--index-strategy")
+        .arg("unsafe-best-match")
+        .arg("--no-binary")
+        .arg("circular-one"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download and build `circular-one==0.2.0`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ╰─▶ Cyclic build dependency detected for `circular-one`
+    "###
+    );
+
+    // Installing without `--no-binary circular-one` should succeed, since we can use the wheel.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
+        .arg("circular-one")
+        .arg("--extra-index-url")
+        .arg("https://test.pypi.org/simple")
+        .arg("--index-strategy")
+        .arg("unsafe-best-match"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + circular-one==0.2.0
+    "###
+    );
+}

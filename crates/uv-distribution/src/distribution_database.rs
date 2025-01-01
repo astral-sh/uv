@@ -28,7 +28,7 @@ use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
 use uv_platform_tags::Tags;
 use uv_pypi_types::HashDigest;
-use uv_types::BuildContext;
+use uv_types::{BuildContext, BuildStack};
 
 use crate::archive::Archive;
 use crate::locks::Locks;
@@ -71,7 +71,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         }
     }
 
-    /// Set the [`Reporter`] to use for this source distribution fetcher.
+    /// Set the build stack to use for the [`DistributionDatabase`].
+    #[must_use]
+    pub fn with_build_stack(self, build_stack: &'a BuildStack) -> Self {
+        Self {
+            builder: self.builder.with_build_stack(build_stack),
+            ..self
+        }
+    }
+
+    /// Set the [`Reporter`] to use for the [`DistributionDatabase`].
     #[must_use]
     pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
         let reporter = Arc::new(reporter);
