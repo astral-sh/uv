@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.5.14
+
+### Enhancements
+
+- Add `--exact` flag to `uv run` ([#10198](https://github.com/astral-sh/uv/pull/10198))
+- Add `--outdated` support to `uv pip tree` ([#10199](https://github.com/astral-sh/uv/pull/10199))
+- Add a required version setting to uv ([#10248](https://github.com/astral-sh/uv/pull/10248))
+- Add loongarch64 to supported Python platform tags ([#10223](https://github.com/astral-sh/uv/pull/10223))
+- Add manylinux2014 aliases for `--python-platform` ([#10217](https://github.com/astral-sh/uv/pull/10217))
+- Add support for Python interpreters on ARMv5TE platforms ([#10234](https://github.com/astral-sh/uv/pull/10234))
+- Add support for optional `--description` in `uv init` ([#10209](https://github.com/astral-sh/uv/pull/10209))
+- Ignore empty or missing hrefs in Simple HTML ([#10276](https://github.com/astral-sh/uv/pull/10276))
+- Patch pkgconfig files after Python install ([#10189](https://github.com/astral-sh/uv/pull/10189))
+
+### Performance
+
+- Actually use jemalloc as alternative allocator ([#10269](https://github.com/astral-sh/uv/pull/10269))
+- Parse URLs lazily in resolver ([#10259](https://github.com/astral-sh/uv/pull/10259))
+- Use `BTreeMap::range` to avoid iterating over unnecessary versions ([#10266](https://github.com/astral-sh/uv/pull/10266))
+
+### Bug fixes
+
+- Accept directories with space names in `uv init` ([#10246](https://github.com/astral-sh/uv/pull/10246))
+- Avoid forking on version in non-universal resolutions ([#10274](https://github.com/astral-sh/uv/pull/10274))
+- Avoid stripping query parameters from URLs ([#10253](https://github.com/astral-sh/uv/pull/10253))
+- Consider workspace dependencies to be 'direct' ([#10197](https://github.com/astral-sh/uv/pull/10197))
+- Detect cyclic dependencies during builds ([#10258](https://github.com/astral-sh/uv/pull/10258))
+- Guard against self-deletion in `uv venv` and `uv tool` ([#10206](https://github.com/astral-sh/uv/pull/10206))
+- Respect static metadata for already-installed distributions ([#10242](https://github.com/astral-sh/uv/pull/10242))
+
 ## 0.5.13
 
 ### Bug fixes
