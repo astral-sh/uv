@@ -1328,6 +1328,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         pins: &mut FilePins,
         request_sink: &Sender<Request>,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
+        // This only applies to universal resolutions.
+        if env.marker_environment().is_some() {
+            return Ok(None);
+        }
+
         // For now, we only apply this to local versions.
         if !candidate.version().is_local() {
             return Ok(None);
