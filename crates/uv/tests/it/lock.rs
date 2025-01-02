@@ -21390,6 +21390,32 @@ fn lock_pytorch_cpu() -> Result<()> {
             { extra = "cu124" },
           ],
         ]
+        constraint-dependencies = [
+            "filelock<=3.16.1",
+            "fsspec<=2024.12.0",
+            "jinja2<=3.1.4",
+            "markupsafe<=3.0.2",
+            "mpmath<=1.3.0",
+            "networkx<=3.4.2",
+            "numpy<=2.2.0",
+            "nvidia-cublas-cu12<=12.4.5.8",
+            "nvidia-cuda-cupti-cu12<=12.4.127",
+            "nvidia-cuda-nvrtc-cu12<=12.4.127",
+            "nvidia-cuda-runtime-cu12<=12.4.127",
+            "nvidia-cudnn-cu12<=9.1.0.70",
+            "nvidia-cufft-cu12<=11.2.1.3",
+            "nvidia-curand-cu12<=10.3.5.147",
+            "nvidia-cusolver-cu12<=11.6.1.9",
+            "nvidia-cusparse-cu12<=12.3.1.170",
+            "nvidia-nccl-cu12<=2.21.5",
+            "nvidia-nvjitlink-cu12<=12.4.127",
+            "nvidia-nvtx-cu12<=12.4.127",
+            "pillow<=11.0.0",
+            "setuptools<=75.6.0",
+            "sympy<=1.13.1",
+            "triton<=3.1.0",
+            "typing-extensions<=4.12.2",
+        ]
 
         [tool.uv.sources]
         torch = [
@@ -21410,7 +21436,6 @@ fn lock_pytorch_cpu() -> Result<()> {
         name = "pytorch-cu124"
         url = "https://download.pytorch.org/whl/cu124"
         explicit = true
-
         "#,
     )?;
 
@@ -21433,6 +21458,9 @@ fn lock_pytorch_cpu() -> Result<()> {
         version = 1
         requires-python = ">=3.12.[X]"
         resolution-markers = [
+            "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "platform_machine != 'x86_64' or sys_platform != 'linux'",
             "sys_platform != 'darwin'",
             "sys_platform == 'darwin'",
         ]
@@ -21440,6 +21468,34 @@ fn lock_pytorch_cpu() -> Result<()> {
             { package = "project", extra = "cpu" },
             { package = "project", extra = "cu124" },
         ]]
+
+        [manifest]
+        constraints = [
+            { name = "filelock", specifier = "<=3.16.1" },
+            { name = "fsspec", specifier = "<=2024.12.0" },
+            { name = "jinja2", specifier = "<=3.1.4" },
+            { name = "markupsafe", specifier = "<=3.0.2" },
+            { name = "mpmath", specifier = "<=1.3.0" },
+            { name = "networkx", specifier = "<=3.4.2" },
+            { name = "numpy", specifier = "<=2.2.0" },
+            { name = "nvidia-cublas-cu12", specifier = "<=12.4.5.8" },
+            { name = "nvidia-cuda-cupti-cu12", specifier = "<=12.4.127" },
+            { name = "nvidia-cuda-nvrtc-cu12", specifier = "<=12.4.127" },
+            { name = "nvidia-cuda-runtime-cu12", specifier = "<=12.4.127" },
+            { name = "nvidia-cudnn-cu12", specifier = "<=9.1.0.70" },
+            { name = "nvidia-cufft-cu12", specifier = "<=11.2.1.3" },
+            { name = "nvidia-curand-cu12", specifier = "<=10.3.5.147" },
+            { name = "nvidia-cusolver-cu12", specifier = "<=11.6.1.9" },
+            { name = "nvidia-cusparse-cu12", specifier = "<=12.3.1.170" },
+            { name = "nvidia-nccl-cu12", specifier = "<=2.21.5" },
+            { name = "nvidia-nvjitlink-cu12", specifier = "<=12.4.127" },
+            { name = "nvidia-nvtx-cu12", specifier = "<=12.4.127" },
+            { name = "pillow", specifier = "<=11.0.0" },
+            { name = "setuptools", specifier = "<=75.6.0" },
+            { name = "sympy", specifier = "<=1.13.1" },
+            { name = "triton", specifier = "<=3.1.0" },
+            { name = "typing-extensions", specifier = "<=4.12.2" },
+        ]
 
         [[package]]
         name = "filelock"
@@ -21610,7 +21666,7 @@ fn lock_pytorch_cpu() -> Result<()> {
         version = "9.1.0.70"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "nvidia-cublas-cu12" },
+            { name = "nvidia-cublas-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/9f/fd/713452cd72343f682b1c7b9321e23829f00b842ceaedcda96e742ea0b0b3/nvidia_cudnn_cu12-9.1.0.70-py3-none-manylinux2014_x86_64.whl", hash = "sha256:165764f44ef8c61fcdfdfdbe769d687e06374059fbb388b6c89ecb0e28793a6f", size = 664752741 },
@@ -21622,7 +21678,7 @@ fn lock_pytorch_cpu() -> Result<()> {
         version = "11.2.1.3"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "nvidia-nvjitlink-cu12" },
+            { name = "nvidia-nvjitlink-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/7a/8a/0e728f749baca3fbeffad762738276e5df60851958be7783af121a7221e7/nvidia_cufft_cu12-11.2.1.3-py3-none-manylinux2014_aarch64.whl", hash = "sha256:5dad8008fc7f92f5ddfa2101430917ce2ffacd86824914c82e28990ad7f00399", size = 211422548 },
@@ -21645,9 +21701,9 @@ fn lock_pytorch_cpu() -> Result<()> {
         version = "11.6.1.9"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "nvidia-cublas-cu12" },
-            { name = "nvidia-cusparse-cu12" },
-            { name = "nvidia-nvjitlink-cu12" },
+            { name = "nvidia-cublas-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+            { name = "nvidia-cusparse-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+            { name = "nvidia-nvjitlink-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/46/6b/a5c33cf16af09166845345275c34ad2190944bcc6026797a39f8e0a282e0/nvidia_cusolver_cu12-11.6.1.9-py3-none-manylinux2014_aarch64.whl", hash = "sha256:d338f155f174f90724bbde3758b7ac375a70ce8e706d70b018dd3375545fc84e", size = 127634111 },
@@ -21660,7 +21716,7 @@ fn lock_pytorch_cpu() -> Result<()> {
         version = "12.3.1.170"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "nvidia-nvjitlink-cu12" },
+            { name = "nvidia-nvjitlink-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/96/a9/c0d2f83a53d40a4a41be14cea6a0bf9e668ffcf8b004bd65633f433050c0/nvidia_cusparse_cu12-12.3.1.170-py3-none-manylinux2014_aarch64.whl", hash = "sha256:9d32f62896231ebe0480efd8a7f702e143c98cfaa0e8a76df3386c1ba2b54df3", size = 207381987 },
@@ -21833,6 +21889,11 @@ fn lock_pytorch_cpu() -> Result<()> {
         name = "torch"
         version = "2.5.1+cu124"
         source = { registry = "https://download.pytorch.org/whl/cu124" }
+        resolution-markers = [
+            "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "platform_machine != 'x86_64' or sys_platform != 'linux'",
+        ]
         dependencies = [
             { name = "filelock" },
             { name = "fsspec" },
@@ -21899,6 +21960,11 @@ fn lock_pytorch_cpu() -> Result<()> {
         name = "torchvision"
         version = "0.20.1+cu124"
         source = { registry = "https://download.pytorch.org/whl/cu124" }
+        resolution-markers = [
+            "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "platform_machine != 'x86_64' or sys_platform != 'linux'",
+        ]
         dependencies = [
             { name = "numpy" },
             { name = "pillow" },
@@ -21914,7 +21980,7 @@ fn lock_pytorch_cpu() -> Result<()> {
         version = "3.1.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "filelock" },
+            { name = "filelock", marker = "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/78/eb/65f5ba83c2a123f6498a3097746607e5b2f16add29e36765305e4ac7fdd8/triton-3.1.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c8182f42fd8080a7d39d666814fa36c5e30cc00ea7eeeb1a2983dbb4c99a0fdc", size = 209551444 },
