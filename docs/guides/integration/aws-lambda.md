@@ -158,7 +158,7 @@ layers, resulting in millisecond builds:
 ```
 
 After building, we can push the image to
-[Amazon Elastic Container Registry (ECR)](https://aws.amazon.com/ecr/) with, e.g.:
+[Elastic Container Registry (ECR)](https://aws.amazon.com/ecr/) with, e.g.:
 
 ```console
 $ aws ecr get-login-password --region region | docker login --username AWS --password-stdin aws_account_id.dkr.ecr.region.amazonaws.com
@@ -166,8 +166,37 @@ $ docker tag fastapi-app:latest aws_account_id.dkr.ecr.region.amazonaws.com/fast
 $ docker push aws_account_id.dkr.ecr.region.amazonaws.com/fastapi-app:latest
 ```
 
-Finally, we can deploy the image to AWS Lambda using the AWS CLI or the AWS Management Console. For
-details, see the
+Finally, we can deploy the image to AWS Lambda using the AWS Management Console or the AWS CLI,
+e.g.:
+
+```console
+$ aws lambda create-function \
+   --function-name myFunction \
+   --package-type Image \
+   --code ImageUri=aws_account_id.dkr.ecr.region.amazonaws.com/fastapi-app:latest \
+   --role arn:aws:iam::111122223333:role/lambda-ex
+```
+
+Where the
+[execution role](https://docs.aws.amazon.com/lambda/latest/dg/lambda-intro-execution-role.html#permissions-executionrole-api)
+is created via:
+
+```console
+$ aws iam create-role \
+   --role-name lambda-ex \
+   --assume-role-policy-document '{"Version": "2012-10-17","Statement": [{ "Effect": "Allow", "Principal": {"Service": "lambda.amazonaws.com"}, "Action": "sts:AssumeRole"}]}'
+```
+
+Or update an existing function with:
+
+```console
+$ aws lambda update-function-code \
+   --function-name myFunction \
+   --image-uri aws_account_id.dkr.ecr.region.amazonaws.com/fastapi-app:latest \
+   --publish
+```
+
+For details, see the
 [AWS Lambda documentation](https://docs.aws.amazon.com/lambda/latest/dg/python-image.html).
 
 ### Workspace support
@@ -341,7 +370,35 @@ $ cd ..
 $ zip -r package.zip app
 ```
 
-We can then deploy the zip archive to AWS Lambda via the AWS CLI or the AWS Management Console.
+We can then deploy the zip archive to AWS Lambda via the AWS Management Console or the AWS CLI,
+e.g.:
+
+```console
+$ aws lambda create-function \
+   --function-name myFunction \
+   --runtime python3.13 \
+   --zip-file fileb://package.zip
+   --handler app.main.handler \
+   --role arn:aws:iam::111122223333:role/service-role/my-lambda-role
+```
+
+Where the
+[execution role](https://docs.aws.amazon.com/lambda/latest/dg/lambda-intro-execution-role.html#permissions-executionrole-api)
+is created via:
+
+```console
+$ aws iam create-role \
+   --role-name lambda-ex \
+   --assume-role-policy-document '{"Version": "2012-10-17","Statement": [{ "Effect": "Allow", "Principal": {"Service": "lambda.amazonaws.com"}, "Action": "sts:AssumeRole"}]}'
+```
+
+Or update an existing function with:
+
+```console
+$ aws lambda update-function-code \
+   --function-name myFunction \
+   --zip-file fileb://package.zip
+```
 
 !!! note
 
