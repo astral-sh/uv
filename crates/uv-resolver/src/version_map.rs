@@ -1,6 +1,9 @@
-use pubgrub::Range;
 use std::collections::btree_map::{BTreeMap, Entry};
+use std::collections::Bound;
+use std::ops::RangeBounds;
 use std::sync::OnceLock;
+
+use pubgrub::Ranges;
 use tracing::instrument;
 
 use uv_client::{OwnedArchive, SimpleMetadata, VersionFiles};
@@ -156,8 +159,8 @@ impl VersionMap {
     /// for each version.
     pub(crate) fn iter(
         &self,
-        range: &Range<Version>,
-    ) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle)> + ExactSizeIterator {
+        range: &Ranges<Version>,
+    ) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle)> {
         // Performance optimization: If we only have a single version, return that version directly.
         if let Some(version) = range.as_singleton() {
             either::Either::Left(match self.inner {
@@ -185,20 +188,24 @@ impl VersionMap {
         } else {
             either::Either::Right(match self.inner {
                 VersionMapInner::Eager(ref eager) => {
-                    either::Either::Left(eager.map.iter().map(|(version, dist)| {
-                        let version_map_dist = VersionMapDistHandle {
-                            inner: VersionMapDistHandleInner::Eager(dist),
-                        };
-                        (version, version_map_dist)
-                    }))
+                    either::Either::Left(eager.map.range(BoundingRange::from(range)).map(
+                        |(version, dist)| {
+                            let version_map_dist = VersionMapDistHandle {
+                                inner: VersionMapDistHandleInner::Eager(dist),
+                            };
+                            (version, version_map_dist)
+                        },
+                    ))
                 }
                 VersionMapInner::Lazy(ref lazy) => {
-                    either::Either::Right(lazy.map.iter().map(|(version, dist)| {
-                        let version_map_dist = VersionMapDistHandle {
-                            inner: VersionMapDistHandleInner::Lazy { lazy, dist },
-                        };
-                        (version, version_map_dist)
-                    }))
+                    either::Either::Right(lazy.map.range(BoundingRange::from(range)).map(
+                        |(version, dist)| {
+                            let version_map_dist = VersionMapDistHandle {
+                                inner: VersionMapDistHandleInner::Lazy { lazy, dist },
+                            };
+                            (version, version_map_dist)
+                        },
+                    ))
                 }
             })
         }
@@ -608,4 +615,30 @@ struct SimplePrioritizedDist {
     /// construct a distribution. (One easy way to effect this, at the time
     /// of writing, is to use `--exclude-newer 1900-01-01`.)
     dist: OnceLock<Option<PrioritizedDist>>,
+}
+
+/// A range that can be used to iterate over a subset of a [`BTreeMap`].
+#[derive(Debug)]
+struct BoundingRange<'a> {
+    min: Bound<&'a Version>,
+    max: Bound<&'a Version>,
+}
+
+impl<'a> From<&'a Ranges<Version>> for BoundingRange<'a> {
+    fn from(value: &'a Ranges<Version>) -> Self {
+        let (min, max) = value
+            .bounding_range()
+            .unwrap_or((Bound::Unbounded, Bound::Unbounded));
+        Self { min, max }
+    }
+}
+
+impl<'a> RangeBounds<Version> for BoundingRange<'a> {
+    fn start_bound(&self) -> Bound<&'a Version> {
+        self.min
+    }
+
+    fn end_bound(&self) -> Bound<&'a Version> {
+        self.max
+    }
 }
