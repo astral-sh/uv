@@ -112,6 +112,7 @@ nav:
           - FastAPI: guides/integration/fastapi.md
           - Alternative indexes: guides/integration/alternative-indexes.md
           - Dependency bots: guides/integration/dependency-bots.md
+          - AWS Lambda: guides/integration/aws-lambda.md
   - Concepts:
       - concepts/index.md
       - Projects:

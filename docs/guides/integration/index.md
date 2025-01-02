@@ -10,6 +10,7 @@ Learn how to integrate uv with other software:
 - [Using with alternative package indexes](./alternative-indexes.md)
 - [Installing PyTorch](./pytorch.md)
 - [Building a FastAPI application](./fastapi.md)
+- [Using with AWS Lambda](./aws-lambda.md)
 
 Or, explore the [concept documentation](../../concepts/index.md) for comprehensive breakdown of each
 feature.
