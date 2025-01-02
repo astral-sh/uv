@@ -305,7 +305,7 @@ jobs:
           # See https://github.com/astral-sh/uv/issues/6940
           UV_LINK_MODE: copy
         run: |
-          cargo nextest run --no-default-features --features python,pypi,python-managed,performance --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
+          cargo nextest run --no-default-features --features python,pypi,python-managed --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
       - name: "Smoke test"
         working-directory: ${{ env.UV_WORKSPACE }}
