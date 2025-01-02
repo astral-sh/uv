@@ -483,6 +483,8 @@ fn help_subsubcommand() {
               any Python versions. If not, it will install the latest stable version of Python.
               
               See `uv help python` to view supported request formats.
+              
+              [env: UV_PYTHON=]
 
     Options:
       -i, --install-dir <INSTALL_DIR>

@@ -1635,7 +1635,7 @@ fn sha() -> Result<()> {
     creating build/bdist.linux-x86_64/wheel
     copying build/lib/__init__.py -> build/bdist.linux-x86_64/wheel
     running install_egg_info
-    Copying src/project.egg-info to build/bdist.linux-x86_64/wheel/project-0.1.0-py3.8.egg-info
+    Copying src/project.egg-info to build/bdist.linux-x86_64/wheel/project-0.1.0-py3.12.egg-info
     running install_scripts
     creating build/bdist.linux-x86_64/wheel/project-0.1.0.dist-info/WHEEL
     creating '[TEMP_DIR]/project/dist/[TMP]/wheel' to it
