@@ -1,13 +1,13 @@
 use std::{path::Path, process::Command};
 
+use crate::common::{uv_snapshot, TestContext};
 use assert_fs::{
     assert::PathAssert,
     prelude::{FileTouch, PathChild, PathCreateDir},
 };
 use predicates::prelude::predicate;
 use uv_fs::Simplified;
-
-use crate::common::{uv_snapshot, TestContext};
+use uv_static::EnvVars;
 
 #[test]
 fn python_install() {
@@ -883,20 +883,35 @@ fn python_install_with_uv_python_env() {
         .with_filtered_python_keys()
         .with_filtered_exe_suffix();
 
-    // Set the UV_PYTHON environment variable to 3.12
-    std::env::set_var("UV_PYTHON", "3.12");
-
     // Install the version specified by the UV_PYTHON environment variable
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.python_install()
+                                    .env(EnvVars::UV_PYTHON, "3.12"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Installed Python 3.12.8 in [TIME]
-     + cpython-3.12.8-[PLATFORM] (python3.12)
+     + cpython-3.12.8-[PLATFORM]
     "###);
+}
 
-    // Clean up the environment variable
-    std::env::remove_var("UV_PYTHON");
+#[test]
+fn python_install_with_uv_python_env_and_arg() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix();
+
+    // Command line arg (3.11) should take precedence over UV_PYTHON (3.12)
+    uv_snapshot!(context.filters(), context.python_install()
+                                            .arg("3.11")
+                                            .env(EnvVars::UV_PYTHON, "3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.11.11 in [TIME]
+     + cpython-3.11.11-[PLATFORM]
+    "###);
 }
