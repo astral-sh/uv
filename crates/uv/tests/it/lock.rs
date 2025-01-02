@@ -21698,7 +21698,7 @@ fn lock_pytorch_cpu() -> Result<()> {
 
         [[package]]
         name = "pillow"
-        version = "11.1.0"
+        version = "11.0.0"
         source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/f3/af/c097e544e7bd278333db77933e535098c259609c4eb3b85381109602fb5b/pillow-11.1.0.tar.gz", hash = "sha256:368da70808b36d73b4b390a8ffac11069f8a5c85f29eff1f1b01bcf3ef5b2a20", size = 46742715 }
         wheels = [
