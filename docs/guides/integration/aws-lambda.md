@@ -40,7 +40,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     # In development mode, include the FastAPI development server.
-    "fastapi[standard]",
+    "fastapi[standard]>=0.115",
 ]
 ```
 
@@ -85,7 +85,7 @@ the second stage, we'll copy this directory over to the final image, omitting th
 other unnecessary files.
 
 ```dockerfile title="Dockerfile"
-FROM ghcr.io/astral-sh/uv:latest AS uv
+FROM ghcr.io/astral-sh/uv:0.5.15 AS uv
 
 # First, bundle the dependencies into the task root.
 FROM public.ecr.aws/lambda/python:3.13 AS builder
@@ -119,6 +119,10 @@ COPY ./app ${LAMBDA_TASK_ROOT}/app
 # Set the AWS Lambda handler.
 CMD ["app.main.handler"]
 ```
+
+!!! tip
+
+    To deploy to ARM-based AWS Lambda runtimes, replace `public.ecr.aws/lambda/python:3.13` with `public.ecr.aws/lambda/python:3.13-arm64`.
 
 We can build the image with, e.g.:
 
@@ -158,7 +162,7 @@ layers, resulting in millisecond builds:
 ```
 
 After building, we can push the image to
-[Amazon Elastic Container Registry (ECR)](https://aws.amazon.com/ecr/) with, e.g.:
+[Elastic Container Registry (ECR)](https://aws.amazon.com/ecr/) with, e.g.:
 
 ```console
 $ aws ecr get-login-password --region region | docker login --username AWS --password-stdin aws_account_id.dkr.ecr.region.amazonaws.com
@@ -166,8 +170,37 @@ $ docker tag fastapi-app:latest aws_account_id.dkr.ecr.region.amazonaws.com/fast
 $ docker push aws_account_id.dkr.ecr.region.amazonaws.com/fastapi-app:latest
 ```
 
-Finally, we can deploy the image to AWS Lambda using the AWS CLI or the AWS Management Console. For
-details, see the
+Finally, we can deploy the image to AWS Lambda using the AWS Management Console or the AWS CLI,
+e.g.:
+
+```console
+$ aws lambda create-function \
+   --function-name myFunction \
+   --package-type Image \
+   --code ImageUri=aws_account_id.dkr.ecr.region.amazonaws.com/fastapi-app:latest \
+   --role arn:aws:iam::111122223333:role/my-lambda-role
+```
+
+Where the
+[execution role](https://docs.aws.amazon.com/lambda/latest/dg/lambda-intro-execution-role.html#permissions-executionrole-api)
+is created via:
+
+```console
+$ aws iam create-role \
+   --role-name my-lambda-role \
+   --assume-role-policy-document '{"Version": "2012-10-17", "Statement": [{ "Effect": "Allow", "Principal": {"Service": "lambda.amazonaws.com"}, "Action": "sts:AssumeRole"}]}'
+```
+
+Or, update an existing function with:
+
+```console
+$ aws lambda update-function-code \
+   --function-name myFunction \
+   --image-uri aws_account_id.dkr.ecr.region.amazonaws.com/fastapi-app:latest \
+   --publish
+```
+
+For details, see the
 [AWS Lambda documentation](https://docs.aws.amazon.com/lambda/latest/dg/python-image.html).
 
 ### Workspace support
@@ -183,11 +216,11 @@ First, we'll create the library itself:
 
 ```console
 $ uv init --lib library
+$ uv add ./library
 ```
 
-Note that running `uv init` within the `project` directory will automatically convert `project` to a
-workspace and add `library` as a workspace member. However, we'll still need to add the library as
-an explicit dependency of the main project:
+Running `uv init` within the `project` directory will automatically convert `project` to a workspace
+and add `library` as a workspace member:
 
 ```toml title="pyproject.toml"
 [project]
@@ -205,10 +238,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    # Uvicorn is a lightning-fast ASGI server implementation.
-    #
-    # We'll use Uvicorn to run the FastAPI application locally,
-    # but it won't be included in the deployment package.
+    # In development mode, include the FastAPI development server.
     "fastapi[standard]",
 ]
 
@@ -254,7 +284,7 @@ And confirm that opening http://127.0.0.1:8000/ in a web browser displays, "Hell
 Finally, we'll update the Dockerfile to include the local library in the deployment package:
 
 ```dockerfile title="Dockerfile"
-FROM ghcr.io/astral-sh/uv:latest AS uv
+FROM ghcr.io/astral-sh/uv:0.5.15 AS uv
 
 # First, bundle the dependencies into the task root.
 FROM public.ecr.aws/lambda/python:3.13 AS builder
@@ -302,6 +332,10 @@ COPY ./app ${LAMBDA_TASK_ROOT}/app
 CMD ["app.main.handler"]
 ```
 
+!!! tip
+
+    To deploy to ARM-based AWS Lambda runtimes, replace `public.ecr.aws/lambda/python:3.13` with `public.ecr.aws/lambda/python:3.13-arm64`.
+
 From there, we can build and deploy the updated image as before.
 
 ## Deploying a zip archive
@@ -325,6 +359,10 @@ $ uv pip install \
    -r requirements.txt
 ```
 
+!!! tip
+
+    To deploy to ARM-based AWS Lambda runtimes, replace `x86_64-manylinux2014` with `aarch64-manylinux2014`.
+
 Following the
 [AWS Lambda documentation](https://docs.aws.amazon.com/lambda/latest/dg/python-package.html), we can
 then bundle these dependencies into a zip as follows:
@@ -341,7 +379,35 @@ $ cd ..
 $ zip -r package.zip app
 ```
 
-We can then deploy the zip archive to AWS Lambda via the AWS CLI or the AWS Management Console.
+We can then deploy the zip archive to AWS Lambda via the AWS Management Console or the AWS CLI,
+e.g.:
+
+```console
+$ aws lambda create-function \
+   --function-name myFunction \
+   --runtime python3.13 \
+   --zip-file fileb://package.zip
+   --handler app.main.handler \
+   --role arn:aws:iam::111122223333:role/service-role/my-lambda-role
+```
+
+Where the
+[execution role](https://docs.aws.amazon.com/lambda/latest/dg/lambda-intro-execution-role.html#permissions-executionrole-api)
+is created via:
+
+```console
+$ aws iam create-role \
+   --role-name my-lambda-role \
+   --assume-role-policy-document '{"Version": "2012-10-17", "Statement": [{ "Effect": "Allow", "Principal": {"Service": "lambda.amazonaws.com"}, "Action": "sts:AssumeRole"}]}'
+```
+
+Or, update an existing function with:
+
+```console
+$ aws lambda update-function-code \
+   --function-name myFunction \
+   --zip-file fileb://package.zip
+```
 
 !!! note
 
