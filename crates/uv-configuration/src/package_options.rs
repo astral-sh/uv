@@ -47,6 +47,15 @@ impl Reinstall {
         matches!(self, Self::All)
     }
 
+    /// Returns `true` if the specified package should be reinstalled.
+    pub fn contains(&self, package_name: &PackageName) -> bool {
+        match &self {
+            Self::None => false,
+            Self::All => true,
+            Self::Packages(packages) => packages.contains(package_name),
+        }
+    }
+
     /// Combine a set of [`Reinstall`] values.
     #[must_use]
     pub fn combine(self, other: Self) -> Self {
