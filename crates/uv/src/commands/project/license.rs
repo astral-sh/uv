@@ -1,3 +1,4 @@
+use anstream::print;
 use std::path::Path;
 
 use anyhow::{Error, Result};
@@ -201,7 +202,7 @@ pub(crate) async fn license(
         &flat_index,
         &dependency_metadata,
         state.clone(),
-        index_strategy.clone(),
+        index_strategy,
         &config_setting,
         build_isolation,
         link_mode,
@@ -222,7 +223,7 @@ pub(crate) async fn license(
     let db = &database;
     let mut fetches = futures::stream::iter(lock.packages())
         .map(|package| async move {
-            let license = package.license(&ws.clone(), interpret, &db).await;
+            let license = package.license(&ws.clone(), interpret, db).await;
             Ok::<Option<_>, Error>(Some((package, license)))
         })
         .buffer_unordered(concurrency.downloads);

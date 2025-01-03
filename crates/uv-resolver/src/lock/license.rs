@@ -277,11 +277,7 @@ impl<'env> LicenseDisplay<'env> {
             }
 
             line.push(' ');
-            line.push_str(
-                self.license
-                    .get(package_id)
-                    .unwrap_or_else(|| &unknown_license),
-            );
+            line.push_str(self.license.get(package_id).unwrap_or(&unknown_license));
 
             if let Some(edge) = edge {
                 match edge {
@@ -336,10 +332,9 @@ impl<'env> LicenseDisplay<'env> {
         );
         path.push(package_id);
 
-        for (_index, dep) in dependencies.iter().enumerate() {
-            for (_visited_index, visited_line) in self.visit(*dep, visited, path).iter().enumerate()
-            {
-                lines.push(format!("{visited_line}"));
+        for dep in &dependencies {
+            for visited_line in &self.visit(*dep, visited, path) {
+                lines.push(visited_line.to_string());
             }
         }
 

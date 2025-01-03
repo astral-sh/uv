@@ -2467,36 +2467,50 @@ impl Package {
     }
 
     fn get_license_string(
-        &self,
-        license_meta: &Option<String>,
-        classifiers: &Vec<String>,
+        license_meta: Option<&String>,
+        classifiers: Option<&Vec<String>>,
     ) -> Option<String> {
+        // first we'll try trove classifiers
+        let trove_license = if let Some(classifiers) = classifiers {
+            let license_prefix = "License ::";
+            let license_osi_prefix = "License :: OSI Approved ::";
+            Some(
+                classifiers
+                    .iter()
+                    .filter_map(|c| {
+                        if !c.starts_with(license_prefix) {
+                            None // filter this classifier out if it's not License-related
+                        } else {
+                            if c.starts_with(license_osi_prefix) {
+                                Some(c[license_osi_prefix.len() + 1..].to_string())
+                            // remove the License & OSI-approved prefixes
+                            } else {
+                                Some(c[license_prefix.len() + 1..].to_string()) // remove the License prefix
+                            }
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            )
+            .filter(|s| !s.is_empty())
+        } else {
+            None
+        };
+
+        // trove_license is none if there were no classifiers that specify the license
+        if trove_license.is_some() {
+            return trove_license;
+        }
+
+        // we did not successfully find and parse a license from a trove classifier
+        // try the license field
         if let Some(license_txt) = license_meta {
             if !license_txt.is_empty() {
-                return license_meta.clone();
+                return Some(license_txt.clone());
             }
         }
-        let license_prefix = "License ::";
-        let license_osi_prefix = "License :: OSI Approved ::";
-        let classifier_license = Some(
-            classifiers
-                .iter()
-                .filter_map(|c| {
-                    if !c.starts_with(license_prefix) {
-                        None // filter this classifier out if it's not License-related
-                    } else {
-                        if c.starts_with(license_osi_prefix) {
-                            Some(c[license_osi_prefix.len() + 1..].to_string()) // remove the License & OSI-approved prefixes
-                        } else {
-                            Some(c[license_prefix.len() + 1..].to_string()) // remove the License prefix
-                        }
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join(", "),
-        )
-        .filter(|s| !s.is_empty());
-        classifier_license
+
+        None
     }
 
     pub async fn license<Context: BuildContext>(
@@ -2510,43 +2524,32 @@ impl Package {
         // of the package. the package may be populated from the lock file OR the resolver.
         // in the case of the former, the package data is incomplete and we must fetch
         // the additional data ourselves.
-        let mut classifiers: Option<Vec<String>> = None;
-        let mut license_meta: Option<String> = None;
-        if classifiers.is_none() || license_meta.is_none() {
-            // TODO(RL): need a smarter check here
-            // Get the metadata for the distribution (see above for explanation of tags/capabilities).
-            let dist = self.to_dist(
-                workspace.install_path(),
-                TagPolicy::Preferred(tags),
-                &BuildOptions::default(),
-            );
 
-            if let Ok(generated_dist) = dist {
-                let hasher = HashStrategy::None;
+        // TODO(RL): need a smarter check here
+        // Get the metadata for the distribution (see above for explanation of tags/capabilities).
+        let dist = self.to_dist(
+            workspace.install_path(),
+            TagPolicy::Preferred(tags),
+            &BuildOptions::default(),
+        );
 
-                if let Ok(meta) = database
-                    .get_or_build_wheel_metadata(&generated_dist, hasher.get(&generated_dist))
-                    .await
-                {
-                    classifiers = meta.metadata.classifiers.clone();
-                    license_meta = meta.metadata.license.clone();
-                    println!("{} :: {:?}", self.name(), license_meta);
-                } else {
-                    debug!("package metadata lookup failed");
-                    return None;
-                }
-            } else {
-                debug!("package.to_dist failed");
-                return None;
+        if let Ok(generated_dist) = dist {
+            let hasher = HashStrategy::None;
+
+            if let Ok(meta) = database
+                .get_or_build_wheel_metadata(&generated_dist, hasher.get(&generated_dist))
+                .await
+            {
+                return Package::get_license_string(
+                    meta.metadata.license.as_ref(),
+                    meta.metadata.classifiers.as_ref(),
+                );
             }
-        };
-
-        if let Some(classifiers) = classifiers {
-            let license_string = self.get_license_string(&license_meta, &classifiers);
-            license_string
-        } else {
-            None
+            debug!("package metadata lookup failed");
+            return None;
         }
+        debug!("package.to_dist failed");
+        None
     }
 
     /// Returns the [`Version`] of the package.
