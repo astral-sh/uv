@@ -13,10 +13,10 @@ use uv_cli::{
     ToolUpgradeArgs,
 };
 use uv_cli::{
-    AddArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
-    PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
-    PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
-    PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs, ToolDirArgs,
+    AddArgs, ColorChoice, ExternalCommand, GlobalArgs, IndexCredentialsArgs, InitArgs, ListFormat,
+    LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs,
+    PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs,
+    PythonListArgs, PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs, ToolDirArgs,
     ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs,
 };
 use uv_client::Connectivity;
@@ -2958,6 +2958,48 @@ impl PublishSettings {
                 Vec::new(),
                 false,
             ),
+        }
+    }
+}
+
+pub(crate) struct IndexSettings {
+    // CLI only settings
+    pub(crate) name: String,
+    pub(crate) username: Option<String>,
+    pub(crate) password: Option<String>,
+
+    // CLI and Filesystem settings
+    pub(crate) keyring_provider: KeyringProviderType,
+
+    // Filesystem only settings
+    pub(crate) index: Vec<Index>,
+}
+
+impl IndexSettings {
+    /// Resolve the [`IndexSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(
+        args: IndexCredentialsArgs,
+        filesystem: Option<FilesystemOptions>,
+    ) -> Self {
+        let Options { top_level, .. } = filesystem
+            .map(FilesystemOptions::into_options)
+            .unwrap_or_default();
+
+        let ResolverInstallerOptions {
+            keyring_provider,
+            index,
+            ..
+        } = top_level;
+
+        Self {
+            name: args.name,
+            username: args.username,
+            password: args.password,
+            keyring_provider: args
+                .keyring_provider
+                .combine(keyring_provider)
+                .unwrap_or_default(),
+            index: index.unwrap_or_default(),
         }
     }
 }

@@ -479,6 +479,7 @@ pub enum Commands {
         ),
     )]
     Help(HelpArgs),
+    Index(IndexNamespace),
 }
 
 #[derive(Args, Debug)]
@@ -5373,4 +5374,76 @@ pub enum BuildBackendCommand {
     GetRequiresForBuildEditable,
     /// PEP 660 hook `prepare_metadata_for_build_editable`.
     PrepareMetadataForBuildEditable { wheel_directory: PathBuf },
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct IndexNamespace {
+    #[command(subcommand)]
+    pub command: IndexCommand,
+}
+
+#[derive(Subcommand)]
+pub enum IndexCommand {
+    /// Compile a `requirements.in` file to a `requirements.txt` file.
+    #[command(
+        after_help = "Use `uv help index add` for more details.",
+        after_long_help = ""
+    )]
+    Add(IndexSourceArgs),
+    /// Sync an environment with a `requirements.txt` file.
+    #[command(
+        after_help = "Use `uv help index list` for more details.",
+        after_long_help = ""
+    )]
+    List(IndexSourceArgs),
+    /// Install packages into an environment.
+    #[command(
+        after_help = "Use `uv help index delete` for more details.",
+        after_long_help = ""
+    )]
+    Delete(IndexSourceArgs),
+
+    #[command(subcommand)]
+    Credentials(IndexCredentialsCommand),
+}
+
+#[derive(Subcommand)]
+pub enum IndexCredentialsCommand {
+    #[command(
+        after_help = "Use `uv help index credentials add` for more details.",
+        after_long_help = ""
+    )]
+    Add(IndexCredentialsArgs),
+}
+
+#[derive(Args)]
+pub struct IndexSourceArgs {
+    /// The name of the index
+    #[arg(long)]
+    pub name: String,
+}
+
+#[derive(Args)]
+pub struct IndexCredentialsArgs {
+    /// The name of the index
+    #[arg(long)]
+    pub name: String,
+
+    /// The username that should be used for the index
+    #[arg(long, required(false))]
+    pub username: Option<String>,
+
+    /// The password that should be user for the index
+    #[arg(long, required(false))]
+    pub password: Option<String>,
+
+    /// Attempt to use `keyring` for authentication for remote requirements files.
+    ///
+    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to
+    /// use the `keyring` CLI to handle authentication.
+    ///
+    /// Defaults to `disabled`.
+    #[arg(long, value_enum, env = EnvVars::UV_KEYRING_PROVIDER)]
+    pub keyring_provider: Option<KeyringProviderType>,
 }
