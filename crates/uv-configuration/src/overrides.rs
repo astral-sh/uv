@@ -42,7 +42,16 @@ impl Overrides {
         &'a self,
         requirements: impl IntoIterator<Item = &'a Requirement>,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> {
-        requirements.into_iter().flat_map(|requirement| {
+        if self.0.is_empty() {
+            // Fast path: There are no overrides.
+            return Either::Left(
+                requirements
+                    .into_iter()
+                    .map(|requirement| Cow::Borrowed(requirement)),
+            );
+        }
+
+        Either::Right(requirements.into_iter().flat_map(|requirement| {
             let Some(overrides) = self.get(&requirement.name) else {
                 // Case 1: No override(s).
                 return Either::Left(std::iter::once(Cow::Borrowed(requirement)));
@@ -70,6 +79,6 @@ impl Overrides {
                     })
                 },
             )))
-        })
+        }))
     }
 }
