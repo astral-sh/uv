@@ -5256,9 +5256,7 @@ uv python uninstall [OPTIONS] <TARGETS>...
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt><code>TARGETS</code></dt><dd><p>The Python version(s) to uninstall.</p>
-
-<p>See <a href="#uv-python">uv python</a> to view supported request formats.</p>
+<dl class="cli-reference"><dt><code>TARGETS</code></dt><dd><p>The Python version(s) to uninstall. See <a href="#uv-python">uv python</a> to view supported request formats</p>
 
 </dd></dl>
 

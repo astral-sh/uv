@@ -4329,6 +4329,7 @@ pub struct PythonInstallArgs {
     /// it will install the latest stable version of Python.
     ///
     /// See `uv help python` to view supported request formats.
+    #[arg(env = EnvVars::UV_PYTHON)]
     pub targets: Vec<String>,
 
     /// Set the URL to use as the source for downloading Python installations.
@@ -4385,9 +4386,8 @@ pub struct PythonUninstallArgs {
     pub install_dir: Option<PathBuf>,
 
     /// The Python version(s) to uninstall.
-    ///
     /// See `uv help python` to view supported request formats.
-    #[arg(required = true)]
+    #[arg(required = true, env=EnvVars::UV_PYTHON)]
     pub targets: Vec<String>,
 
     /// Uninstall all managed Python versions.
