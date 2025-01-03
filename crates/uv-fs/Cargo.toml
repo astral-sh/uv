@@ -37,6 +37,9 @@ winsafe = { workspace = true }
 [target.'cfg(any(unix, target_os = "wasi", target_os = "redox"))'.dependencies]
 rustix = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true }
+
 [target.'cfg(windows)'.dependencies]
 backoff = { workspace = true }
 junction = { workspace = true }

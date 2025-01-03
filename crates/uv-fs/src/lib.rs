@@ -556,7 +556,16 @@ impl LockedFile {
         path: impl AsRef<Path>,
         resource: impl Display,
     ) -> Result<Self, std::io::Error> {
-        let file = fs_err::File::create(path.as_ref())?;
+        #[allow(unsafe_code)]
+        #[cfg(unix)]
+        let old_umask = unsafe { nix::libc::umask(0) }; // for multi user file locking
+        let file = fs_err::File::create(path.as_ref());
+        #[cfg(unix)]
+        #[allow(unsafe_code)]
+        unsafe {
+            nix::libc::umask(old_umask);
+        };
+        let file = file?;
         let resource = resource.to_string();
         tokio::task::spawn_blocking(move || Self::lock_file_blocking(file, &resource)).await?
     }

@@ -63,6 +63,9 @@ which = { workspace = true }
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true }
+
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true }
 windows-registry = { workspace = true }

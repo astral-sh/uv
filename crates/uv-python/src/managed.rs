@@ -142,6 +142,18 @@ impl ManagedPythonInstallations {
     ///
     /// Ensures the directory is created.
     pub fn init(self) -> Result<Self, Error> {
+        #[allow(unsafe_code)]
+        #[cfg(unix)]
+        let old_umask = unsafe { nix::libc::umask(0) }; // for multi user file locking
+        let ret = self.init1();
+        #[allow(unsafe_code)]
+        #[cfg(unix)]
+        unsafe {
+            nix::libc::umask(old_umask);
+        }
+        ret
+    }
+    pub fn init1(self) -> Result<Self, Error> {
         let root = &self.root;
 
         // Support `toolchains` -> `python` migration transparently.
