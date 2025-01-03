@@ -352,7 +352,7 @@ fn star_range_inequality(range: &Ranges<Version>) -> Option<VersionSpecifier> {
     match (b1, b2) {
         ((Bound::Unbounded, Bound::Excluded(v1)), (Bound::Included(v2), Bound::Unbounded))
             if v1.release().len() == 2
-                && v2.release() == [v1.release()[0], v1.release()[1] + 1] =>
+                && *v2.release() == [v1.release()[0], v1.release()[1] + 1] =>
         {
             Some(VersionSpecifier::not_equals_star_version(v1.clone()))
         }

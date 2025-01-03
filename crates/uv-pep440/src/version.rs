@@ -1,4 +1,5 @@
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use std::ops::Deref;
 use std::sync::LazyLock;
 use std::{
     borrow::Borrow,
@@ -267,7 +268,7 @@ impl std::fmt::Display for OperatorParseError {
 )]
 #[cfg_attr(feature = "rkyv", rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord)))]
 pub struct Version {
-    inner: Arc<VersionInner>,
+    inner: VersionInner,
 }
 
 #[derive(Clone, Debug)]
@@ -278,7 +279,7 @@ pub struct Version {
 #[cfg_attr(feature = "rkyv", rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord)))]
 enum VersionInner {
     Small { small: VersionSmall },
-    Full { full: VersionFull },
+    Full { full: Arc<VersionFull> },
 }
 
 impl Version {
@@ -295,9 +296,9 @@ impl Version {
         R: Borrow<u64>,
     {
         Self {
-            inner: Arc::new(VersionInner::Small {
+            inner: VersionInner::Small {
                 small: VersionSmall::new(),
-            }),
+            },
         }
         .with_release(release_numbers)
     }
@@ -344,7 +345,7 @@ impl Version {
     /// Returns the epoch of this version.
     #[inline]
     pub fn epoch(&self) -> u64 {
-        match *self.inner {
+        match self.inner {
             VersionInner::Small { ref small } => small.epoch(),
             VersionInner::Full { ref full } => full.epoch,
         }
@@ -352,17 +353,44 @@ impl Version {
 
     /// Returns the release number part of the version.
     #[inline]
-    pub fn release(&self) -> &[u64] {
-        match *self.inner {
-            VersionInner::Small { ref small } => small.release(),
-            VersionInner::Full { ref full, .. } => &full.release,
-        }
+    pub fn release(&self) -> Release {
+        let inner = match &self.inner {
+            VersionInner::Small { small } => {
+                // Parse out the version digits.
+                // * Bytes 6 and 7 correspond to the first release segment as a `u16`.
+                // * Bytes 5, 4 and 3 correspond to the second, third and fourth release
+                //   segments, respectively.
+                match small.len {
+                    0 => ReleaseInner::Small0([]),
+                    1 => ReleaseInner::Small1([(small.repr >> 0o60) & 0xFFFF]),
+                    2 => ReleaseInner::Small2([
+                        (small.repr >> 0o60) & 0xFFFF,
+                        (small.repr >> 0o50) & 0xFF,
+                    ]),
+                    3 => ReleaseInner::Small3([
+                        (small.repr >> 0o60) & 0xFFFF,
+                        (small.repr >> 0o50) & 0xFF,
+                        (small.repr >> 0o40) & 0xFF,
+                    ]),
+                    4 => ReleaseInner::Small4([
+                        (small.repr >> 0o60) & 0xFFFF,
+                        (small.repr >> 0o50) & 0xFF,
+                        (small.repr >> 0o40) & 0xFF,
+                        (small.repr >> 0o30) & 0xFF,
+                    ]),
+                    _ => unreachable!("{}", small.len),
+                }
+            }
+            VersionInner::Full { full } => ReleaseInner::Full(&full.release),
+        };
+
+        Release { inner }
     }
 
     /// Returns the pre-release part of this version, if it exists.
     #[inline]
     pub fn pre(&self) -> Option<Prerelease> {
-        match *self.inner {
+        match self.inner {
             VersionInner::Small { ref small } => small.pre(),
             VersionInner::Full { ref full } => full.pre,
         }
@@ -371,7 +399,7 @@ impl Version {
     /// Returns the post-release part of this version, if it exists.
     #[inline]
     pub fn post(&self) -> Option<u64> {
-        match *self.inner {
+        match self.inner {
             VersionInner::Small { ref small } => small.post(),
             VersionInner::Full { ref full } => full.post,
         }
@@ -380,7 +408,7 @@ impl Version {
     /// Returns the dev-release part of this version, if it exists.
     #[inline]
     pub fn dev(&self) -> Option<u64> {
-        match *self.inner {
+        match self.inner {
             VersionInner::Small { ref small } => small.dev(),
             VersionInner::Full { ref full } => full.dev,
         }
@@ -389,7 +417,7 @@ impl Version {
     /// Returns the local segments in this version, if any exist.
     #[inline]
     pub fn local(&self) -> LocalVersionSlice {
-        match *self.inner {
+        match self.inner {
             VersionInner::Small { ref small } => small.local_slice(),
             VersionInner::Full { ref full } => full.local.as_slice(),
         }
@@ -402,7 +430,7 @@ impl Version {
     /// like `1.0a1`, `1.0dev0`, etc.
     #[inline]
     pub fn min(&self) -> Option<u64> {
-        match *self.inner {
+        match self.inner {
             VersionInner::Small { ref small } => small.min(),
             VersionInner::Full { ref full } => full.min,
         }
@@ -415,7 +443,7 @@ impl Version {
     /// like `1.0.post1`, `1.0+local`, etc.
     #[inline]
     pub fn max(&self) -> Option<u64> {
-        match *self.inner {
+        match self.inner {
             VersionInner::Small { ref small } => small.max(),
             VersionInner::Full { ref full } => full.max,
         }
@@ -453,7 +481,7 @@ impl Version {
     /// last number in the release component.
     #[inline]
     fn push_release(&mut self, n: u64) {
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let VersionInner::Small { ref mut small } = &mut self.inner {
             if small.push_release(n) {
                 return;
             }
@@ -467,10 +495,10 @@ impl Version {
     /// since all versions should have at least one release number.
     #[inline]
     fn clear_release(&mut self) {
-        match Arc::make_mut(&mut self.inner) {
+        match &mut self.inner {
             VersionInner::Small { ref mut small } => small.clear_release(),
             VersionInner::Full { ref mut full } => {
-                full.release.clear();
+                Arc::make_mut(full).release.clear();
             }
         }
     }
@@ -479,7 +507,7 @@ impl Version {
     #[inline]
     #[must_use]
     pub fn with_epoch(mut self, value: u64) -> Self {
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let VersionInner::Small { ref mut small } = &mut self.inner {
             if small.set_epoch(value) {
                 return self;
             }
@@ -492,7 +520,7 @@ impl Version {
     #[inline]
     #[must_use]
     pub fn with_pre(mut self, value: Option<Prerelease>) -> Self {
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let VersionInner::Small { ref mut small } = &mut self.inner {
             if small.set_pre(value) {
                 return self;
             }
@@ -505,7 +533,7 @@ impl Version {
     #[inline]
     #[must_use]
     pub fn with_post(mut self, value: Option<u64>) -> Self {
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let VersionInner::Small { ref mut small } = &mut self.inner {
             if small.set_post(value) {
                 return self;
             }
@@ -518,7 +546,7 @@ impl Version {
     #[inline]
     #[must_use]
     pub fn with_dev(mut self, value: Option<u64>) -> Self {
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let VersionInner::Small { ref mut small } = &mut self.inner {
             if small.set_dev(value) {
                 return self;
             }
@@ -546,7 +574,7 @@ impl Version {
         match value {
             LocalVersion::Segments(segments) => self.with_local_segments(segments),
             LocalVersion::Max => {
-                if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+                if let VersionInner::Small { ref mut small } = &mut self.inner {
                     if small.set_local(LocalVersion::Max) {
                         return self;
                     }
@@ -564,7 +592,7 @@ impl Version {
     #[inline]
     #[must_use]
     pub fn without_local(mut self) -> Self {
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let VersionInner::Small { ref mut small } = &mut self.inner {
             if small.set_local(LocalVersion::empty()) {
                 return self;
             }
@@ -605,7 +633,7 @@ impl Version {
     pub fn with_min(mut self, value: Option<u64>) -> Self {
         debug_assert!(!self.is_pre(), "min is not allowed on pre-release versions");
         debug_assert!(!self.is_dev(), "min is not allowed on dev versions");
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let VersionInner::Small { ref mut small } = &mut self.inner {
             if small.set_min(value) {
                 return self;
             }
@@ -627,7 +655,7 @@ impl Version {
             "max is not allowed on post-release versions"
         );
         debug_assert!(!self.is_dev(), "max is not allowed on dev versions");
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let VersionInner::Small { ref mut small } = &mut self.inner {
             if small.set_max(value) {
                 return self;
             }
@@ -639,10 +667,10 @@ impl Version {
     /// Convert this version to a "full" representation in-place and return a
     /// mutable borrow to the full type.
     fn make_full(&mut self) -> &mut VersionFull {
-        if let VersionInner::Small { ref small } = *self.inner {
+        if let VersionInner::Small { ref small } = self.inner {
             let full = VersionFull {
                 epoch: small.epoch(),
-                release: small.release().to_vec(),
+                release: self.release().to_vec(),
                 min: small.min(),
                 max: small.max(),
                 pre: small.pre(),
@@ -651,11 +679,13 @@ impl Version {
                 local: small.local(),
             };
             *self = Self {
-                inner: Arc::new(VersionInner::Full { full }),
+                inner: VersionInner::Full {
+                    full: Arc::new(full),
+                },
             };
         }
-        match Arc::make_mut(&mut self.inner) {
-            VersionInner::Full { ref mut full } => full,
+        match &mut self.inner {
+            VersionInner::Full { ref mut full } => Arc::make_mut(full),
             VersionInner::Small { .. } => unreachable!(),
         }
     }
@@ -679,7 +709,7 @@ impl Version {
             }
         }
 
-        match compare_release(self.release(), other.release()) {
+        match compare_release(&self.release(), &other.release()) {
             Ordering::Less => {
                 return Ordering::Less;
             }
@@ -800,7 +830,7 @@ impl Ord for Version {
     /// < 1.0 < 1.0.post456.dev34 < 1.0.post456
     #[inline]
     fn cmp(&self, other: &Self) -> Ordering {
-        match (&*self.inner, &*other.inner) {
+        match (&self.inner, &other.inner) {
             (VersionInner::Small { small: small1 }, VersionInner::Small { small: small2 }) => {
                 small1.repr.cmp(&small2.repr)
             }
@@ -820,7 +850,7 @@ impl FromStr for Version {
     }
 }
 
-/// A "small" representation of a version.
+/// A small representation of a version.
 ///
 /// This representation is used for a (very common) subset of versions: the
 /// set of all versions with ~small numbers and no local component. The
@@ -901,27 +931,6 @@ impl FromStr for Version {
 )]
 #[cfg_attr(feature = "rkyv", rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord)))]
 struct VersionSmall {
-    /// The representation discussed above.
-    repr: u64,
-    /// The `u64` numbers in the release component.
-    ///
-    /// These are *only* used to implement the public API `Version::release`
-    /// method. This is necessary in order to provide a `&[u64]` to the caller.
-    /// If we didn't need the public API, or could re-work it, then we could
-    /// get rid of this extra storage. (Which is indeed duplicative of what is
-    /// stored in `repr`.) Note that this uses `u64` not because it can store
-    /// bigger numbers than what's in `repr` (it can't), but so that it permits
-    /// us to return a `&[u64]`.
-    ///
-    /// I believe there is only one way to get rid of this extra storage:
-    /// change the public API so that it doesn't return a `&[u64]`. Instead,
-    /// we'd return a new type that conceptually represents a `&[u64]`, but may
-    /// use a different representation based on what kind of `Version` it came
-    /// from. The downside of this approach is that one loses the flexibility
-    /// of a simple `&[u64]`. (Which, at time of writing, is taken advantage of
-    /// in several places via slice patterns.) But, if we needed to change it,
-    /// we could do it without losing expressivity, but losing convenience.
-    release: [u64; 4],
     /// The number of segments in the release component.
     ///
     /// Strictly speaking, this isn't necessary since `1.2` is considered
@@ -930,6 +939,8 @@ struct VersionSmall {
     /// places somewhat exposes internal details, since the "full" version
     /// representation would not do that.
     len: u8,
+    /// The representation discussed above.
+    repr: u64,
 }
 
 impl VersionSmall {
@@ -979,7 +990,6 @@ impl VersionSmall {
     fn new() -> Self {
         Self {
             repr: Self::SUFFIX_NONE << Self::SUFFIX_VERSION_BIT_LEN,
-            release: [0, 0, 0, 0],
             len: 0,
         }
     }
@@ -1000,14 +1010,8 @@ impl VersionSmall {
     }
 
     #[inline]
-    fn release(&self) -> &[u64] {
-        &self.release[..usize::from(self.len)]
-    }
-
-    #[inline]
     fn clear_release(&mut self) {
         self.repr &= !Self::SUFFIX_RELEASE_MASK;
-        self.release = [0, 0, 0, 0];
         self.len = 0;
     }
 
@@ -1018,7 +1022,6 @@ impl VersionSmall {
                 return false;
             }
             self.repr |= n << 48;
-            self.release[0] = n;
             self.len = 1;
             true
         } else {
@@ -1030,7 +1033,6 @@ impl VersionSmall {
             }
             let shift = 48 - (usize::from(self.len) * 8);
             self.repr |= n << shift;
-            self.release[usize::from(self.len)] = n;
             self.len += 1;
             true
         }
@@ -1416,6 +1418,39 @@ impl FromStr for VersionPattern {
     }
 }
 
+/// Lifetime and indexing workaround to allow accessing the release as `&[u64]` even though the
+/// digits may be stored in a compressed representation.
+pub struct Release<'a> {
+    inner: ReleaseInner<'a>,
+}
+
+enum ReleaseInner<'a> {
+    // The small versions unpacked into larger u64 values.
+    // We're storing at most 4 u64 plus determinant for the duration of the release call on the
+    // stack, without heap allocation.
+    Small0([u64; 0]),
+    Small1([u64; 1]),
+    Small2([u64; 2]),
+    Small3([u64; 3]),
+    Small4([u64; 4]),
+    Full(&'a [u64]),
+}
+
+impl Deref for Release<'_> {
+    type Target = [u64];
+
+    fn deref(&self) -> &Self::Target {
+        match &self.inner {
+            ReleaseInner::Small0(v) => v,
+            ReleaseInner::Small1(v) => v,
+            ReleaseInner::Small2(v) => v,
+            ReleaseInner::Small3(v) => v,
+            ReleaseInner::Small4(v) => v,
+            ReleaseInner::Full(v) => v,
+        }
+    }
+}
+
 /// An optional pre-release modifier and number applied to a version.
 #[derive(PartialEq, Eq, Debug, Hash, Clone, Copy, Ord, PartialOrd)]
 #[cfg_attr(
@@ -1768,15 +1803,10 @@ impl<'a> Parser<'a> {
                 | (u64::from(release[2]) << 32)
                 | (u64::from(release[3]) << 24)
                 | (VersionSmall::SUFFIX_NONE << VersionSmall::SUFFIX_VERSION_BIT_LEN),
-            release: [
-                u64::from(release[0]),
-                u64::from(release[1]),
-                u64::from(release[2]),
-                u64::from(release[3]),
-            ],
+
             len,
         };
-        let inner = Arc::new(VersionInner::Small { small });
+        let inner = VersionInner::Small { small };
         let version = Version { inner };
         Some(VersionPattern {
             version,
@@ -3945,7 +3975,7 @@ mod tests {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             f.debug_struct("Version")
                 .field("epoch", &self.0.epoch())
-                .field("release", &self.0.release())
+                .field("release", &&*self.0.release())
                 .field("pre", &self.0.pre())
                 .field("post", &self.0.post())
                 .field("dev", &self.0.dev())
