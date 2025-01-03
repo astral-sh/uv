@@ -116,8 +116,8 @@ impl Metadata {
             provides_extras,
             dependency_groups,
             dynamic: metadata.dynamic,
+            classifiers: metadata.classifiers,
             license: metadata.license,
-            classifiers: metadata.classifiers
         })
     }
 }

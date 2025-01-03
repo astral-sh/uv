@@ -3530,7 +3530,6 @@ pub struct TreeArgs {
     pub python: Option<Maybe<String>>,
 }
 
-
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct LicenseArgs {

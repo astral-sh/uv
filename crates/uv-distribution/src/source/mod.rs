@@ -45,7 +45,9 @@ use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
 use uv_pep440::{release_specifiers_to_ranges, Version};
 use uv_platform_tags::Tags;
-use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata12, Metadata23, RequiresTxt, ResolutionMetadata};
+use uv_pypi_types::{
+    HashAlgorithm, HashDigest, Metadata12, Metadata23, RequiresTxt, ResolutionMetadata,
+};
 use uv_types::{BuildContext, BuildStack, SourceBuildTrait};
 use uv_workspace::pyproject::ToolUvSources;
 use zip::ZipArchive;

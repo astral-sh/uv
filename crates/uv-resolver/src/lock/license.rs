@@ -173,7 +173,6 @@ impl<'env> LicenseDisplay<'env> {
             graph.retain_nodes(|_, index| reachable.contains(&index));
         }
 
-
         // // Filter the graph to those nodes reachable from the target packages.
         // if !packages.is_empty() {
         //     let mut reachable = graph
@@ -278,7 +277,11 @@ impl<'env> LicenseDisplay<'env> {
             }
 
             line.push(' ');
-            line.push_str(self.license.get(package_id).unwrap_or_else(|| &unknown_license));
+            line.push_str(
+                self.license
+                    .get(package_id)
+                    .unwrap_or_else(|| &unknown_license),
+            );
 
             if let Some(edge) = edge {
                 match edge {
@@ -300,7 +303,7 @@ impl<'env> LicenseDisplay<'env> {
         // 2. The package has been visited and de-duplication is enabled (default).
         if let Some(requirements) = visited.get(package_id) {
             if requirements.is_empty() {
-                return vec![line]
+                return vec![line];
             }
         }
 
@@ -421,7 +424,6 @@ impl Cursor {
 
 impl std::fmt::Display for LicenseDisplay<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-
         for line in self.render() {
             writeln!(f, "{line}")?;
         }

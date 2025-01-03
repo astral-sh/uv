@@ -56,13 +56,13 @@ pub(crate) mod environment;
 pub(crate) mod export;
 pub(crate) mod init;
 mod install_target;
+pub(crate) mod license;
 pub(crate) mod lock;
 mod lock_target;
 pub(crate) mod remove;
 pub(crate) mod run;
 pub(crate) mod sync;
 pub(crate) mod tree;
-pub(crate) mod license;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ProjectError {

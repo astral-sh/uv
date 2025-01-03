@@ -2466,30 +2466,36 @@ impl Package {
         &self.id.name
     }
 
-    fn get_license_string(&self, license_meta: &Option<String>, classifiers: &Vec::<String>) -> Option<String> {
+    fn get_license_string(
+        &self,
+        license_meta: &Option<String>,
+        classifiers: &Vec<String>,
+    ) -> Option<String> {
         if let Some(license_txt) = license_meta {
             if !license_txt.is_empty() {
-                return license_meta.clone()
+                return license_meta.clone();
             }
         }
         let license_prefix = "License ::";
         let license_osi_prefix = "License :: OSI Approved ::";
-        let classifier_license = Some(classifiers
-            .iter()
-            .filter_map(|c| {
-                if !c.starts_with(license_prefix) {
-                    None // filter this classifier out if it's not License-related
-                } else {
-                    if c.starts_with(license_osi_prefix) {
-                        Some(c[license_osi_prefix.len()+1..].to_string()) // remove the License & OSI-approved prefixes
-                    } else{
-                        Some(c[license_prefix.len()+1..].to_string()) // remove the License prefix
+        let classifier_license = Some(
+            classifiers
+                .iter()
+                .filter_map(|c| {
+                    if !c.starts_with(license_prefix) {
+                        None // filter this classifier out if it's not License-related
+                    } else {
+                        if c.starts_with(license_osi_prefix) {
+                            Some(c[license_osi_prefix.len() + 1..].to_string()) // remove the License & OSI-approved prefixes
+                        } else {
+                            Some(c[license_prefix.len() + 1..].to_string()) // remove the License prefix
+                        }
                     }
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(", "))
-            .filter(|s| !s.is_empty());
+                })
+                .collect::<Vec<_>>()
+                .join(", "),
+        )
+        .filter(|s| !s.is_empty());
         classifier_license
     }
 
@@ -2506,7 +2512,8 @@ impl Package {
         // the additional data ourselves.
         let mut classifiers: Option<Vec<String>> = None;
         let mut license_meta: Option<String> = None;
-        if classifiers.is_none() || license_meta.is_none() { // TODO(RL): need a smarter check here
+        if classifiers.is_none() || license_meta.is_none() {
+            // TODO(RL): need a smarter check here
             // Get the metadata for the distribution (see above for explanation of tags/capabilities).
             let dist = self.to_dist(
                 workspace.install_path(),
@@ -2526,11 +2533,11 @@ impl Package {
                     println!("{} :: {:?}", self.name(), license_meta);
                 } else {
                     debug!("package metadata lookup failed");
-                    return None
+                    return None;
                 }
             } else {
                 debug!("package.to_dist failed");
-                return None
+                return None;
             }
         };
 

@@ -92,12 +92,13 @@ pub(super) fn parse_pyproject_toml(
         );
         provides_extras.push(extra);
     }
-    let classifiers = Some(project
-        .classifiers
-        .unwrap_or_default()
-        .into_iter()
-        .collect::<Vec<_>>());
-
+    let classifiers = Some(
+        project
+            .classifiers
+            .unwrap_or_default()
+            .into_iter()
+            .collect::<Vec<_>>(),
+    );
 
     Ok(ResolutionMetadata {
         name,
@@ -107,7 +108,7 @@ pub(super) fn parse_pyproject_toml(
         provides_extras,
         dynamic,
         classifiers,
-        license: None // TODO(RL): come back
+        license: None, // TODO(RL): come back
     })
 }
 
@@ -180,7 +181,7 @@ impl TryFrom<PyprojectTomlWire> for Project {
             dependencies: wire.dependencies,
             optional_dependencies: wire.optional_dependencies,
             dynamic: wire.dynamic,
-            classifiers: wire.classifiers
+            classifiers: wire.classifiers,
         })
     }
 }
