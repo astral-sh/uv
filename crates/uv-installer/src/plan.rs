@@ -5,7 +5,7 @@ use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
 use uv_configuration::{BuildOptions, ConfigSettings, Reinstall};
 use uv_distribution::{
-    BuiltWheelIndex, HttpArchivePointer, LocalArchivePointer, RegistryWheelIndex,
+    BuiltWheelIndex, HttpArchivePointer, PathArchivePointer, RegistryWheelIndex,
 };
 use uv_distribution_types::{
     BuiltDist, CachedDirectUrlDist, CachedDist, Dist, Error, Hashed, IndexLocations, InstalledDist,
@@ -135,7 +135,6 @@ impl<'a> Planner<'a> {
                         Some(&entry.dist)
                     }) {
                         debug!("Requirement already cached: {distribution}");
-                        // STOPSHIP(charlie): If these are mismatched, skip and warn.
                         cached.push(CachedDist::Registry(distribution.clone()));
                         continue;
                     }
@@ -177,7 +176,6 @@ impl<'a> Planner<'a> {
                             );
 
                             debug!("URL wheel requirement already cached: {cached_dist}");
-                            // STOPSHIP(charlie): If these are mismatched, skip and warn.
                             cached.push(CachedDist::Url(cached_dist));
                             continue;
                         }
@@ -212,7 +210,7 @@ impl<'a> Planner<'a> {
                         )
                         .entry(format!("{}.rev", wheel.filename.stem()));
 
-                    if let Some(pointer) = LocalArchivePointer::read_from(&cache_entry)? {
+                    if let Some(pointer) = PathArchivePointer::read_from(&cache_entry)? {
                         let timestamp = Timestamp::from_path(&wheel.install_path)?;
                         if pointer.is_up_to_date(timestamp) {
                             let cache_info = pointer.to_cache_info();
@@ -227,6 +225,50 @@ impl<'a> Planner<'a> {
                                 );
 
                                 debug!("Path wheel requirement already cached: {cached_dist}");
+                                cached.push(CachedDist::Url(cached_dist));
+                                continue;
+                            }
+                        }
+                    }
+                }
+                Dist::Built(BuiltDist::GitPath(wheel)) => {
+                    if !wheel.filename.is_compatible(tags) {
+                        bail!(
+                            "A Git path dependency is incompatible with the current platform: {}",
+                            wheel.install_path.user_display()
+                        );
+                    }
+
+                    if no_binary {
+                        bail!(
+                            "A Git path dependency points to a wheel which conflicts with `--no-binary`: {}",
+                            wheel.url
+                        );
+                    }
+
+                    if let Some(git_sha) = wheel.git.precise() {
+                        // Find the exact wheel from the cache, since we know the filename in
+                        // advance.
+                        let cache_entry = cache
+                            .shard(
+                                CacheBucket::Wheels,
+                                WheelCache::Git(&wheel.url, &git_sha.to_short_string()).root(),
+                            )
+                            .entry(format!("{}.rev", wheel.filename.stem()));
+
+                        if let Some(pointer) = PathArchivePointer::read_from(&cache_entry)? {
+                            let cache_info = pointer.to_cache_info();
+                            let archive = pointer.into_archive();
+                            if archive.satisfies(hasher.get(dist)) {
+                                let cached_dist = CachedDirectUrlDist::from_url(
+                                    wheel.filename.clone(),
+                                    wheel.url.clone(),
+                                    archive.hashes,
+                                    cache_info,
+                                    cache.archive(&archive.id),
+                                );
+
+                                debug!("Git wheel requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
                                 continue;
                             }
@@ -275,10 +317,28 @@ impl<'a> Planner<'a> {
                         );
                     }
                 }
-                Dist::Source(SourceDist::Git(sdist)) => {
+                Dist::Source(SourceDist::GitPath(sdist)) => {
                     // Find the most-compatible wheel from the cache, since we don't know
                     // the filename in advance.
-                    if let Some(wheel) = built_index.git(sdist) {
+                    if let Some(wheel) = built_index.git_path(sdist)? {
+                        if wheel.filename.name == sdist.name {
+                            let cached_dist = wheel.into_url_dist(sdist.url.clone());
+                            debug!("Git source requirement already cached: {cached_dist}");
+                            cached.push(CachedDist::Url(cached_dist));
+                            continue;
+                        }
+
+                        warn!(
+                            "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                            sdist,
+                            wheel.filename
+                        );
+                    }
+                }
+                Dist::Source(SourceDist::GitDirectory(sdist)) => {
+                    // Find the most-compatible wheel from the cache, since we don't know
+                    // the filename in advance.
+                    if let Some(wheel) = built_index.git_directory(sdist) {
                         if wheel.filename.name == sdist.name {
                             let cached_dist = wheel.into_url_dist(sdist.url.clone());
                             debug!("Git source requirement already cached: {cached_dist}");

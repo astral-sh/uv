@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use url::Url;
 
 use uv_normalize::PackageName;
@@ -15,6 +16,9 @@ pub enum Error {
 
     #[error("Could not extract path segments from URL: {0}")]
     MissingPathSegments(String),
+
+    #[error("Could not extract wheel filename from path: {}", _0.display())]
+    MissingWheelFilename(PathBuf),
 
     #[error("Distribution not found at: {0}")]
     NotFound(Url),

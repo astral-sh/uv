@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
 use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
@@ -19,6 +20,7 @@ use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     BuiltDist, File, FileLocation, Index, IndexCapabilities, IndexUrl, IndexUrls, Name,
 };
+use uv_git::{GitResolver, Reporter};
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -446,7 +448,9 @@ impl RegistryClient {
     pub async fn wheel_metadata(
         &self,
         built_dist: &BuiltDist,
+        git: &GitResolver,
         capabilities: &IndexCapabilities,
+        reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<ResolutionMetadata, Error> {
         let metadata = match &built_dist {
             BuiltDist::Registry(wheels) => {
@@ -523,6 +527,36 @@ impl RegistryClient {
             }
             BuiltDist::Path(wheel) => {
                 let file = fs_err::tokio::File::open(&wheel.install_path)
+                    .await
+                    .map_err(ErrorKind::Io)?;
+                let reader = tokio::io::BufReader::new(file);
+                let contents = read_metadata_async_seek(&wheel.filename, reader)
+                    .await
+                    .map_err(|err| {
+                        ErrorKind::Metadata(wheel.install_path.to_string_lossy().to_string(), err)
+                    })?;
+                ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
+                    ErrorKind::MetadataParseError(
+                        wheel.filename.clone(),
+                        built_dist.to_string(),
+                        Box::new(err),
+                    )
+                })?
+            }
+            BuiltDist::GitPath(wheel) => {
+                // Fetch the Git repository.
+                let fetch = git
+                    .fetch(
+                        &wheel.git,
+                        self.uncached_client(&wheel.url).clone(),
+                        self.cache.bucket(CacheBucket::Git),
+                        reporter,
+                    )
+                    .await
+                    .map_err(ErrorKind::Git)?;
+
+                // Read the metadata.
+                let file = fs_err::tokio::File::open(fetch.path().join(&wheel.install_path))
                     .await
                     .map_err(ErrorKind::Io)?;
                 let reader = tokio::io::BufReader::new(file);

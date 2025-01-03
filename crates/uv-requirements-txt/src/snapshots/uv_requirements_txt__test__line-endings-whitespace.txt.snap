@@ -36,8 +36,8 @@ RequirementsTxt {
                     version_or_url: Some(
                         Url(
                             VerbatimParsedUrl {
-                                parsed_url: Git(
-                                    ParsedGitUrl {
+                                parsed_url: GitDirectory(
+                                    ParsedGitDirectoryUrl {
                                         url: GitUrl {
                                             repository: Url {
                                                 scheme: "https",
