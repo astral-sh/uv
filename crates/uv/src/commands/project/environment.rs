@@ -110,6 +110,7 @@ impl CachedEnvironment {
             uv_virtualenv::Prompt::None,
             false,
             false,
+            false,
             true,
             false,
         )?;

@@ -5643,7 +5643,7 @@ version = "0.5.14"
 
 [[package]]
 name = "uv-virtualenv"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "fs-err 3.0.0",
  "itertools 0.13.0",

@@ -52,6 +52,7 @@ pub(crate) fn create(
     prompt: Prompt,
     system_site_packages: bool,
     allow_existing: bool,
+    activatable: bool,
     relocatable: bool,
     seed: bool,
 ) -> Result<VirtualEnvironment, Error> {
@@ -300,47 +301,51 @@ pub(crate) fn create(
         compile_error!("Only Windows and Unix are supported")
     }
 
-    // Add all the activate scripts for different shells
-    for (name, template) in ACTIVATE_TEMPLATES {
-        let path_sep = if cfg!(windows) { ";" } else { ":" };
+    if activatable {
+        // Add all the activate scripts for different shells
+        for (name, template) in ACTIVATE_TEMPLATES {
+            let path_sep = if cfg!(windows) { ";" } else { ":" };
 
-        let relative_site_packages = [
-            interpreter.virtualenv().purelib.as_path(),
-            interpreter.virtualenv().platlib.as_path(),
-        ]
-        .iter()
-        .dedup()
-        .map(|path| {
-            pathdiff::diff_paths(path, &interpreter.virtualenv().scripts)
-                .expect("Failed to calculate relative path to site-packages")
-        })
-        .map(|path| path.simplified().to_str().unwrap().replace('\\', "\\\\"))
-        .join(path_sep);
+            let relative_site_packages = [
+                interpreter.virtualenv().purelib.as_path(),
+                interpreter.virtualenv().platlib.as_path(),
+            ]
+            .iter()
+            .dedup()
+            .map(|path| {
+                pathdiff::diff_paths(path, &interpreter.virtualenv().scripts)
+                    .expect("Failed to calculate relative path to site-packages")
+            })
+            .map(|path| path.simplified().to_str().unwrap().replace('\\', "\\\\"))
+            .join(path_sep);
 
-        let virtual_env_dir = match (relocatable, name.to_owned()) {
-            (true, "activate") => {
-                r#"'"$(dirname -- "$(dirname -- "$(realpath -- "$SCRIPT_PATH")")")"'"#.to_string()
-            }
-            (true, "activate.bat") => r"%~dp0..".to_string(),
-            (true, "activate.fish") => {
-                r#"'"$(dirname -- "$(cd "$(dirname -- "$(status -f)")"; and pwd)")"'"#.to_string()
-            }
-            // Note:
-            // * relocatable activate scripts appear not to be possible in csh and nu shell
-            // * `activate.ps1` is already relocatable by default.
-            _ => escape_posix_for_single_quotes(location.simplified().to_str().unwrap()),
-        };
+            let virtual_env_dir = match (relocatable, name.to_owned()) {
+                (true, "activate") => {
+                    r#"'"$(dirname -- "$(dirname -- "$(realpath -- "$SCRIPT_PATH")")")"'"#
+                        .to_string()
+                }
+                (true, "activate.bat") => r"%~dp0..".to_string(),
+                (true, "activate.fish") => {
+                    r#"'"$(dirname -- "$(cd "$(dirname -- "$(status -f)")"; and pwd)")"'"#
+                        .to_string()
+                }
+                // Note:
+                // * relocatable activate scripts appear not to be possible in csh and nu shell
+                // * `activate.ps1` is already relocatable by default.
+                _ => escape_posix_for_single_quotes(location.simplified().to_str().unwrap()),
+            };
 
-        let activator = template
-            .replace("{{ VIRTUAL_ENV_DIR }}", &virtual_env_dir)
-            .replace("{{ BIN_NAME }}", bin_name)
-            .replace(
-                "{{ VIRTUAL_PROMPT }}",
-                prompt.as_deref().unwrap_or_default(),
-            )
-            .replace("{{ PATH_SEP }}", path_sep)
-            .replace("{{ RELATIVE_SITE_PACKAGES }}", &relative_site_packages);
-        fs::write(scripts.join(name), activator)?;
+            let activator = template
+                .replace("{{ VIRTUAL_ENV_DIR }}", &virtual_env_dir)
+                .replace("{{ BIN_NAME }}", bin_name)
+                .replace(
+                    "{{ VIRTUAL_PROMPT }}",
+                    prompt.as_deref().unwrap_or_default(),
+                )
+                .replace("{{ PATH_SEP }}", path_sep)
+                .replace("{{ RELATIVE_SITE_PACKAGES }}", &relative_site_packages);
+            fs::write(scripts.join(name), activator)?;
+        }
     }
 
     let mut pyvenv_cfg_data: Vec<(String, String)> = vec![

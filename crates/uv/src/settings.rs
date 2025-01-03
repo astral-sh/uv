@@ -2150,6 +2150,7 @@ pub(crate) struct VenvSettings {
     pub(crate) path: Option<PathBuf>,
     pub(crate) prompt: Option<String>,
     pub(crate) system_site_packages: bool,
+    pub(crate) activatable: bool,
     pub(crate) relocatable: bool,
     pub(crate) no_project: bool,
     pub(crate) settings: PipSettings,
@@ -2167,6 +2168,8 @@ impl VenvSettings {
             path,
             prompt,
             system_site_packages,
+            activatable,
+            not_activatable,
             relocatable,
             index_args,
             index_strategy,
@@ -2184,6 +2187,7 @@ impl VenvSettings {
             prompt,
             system_site_packages,
             no_project,
+            activatable: flag(activatable, not_activatable).unwrap_or(true),
             relocatable,
             settings: PipSettings::combine(
                 PipOptions {

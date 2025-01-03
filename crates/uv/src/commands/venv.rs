@@ -64,6 +64,7 @@ pub(crate) async fn venv(
     no_project: bool,
     cache: &Cache,
     printer: Printer,
+    activatable: bool,
     relocatable: bool,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
@@ -92,6 +93,7 @@ pub(crate) async fn venv(
         no_project,
         cache,
         printer,
+        activatable,
         relocatable,
         preview,
     )
@@ -151,6 +153,7 @@ async fn venv_impl(
     no_project: bool,
     cache: &Cache,
     printer: Printer,
+    activatable: bool,
     relocatable: bool,
     preview: PreviewMode,
 ) -> miette::Result<ExitStatus> {
@@ -259,6 +262,7 @@ async fn venv_impl(
         prompt,
         system_site_packages,
         allow_existing,
+        activatable,
         relocatable,
         seed,
     )
@@ -374,33 +378,35 @@ async fn venv_impl(
             .into_diagnostic()?;
     }
 
-    // Determine the appropriate activation command.
-    let activation = match Shell::from_env() {
-        None => None,
-        Some(Shell::Bash | Shell::Zsh | Shell::Ksh) => Some(format!(
-            "source {}",
-            shlex_posix(venv.scripts().join("activate"))
-        )),
-        Some(Shell::Fish) => Some(format!(
-            "source {}",
-            shlex_posix(venv.scripts().join("activate.fish"))
-        )),
-        Some(Shell::Nushell) => Some(format!(
-            "overlay use {}",
-            shlex_posix(venv.scripts().join("activate.nu"))
-        )),
-        Some(Shell::Csh) => Some(format!(
-            "source {}",
-            shlex_posix(venv.scripts().join("activate.csh"))
-        )),
-        Some(Shell::Powershell) => Some(shlex_windows(
-            venv.scripts().join("activate"),
-            Shell::Powershell,
-        )),
-        Some(Shell::Cmd) => Some(shlex_windows(venv.scripts().join("activate"), Shell::Cmd)),
-    };
-    if let Some(act) = activation {
-        writeln!(printer.stderr(), "Activate with: {}", act.green()).into_diagnostic()?;
+    if activatable {
+        // Determine the appropriate activation command.
+        let activation = match Shell::from_env() {
+            None => None,
+            Some(Shell::Bash | Shell::Zsh | Shell::Ksh) => Some(format!(
+                "source {}",
+                shlex_posix(venv.scripts().join("activate"))
+            )),
+            Some(Shell::Fish) => Some(format!(
+                "source {}",
+                shlex_posix(venv.scripts().join("activate.fish"))
+            )),
+            Some(Shell::Nushell) => Some(format!(
+                "overlay use {}",
+                shlex_posix(venv.scripts().join("activate.nu"))
+            )),
+            Some(Shell::Csh) => Some(format!(
+                "source {}",
+                shlex_posix(venv.scripts().join("activate.csh"))
+            )),
+            Some(Shell::Powershell) => Some(shlex_windows(
+                venv.scripts().join("activate"),
+                Shell::Powershell,
+            )),
+            Some(Shell::Cmd) => Some(shlex_windows(venv.scripts().join("activate"), Shell::Cmd)),
+        };
+        if let Some(act) = activation {
+            writeln!(printer.stderr(), "Activate with: {}", act.green()).into_diagnostic()?;
+        }
     }
 
     Ok(ExitStatus::Success)
