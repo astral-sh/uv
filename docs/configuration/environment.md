@@ -474,6 +474,7 @@ Adds directories to Python module search path (e.g., `PYTHONPATH=/path/to/module
 If set, uv will use this value as the log level for its `--verbose` output. Accepts
 any filter compatible with the `tracing_subscriber` crate.
 For example:
+
 * `RUST_LOG=uv=debug` is the equivalent of adding `--verbose` to the command line
 * `RUST_LOG=trace` will enable trace-level logging.
 
