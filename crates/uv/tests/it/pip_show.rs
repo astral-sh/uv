@@ -55,7 +55,7 @@ fn show_requires_multiple() -> Result<()> {
 
     context.assert_command("import requests").success();
     uv_snapshot!(context.filters(), context.pip_show()
-        .arg("requests"), @r###"
+        .arg("requests"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -64,9 +64,10 @@ fn show_requires_multiple() -> Result<()> {
     Location: [SITE_PACKAGES]/
     Requires: certifi, charset-normalizer, idna, urllib3
     Required-by:
+    Classifiers: Development Status :: 5 - Production/Stable, Environment :: Web Environment, Intended Audience :: Developers, License :: OSI Approved :: Apache Software License, Natural Language :: English, Operating System :: OS Independent, Programming Language :: Python, Programming Language :: Python :: 3, Programming Language :: Python :: 3.7, Programming Language :: Python :: 3.8, Programming Language :: Python :: 3.9, Programming Language :: Python :: 3.10, Programming Language :: Python :: 3.11, Programming Language :: Python :: 3 :: Only, Programming Language :: Python :: Implementation :: CPython, Programming Language :: Python :: Implementation :: PyPy, Topic :: Internet :: WWW/HTTP, Topic :: Software Development :: Libraries
 
     ----- stderr -----
-    "###
+    "
     );
 
     Ok(())
@@ -106,7 +107,7 @@ fn show_python_version_marker() -> Result<()> {
     }
 
     uv_snapshot!(filters, context.pip_show()
-        .arg("click"), @r###"
+        .arg("click"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -115,9 +116,10 @@ fn show_python_version_marker() -> Result<()> {
     Location: [SITE_PACKAGES]/
     Requires:
     Required-by:
+    Classifiers: Development Status :: 5 - Production/Stable, Intended Audience :: Developers, License :: OSI Approved :: BSD License, Operating System :: OS Independent, Programming Language :: Python
 
     ----- stderr -----
-    "###
+    "
     );
 
     Ok(())
@@ -150,7 +152,7 @@ fn show_found_single_package() -> Result<()> {
     context.assert_command("import markupsafe").success();
 
     uv_snapshot!(context.filters(), context.pip_show()
-        .arg("markupsafe"), @r###"
+        .arg("markupsafe"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -159,9 +161,10 @@ fn show_found_single_package() -> Result<()> {
     Location: [SITE_PACKAGES]/
     Requires:
     Required-by:
+    Classifiers: Development Status :: 5 - Production/Stable, Environment :: Web Environment, Intended Audience :: Developers, License :: OSI Approved :: BSD License, Operating System :: OS Independent, Programming Language :: Python, Topic :: Internet :: WWW/HTTP :: Dynamic Content, Topic :: Text Processing :: Markup :: HTML
 
     ----- stderr -----
-    "###
+    "
     );
 
     Ok(())
@@ -200,7 +203,7 @@ fn show_found_multiple_packages() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_show()
         .arg("markupsafe")
-        .arg("pip"), @r###"
+        .arg("pip"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -209,15 +212,17 @@ fn show_found_multiple_packages() -> Result<()> {
     Location: [SITE_PACKAGES]/
     Requires:
     Required-by:
+    Classifiers: Development Status :: 5 - Production/Stable, Environment :: Web Environment, Intended Audience :: Developers, License :: OSI Approved :: BSD License, Operating System :: OS Independent, Programming Language :: Python, Topic :: Internet :: WWW/HTTP :: Dynamic Content, Topic :: Text Processing :: Markup :: HTML
     ---
     Name: pip
     Version: 21.3.1
     Location: [SITE_PACKAGES]/
     Requires:
     Required-by:
+    Classifiers: Development Status :: 5 - Production/Stable, Intended Audience :: Developers, License :: OSI Approved :: MIT License, Topic :: Software Development :: Build Tools, Programming Language :: Python, Programming Language :: Python :: 3, Programming Language :: Python :: 3 :: Only, Programming Language :: Python :: 3.6, Programming Language :: Python :: 3.7, Programming Language :: Python :: 3.8, Programming Language :: Python :: 3.9, Programming Language :: Python :: 3.10, Programming Language :: Python :: Implementation :: CPython, Programming Language :: Python :: Implementation :: PyPy
 
     ----- stderr -----
-    "###
+    "
     );
 
     Ok(())
@@ -257,7 +262,7 @@ fn show_found_one_out_of_three() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_show()
         .arg("markupsafe")
         .arg("flask")
-        .arg("django"), @r###"
+        .arg("django"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -266,10 +271,11 @@ fn show_found_one_out_of_three() -> Result<()> {
     Location: [SITE_PACKAGES]/
     Requires:
     Required-by:
+    Classifiers: Development Status :: 5 - Production/Stable, Environment :: Web Environment, Intended Audience :: Developers, License :: OSI Approved :: BSD License, Operating System :: OS Independent, Programming Language :: Python, Topic :: Internet :: WWW/HTTP :: Dynamic Content, Topic :: Text Processing :: Markup :: HTML
 
     ----- stderr -----
     warning: Package(s) not found for: django, flask
-    "###
+    "
     );
 
     Ok(())
@@ -386,7 +392,7 @@ fn show_editable() -> Result<()> {
         .success();
 
     uv_snapshot!(context.filters(), context.pip_show()
-        .arg("poetry-editable"), @r###"
+        .arg("poetry-editable"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -396,9 +402,10 @@ fn show_editable() -> Result<()> {
     Editable project location: [WORKSPACE]/scripts/packages/poetry_editable
     Requires: anyio
     Required-by:
+    Classifiers: Programming Language :: Python :: 3, Programming Language :: Python :: 3.10, Programming Language :: Python :: 3.11, Programming Language :: Python :: 3.12
 
     ----- stderr -----
-    "###
+    "
     );
 
     Ok(())
@@ -442,7 +449,7 @@ fn show_required_by_multiple() -> Result<()> {
 
     // idna is required by anyio and requests
     uv_snapshot!(context.filters(), context.pip_show()
-        .arg("idna"), @r###"
+        .arg("idna"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -451,9 +458,10 @@ fn show_required_by_multiple() -> Result<()> {
     Location: [SITE_PACKAGES]/
     Requires:
     Required-by: anyio, requests
+    Classifiers: Development Status :: 5 - Production/Stable, Intended Audience :: Developers, Intended Audience :: System Administrators, License :: OSI Approved :: BSD License, Operating System :: OS Independent, Programming Language :: Python, Programming Language :: Python :: 3, Programming Language :: Python :: 3 :: Only, Programming Language :: Python :: 3.5, Programming Language :: Python :: 3.6, Programming Language :: Python :: 3.7, Programming Language :: Python :: 3.8, Programming Language :: Python :: 3.9, Programming Language :: Python :: 3.10, Programming Language :: Python :: 3.11, Programming Language :: Python :: 3.12, Programming Language :: Python :: Implementation :: CPython, Programming Language :: Python :: Implementation :: PyPy, Topic :: Internet :: Name Service (DNS), Topic :: Software Development :: Libraries :: Python Modules, Topic :: Utilities
 
     ----- stderr -----
-    "###
+    "
     );
 
     Ok(())
@@ -485,7 +493,7 @@ fn show_files() {
 
     // Windows has a different files order.
     #[cfg(not(windows))]
-    uv_snapshot!(context.filters(), context.pip_show().arg("requests").arg("--files"), @r#"
+    uv_snapshot!(context.filters(), context.pip_show().arg("requests").arg("--files"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -494,6 +502,7 @@ fn show_files() {
     Location: [SITE_PACKAGES]/
     Requires: certifi, charset-normalizer, idna, urllib3
     Required-by:
+    Classifiers: Development Status :: 5 - Production/Stable, Environment :: Web Environment, Intended Audience :: Developers, License :: OSI Approved :: Apache Software License, Natural Language :: English, Operating System :: OS Independent, Programming Language :: Python, Programming Language :: Python :: 3, Programming Language :: Python :: 3.7, Programming Language :: Python :: 3.8, Programming Language :: Python :: 3.9, Programming Language :: Python :: 3.10, Programming Language :: Python :: 3.11, Programming Language :: Python :: 3 :: Only, Programming Language :: Python :: Implementation :: CPython, Programming Language :: Python :: Implementation :: PyPy, Topic :: Internet :: WWW/HTTP, Topic :: Software Development :: Libraries
     Files:
       requests-2.31.0.dist-info/INSTALLER
       requests-2.31.0.dist-info/LICENSE
@@ -522,5 +531,5 @@ fn show_files() {
       requests/utils.py
 
     ----- stderr -----
-    "#);
+    ");
 }
