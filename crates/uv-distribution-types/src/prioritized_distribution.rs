@@ -638,7 +638,9 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
     let mut marker = MarkerTree::FALSE;
     for platform_tag in &filename.platform_tag {
         match platform_tag.as_str() {
-            "any" => marker.or(MarkerTree::TRUE),
+            "any" => {
+                return MarkerTree::TRUE;
+            }
             tag if tag.starts_with("win") => {
                 marker.or(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
