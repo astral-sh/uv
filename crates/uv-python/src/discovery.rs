@@ -2220,7 +2220,7 @@ impl FromStr for VersionRequest {
         };
 
         // Cast the release components into u8s since that's what we use in `VersionRequest`
-        let Ok(release) = try_into_u8_slice(version.release()) else {
+        let Ok(release) = try_into_u8_slice(&version.release()) else {
             return Err(Error::InvalidVersionRequest(s.to_string()));
         };
 

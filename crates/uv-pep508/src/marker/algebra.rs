@@ -1508,7 +1508,7 @@ fn normalize_specifier(specifier: VersionSpecifier) -> VersionSpecifier {
     // for `python_version` to fully simplify any ranges, such as `python_version > '3.9' or python_version <= '3.9'`,
     // which is always `true` for `python_version`. For `python_full_version` however, this decision
     // is a semantic change.
-    let mut release = version.release();
+    let mut release = &*version.release();
 
     // Strip any trailing `0`s.
     //
@@ -1583,7 +1583,7 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
             Operator::EqualStar | Operator::NotEqualStar | Operator::TildeEqual => specifier,
         })
     } else {
-        let &[major, minor, ..] = specifier.version().release() else {
+        let [major, minor, ..] = *specifier.version().release() else {
             unreachable!()
         };
 
