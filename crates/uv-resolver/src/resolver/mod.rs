@@ -1802,8 +1802,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         } else {
             Either::Right(dependencies.iter())
         };
+        let python_marker = python_requirement.to_marker_tree();
         let mut requirements = self
-            .requirements_for_extra(regular_and_dev_dependencies, extra, env, python_requirement)
+            .requirements_for_extra(
+                regular_and_dev_dependencies,
+                extra,
+                env,
+                python_marker,
+                python_requirement,
+            )
             .collect::<Vec<_>>();
 
         // Dependency groups can include the project itself, so no need to flatten recursive
@@ -1833,9 +1840,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             if !seen.insert((extra.clone(), marker)) {
                 continue;
             }
-            for requirement in
-                self.requirements_for_extra(dependencies, Some(&extra), env, python_requirement)
-            {
+            for requirement in self.requirements_for_extra(
+                dependencies,
+                Some(&extra),
+                env,
+                python_marker,
+                python_requirement,
+            ) {
                 let requirement = match requirement {
                     Cow::Owned(mut requirement) => {
                         requirement.marker.and(marker);
@@ -1901,6 +1912,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         dependencies: impl IntoIterator<Item = &'data Requirement> + 'parameters,
         extra: Option<&'parameters ExtraName>,
         env: &'parameters ResolverEnvironment,
+        python_marker: MarkerTree,
         python_requirement: &'parameters PythonRequirement,
     ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
     where
@@ -1909,13 +1921,20 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         self.overrides
             .apply(dependencies)
             .filter(move |requirement| {
-                Self::is_requirement_applicable(requirement, extra, env, python_requirement)
+                Self::is_requirement_applicable(
+                    requirement,
+                    extra,
+                    env,
+                    python_marker,
+                    python_requirement,
+                )
             })
             .flat_map(move |requirement| {
                 iter::once(requirement.clone()).chain(self.constraints_for_requirement(
                     requirement,
                     extra,
                     env,
+                    python_marker,
                     python_requirement,
                 ))
             })
@@ -1927,26 +1946,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         requirement: &Requirement,
         extra: Option<&ExtraName>,
         env: &ResolverEnvironment,
+        python_marker: MarkerTree,
         python_requirement: &PythonRequirement,
     ) -> bool {
-        let python_marker = python_requirement.to_marker_tree();
-        // If the requirement would not be selected with any Python version
-        // supported by the root, skip it.
-        if python_marker.is_disjoint(requirement.marker) {
-            trace!(
-                "skipping {requirement} because of Requires-Python: {requires_python}",
-                requires_python = python_requirement.target(),
-            );
-            return false;
-        }
-
-        // If we're in a fork in universal mode, ignore any dependency that isn't part of
-        // this fork (but will be part of another fork).
-        if !env.included_by_marker(requirement.marker) {
-            trace!("skipping {requirement} because of {env}");
-            return false;
-        }
-
         // If the requirement isn't relevant for the current platform, skip it.
         match extra {
             Some(source_extra) => {
@@ -1971,6 +1973,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         }
 
+        // If the requirement would not be selected with any Python version
+        // supported by the root, skip it.
+        if python_marker.is_disjoint(requirement.marker) {
+            trace!(
+                "skipping {requirement} because of Requires-Python: {requires_python}",
+                requires_python = python_requirement.target(),
+            );
+            return false;
+        }
+
+        // If we're in a fork in universal mode, ignore any dependency that isn't part of
+        // this fork (but will be part of another fork).
+        if !env.included_by_marker(requirement.marker) {
+            trace!("skipping {requirement} because of {env}");
+            return false;
+        }
+
         true
     }
 
@@ -1981,6 +2000,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         requirement: Cow<'data, Requirement>,
         extra: Option<&'parameters ExtraName>,
         env: &'parameters ResolverEnvironment,
+        python_marker: MarkerTree,
         python_requirement: &'parameters PythonRequirement,
     ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
     where
@@ -2023,7 +2043,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 } else {
                     let requires_python = python_requirement.target();
-                    let python_marker = python_requirement.to_marker_tree();
 
                     let mut marker = constraint.marker;
                     marker.and(requirement.marker);
@@ -2071,15 +2090,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // If the constraint isn't relevant for the current platform, skip it.
                 match extra {
                     Some(source_extra) => {
-                        if !constraint.evaluate_markers(
-                            env.marker_environment(),
-                            slice::from_ref(source_extra),
-                        ) {
+                        if !constraint
+                            .evaluate_markers(env.marker_environment(), slice::from_ref(source_extra))
+                        {
                             return None;
                         }
-                        if !env.included_by_group(
-                            ConflictItemRef::from((&requirement.name, source_extra)),
-                        ) {
+                        if !env.included_by_group(ConflictItemRef::from((&requirement.name, source_extra)))
+                        {
                             return None;
                         }
                     }
