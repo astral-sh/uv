@@ -152,6 +152,9 @@ jobs:
     needs:
       - docker-publish
     if: ${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
+    permissions:
+      packages: write
+      id-token: write # needed for signing the images with GitHub OIDC Token
     strategy:
       fail-fast: false
       matrix:
@@ -180,6 +183,8 @@ jobs:
           - python:3.9-slim-bookworm,python3.9-bookworm-slim
           - python:3.8-slim-bookworm,python3.8-bookworm-slim
     steps:
+      - uses: sigstore/cosign-installer@v3.7.0
+
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
@@ -242,6 +247,7 @@ jobs:
             ${{ env.TAG_PATTERNS }}
 
       - name: Build and push
+        id: build-and-push
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -254,6 +260,17 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
 
+      - name: Sign the images with GitHub OIDC Token
+        env:
+          DIGEST: ${{ steps.build-and-push.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          images=""
+          for tag in ${TAGS}; do
+            images+="${tag}@${DIGEST} "
+          done
+          cosign sign --yes ${images}
+
   # This is effectively a duplicate of `docker-publish` to make https://github.com/astral-sh/uv/pkgs/container/uv
   # show the uv base image first since GitHub always shows the last updated image digests
   # This works by annotating the original digests (previously non-annotated) which triggers an update to ghcr.io
@@ -265,6 +282,9 @@ jobs:
     needs:
       - docker-publish-extra
     if: ${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
+    permissions:
+      packages: write
+      id-token: write # needed for signing the images with GitHub OIDC Token
     steps:
       - name: Download digests
         uses: actions/download-artifact@v4
@@ -272,6 +292,8 @@ jobs:
           path: /tmp/digests
           pattern: digests-*
           merge-multiple: true
+
+      - uses: sigstore/cosign-installer@v3.7.0
 
       - uses: docker/setup-buildx-action@v3
 
@@ -306,3 +328,33 @@ jobs:
             "${annotations[@]}" \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf '${{ env.UV_BASE_IMG }}@sha256:%s ' *)
+
+      - name: Share manifest digest
+        id: manifest-digest
+        # To sign the manifest, we need it's digest. Unfortunately "docker
+        # buildx imagetools create" does not (yet) have a clean way of sharing
+        # the digest of the manifest it creates (see docker/buildx#2407), so
+        # we use a separate command to retrieve it.
+        # imagetools inspect [TAG] --format '{{json .Manifest}}' gives us
+        # the machine readable JSON description of the manifest, and the
+        # jq command extracts the digest from this. The digest is then
+        # sent to the Github step output file for sharing with other steps.
+        run: |
+          digest="$(
+            docker buildx imagetools inspect \
+              "${UV_BASE_IMG}:${DOCKER_METADATA_OUTPUT_VERSION}" \
+              --format '{{json .Manifest}}' \
+            | jq -r '.digest'
+          )"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Sign the manifest with GitHub OIDC Token
+        env:
+          DIGEST: ${{ steps.manifest-digest.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          images=""
+          for tag in ${TAGS}; do
+            images+="${tag}@${DIGEST} "
+          done
+          cosign sign --yes ${images}
