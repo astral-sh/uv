@@ -777,6 +777,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv license` command with options shared across scenarios.
+    pub fn license(&self) -> Command {
+        let mut command = self.new_command();
+        command.arg("license");
+        self.add_shared_args(&mut command, false);
+        command
+    }
+
     /// Create a `uv cache clean` command.
     pub fn clean(&self) -> Command {
         let mut command = self.new_command();
