@@ -863,7 +863,7 @@ fn help_unknown_subcommand() {
         generate-shell-completion
     ");
 
-    uv_snapshot!(context.filters(), context.help().arg("foo").arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("foo").arg("bar"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -878,6 +878,7 @@ fn help_unknown_subcommand() {
         lock
         export
         tree
+        license
         tool
         python
         pip
@@ -888,7 +889,7 @@ fn help_unknown_subcommand() {
         self
         version
         generate-shell-completion
-    "###);
+    ");
 }
 
 #[test]
