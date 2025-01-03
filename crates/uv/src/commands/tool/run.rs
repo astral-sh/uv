@@ -16,8 +16,10 @@ use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, PreviewMode, TrustedHost};
 use uv_dispatch::SharedState;
-use uv_distribution_types::{Name, UnresolvedRequirementSpecification};
-use uv_installer::{SatisfiesResult, SitePackages};
+use uv_distribution_types::{
+    Name, NameRequirementSpecification, UnresolvedRequirementSpecification,
+};
+use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
@@ -27,7 +29,7 @@ use uv_python::{
     PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_settings::PythonInstallMirrors;
+use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_static::EnvVars;
 use uv_tool::{entrypoint_paths, InstalledTools};
 use uv_warnings::warn_user;
@@ -69,9 +71,12 @@ pub(crate) async fn run(
     command: Option<ExternalCommand>,
     from: Option<String>,
     with: &[RequirementsSource],
+    constraints: &[RequirementsSource],
+    overrides: &[RequirementsSource],
     show_resolution: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
+    options: ResolverInstallerOptions,
     settings: ResolverInstallerSettings,
     invocation_source: ToolRunCommand,
     isolated: bool,
@@ -115,9 +120,12 @@ pub(crate) async fn run(
     let result = get_or_create_environment(
         &target,
         with,
+        constraints,
+        overrides,
         show_resolution,
         python.as_deref(),
         install_mirrors,
+        options,
         &settings,
         isolated,
         python_preference,
@@ -434,9 +442,12 @@ fn warn_executable_not_provided_by_package(
 async fn get_or_create_environment(
     target: &Target<'_>,
     with: &[RequirementsSource],
+    constraints: &[RequirementsSource],
+    overrides: &[RequirementsSource],
     show_resolution: bool,
     python: Option<&str>,
     install_mirrors: PythonInstallMirrors,
+    options: ResolverInstallerOptions,
     settings: &ResolverInstallerSettings,
     isolated: bool,
     python_preference: PythonPreference,
@@ -476,6 +487,11 @@ async fn get_or_create_environment(
 
     // Initialize any shared state.
     let state = SharedState::default();
+
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(connectivity)
+        .native_tls(native_tls)
+        .allow_insecure_host(allow_insecure_host.to_vec());
 
     // Resolve the `--from` requirement.
     let from = match target {
@@ -540,13 +556,9 @@ async fn get_or_create_environment(
     };
 
     // Read the `--with` requirements.
-    let spec = {
-        let client_builder = BaseClientBuilder::new()
-            .connectivity(connectivity)
-            .native_tls(native_tls)
-            .allow_insecure_host(allow_insecure_host.to_vec());
-        RequirementsSpecification::from_simple_sources(with, &client_builder).await?
-    };
+    let spec =
+        RequirementsSpecification::from_sources(with, constraints, overrides, &client_builder)
+            .await?;
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
@@ -571,6 +583,30 @@ async fn get_or_create_environment(
         requirements
     };
 
+    // Resolve the constraints.
+    let constraints = spec
+        .constraints
+        .clone()
+        .into_iter()
+        .map(|constraint| constraint.requirement)
+        .collect::<Vec<_>>();
+
+    // Resolve the overrides.
+    let overrides = resolve_names(
+        spec.overrides.clone(),
+        &interpreter,
+        settings,
+        &state,
+        connectivity,
+        concurrency,
+        native_tls,
+        allow_insecure_host,
+        cache,
+        printer,
+        preview,
+    )
+    .await?;
+
     // Check if the tool is already installed in a compatible environment.
     if !isolated && !target.is_latest() {
         let installed_tools = InstalledTools::from_settings()?.init()?;
@@ -586,25 +622,15 @@ async fn get_or_create_environment(
                 });
         if let Some(environment) = existing_environment {
             // Check if the installed packages meet the requirements.
-            let site_packages = SitePackages::from_environment(&environment)?;
-
-            let requirements = requirements
-                .iter()
-                .cloned()
-                .map(UnresolvedRequirementSpecification::from)
-                .collect::<Vec<_>>();
-            let constraints = [];
-
-            if matches!(
-                site_packages.satisfies(
-                    &requirements,
-                    &constraints,
-                    &interpreter.resolver_marker_environment()
-                ),
-                Ok(SatisfiesResult::Fresh { .. })
-            ) {
-                debug!("Using existing tool `{}`", from.name);
-                return Ok((from, environment));
+            if let Ok(Some(tool_receipt)) = installed_tools.get_tool_receipt(&from.name) {
+                if requirements == tool_receipt.requirements()
+                    && constraints == tool_receipt.constraints()
+                    && overrides == tool_receipt.overrides()
+                    && ToolOptions::from(options) == *tool_receipt.options()
+                {
+                    debug!("Using existing tool `{}`", from.name);
+                    return Ok((from, environment));
+                }
             }
         }
     }
@@ -612,6 +638,14 @@ async fn get_or_create_environment(
     // Create a `RequirementsSpecification` from the resolved requirements, to avoid re-resolving.
     let spec = RequirementsSpecification {
         requirements: requirements
+            .into_iter()
+            .map(UnresolvedRequirementSpecification::from)
+            .collect(),
+        constraints: constraints
+            .into_iter()
+            .map(NameRequirementSpecification::from)
+            .collect(),
+        overrides: overrides
             .into_iter()
             .map(UnresolvedRequirementSpecification::from)
             .collect(),
