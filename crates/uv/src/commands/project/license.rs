@@ -69,29 +69,24 @@ pub(crate) async fn license(
     // Determine the default groups to include.
     let defaults = default_dependency_groups(workspace.pyproject_toml())?;
 
-    // Find an interpreter for the project, unless `--frozen` and `--universal` are both set.
-    let interpreter = if frozen && universal {
-        None
-    } else {
-        Some(
-            ProjectInterpreter::discover(
-                &workspace,
-                project_dir,
-                python.as_deref().map(PythonRequest::parse),
-                python_preference,
-                python_downloads,
-                connectivity,
-                native_tls,
-                allow_insecure_host,
-                &install_mirrors,
-                no_config,
-                cache,
-                printer,
-            )
-            .await?
-            .into_interpreter(),
+    let interpreter = Some(
+        ProjectInterpreter::discover(
+            &workspace,
+            project_dir,
+            python.as_deref().map(PythonRequest::parse),
+            python_preference,
+            python_downloads,
+            connectivity,
+            native_tls,
+            allow_insecure_host,
+            &install_mirrors,
+            no_config,
+            cache,
+            printer,
         )
-    };
+        .await?
+        .into_interpreter(),
+    );
 
     // Determine the lock mode.
     let mode = if frozen {
@@ -201,7 +196,7 @@ pub(crate) async fn license(
         &index_locations,
         &flat_index,
         &dependency_metadata,
-        state.clone(),
+        state,
         index_strategy,
         &config_setting,
         build_isolation,
