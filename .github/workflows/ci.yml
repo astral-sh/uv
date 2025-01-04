@@ -116,8 +116,7 @@ jobs:
     timeout-minutes: 15
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: "windows-latest-xlarge"
+    runs-on: github-windows-2025-x86_64-16
     name: "cargo clippy | windows"
     steps:
       - uses: actions/checkout@v4
@@ -173,8 +172,7 @@ jobs:
     timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: "depot-ubuntu-22.04-16"
+    runs-on: depot-ubuntu-22.04-16
     name: "cargo test | ubuntu"
     steps:
       - uses: actions/checkout@v4
@@ -219,8 +217,7 @@ jobs:
     timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: "macos-latest-xlarge"
+    runs-on: macos-latest-xlarge # github-macos-14-aarch64-6
     name: "cargo test | macos"
     steps:
       - uses: actions/checkout@v4
@@ -258,8 +255,7 @@ jobs:
     timeout-minutes: 15
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: "windows-latest-xlarge"
+    runs-on: github-windows-2025-x86_64-16
     name: "cargo test | windows"
     steps:
       - uses: actions/checkout@v4
@@ -334,7 +330,7 @@ jobs:
     timeout-minutes: 15
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on: windows-latest-xlarge
+    runs-on: github-windows-2025-x86_64-16
     name: "check windows trampoline | ${{ matrix.target-arch }}"
     strategy:
       fail-fast: false
@@ -456,8 +452,7 @@ jobs:
     timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: ubuntu-latest-large
+    runs-on: github-ubuntu-24.04-x86_64-8
     name: "build binary | linux"
     steps:
       - uses: actions/checkout@v4
@@ -484,8 +479,7 @@ jobs:
     timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: macos-14
+    runs-on: macos-14 # github-macos-14-aarch64-3
     name: "build binary | macos aarch64"
     steps:
       - uses: actions/checkout@v4
@@ -507,8 +501,7 @@ jobs:
     timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: macos-latest-large # Intel runner on GitHub
+    runs-on: macos-latest-large # github-macos-14-x86_64-12
     name: "build binary | macos x86_64"
     steps:
       - uses: actions/checkout@v4
@@ -530,8 +523,7 @@ jobs:
     needs: determine_changes
     timeout-minutes: 10
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: windows-latest-large
+    runs-on: github-windows-2025-x86_64-8
     name: "build binary | windows"
     steps:
       - uses: actions/checkout@v4
@@ -563,8 +555,7 @@ jobs:
     name: "cargo build (msrv)"
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: ubuntu-latest-large
+    runs-on: github-ubuntu-24.04-x86_64-8
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -585,8 +576,7 @@ jobs:
     needs: determine_changes
     timeout-minutes: 10
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: ubuntu-latest
+    runs-on: ubuntu-latest
     name: "build binary | freebsd"
 
     steps:
@@ -1220,7 +1210,7 @@ jobs:
     timeout-minutes: 10
     needs: build-binary-macos-aarch64
     name: "check cache | macos aarch64"
-    runs-on: macos-14
+    runs-on: macos-14 # github-macos-14-aarch64-3
     steps:
       - uses: actions/checkout@v4
 
@@ -1468,7 +1458,7 @@ jobs:
     timeout-minutes: 10
     needs: build-binary-macos-aarch64
     name: "check system | python on macos aarch64"
-    runs-on: macos-14
+    runs-on: macos-14 # github-macos-14-aarch64-3
     steps:
       - uses: actions/checkout@v4
 
@@ -1492,7 +1482,7 @@ jobs:
     timeout-minutes: 10
     needs: build-binary-macos-aarch64
     name: "check system | homebrew python on macos aarch64"
-    runs-on: macos-14
+    runs-on: macos-14 # github-macos-14-aarch64-3
     steps:
       - uses: actions/checkout@v4
 
@@ -1517,7 +1507,7 @@ jobs:
     timeout-minutes: 10
     needs: build-binary-macos-x86_64
     name: "check system | python on macos x86_64"
-    runs-on: macos-13
+    runs-on: macos-13 # github-macos-13-x86_64-4
     steps:
       - uses: actions/checkout@v4
 
