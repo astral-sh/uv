@@ -55,7 +55,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ```bash
 # On Windows.
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+powershell -NoP -EP Bypass "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
 Or, from [PyPI](https://pypi.org/project/uv/):
