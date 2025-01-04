@@ -1,16 +1,8 @@
-# This creates a 20GB dev drive, and exports all required environment
-# variables so that rustup, uv and others all use the dev drive as much
-# as possible.
-$Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 20GB |
-					Mount-VHD -Passthru |
-					Initialize-Disk -Passthru |
-					New-Partition -AssignDriveLetter -UseMaximumSize |
-					Format-Volume -FileSystem ReFS -Confirm:$false -Force
+# This uses `D:` as the workspace instead of `C:`, as the performance is much
+# better. Previously, we created a ReFS Dev Drive, but this is actually faster.
 
-Write-Output $Volume
-
-$Drive = "$($Volume.DriveLetter):"
-$Tmp = "$($Drive)/uv-tmp"
+$Drive = "D:"
+$Tmp = "$($Drive)\uv-tmp"
 
 # Create the directory ahead of time in an attempt to avoid race-conditions
 New-Item $Tmp -ItemType Directory
