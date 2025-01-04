@@ -1,6 +1,8 @@
 use std::fmt::{Display, Formatter};
-use uv_distribution_filename::{BuildTag, WheelFilename};
 
+use tracing::debug;
+
+use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
 use uv_platform_tags::{IncompatibleTag, TagPriority};
@@ -634,6 +636,9 @@ impl IncompatibleWheel {
 }
 
 /// Given a wheel filename, determine the set of supported platforms, in terms of their markers.
+///
+/// This is roughly the inverse of platform tag generation: given a tag, we want to infer the
+/// supported platforms (rather than generating the supported tags from a given platform).
 pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
     let mut marker = MarkerTree::FALSE;
     for platform_tag in &filename.platform_tag {
@@ -641,32 +646,281 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
             "any" => {
                 return MarkerTree::TRUE;
             }
-            tag if tag.starts_with("win") => {
-                marker.or(MarkerTree::expression(MarkerExpression::String {
+
+            // Windows
+            "win32" => {
+                let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
                     value: "win32".to_string(),
+                });
+                tag_marker.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::PlatformMachine,
+                    operator: MarkerOperator::Equal,
+                    value: "x86".to_string(),
                 }));
+                marker.or(tag_marker);
             }
-            tag if tag.starts_with("macosx") => {
-                marker.or(MarkerTree::expression(MarkerExpression::String {
+            "win_amd64" => {
+                let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "win32".to_string(),
+                });
+                tag_marker.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::PlatformMachine,
+                    operator: MarkerOperator::Equal,
+                    value: "x86_64".to_string(),
+                }));
+                marker.or(tag_marker);
+            }
+            "win_arm64" => {
+                let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "win32".to_string(),
+                });
+                tag_marker.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::PlatformMachine,
+                    operator: MarkerOperator::Equal,
+                    value: "arm64".to_string(),
+                }));
+                marker.or(tag_marker);
+            }
+
+            // macOS
+            tag if tag.starts_with("macosx_") => {
+                let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
                     value: "darwin".to_string(),
-                }));
+                });
+
+                // Parse the macOS version from the tag.
+                //
+                // For example, given `macosx_10_9_x86_64`, infer `10.9`, followed by `x86_64`.
+                //
+                // If at any point we fail to parse, we assume the tag is invalid and skip it.
+                let mut parts = tag.splitn(4, '_');
+
+                // Skip the "macosx_" prefix.
+                if parts.next().is_none_or(|part| part != "macosx") {
+                    debug!("Failed to parse macOS prefix from tag: {tag}");
+                    continue;
+                }
+
+                // Skip the major and minor version numbers.
+                if parts
+                    .next()
+                    .and_then(|part| part.parse::<u16>().ok())
+                    .is_none()
+                {
+                    debug!("Failed to parse macOS major version from tag: {tag}");
+                    continue;
+                };
+                if parts
+                    .next()
+                    .and_then(|part| part.parse::<u16>().ok())
+                    .is_none()
+                {
+                    debug!("Failed to parse macOS minor version from tag: {tag}");
+                    continue;
+                };
+
+                // Extract the architecture from the end of the tag.
+                let Some(arch) = parts.next() else {
+                    debug!("Failed to parse macOS architecture from tag: {tag}");
+                    continue;
+                };
+
+                // Extract the architecture from the end of the tag.
+                let mut arch_marker = MarkerTree::FALSE;
+                let supported_architectures = match arch {
+                    "universal" => {
+                        // Allow any of: "x86_64", "i386", "ppc64", "ppc", "intel"
+                        ["x86_64", "i386", "ppc64", "ppc", "intel"].iter()
+                    }
+                    "universal2" => {
+                        // Allow any of: "x86_64", "arm64"
+                        ["x86_64", "arm64"].iter()
+                    }
+                    "intel" => {
+                        // Allow any of: "x86_64", "i386"
+                        ["x86_64", "i386"].iter()
+                    }
+                    "x86_64" => {
+                        // Allow only "x86_64"
+                        ["x86_64"].iter()
+                    }
+                    "arm64" => {
+                        // Allow only "arm64"
+                        ["arm64"].iter()
+                    }
+                    "ppc64" => {
+                        // Allow only "ppc64"
+                        ["ppc64"].iter()
+                    }
+                    "ppc" => {
+                        // Allow only "ppc"
+                        ["ppc"].iter()
+                    }
+                    "i386" => {
+                        // Allow only "i386"
+                        ["i386"].iter()
+                    }
+                    _ => {
+                        debug!("Unknown macOS architecture in wheel tag: {tag}");
+                        continue;
+                    }
+                };
+                for arch in supported_architectures {
+                    arch_marker.or(MarkerTree::expression(MarkerExpression::String {
+                        key: MarkerValueString::PlatformMachine,
+                        operator: MarkerOperator::Equal,
+                        value: (*arch).to_string(),
+                    }));
+                }
+                tag_marker.and(arch_marker);
+
+                marker.or(tag_marker);
             }
-            tag if tag.starts_with("manylinux")
-                || tag.starts_with("musllinux")
-                || tag.starts_with("linux") =>
-            {
-                marker.or(MarkerTree::expression(MarkerExpression::String {
+
+            // Linux
+            tag => {
+                let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
                     value: "linux".to_string(),
+                });
+
+                // Parse the architecture from the tag.
+                let arch = if let Some(arch) = tag.strip_prefix("linux_") {
+                    arch
+                } else if let Some(arch) = tag.strip_prefix("manylinux1_") {
+                    arch
+                } else if let Some(arch) = tag.strip_prefix("manylinux2010_") {
+                    arch
+                } else if let Some(arch) = tag.strip_prefix("manylinux2014_") {
+                    arch
+                } else if let Some(arch) = tag.strip_prefix("musllinux_") {
+                    // Skip over the version tags (e.g., given `musllinux_1_2`, skip over `1` and `2`).
+                    let mut parts = arch.splitn(3, '_');
+                    if parts
+                        .next()
+                        .and_then(|part| part.parse::<u16>().ok())
+                        .is_none()
+                    {
+                        debug!("Failed to parse musllinux major version from tag: {tag}");
+                        continue;
+                    };
+                    if parts
+                        .next()
+                        .and_then(|part| part.parse::<u16>().ok())
+                        .is_none()
+                    {
+                        debug!("Failed to parse musllinux minor version from tag: {tag}");
+                        continue;
+                    };
+                    let Some(arch) = parts.next() else {
+                        debug!("Failed to parse musllinux architecture from tag: {tag}");
+                        continue;
+                    };
+                    arch
+                } else if let Some(arch) = tag.strip_prefix("manylinux_") {
+                    // Skip over the version tags (e.g., given `manylinux_2_17`, skip over `2` and `17`).
+                    let mut parts = arch.splitn(3, '_');
+                    if parts
+                        .next()
+                        .and_then(|part| part.parse::<u16>().ok())
+                        .is_none()
+                    {
+                        debug!("Failed to parse manylinux major version from tag: {tag}");
+                        continue;
+                    };
+                    if parts
+                        .next()
+                        .and_then(|part| part.parse::<u16>().ok())
+                        .is_none()
+                    {
+                        debug!("Failed to parse manylinux minor version from tag: {tag}");
+                        continue;
+                    };
+                    let Some(arch) = parts.next() else {
+                        debug!("Failed to parse manylinux architecture from tag: {tag}");
+                        continue;
+                    };
+                    arch
+                } else {
+                    continue;
+                };
+                tag_marker.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::PlatformMachine,
+                    operator: MarkerOperator::Equal,
+                    value: arch.to_string(),
                 }));
+
+                marker.or(tag_marker);
             }
-            _ => {}
         }
     }
     marker
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+
+    #[track_caller]
+    fn assert_markers(filename: &str, expected: &str) {
+        let filename = WheelFilename::from_str(filename).unwrap();
+        assert_eq!(
+            implied_markers(&filename),
+            expected.parse::<MarkerTree>().unwrap()
+        );
+    }
+
+    #[test]
+    fn test_implied_markers() {
+        let filename = WheelFilename::from_str("example-1.0-py3-none-any.whl").unwrap();
+        assert_eq!(implied_markers(&filename), MarkerTree::TRUE);
+
+        assert_markers(
+            "example-1.0-cp310-cp310-win32.whl",
+            "sys_platform == 'win32' and platform_machine == 'x86'",
+        );
+        assert_markers(
+            "numpy-2.2.1-cp313-cp313t-win_amd64.whl",
+            "sys_platform == 'win32' and platform_machine == 'x86_64'",
+        );
+        assert_markers(
+            "numpy-2.2.1-cp313-cp313t-win_arm64.whl",
+            "sys_platform == 'win32' and platform_machine == 'arm64'",
+        );
+        assert_markers(
+            "numpy-2.2.1-cp313-cp313t-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "sys_platform == 'linux' and platform_machine == 'aarch64'",
+        );
+        assert_markers(
+            "numpy-2.2.1-cp313-cp313t-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "sys_platform == 'linux' and platform_machine == 'x86_64'",
+        );
+        assert_markers(
+            "numpy-2.2.1-cp312-cp312-musllinux_1_2_aarch64.whl",
+            "sys_platform == 'linux' and platform_machine == 'aarch64'",
+        );
+        assert_markers(
+            "numpy-2.2.1-cp310-cp310-macosx_14_0_x86_64.whl",
+            "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+        );
+        assert_markers(
+            "numpy-2.2.1-cp310-cp310-macosx_10_9_x86_64.whl",
+            "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+        );
+        assert_markers(
+            "numpy-2.2.1-cp310-cp310-macosx_11_0_arm64.whl",
+            "sys_platform == 'darwin' and platform_machine == 'arm64'",
+        );
+    }
 }
