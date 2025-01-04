@@ -194,11 +194,17 @@ pub(crate) async fn list(
             }
             Either::Right(url) => {
                 if show_urls {
-                    writeln!(printer.stdout(), "{key:width$}    {}", url.dimmed())?;
+                    writeln!(
+                        printer.stdout(),
+                        "{:width$}    {}",
+                        key.dimmed(),
+                        url.dimmed()
+                    )?;
                 } else {
                     writeln!(
                         printer.stdout(),
-                        "{key:width$}    {}",
+                        "{:width$}    {}",
+                        key.dimmed(),
                         "<download available>".dimmed()
                     )?;
                 }
