@@ -37,7 +37,9 @@ use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
 use uv_pep440::{release_specifiers_to_ranges, Version};
 use uv_platform_tags::Tags;
-use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata12, RequiresTxt, ResolutionMetadata};
+use uv_pypi_types::{
+    HashAlgorithm, HashDigest, Metadata12, Metadata23, RequiresTxt, ResolutionMetadata,
+};
 use uv_types::{BuildContext, BuildStack, SourceBuildTrait};
 use zip::ZipArchive;
 
@@ -2448,6 +2450,7 @@ async fn read_egg_info(
 
     // Parse the metadata.
     let metadata = Metadata12::parse_metadata(&content).map_err(Error::PkgInfo)?;
+    let metadata23 = Metadata23::parse(&content).map_err(Error::PkgInfo)?;
 
     // Combine the sources.
     Ok(ResolutionMetadata {
@@ -2456,6 +2459,9 @@ async fn read_egg_info(
         requires_python: metadata.requires_python,
         requires_dist: requires_txt.requires_dist,
         provides_extras: requires_txt.provides_extras,
+        classifiers: Some(metadata23.classifiers),
+        // TODO(RL): collapse metadata23.license / metadata23.license_expression [pep639] / metadata23.license_files
+        license: metadata23.license,
     })
 }
 

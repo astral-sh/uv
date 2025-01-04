@@ -187,6 +187,15 @@ pub(crate) fn pip_show(
                 )?;
             }
         }
+        if let Ok(meta) = distribution.metadata() {
+            if let Some(classifiers) = meta.classifiers {
+                if classifiers.is_empty() {
+                    writeln!(printer.stdout(), "Classifiers:")?;
+                } else {
+                    writeln!(printer.stdout(), "Classifiers: {}", classifiers.join(", "))?;
+                }
+            }
+        }
 
         // If requests, show the list of installed files.
         if files {
