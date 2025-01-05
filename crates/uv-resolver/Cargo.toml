@@ -67,3 +67,6 @@ url = { workspace = true }
 [dev-dependencies]
 insta = { version = "1.40.0" }
 toml = { workspace = true }
+
+[features]
+tracing-durations-export = []
