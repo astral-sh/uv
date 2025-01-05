@@ -1,7 +1,8 @@
 use std::cmp::min;
+use std::sync::Arc;
 
 use itertools::Itertools;
-use pubgrub::{Range, Term};
+use pubgrub::{Range, Ranges, Term};
 use rustc_hash::FxHashMap;
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
@@ -76,7 +77,7 @@ impl BatchPrefetcher {
         python_requirement: &PythonRequirement,
         selector: &CandidateSelector,
         env: &ResolverEnvironment,
-    ) -> anyhow::Result<(), ResolveError> {
+    ) -> Result<(), ResolveError> {
         let PubGrubPackageInner::Package {
             name,
             extra: None,
@@ -106,14 +107,44 @@ impl BatchPrefetcher {
                 .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?
         };
 
-        let VersionsResponse::Found(ref version_map) = *versions_response else {
-            return Ok(());
-        };
-
-        let mut phase = BatchPrefetchStrategy::Compatible {
+        let phase = BatchPrefetchStrategy::Compatible {
             compatible: current_range.clone(),
             previous: version.clone(),
         };
+
+        self.last_prefetch.insert(name.clone(), num_tried);
+
+        self.send_prefetch(
+            name,
+            unchangeable_constraints,
+            total_prefetch,
+            &versions_response,
+            phase,
+            python_requirement,
+            selector,
+            env,
+        )?;
+
+        Ok(())
+    }
+
+    /// Given that the conditions for prefetching are met, find the versions to prefetch and
+    /// send the prefetch requests.
+    fn send_prefetch(
+        &self,
+        name: &PackageName,
+        unchangeable_constraints: Option<&Term<Ranges<Version>>>,
+        total_prefetch: usize,
+        versions_response: &Arc<VersionsResponse>,
+        mut phase: BatchPrefetchStrategy,
+        python_requirement: &PythonRequirement,
+        selector: &CandidateSelector,
+        env: &ResolverEnvironment,
+    ) -> Result<(), ResolveError> {
+        let VersionsResponse::Found(ref version_map) = &**versions_response else {
+            return Ok(());
+        };
+
         let mut prefetch_count = 0;
         for _ in 0..total_prefetch {
             let candidate = match phase {
@@ -148,7 +179,7 @@ impl BatchPrefetcher {
                     // If we have constraints from root, don't go beyond those. Example: We are
                     // prefetching for foo 1.60 and have a dependency for `foo>=1.50`, so we should
                     // only prefetch 1.60 to 1.50, knowing 1.49 will always be rejected.
-                    if let Some(unchangeable_constraints) = unchangeable_constraints {
+                    if let Some(unchangeable_constraints) = &unchangeable_constraints {
                         range = match unchangeable_constraints {
                             Term::Positive(constraints) => range.intersection(constraints),
                             Term::Negative(negative_constraints) => {
@@ -242,7 +273,6 @@ impl BatchPrefetcher {
             _ => debug!("Prefetched {prefetch_count} `{name}` versions"),
         }
 
-        self.last_prefetch.insert(name.clone(), num_tried);
         Ok(())
     }
 
