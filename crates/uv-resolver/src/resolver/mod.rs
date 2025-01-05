@@ -1014,7 +1014,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     ///
     /// Returns `None` when there are no versions in the given range, rejecting the current partial
     /// solution.
-    #[instrument(skip_all, fields(%package))]
+    // TODO(konsti): re-enable tracing. This trace is crucial to understanding the
+    // tracing-durations-export diagrams, but it took ~5% resolver thread runtime for apache-airflow
+    // when I last measured.
+    #[cfg_attr(feature = "tracing-durations-export", instrument(skip_all, fields(%package)))]
     fn choose_version(
         &self,
         package: &PubGrubPackage,
