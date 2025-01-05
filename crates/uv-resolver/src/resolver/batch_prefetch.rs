@@ -42,10 +42,19 @@ enum BatchPrefetchStrategy {
 /// Note that these all heuristics that could totally prefetch lots of irrelevant versions.
 #[derive(Clone)]
 pub(crate) struct BatchPrefetcher {
-    // Internal types.
+    // Types to determine whether we need to prefetch.
     tried_versions: FxHashMap<PackageName, usize>,
     last_prefetch: FxHashMap<PackageName, usize>,
-    // Shared (e.g., `Arc`) types.
+    // Types to execute the prefetch.
+    prefetch_runner: BatchPrefetcherRunner,
+}
+
+/// The types that are needed for running the batch prefetching after we determined that we need to
+/// prefetch.
+///
+/// These types are shared (e.g., `Arc`) so they can be cheaply cloned and moved between threads.
+#[derive(Clone)]
+pub(crate) struct BatchPrefetcherRunner {
     capabilities: IndexCapabilities,
     index: InMemoryIndex,
     request_sink: Sender<Request>,
@@ -60,9 +69,11 @@ impl BatchPrefetcher {
         Self {
             tried_versions: FxHashMap::default(),
             last_prefetch: FxHashMap::default(),
-            capabilities,
-            index,
-            request_sink,
+            prefetch_runner: BatchPrefetcherRunner {
+                capabilities,
+                index,
+                request_sink,
+            },
         }
     }
 
@@ -96,12 +107,14 @@ impl BatchPrefetcher {
 
         // This is immediate, we already fetched the version map.
         let versions_response = if let Some(index) = index {
-            self.index
+            self.prefetch_runner
+                .index
                 .explicit()
                 .wait_blocking(&(name.clone(), index.clone()))
                 .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?
         } else {
-            self.index
+            self.prefetch_runner
+                .index
                 .implicit()
                 .wait_blocking(name)
                 .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?
@@ -114,7 +127,7 @@ impl BatchPrefetcher {
 
         self.last_prefetch.insert(name.clone(), num_tried);
 
-        self.send_prefetch(
+        self.prefetch_runner.send_prefetch(
             name,
             unchangeable_constraints,
             total_prefetch,
@@ -128,6 +141,65 @@ impl BatchPrefetcher {
         Ok(())
     }
 
+    /// Each time we tried a version for a package, we register that here.
+    pub(crate) fn version_tried(&mut self, package: &PubGrubPackage) {
+        // Only track base packages, no virtual packages from extras.
+        let PubGrubPackageInner::Package {
+            name,
+            extra: None,
+            dev: None,
+            marker: MarkerTree::TRUE,
+        } = &**package
+        else {
+            return;
+        };
+        *self.tried_versions.entry(name.clone()).or_default() += 1;
+    }
+
+    /// After 5, 10, 20, 40 tried versions, prefetch that many versions to start early but not
+    /// too aggressive. Later we schedule the prefetch of 50 versions every 20 versions, this gives
+    /// us a good buffer until we see prefetch again and is high enough to saturate the task pool.
+    fn should_prefetch(&self, next: &PubGrubPackage) -> (usize, bool) {
+        let PubGrubPackageInner::Package {
+            name,
+            extra: None,
+            dev: None,
+            marker: MarkerTree::TRUE,
+        } = &**next
+        else {
+            return (0, false);
+        };
+
+        let num_tried = self.tried_versions.get(name).copied().unwrap_or_default();
+        let previous_prefetch = self.last_prefetch.get(name).copied().unwrap_or_default();
+        let do_prefetch = (num_tried >= 5 && previous_prefetch < 5)
+            || (num_tried >= 10 && previous_prefetch < 10)
+            || (num_tried >= 20 && previous_prefetch < 20)
+            || (num_tried >= 20 && num_tried - previous_prefetch >= 20);
+        (num_tried, do_prefetch)
+    }
+
+    /// Log stats about how many versions we tried.
+    ///
+    /// Note that they may be inflated when we count the same version repeatedly during
+    /// backtracking.
+    pub(crate) fn log_tried_versions(&self) {
+        let total_versions: usize = self.tried_versions.values().sum();
+        let mut tried_versions: Vec<_> = self.tried_versions.iter().collect();
+        tried_versions.sort_by(|(p1, c1), (p2, c2)| {
+            c1.cmp(c2)
+                .reverse()
+                .then(p1.to_string().cmp(&p2.to_string()))
+        });
+        let counts = tried_versions
+            .iter()
+            .map(|(package, count)| format!("{package} {count}"))
+            .join(", ");
+        debug!("Tried {total_versions} versions: {counts}");
+    }
+}
+
+impl BatchPrefetcherRunner {
     /// Given that the conditions for prefetching are met, find the versions to prefetch and
     /// send the prefetch requests.
     fn send_prefetch(
@@ -220,33 +292,9 @@ impl BatchPrefetcher {
             }
 
             // Avoid prefetching for distributions that don't satisfy the Python requirement.
-            match dist {
-                CompatibleDist::InstalledDist(_) => {}
-                CompatibleDist::SourceDist { sdist, .. }
-                | CompatibleDist::IncompatibleWheel { sdist, .. } => {
-                    // Source distributions must meet both the _target_ Python version and the
-                    // _installed_ Python version (to build successfully).
-                    if let Some(requires_python) = sdist.file.requires_python.as_ref() {
-                        if !python_requirement
-                            .installed()
-                            .is_contained_by(requires_python)
-                        {
-                            continue;
-                        }
-                        if !python_requirement.target().is_contained_by(requires_python) {
-                            continue;
-                        }
-                    }
-                }
-                CompatibleDist::CompatibleWheel { wheel, .. } => {
-                    // Wheels must meet the _target_ Python version.
-                    if let Some(requires_python) = wheel.file.requires_python.as_ref() {
-                        if !python_requirement.target().is_contained_by(requires_python) {
-                            continue;
-                        }
-                    }
-                }
-            };
+            if !satisfies_python(dist, python_requirement) {
+                continue;
+            }
 
             let dist = dist.for_resolution();
 
@@ -275,61 +323,36 @@ impl BatchPrefetcher {
 
         Ok(())
     }
+}
 
-    /// Each time we tried a version for a package, we register that here.
-    pub(crate) fn version_tried(&mut self, package: &PubGrubPackage) {
-        // Only track base packages, no virtual packages from extras.
-        let PubGrubPackageInner::Package {
-            name,
-            extra: None,
-            dev: None,
-            marker: MarkerTree::TRUE,
-        } = &**package
-        else {
-            return;
-        };
-        *self.tried_versions.entry(name.clone()).or_default() += 1;
+fn satisfies_python(dist: &CompatibleDist, python_requirement: &PythonRequirement) -> bool {
+    match dist {
+        CompatibleDist::InstalledDist(_) => {}
+        CompatibleDist::SourceDist { sdist, .. }
+        | CompatibleDist::IncompatibleWheel { sdist, .. } => {
+            // Source distributions must meet both the _target_ Python version and the
+            // _installed_ Python version (to build successfully).
+            if let Some(requires_python) = sdist.file.requires_python.as_ref() {
+                if !python_requirement
+                    .installed()
+                    .is_contained_by(requires_python)
+                {
+                    return false;
+                }
+                if !python_requirement.target().is_contained_by(requires_python) {
+                    return false;
+                }
+            }
+        }
+        CompatibleDist::CompatibleWheel { wheel, .. } => {
+            // Wheels must meet the _target_ Python version.
+            if let Some(requires_python) = wheel.file.requires_python.as_ref() {
+                if !python_requirement.target().is_contained_by(requires_python) {
+                    return false;
+                }
+            }
+        }
     }
 
-    /// After 5, 10, 20, 40 tried versions, prefetch that many versions to start early but not
-    /// too aggressive. Later we schedule the prefetch of 50 versions every 20 versions, this gives
-    /// us a good buffer until we see prefetch again and is high enough to saturate the task pool.
-    fn should_prefetch(&self, next: &PubGrubPackage) -> (usize, bool) {
-        let PubGrubPackageInner::Package {
-            name,
-            extra: None,
-            dev: None,
-            marker: MarkerTree::TRUE,
-        } = &**next
-        else {
-            return (0, false);
-        };
-
-        let num_tried = self.tried_versions.get(name).copied().unwrap_or_default();
-        let previous_prefetch = self.last_prefetch.get(name).copied().unwrap_or_default();
-        let do_prefetch = (num_tried >= 5 && previous_prefetch < 5)
-            || (num_tried >= 10 && previous_prefetch < 10)
-            || (num_tried >= 20 && previous_prefetch < 20)
-            || (num_tried >= 20 && num_tried - previous_prefetch >= 20);
-        (num_tried, do_prefetch)
-    }
-
-    /// Log stats about how many versions we tried.
-    ///
-    /// Note that they may be inflated when we count the same version repeatedly during
-    /// backtracking.
-    pub(crate) fn log_tried_versions(&self) {
-        let total_versions: usize = self.tried_versions.values().sum();
-        let mut tried_versions: Vec<_> = self.tried_versions.iter().collect();
-        tried_versions.sort_by(|(p1, c1), (p2, c2)| {
-            c1.cmp(c2)
-                .reverse()
-                .then(p1.to_string().cmp(&p2.to_string()))
-        });
-        let counts = tried_versions
-            .iter()
-            .map(|(package, count)| format!("{package} {count}"))
-            .join(", ");
-        debug!("Tried {total_versions} versions: {counts}");
-    }
+    true
 }
