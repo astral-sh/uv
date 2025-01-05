@@ -9,7 +9,7 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
-
+build-binary
 env:
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
@@ -526,7 +526,7 @@ jobs:
           path: ./target/debug/uv
           retention-days: 1
 
-  build-binary-windows:
+  build-binary-windows-x86_64:
     needs: determine_changes
     timeout-minutes: 10
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
@@ -551,6 +551,39 @@ jobs:
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: cargo build
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@v4
+        with:
+          name: uv-windows-${{ github.sha }}
+          path: ${{ env.UV_WORKSPACE }}/target/debug/uv.exe
+          retention-days: 1
+
+  build-binary-windows-aarch64:
+    needs: determine_changes
+    timeout-minutes: 10
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    runs-on:
+      labels: github-windows-11-aarch64-4
+    name: "build binary | windows aarch64"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Dev Drive using ReFS
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ env.UV_WORKSPACE }}
+
+      - name: "Build"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: cargo build --target aarch64-pc-windows-msvc
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
