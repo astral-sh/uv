@@ -526,7 +526,7 @@ jobs:
           path: ./target/debug/uv
           retention-days: 1
 
-  build-binary-windows-x86_64:
+  build-binary-windows:
     needs: determine_changes
     timeout-minutes: 10
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
