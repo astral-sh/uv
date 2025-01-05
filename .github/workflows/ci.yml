@@ -568,6 +568,11 @@ jobs:
     name: "build binary | windows aarch64"
     steps:
       - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-pc-windows-msvc
 
       - uses: Swatinem/rust-cache@v2
 
