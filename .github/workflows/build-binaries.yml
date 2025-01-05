@@ -156,7 +156,7 @@ jobs:
 
   windows:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
-    runs-on: windows-latest-large
+    runs-on: github-windows-2022-x86_64-8
     strategy:
       matrix:
         platform:
