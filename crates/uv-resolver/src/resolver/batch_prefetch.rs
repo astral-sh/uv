@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use pubgrub::{Range, Ranges, Term};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
 
@@ -43,7 +43,7 @@ enum BatchPrefetchStrategy {
 #[derive(Clone)]
 pub(crate) struct BatchPrefetcher {
     // Types to determine whether we need to prefetch.
-    tried_versions: FxHashMap<PackageName, usize>,
+    tried_versions: FxHashMap<PackageName, FxHashSet<Version>>,
     last_prefetch: FxHashMap<PackageName, usize>,
     // Types to execute the prefetch.
     prefetch_runner: BatchPrefetcherRunner,
@@ -142,7 +142,7 @@ impl BatchPrefetcher {
     }
 
     /// Each time we tried a version for a package, we register that here.
-    pub(crate) fn version_tried(&mut self, package: &PubGrubPackage) {
+    pub(crate) fn version_tried(&mut self, package: &PubGrubPackage, version: &Version) {
         // Only track base packages, no virtual packages from extras.
         let PubGrubPackageInner::Package {
             name,
@@ -153,7 +153,10 @@ impl BatchPrefetcher {
         else {
             return;
         };
-        *self.tried_versions.entry(name.clone()).or_default() += 1;
+        self.tried_versions
+            .entry(name.clone())
+            .or_default()
+            .insert(version.clone());
     }
 
     /// After 5, 10, 20, 40 tried versions, prefetch that many versions to start early but not
@@ -170,7 +173,10 @@ impl BatchPrefetcher {
             return (0, false);
         };
 
-        let num_tried = self.tried_versions.get(name).copied().unwrap_or_default();
+        let num_tried = self
+            .tried_versions
+            .get(name)
+            .map_or(0, |versions| versions.len());
         let previous_prefetch = self.last_prefetch.get(name).copied().unwrap_or_default();
         let do_prefetch = (num_tried >= 5 && previous_prefetch < 5)
             || (num_tried >= 10 && previous_prefetch < 10)
@@ -184,8 +190,12 @@ impl BatchPrefetcher {
     /// Note that they may be inflated when we count the same version repeatedly during
     /// backtracking.
     pub(crate) fn log_tried_versions(&self) {
-        let total_versions: usize = self.tried_versions.values().sum();
-        let mut tried_versions: Vec<_> = self.tried_versions.iter().collect();
+        let total_versions: usize = self.tried_versions.values().map(|v| v.len()).sum();
+        let mut tried_versions: Vec<_> = self
+            .tried_versions
+            .iter()
+            .map(|(name, versions)| (name, versions.len()))
+            .collect();
         tried_versions.sort_by(|(p1, c1), (p2, c2)| {
             c1.cmp(c2)
                 .reverse()

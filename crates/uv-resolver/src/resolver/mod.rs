@@ -477,8 +477,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // (idempotent due to caching).
                 self.request_package(next_package, url, index, &request_sink)?;
 
-                state.prefetcher.version_tried(next_package);
-
                 let version = if let Some(version) = state.initial_version.take() {
                     // If we just forked based on platform support, we can skip version selection,
                     // since the fork operation itself already selected the appropriate version for
@@ -571,6 +569,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                     version
                 };
+
+                state.prefetcher.version_tried(next_package, &version);
 
                 self.on_progress(next_package, &version);
 
