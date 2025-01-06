@@ -9307,7 +9307,7 @@ fn lock_find_links_local_wheel() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Prepared 1 package in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/workspace)
      + tqdm==1000.0.0
@@ -9518,7 +9518,7 @@ fn lock_find_links_http_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 1 package in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + packaging==23.2
      + project==0.1.0 (from file://[TEMP_DIR]/)
@@ -9744,7 +9744,7 @@ fn lock_local_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 1 package in [TIME]
+    Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + tqdm==1000.0.0

@@ -17,7 +17,7 @@ use uv_configuration::{
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
-    DependencyMetadata, Index, IndexLocations, NameRequirementSpecification,
+    DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
     UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
@@ -472,7 +472,7 @@ async fn do_lock(
         .index_strategy(index_strategy)
         .build_options(build_options.clone())
         .build();
-    let hasher = HashStrategy::Generate;
+    let hasher = HashStrategy::Generate(HashGeneration::Url);
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
