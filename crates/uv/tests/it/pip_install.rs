@@ -2617,6 +2617,93 @@ fn no_deps_editable() {
     context.assert_command("import aiohttp").failure();
 }
 
+/// Avoid downgrading already-installed packages when `--upgrade` is provided.
+#[test]
+fn install_no_downgrade() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a local package named `idna`.
+    let idna = context.temp_dir.child("idna");
+    idna.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "idna"
+        version = "1000"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    // Install the local `idna`.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("./idna"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==1000 (from file://[TEMP_DIR]/idna)
+    "###
+    );
+
+    // Install `anyio`, which depends on `idna`.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + anyio==4.3.0
+     + sniffio==1.3.1
+    "###
+    );
+
+    // Install `anyio` with `--upgrade`, which should retain the local `idna`.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-U")
+        .arg("anyio"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited 3 packages in [TIME]
+    "###
+    );
+
+    // Install `anyio` with `--reinstall`, which should downgrade `idna`.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--reinstall")
+        .arg("anyio"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     ~ anyio==4.3.0
+     - idna==1000 (from file://[TEMP_DIR]/idna)
+     + idna==3.6
+     ~ sniffio==1.3.1
+    "###
+    );
+
+    Ok(())
+}
+
 /// Upgrade a package.
 #[test]
 fn install_upgrade() {
@@ -5311,14 +5398,13 @@ fn already_installed_local_path_dependent() {
         .arg("--no-index")
         .arg("--find-links")
         .arg(build_vendor_links_url()), @r###"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because first-local was not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
-          And because only second-local==0.1.0 is available and you require second-local, we can conclude that your requirements are unsatisfiable.
+    Resolved 2 packages in [TIME]
+    Audited 2 packages in [TIME]
     "###
     );
 
@@ -5477,8 +5563,8 @@ fn already_installed_local_version_of_remote_package() {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
     "###
     );
 
