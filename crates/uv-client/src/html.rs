@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use tl::{HTMLTag, Parser};
+use tl::HTMLTag;
 use tracing::{instrument, warn};
 use url::Url;
 
@@ -44,7 +44,12 @@ impl SimpleHtml {
             .iter()
             .filter_map(|node| node.as_tag())
             .filter(|link| link.name().as_bytes() == b"a")
-            .map(|link| Self::parse_anchor(link, dom.parser()))
+            .map(|link| Self::parse_anchor(link))
+            .filter_map(|result| match result {
+                Ok(None) => None,
+                Ok(Some(file)) => Some(Ok(file)),
+                Err(err) => Some(Err(err)),
+            })
             .collect::<Result<Vec<_>, _>>()?;
         // While it has not been positively observed, we sort the files
         // to ensure we have a defined ordering. Otherwise, if we rely on
@@ -70,14 +75,18 @@ impl SimpleHtml {
     }
 
     /// Parse a [`File`] from an `<a>` tag.
-    fn parse_anchor(link: &HTMLTag, parser: &Parser) -> Result<File, Error> {
+    ///
+    /// Returns `None` if the `<a>` don't doesn't have an `href` attribute.
+    fn parse_anchor(link: &HTMLTag) -> Result<Option<File>, Error> {
         // Extract the href.
-        let href = link
+        let Some(href) = link
             .attributes()
             .get("href")
             .flatten()
             .filter(|bytes| !bytes.as_bytes().is_empty())
-            .ok_or(Error::MissingHref(link.inner_text(parser).to_string()))?;
+        else {
+            return Ok(None);
+        };
         let href = std::str::from_utf8(href.as_bytes())?;
 
         // Extract the hash, which should be in the fragment.
@@ -158,7 +167,7 @@ impl SimpleHtml {
             None
         };
 
-        Ok(File {
+        Ok(Some(File {
             core_metadata,
             dist_info_metadata: None,
             data_dist_info_metadata: None,
@@ -169,7 +178,7 @@ impl SimpleHtml {
             url: decoded.to_string(),
             size: None,
             upload_time: None,
-        })
+        }))
     }
 }
 
@@ -628,8 +637,29 @@ mod tests {
 <!--TIMESTAMP 1703347410-->
     ";
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap_err();
-        insta::assert_snapshot!(result, @"Missing href attribute on anchor link: `Jinja2-3.1.2-py3-none-any.whl`");
+        let result = SimpleHtml::parse(text, &base).unwrap();
+        insta::assert_debug_snapshot!(result, @r###"
+        SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
+            ),
+            files: [],
+        }
+        "###);
     }
 
     #[test]
@@ -645,8 +675,29 @@ mod tests {
 <!--TIMESTAMP 1703347410-->
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap_err();
-        insta::assert_snapshot!(result, @"Missing href attribute on anchor link: `Jinja2-3.1.2-py3-none-any.whl`");
+        let result = SimpleHtml::parse(text, &base).unwrap();
+        insta::assert_debug_snapshot!(result, @r###"
+        SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
+            ),
+            files: [],
+        }
+        "###);
     }
 
     #[test]

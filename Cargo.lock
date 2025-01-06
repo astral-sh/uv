@@ -178,9 +178,9 @@ dependencies = [
 
 [[package]]
 name = "async-trait"
-version = "0.1.83"
+version = "0.1.84"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "721cae7de5c34fbb2acd27e21e6d2cf7b886dce0c27388d46c4e6c47ea4318dd"
+checksum = "1b1244b10dcd56c92219da4e14caa97e312079e185f04ba3eea25061561dc0a0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -672,7 +672,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1788,13 +1788,13 @@ checksum = "b248f5224d1d606005e02c97f5aa4e88eeb230488bcc03bc9ca4d7991399f2b5"
 
 [[package]]
 name = "insta"
-version = "1.41.1"
+version = "1.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e9ffc4d4892617c50a928c52b2961cb5174b6fc6ebf252b2fac9d21955c48b8"
+checksum = "6513e4067e16e69ed1db5ab56048ed65db32d10ba5fc1217f5393f8f17d8b5a5"
 dependencies = [
  "console",
- "lazy_static",
  "linked-hash-map",
+ "once_cell",
  "pest",
  "pest_derive",
  "regex",
@@ -1862,6 +1862,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1869,11 +1878,14 @@ checksum = "d75a2a4b1b190afb6f5425f10f6a8f959d2ea0b9c2b1d79553551850539e4674"
 
 [[package]]
 name = "jiff"
-version = "0.1.16"
+version = "0.1.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24a46169c7a10358cdccfb179910e8a5a392fc291bdb409da9aeece5b19786d8"
+checksum = "ed0ce60560149333a8e41ca7dc78799c47c5fd435e2bc18faf6a054382eec037"
 dependencies = [
  "jiff-tzdb-platform",
+ "log",
+ "portable-atomic",
+ "portable-atomic-util",
  "serde",
  "windows-sys 0.52.0",
 ]
@@ -2571,6 +2583,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "280dc24453071f1b63954171985a0b0d30058d287960968b9b2aca264c8d4ee6"
 
 [[package]]
+name = "portable-atomic-util"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d8a2f0d8d040d7848a709caf78912debcc3f33ee4b3cac47d73d1e1069e83507"
+dependencies = [
+ "portable-atomic",
+]
+
+[[package]]
 name = "ppv-lite86"
 version = "0.2.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2931,9 +2952,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.12.9"
+version = "0.12.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a77c62af46e79de0a562e1a9849205ffcb7fc1238876e9bd743357570e04046f"
+checksum = "43e734407157c3c2034e0258f5e4473ddb361b1e85f95a66690d67264d7cd1da"
 dependencies = [
  "async-compression",
  "base64 0.22.1",
@@ -2969,6 +2990,7 @@ dependencies = [
  "tokio-rustls",
  "tokio-socks",
  "tokio-util",
+ "tower",
  "tower-service",
  "url",
  "wasm-bindgen",
@@ -3568,9 +3590,9 @@ dependencies = [
 
 [[package]]
 name = "spdx"
-version = "0.10.7"
+version = "0.10.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bae30cc7bfe3656d60ee99bf6836f472b0c53dddcbf335e253329abb16e535a2"
+checksum = "58b69356da67e2fc1f542c71ea7e654a361a79c938e4424392ecf4fa065d2193"
 dependencies = [
  "smallvec",
 ]
@@ -3667,9 +3689,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.93"
+version = "2.0.95"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c786062daee0d6db1132800e623df74274a0a87322d8e183338e01b3d98d058"
+checksum = "46f71c0377baf4ef1cc3e3402ded576dccc315800fbc62dfc7fe04b009773b4a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3740,12 +3762,13 @@ dependencies = [
 
 [[package]]
 name = "tempfile"
-version = "3.14.0"
+version = "3.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28cce251fcbc87fac86a866eeb0d6c2d536fc16d06f184bb61aeae11aa4cee0c"
+checksum = "9a8a559c81686f576e8cd0290cd2a24a2a9ad80c98b3478856500fcbd7acd704"
 dependencies = [
  "cfg-if",
  "fastrand",
+ "getrandom",
  "once_cell",
  "rustix",
  "windows-sys 0.52.0",
@@ -4089,6 +4112,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "tower"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d039ad9159c98b70ecfd540b2573b97f7f52c3e8d9f8ad57a24b916a536975f9"
+dependencies = [
+ "futures-core",
+ "futures-util",
+ "pin-project-lite",
+ "sync_wrapper",
+ "tokio",
+ "tower-layer",
+ "tower-service",
+]
+
+[[package]]
+name = "tower-layer"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "121c2a6cda46980bb0fcd1647ffaf6cd3fc79a013de288782836f6df9c48780e"
+
+[[package]]
 name = "tower-service"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4410,7 +4454,7 @@ checksum = "f8c5f0a0af699448548ad1a2fbf920fb4bee257eae39953ba95cb84891a0446a"
 
 [[package]]
 name = "uv"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4433,7 +4477,7 @@ dependencies = [
  "indicatif",
  "indoc",
  "insta",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "jiff",
  "miette",
  "nix",
@@ -4570,7 +4614,7 @@ dependencies = [
  "globset",
  "indoc",
  "insta",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "serde",
  "sha2",
  "spdx",
@@ -4601,7 +4645,7 @@ dependencies = [
  "fs-err 3.0.0",
  "indoc",
  "insta",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "owo-colors",
  "regex",
  "rustc-hash",
@@ -4715,7 +4759,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "insta",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "jiff",
  "reqwest",
  "reqwest-middleware",
@@ -4796,7 +4840,7 @@ dependencies = [
  "anyhow",
  "clap",
  "fs-err 3.0.0",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "markdown",
  "owo-colors",
  "poloto",
@@ -4845,7 +4889,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "futures",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "rustc-hash",
  "thiserror 2.0.9",
  "tokio",
@@ -4936,7 +4980,7 @@ dependencies = [
  "anyhow",
  "bitflags 2.6.0",
  "fs-err 3.0.0",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "jiff",
  "petgraph",
  "rkyv",
@@ -5196,7 +5240,7 @@ dependencies = [
  "boxcar",
  "indexmap",
  "insta",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "regex",
  "rustc-hash",
  "schemars",
@@ -5249,7 +5293,7 @@ dependencies = [
  "futures",
  "glob",
  "insta",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "krata-tokio-tar",
  "reqwest",
  "reqwest-middleware",
@@ -5282,7 +5326,7 @@ dependencies = [
  "anyhow",
  "hashbrown 0.15.2",
  "indexmap",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "jiff",
  "mailparse",
  "regex",
@@ -5316,7 +5360,7 @@ dependencies = [
  "goblin",
  "indoc",
  "insta",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "nix",
  "owo-colors",
  "procfs",
@@ -5404,7 +5448,7 @@ dependencies = [
  "fs-err 3.0.0",
  "indoc",
  "insta",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "regex",
  "reqwest",
  "reqwest-middleware",
@@ -5436,7 +5480,7 @@ dependencies = [
  "hashbrown 0.15.2",
  "indexmap",
  "insta",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "jiff",
  "owo-colors",
  "petgraph",
@@ -5619,14 +5663,14 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.5.13"
+version = "0.5.14"
 
 [[package]]
 name = "uv-virtualenv"
 version = "0.0.4"
 dependencies = [
  "fs-err 3.0.0",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "pathdiff",
  "self-replace",
  "thiserror 2.0.9",
@@ -5657,7 +5701,7 @@ dependencies = [
  "fs-err 3.0.0",
  "glob",
  "insta",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "owo-colors",
  "regex",
  "rustc-hash",
@@ -5910,7 +5954,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

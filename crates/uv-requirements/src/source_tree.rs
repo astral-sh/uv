@@ -13,7 +13,7 @@ use url::Url;
 use uv_configuration::ExtrasSpecification;
 use uv_distribution::{DistributionDatabase, Reporter, RequiresDist};
 use uv_distribution_types::{
-    BuildableSource, DirectorySourceUrl, HashPolicy, SourceUrl, VersionId,
+    BuildableSource, DirectorySourceUrl, HashGeneration, HashPolicy, SourceUrl, VersionId,
 };
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
@@ -213,8 +213,8 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         // manual match.
         let hashes = match self.hasher {
             HashStrategy::None => HashPolicy::None,
-            HashStrategy::Generate => HashPolicy::Generate,
-            HashStrategy::Verify(_) => HashPolicy::Generate,
+            HashStrategy::Generate(mode) => HashPolicy::Generate(*mode),
+            HashStrategy::Verify(_) => HashPolicy::Generate(HashGeneration::All),
             HashStrategy::Require(_) => {
                 return Err(anyhow::anyhow!(
                     "Hash-checking is not supported for local directories: {}",

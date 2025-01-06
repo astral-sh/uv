@@ -80,7 +80,7 @@ axoupdater = { version = "0.9.0", default-features = false }
 backoff = { version = "0.4.0" }
 base64 = { version = "0.22.1" }
 bitflags = { version = "2.6.0" }
-boxcar = { version = "0.2.8" }
+boxcar = { version = "0.2.5" }
 bytecheck = { version = "0.8.0" }
 cachedir = { version = "0.3.1" }
 cargo-util = { version = "0.2.14" }
@@ -113,7 +113,7 @@ http = { version = "1.1.0" }
 indexmap = { version = "2.5.0" }
 indicatif = { version = "0.17.8" }
 indoc = { version = "2.0.5" }
-itertools = { version = "0.13.0" }
+itertools = { version = "0.14.0" }
 jiff = { version = "0.1.14", features = ["serde"] }
 junction = { version = "1.2.0" }
 krata-tokio-tar = { version = "0.4.2" }

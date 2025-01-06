@@ -786,15 +786,13 @@ impl VersionFiles {
     }
 
     pub fn all(self) -> impl Iterator<Item = (DistFilename, File)> {
-        self.wheels
+        self.source_dists
             .into_iter()
-            .map(|VersionWheel { name, file }| (DistFilename::WheelFilename(name), file))
+            .map(|VersionSourceDist { name, file }| (DistFilename::SourceDistFilename(name), file))
             .chain(
-                self.source_dists
+                self.wheels
                     .into_iter()
-                    .map(|VersionSourceDist { name, file }| {
-                        (DistFilename::SourceDistFilename(name), file)
-                    }),
+                    .map(|VersionWheel { name, file }| (DistFilename::WheelFilename(name), file)),
             )
     }
 }
