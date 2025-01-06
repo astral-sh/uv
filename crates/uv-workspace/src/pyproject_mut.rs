@@ -303,7 +303,7 @@ impl PyProjectTomlMut {
             .and_then(|url| Url::parse(url).ok())
             .is_none_or(|url| CanonicalUrl::new(&url) != CanonicalUrl::new(index.url.url()))
         {
-            let mut formatted = Formatted::new(index.url.to_string());
+            let mut formatted = Formatted::new(index.url.redacted().to_string());
             if let Some(value) = table.get("url").and_then(Item::as_value) {
                 if let Some(prefix) = value.decor().prefix() {
                     formatted.decor_mut().set_prefix(prefix.clone());
