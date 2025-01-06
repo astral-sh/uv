@@ -113,6 +113,14 @@ uv is available via [WinGet](https://winstall.app/apps/astral-sh.uv).
 $ winget install --id=astral-sh.uv  -e
 ```
 
+### Scoop
+
+uv is available via [Scoop](https://scoop.sh/#/apps?q=uv).
+
+```console
+$ scoop install main/uv
+```
+
 ### Docker
 
 uv provides a Docker image at
