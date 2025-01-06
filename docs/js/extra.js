@@ -1,15 +1,20 @@
 function cleanupClipboardText(targetSelector) {
   const targetElement = document.querySelector(targetSelector);
 
-  // exclude "Generic Prompt" and "Generic Output" spans from copy
+  // Exclude "Generic Prompt" and "Generic Output" spans from copy.
   const excludedClasses = ["gp", "go"];
 
   const clipboardText = Array.from(targetElement.childNodes)
     .filter(
-      (node) =>
+      (node) => {
+        // Allow comments.
+        if (node.textContent === "#") {
+            return true;
+        }
         !excludedClasses.some((className) =>
-          node?.classList?.contains(className)
+            node?.classList?.contains(className)
         )
+      }
     )
     .map((node) => node.textContent)
     .filter((s) => s != "");

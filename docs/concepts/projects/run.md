@@ -15,10 +15,10 @@ command.
 The given command can be provided by the project environment or exist outside of it, e.g.:
 
 ```console
-$ # Presuming the project provides `example-cli`
+# Presuming the project provides `example-cli`
 $ uv run example-cli foo
 
-$ # Running a `bash` script that requires the project to be available
+# Running a `bash` script that requires the project to be available
 $ uv run bash scripts/foo.sh
 ```
 

@@ -74,7 +74,7 @@ install the current project before running the script. If your script does not d
 project, use the `--no-project` flag to skip this:
 
 ```console
-$ # Note, it is important that the flag comes _before_ the script
+# Note: the `--no-project` flag must be provided _before_ the script name.
 $ uv run --no-project example.py
 ```
 
@@ -244,13 +244,13 @@ print(".".join(map(str, sys.version_info[:3])))
 ```
 
 ```console
-$ # Use the default Python version, may differ on your machine
+# Use the default Python version, may differ on your machine
 $ uv run example.py
 3.12.6
 ```
 
 ```console
-$ # Use a specific Python version
+# Use a specific Python version
 $ uv run --python 3.10 example.py
 3.10.15
 ```

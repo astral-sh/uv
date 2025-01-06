@@ -52,13 +52,13 @@ environment. The `keyring` CLI requires a username in the URL, so the index URL 
 default username `VssSessionToken`.
 
 ```console
-$ # Pre-install keyring and the Artifacts plugin from the public PyPI
+# Pre-install keyring and the Artifacts plugin from the public PyPI
 $ uv tool install keyring --with artifacts-keyring
 
-$ # Enable keyring authentication
+# Enable keyring authentication
 $ export UV_KEYRING_PROVIDER=subprocess
 
-$ # Configure the index URL with the username
+# Configure the index URL with the username
 $ export UV_EXTRA_INDEX_URL=https://VssSessionToken@pkgs.dev.azure.com/{organisation}/{project}/_packaging/{feedName}/pypi/simple/
 ```
 

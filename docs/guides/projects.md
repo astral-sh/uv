@@ -120,10 +120,10 @@ $ uv add requests
 You can also specify version constraints or alternative sources:
 
 ```console
-$ # Specify a version constraint
+# Specify a version constraint
 $ uv add 'requests==2.31.0'
 
-$ # Add a git dependency
+# Add a git dependency
 $ uv add git+https://github.com/psf/requests
 ```
 

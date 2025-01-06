@@ -47,13 +47,13 @@ $ uv pip install "git+https://github.com/astral-sh/ruff"
 To install a package from GitHub at a specific reference:
 
 ```console
-$ # Install a tag
+# Install a tag
 $ uv pip install "git+https://github.com/astral-sh/ruff@v0.2.0"
 
-$ # Install a commit
+# Install a commit
 $ uv pip install "git+https://github.com/astral-sh/ruff@1fadefa67b26508cc59cf38e6130bde2243c929d"
 
-$ # Install a branch
+# Install a branch
 $ uv pip install "git+https://github.com/astral-sh/ruff@main"
 ```
 
