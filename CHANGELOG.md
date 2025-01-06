@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.5.15
+
+### Python
+
+The managed Python distributions have been updated, including:
+
+- Python 3.14.0a3 support on macOS and Linux
+- Performance improvements
+- Fixes to SQLite feature detection
+
+See the [`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250106) for more details.
+
+### Enhancements
+
+- Respect `FORCE_COLOR` environment variable ([#10315](https://github.com/astral-sh/uv/pull/10315))
+
+### Performance
+
+- Avoid generating unused hashes during `uv lock` ([#10307](https://github.com/astral-sh/uv/pull/10307))
+- Visit source distributions before wheels ([#10291](https://github.com/astral-sh/uv/pull/10291))
+
+### Bug fixes
+
+- Avoid downgrading packages when `--upgrade` is provided ([#10097](https://github.com/astral-sh/uv/pull/10097))
+- Extract supported architectures from wheel tags ([#10179](https://github.com/astral-sh/uv/pull/10179))
+- Redact new index credentials in `uv add` ([#10329](https://github.com/astral-sh/uv/pull/10329))
+
+### Documentation
+
+- Clarify `exclude-newer` only allows full timestamps in settings documentation ([#9135](https://github.com/astral-sh/uv/pull/9135))
+- Tweak script `--no-project` comment ([#10331](https://github.com/astral-sh/uv/pull/10331))
+- Update copyright year ([#10297](https://github.com/astral-sh/uv/pull/10297))
+- Add instructinos for installing with Scoop ([#10332](https://github.com/astral-sh/uv/pull/10332))
+
 ## 0.5.14
 
 ### Enhancements
