@@ -105,9 +105,9 @@ uv is available in the core Homebrew packages.
 $ brew install uv
 ```
 
-### Winget
+### WinGet
 
-uv is available via [winget](https://winstall.app/apps/astral-sh.uv).
+uv is available via [WinGet](https://winstall.app/apps/astral-sh.uv).
 
 ```console
 $ winget install --id=astral-sh.uv  -e
@@ -192,7 +192,7 @@ Then restart the shell or source the shell config file.
 
 If you need to remove uv from your system, follow these steps:
 
-1.  Clean up stored data (optional):
+1. Clean up stored data (optional):
 
     ```console
     $ uv cache clean
@@ -204,7 +204,7 @@ If you need to remove uv from your system, follow these steps:
 
         Before removing the binaries, you may want to remove any data that uv has stored.
 
-2.  Remove the uv and uvx binaries:
+2. Remove the uv and uvx binaries:
 
     === "macOS and Linux"
 
