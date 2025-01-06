@@ -171,12 +171,13 @@ pub struct GlobalArgs {
     #[arg(global = true, long, hide = true, conflicts_with = "color")]
     pub no_color: bool,
 
-    /// Control colors in output.
+    /// Control the use of color in output.
+    ///
+    /// By default, uv will automatically detect support for colors when writing to a terminal.
     #[arg(
         global = true,
         long,
         value_enum,
-        default_value = "auto",
         conflicts_with = "no_color",
         value_name = "COLOR_CHOICE"
     )]
@@ -4486,8 +4487,8 @@ pub struct GenerateShellCompletionArgs {
     pub quiet: bool,
     #[arg(long, short, action = clap::ArgAction::Count, conflicts_with = "quiet", hide = true)]
     pub verbose: u8,
-    #[arg(long, default_value = "auto", conflicts_with = "no_color", hide = true)]
-    pub color: ColorChoice,
+    #[arg(long, conflicts_with = "no_color", hide = true)]
+    pub color: Option<ColorChoice>,
     #[arg(long, hide = true)]
     pub native_tls: bool,
     #[arg(long, hide = true)]
