@@ -13,7 +13,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 14,
             patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::A, number: 3 }),
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 3 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
@@ -31,7 +31,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 14,
             patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::A, number: 3 }),
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 3 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
@@ -49,7 +49,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 14,
             patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::A, number: 3 }),
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 3 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
@@ -67,7 +67,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 14,
             patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::A, number: 3 }),
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 3 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7),
@@ -85,7 +85,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 14,
             patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::A, number: 3 }),
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 3 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7),
@@ -103,7 +103,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 14,
             patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::A, number: 3 }),
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 3 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::Powerpc64le,
@@ -121,7 +121,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 14,
             patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::A, number: 3 }),
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 3 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::S390x,
@@ -139,7 +139,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 14,
             patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::A, number: 3 }),
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 3 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
@@ -157,7 +157,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 14,
             patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::A, number: 3 }),
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 3 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
@@ -175,7 +175,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 14,
             patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::A, number: 3 }),
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 3 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
@@ -193,7 +193,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 14,
             patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::A, number: 3 }),
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 3 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
@@ -211,7 +211,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 14,
             patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::A, number: 3 }),
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 3 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
@@ -229,7 +229,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 14,
             patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::A, number: 3 }),
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 3 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
@@ -247,7 +247,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 14,
             patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::A, number: 3 }),
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 3 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
@@ -265,7 +265,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 14,
             patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::A, number: 3 }),
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 3 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7),
@@ -283,7 +283,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 14,
             patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::A, number: 3 }),
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 3 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7),
@@ -301,7 +301,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 14,
             patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::A, number: 3 }),
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 3 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::Powerpc64le,
@@ -319,7 +319,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 14,
             patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::A, number: 3 }),
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 3 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::S390x,
@@ -337,7 +337,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 14,
             patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::A, number: 3 }),
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 3 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
@@ -355,7 +355,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 14,
             patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::A, number: 3 }),
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 3 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
@@ -373,7 +373,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 14,
             patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::A, number: 3 }),
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 3 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
@@ -391,7 +391,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 14,
             patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::A, number: 3 }),
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 3 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
