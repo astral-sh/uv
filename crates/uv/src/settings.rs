@@ -5,6 +5,7 @@ use std::process;
 use std::str::FromStr;
 
 use url::Url;
+
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
@@ -1250,6 +1251,11 @@ impl RemoveSettings {
             .clone()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
+
+        let packages = packages
+            .into_iter()
+            .map(|requirement| requirement.name)
+            .collect();
 
         Self {
             locked,
