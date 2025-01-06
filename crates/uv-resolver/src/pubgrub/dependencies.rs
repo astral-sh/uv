@@ -6,8 +6,8 @@ use pubgrub::Ranges;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{
-    Conflicts, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl,
-    Requirement, RequirementSource, VerbatimParsedUrl,
+    Conflicts, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl,
+    ParsedPathUrl, ParsedUrl, Requirement, RequirementSource, VerbatimParsedUrl,
 };
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
@@ -177,18 +177,35 @@ impl PubGrubRequirement {
                 ));
                 (url, parsed_url)
             }
-            RequirementSource::Git {
+            RequirementSource::GitDirectory {
                 repository,
                 reference,
                 precise,
                 url,
                 subdirectory,
             } => {
-                let parsed_url = ParsedUrl::Git(ParsedGitUrl::from_source(
+                let parsed_url = ParsedUrl::GitDirectory(ParsedGitDirectoryUrl::from_source(
                     repository.clone(),
                     reference.clone(),
                     *precise,
                     subdirectory.clone(),
+                ));
+                (url, parsed_url)
+            }
+            RequirementSource::GitPath {
+                repository,
+                reference,
+                precise,
+                install_path,
+                ext,
+                url,
+            } => {
+                let parsed_url = ParsedUrl::GitPath(ParsedGitPathUrl::from_source(
+                    repository.clone(),
+                    reference.clone(),
+                    *precise,
+                    install_path.clone(),
+                    *ext,
                 ));
                 (url, parsed_url)
             }

@@ -94,7 +94,7 @@ impl RequirementSatisfaction {
                 // Otherwise, assume the requirement is up-to-date.
                 Ok(Self::Satisfied)
             }
-            RequirementSource::Git {
+            RequirementSource::GitDirectory {
                 url: _,
                 repository: requested_repository,
                 reference: requested_reference,
@@ -114,6 +114,7 @@ impl RequirementSatisfaction {
                             commit_id: _,
                         },
                     subdirectory: installed_subdirectory,
+                    path: None,
                 } = direct_url.as_ref()
                 else {
                     return Ok(Self::Mismatch);
@@ -123,6 +124,63 @@ impl RequirementSatisfaction {
                     debug!(
                         "Subdirectory mismatch: {:?} vs. {:?}",
                         installed_subdirectory, requested_subdirectory
+                    );
+                    return Ok(Self::Mismatch);
+                }
+
+                if !RepositoryUrl::parse(installed_url).is_ok_and(|installed_url| {
+                    installed_url == RepositoryUrl::new(requested_repository)
+                }) {
+                    debug!(
+                        "Repository mismatch: {:?} vs. {:?}",
+                        installed_url, requested_repository
+                    );
+                    return Ok(Self::Mismatch);
+                }
+
+                if installed_reference.as_deref() != requested_reference.as_str()
+                    && installed_reference != &requested_precise.map(|git_sha| git_sha.to_string())
+                {
+                    debug!(
+                        "Reference mismatch: {:?} vs. {:?} and {:?}",
+                        installed_reference, requested_reference, requested_precise
+                    );
+                    return Ok(Self::OutOfDate);
+                }
+
+                Ok(Self::Satisfied)
+            }
+            RequirementSource::GitPath {
+                url: _,
+                repository: requested_repository,
+                reference: requested_reference,
+                precise: requested_precise,
+                install_path: requested_path,
+                ext: _,
+            } => {
+                let InstalledDist::Url(InstalledDirectUrlDist { direct_url, .. }) = &distribution
+                else {
+                    return Ok(Self::Mismatch);
+                };
+                let DirectUrl::VcsUrl {
+                    url: installed_url,
+                    vcs_info:
+                        VcsInfo {
+                            vcs: VcsKind::Git,
+                            requested_revision: installed_reference,
+                            commit_id: _,
+                        },
+                    subdirectory: None,
+                    path: Some(installed_path),
+                } = direct_url.as_ref()
+                else {
+                    return Ok(Self::Mismatch);
+                };
+
+                if requested_path != installed_path {
+                    debug!(
+                        "Path mismatch: {:?} vs. {:?}",
+                        installed_path, requested_path
                     );
                     return Ok(Self::Mismatch);
                 }

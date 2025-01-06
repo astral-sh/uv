@@ -192,9 +192,13 @@ fn same_resource(a: &ParsedUrl, b: &ParsedUrl, git: &GitResolver) -> bool {
                 == b.subdirectory.as_deref().map(uv_fs::normalize_path)
                 && CanonicalUrl::new(&a.url) == CanonicalUrl::new(&b.url)
         }
-        (ParsedUrl::Git(a), ParsedUrl::Git(b)) => {
+        (ParsedUrl::GitDirectory(a), ParsedUrl::GitDirectory(b)) => {
             a.subdirectory.as_deref().map(uv_fs::normalize_path)
                 == b.subdirectory.as_deref().map(uv_fs::normalize_path)
+                && git.same_ref(&a.url, &b.url)
+        }
+        (ParsedUrl::GitPath(a), ParsedUrl::GitPath(b)) => {
+            uv_fs::normalize_path(&a.install_path) == uv_fs::normalize_path(&b.install_path)
                 && git.same_ref(&a.url, &b.url)
         }
         (ParsedUrl::Path(a), ParsedUrl::Path(b)) => {

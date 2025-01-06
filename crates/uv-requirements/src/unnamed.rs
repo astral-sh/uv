@@ -13,8 +13,8 @@ use crate::Error;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_filename::{DistExtension, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitSourceUrl, PathSourceUrl,
-    RemoteSource, SourceUrl, VersionId,
+    BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitDirectorySourceUrl, GitPathSourceUrl,
+    PathSourceUrl, RemoteSource, SourceUrl, VersionId,
 };
 use uv_normalize::PackageName;
 use uv_pep508::{UnnamedRequirement, VersionOrUrl};
@@ -264,11 +264,25 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                     ext,
                 })
             }
-            ParsedUrl::Git(parsed_git_url) => SourceUrl::Git(GitSourceUrl {
-                url: &requirement.url.verbatim,
-                git: &parsed_git_url.url,
-                subdirectory: parsed_git_url.subdirectory.as_deref(),
-            }),
+            ParsedUrl::GitDirectory(parsed_git_url) => {
+                SourceUrl::GitDirectory(GitDirectorySourceUrl {
+                    url: &requirement.url.verbatim,
+                    git: &parsed_git_url.url,
+                    subdirectory: parsed_git_url.subdirectory.as_deref(),
+                })
+            }
+            ParsedUrl::GitPath(parsed_git_url) => {
+                let ext = match parsed_git_url.ext {
+                    DistExtension::Source(ext) => ext,
+                    DistExtension::Wheel => unreachable!(),
+                };
+                SourceUrl::GitPath(GitPathSourceUrl {
+                    url: &requirement.url.verbatim,
+                    git: &parsed_git_url.url,
+                    path: Cow::Borrowed(&parsed_git_url.install_path),
+                    ext,
+                })
+            }
         };
 
         // Fetch the metadata for the distribution.

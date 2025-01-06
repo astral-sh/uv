@@ -16,7 +16,7 @@ use uv_fs::Simplified;
 use uv_git::GitReference;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::MarkerTree;
-use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
+use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl};
 
 use crate::graph_ops::marker_reachability;
 use crate::lock::{Package, PackageId, Source};
@@ -315,7 +315,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                     );
 
                     // Reconstruct the PEP 508-compatible URL from the `GitSource`.
-                    let url = Url::from(ParsedGitUrl {
+                    let url = Url::from(ParsedGitDirectoryUrl {
                         url: git_url.clone(),
                         subdirectory: git.subdirectory.as_ref().map(PathBuf::from),
                     });

@@ -2,11 +2,11 @@
 //! Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
 //! Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/sources/git/source.rs>
 
-use std::borrow::Cow;
-use std::path::{Path, PathBuf};
-
 use anyhow::Result;
 use reqwest_middleware::ClientWithMiddleware;
+use std::borrow::Cow;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tracing::{debug, instrument};
 use url::Url;
 
@@ -24,7 +24,7 @@ pub struct GitSource {
     /// The path to the Git source database.
     cache: PathBuf,
     /// The reporter to use for this source.
-    reporter: Option<Box<dyn Reporter>>,
+    reporter: Option<Arc<dyn Reporter>>,
 }
 
 impl GitSource {
@@ -44,9 +44,9 @@ impl GitSource {
 
     /// Set the [`Reporter`] to use for this `GIt` source.
     #[must_use]
-    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
+    pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
-            reporter: Some(Box::new(reporter)),
+            reporter: Some(reporter),
             ..self
         }
     }

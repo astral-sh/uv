@@ -1,4 +1,4 @@
-pub use distribution_database::{DistributionDatabase, HttpArchivePointer, LocalArchivePointer};
+pub use distribution_database::{DistributionDatabase, HttpArchivePointer, PathArchivePointer};
 pub use download::LocalWheel;
 pub use error::Error;
 pub use index::{BuiltWheelIndex, RegistryWheelIndex};

@@ -7,6 +7,7 @@ use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{BuiltDist, DirectUrlBuiltDist, IndexCapabilities};
+use uv_git::GitResolver;
 use uv_pep508::VerbatimUrl;
 
 #[tokio::test]
@@ -24,8 +25,12 @@ async fn remote_metadata_with_and_without_cache() -> Result<()> {
             location: Url::parse(url).unwrap(),
             url: VerbatimUrl::from_str(url).unwrap(),
         });
+        let resolver = GitResolver::default();
         let capabilities = IndexCapabilities::default();
-        let metadata = client.wheel_metadata(&dist, &capabilities).await.unwrap();
+        let metadata = client
+            .wheel_metadata(&dist, &resolver, &capabilities, None)
+            .await
+            .unwrap();
         assert_eq!(metadata.version.to_string(), "4.66.1");
     }
 

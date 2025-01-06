@@ -891,8 +891,10 @@ pub enum Source {
     Git {
         /// The repository URL (without the `git+` prefix).
         git: Url,
-        /// The path to the directory with the `pyproject.toml`, if it's not in the archive root.
+        /// The path to the directory with the `pyproject.toml`, if it's not in the repository root.
         subdirectory: Option<PortablePathBuf>,
+        /// The path to the archive within the repository.
+        path: Option<PortablePathBuf>,
         // Only one of the three may be used; we'll validate this later and emit a custom error.
         rev: Option<String>,
         tag: Option<String>,
@@ -1037,11 +1039,6 @@ impl<'de> Deserialize<'de> for Source {
                     "cannot specify both `git` and `workspace`",
                 ));
             }
-            if path.is_some() {
-                return Err(serde::de::Error::custom(
-                    "cannot specify both `git` and `path`",
-                ));
-            }
             if url.is_some() {
                 return Err(serde::de::Error::custom(
                     "cannot specify both `git` and `url`",
@@ -1050,6 +1047,11 @@ impl<'de> Deserialize<'de> for Source {
             if editable.is_some() {
                 return Err(serde::de::Error::custom(
                     "cannot specify both `git` and `editable`",
+                ));
+            }
+            if subdirectory.is_some() && path.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `subdirectory` and `path`",
                 ));
             }
 
@@ -1076,6 +1078,7 @@ impl<'de> Deserialize<'de> for Source {
             return Ok(Self::Git {
                 git,
                 subdirectory,
+                path,
                 rev,
                 tag,
                 branch,
@@ -1334,7 +1337,7 @@ impl Source {
         root: &Path,
     ) -> Result<Option<Source>, SourceError> {
         // If we resolved to a non-Git source, and the user specified a Git reference, error.
-        if !matches!(source, RequirementSource::Git { .. }) {
+        if !matches!(source, RequirementSource::GitDirectory { .. }) {
             if let Some(rev) = rev {
                 return Err(SourceError::UnusedRev(name.to_string(), rev));
             }
@@ -1360,7 +1363,10 @@ impl Source {
                 RequirementSource::Url { .. } => {
                     Err(SourceError::WorkspacePackageUrl(name.to_string()))
                 }
-                RequirementSource::Git { .. } => {
+                RequirementSource::GitDirectory { .. } => {
+                    Err(SourceError::WorkspacePackageGit(name.to_string()))
+                }
+                RequirementSource::GitPath { .. } => {
                     Err(SourceError::WorkspacePackageGit(name.to_string()))
                 }
                 RequirementSource::Path { .. } => {
@@ -1408,7 +1414,7 @@ impl Source {
                 extra: None,
                 group: None,
             },
-            RequirementSource::Git {
+            RequirementSource::GitDirectory {
                 repository,
                 mut reference,
                 subdirectory,
@@ -1431,6 +1437,7 @@ impl Source {
                         branch,
                         git: repository,
                         subdirectory: subdirectory.map(PortablePathBuf::from),
+                        path: None,
                         marker: MarkerTree::TRUE,
                         extra: None,
                         group: None,
@@ -1442,6 +1449,49 @@ impl Source {
                         branch,
                         git: repository,
                         subdirectory: subdirectory.map(PortablePathBuf::from),
+                        path: None,
+                        marker: MarkerTree::TRUE,
+                        extra: None,
+                        group: None,
+                    }
+                }
+            }
+            RequirementSource::GitPath {
+                repository,
+                mut reference,
+                install_path,
+                ..
+            } => {
+                if rev.is_none() && tag.is_none() && branch.is_none() {
+                    let rev = match reference {
+                        GitReference::FullCommit(ref mut rev) => Some(mem::take(rev)),
+                        GitReference::Branch(ref mut rev) => Some(mem::take(rev)),
+                        GitReference::Tag(ref mut rev) => Some(mem::take(rev)),
+                        GitReference::ShortCommit(ref mut rev) => Some(mem::take(rev)),
+                        GitReference::BranchOrTag(ref mut rev) => Some(mem::take(rev)),
+                        GitReference::BranchOrTagOrCommit(ref mut rev) => Some(mem::take(rev)),
+                        GitReference::NamedRef(ref mut rev) => Some(mem::take(rev)),
+                        GitReference::DefaultBranch => None,
+                    };
+                    Source::Git {
+                        rev,
+                        tag,
+                        branch,
+                        git: repository,
+                        subdirectory: None,
+                        path: Some(PortablePathBuf::from(install_path)),
+                        marker: MarkerTree::TRUE,
+                        extra: None,
+                        group: None,
+                    }
+                } else {
+                    Source::Git {
+                        rev,
+                        tag,
+                        branch,
+                        git: repository,
+                        subdirectory: None,
+                        path: Some(PortablePathBuf::from(install_path)),
                         marker: MarkerTree::TRUE,
                         extra: None,
                         group: None,

@@ -4,7 +4,7 @@ use std::path::Path;
 use thiserror::Error;
 
 use uv_configuration::{LowerBound, SourceStrategy};
-use uv_distribution_types::{GitSourceUrl, IndexLocations};
+use uv_distribution_types::{GitDirectorySourceUrl, IndexLocations};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{HashDigest, ResolutionMetadata};
@@ -153,5 +153,5 @@ pub struct GitWorkspaceMember<'a> {
     /// The root of the checkout, which may be the root of the workspace or may be above the
     /// workspace root.
     pub fetch_root: &'a Path,
-    pub git_source: &'a GitSourceUrl<'a>,
+    pub git_source: &'a GitDirectorySourceUrl<'a>,
 }

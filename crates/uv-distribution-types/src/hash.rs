@@ -99,3 +99,15 @@ pub trait Hashed {
         }
     }
 }
+
+impl Hashed for Vec<HashDigest> {
+    fn hashes(&self) -> &[HashDigest] {
+        self
+    }
+}
+
+impl Hashed for &[HashDigest] {
+    fn hashes(&self) -> &[HashDigest] {
+        self
+    }
+}

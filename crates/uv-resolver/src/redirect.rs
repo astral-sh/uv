@@ -1,36 +1,62 @@
 use url::Url;
 use uv_git::{GitReference, GitResolver};
 use uv_pep508::VerbatimUrl;
-use uv_pypi_types::{ParsedGitUrl, ParsedUrl, VerbatimParsedUrl};
+use uv_pypi_types::{ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedUrl, VerbatimParsedUrl};
 
 /// Map a URL to a precise URL, if possible.
 pub(crate) fn url_to_precise(url: VerbatimParsedUrl, git: &GitResolver) -> VerbatimParsedUrl {
-    let ParsedUrl::Git(ParsedGitUrl {
-        url: git_url,
-        subdirectory,
-    }) = &url.parsed_url
-    else {
-        return url;
-    };
+    match &url.parsed_url {
+        ParsedUrl::GitDirectory(ParsedGitDirectoryUrl {
+            url: git_url,
+            subdirectory,
+        }) => {
+            let Some(new_git_url) = git.precise(git_url.clone()) else {
+                debug_assert!(
+                    matches!(git_url.reference(), GitReference::FullCommit(_)),
+                    "Unseen Git URL: {}, {git_url:?}",
+                    url.verbatim,
+                );
+                return url;
+            };
 
-    let Some(new_git_url) = git.precise(git_url.clone()) else {
-        debug_assert!(
-            matches!(git_url.reference(), GitReference::FullCommit(_)),
-            "Unseen Git URL: {}, {git_url:?}",
-            url.verbatim,
-        );
-        return url;
-    };
+            let new_parsed_url = ParsedGitDirectoryUrl {
+                url: new_git_url,
+                subdirectory: subdirectory.clone(),
+            };
+            let new_url = Url::from(new_parsed_url.clone());
+            let new_verbatim_url = apply_redirect(&url.verbatim, new_url);
+            VerbatimParsedUrl {
+                parsed_url: ParsedUrl::GitDirectory(new_parsed_url),
+                verbatim: new_verbatim_url,
+            }
+        }
+        ParsedUrl::GitPath(ParsedGitPathUrl {
+            url: git_url,
+            install_path,
+            ext,
+        }) => {
+            let Some(new_git_url) = git.precise(git_url.clone()) else {
+                debug_assert!(
+                    matches!(git_url.reference(), GitReference::FullCommit(_)),
+                    "Unseen Git URL: {}, {git_url:?}",
+                    url.verbatim,
+                );
+                return url;
+            };
 
-    let new_parsed_url = ParsedGitUrl {
-        url: new_git_url,
-        subdirectory: subdirectory.clone(),
-    };
-    let new_url = Url::from(new_parsed_url.clone());
-    let new_verbatim_url = apply_redirect(&url.verbatim, new_url);
-    VerbatimParsedUrl {
-        parsed_url: ParsedUrl::Git(new_parsed_url),
-        verbatim: new_verbatim_url,
+            let new_parsed_url = ParsedGitPathUrl {
+                url: new_git_url,
+                install_path: install_path.clone(),
+                ext: *ext,
+            };
+            let new_url = Url::from(new_parsed_url.clone());
+            let new_verbatim_url = apply_redirect(&url.verbatim, new_url);
+            VerbatimParsedUrl {
+                parsed_url: ParsedUrl::GitPath(new_parsed_url),
+                verbatim: new_verbatim_url,
+            }
+        }
+        _ => url,
     }
 }
 

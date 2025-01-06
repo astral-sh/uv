@@ -1534,6 +1534,17 @@
             "marker": {
               "$ref": "#/definitions/MarkerTree"
             },
+            "path": {
+              "description": "The path to the archive within the repository.",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/String"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "rev": {
               "type": [
                 "string",
@@ -1541,7 +1552,7 @@
               ]
             },
             "subdirectory": {
-              "description": "The path to the directory with the `pyproject.toml`, if it's not in the archive root.",
+              "description": "The path to the directory with the `pyproject.toml`, if it's not in the repository root.",
               "anyOf": [
                 {
                   "$ref": "#/definitions/String"
