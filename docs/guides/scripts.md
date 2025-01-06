@@ -74,7 +74,7 @@ install the current project before running the script. If your script does not d
 project, use the `--no-project` flag to skip this:
 
 ```console
-$ # Note, it is important that the flag comes _before_ the script
+$ # Note: the `--no-project` flag must be provided _before_ the script name.
 $ uv run --no-project example.py
 ```
 
