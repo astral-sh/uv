@@ -37,6 +37,13 @@ pub static GIT: LazyLock<Result<PathBuf, GitError>> = LazyLock::new(|| {
     })
 });
 
+/// A global cache of the result of `which git-lfs`.
+///
+/// We search for the Git LFS binary instead of using `git lfs` so that we can
+/// distinguish Git LFS not being installed (which we can ignore) from
+/// LFS errors (which should be returned).
+static GIT_LFS: LazyLock<Option<PathBuf>> = LazyLock::new(|| which::which("git-lfs").ok());
+
 /// A reference to commit or commit-ish.
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
@@ -261,6 +268,8 @@ impl GitRemote {
             };
 
             if let Some(rev) = resolved_commit_hash {
+                fetch_lfs(&mut db.repo, self.url.as_str(), &rev)
+                    .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
                 return Ok((db, rev));
             }
         }
@@ -280,6 +289,8 @@ impl GitRemote {
             Some(rev) => rev,
             None => reference.resolve(&repo)?,
         };
+        fetch_lfs(&mut repo, self.url.as_str(), &rev)
+            .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
 
         Ok((GitDatabase { repo }, rev))
     }
@@ -634,6 +645,32 @@ fn fetch_with_cli(
     // We capture the output to avoid streaming it to the user's console during clones.
     // The required `on...line` callbacks currently do nothing.
     // The output appears to be included in error messages by default.
+    cmd.exec_with_output()?;
+
+    Ok(())
+}
+
+/// Attempts to use `git-lfs` CLI to fetch required LFS objects for a given revision.
+fn fetch_lfs(repo: &mut GitRepository, url: &str, revision: &GitOid) -> Result<()> {
+    let lfs = if let Some(lfs) = GIT_LFS.as_ref() {
+        debug!("Fetching Git LFS objects");
+        lfs
+    } else {
+        debug!("Git lfs is not installed, skipping lfs fetch");
+        return Ok(());
+    };
+    let mut cmd = ProcessBuilder::new(lfs);
+    cmd.arg("fetch")
+        .arg(url)
+        .arg(revision.as_str())
+        // These variables are unset for the same reason as in `fetch_with_cli`.
+        .env_remove(EnvVars::GIT_DIR)
+        .env_remove(EnvVars::GIT_WORK_TREE)
+        .env_remove(EnvVars::GIT_INDEX_FILE)
+        .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
+        .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
+        .cwd(&repo.path);
+
     cmd.exec_with_output()?;
     Ok(())
 }
