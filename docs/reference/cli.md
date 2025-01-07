@@ -1448,8 +1448,6 @@ uv will search for a project in the current directory or any parent directory. I
 
 Note that, when installing from a lockfile, uv will not provide warnings for yanked package versions.
 
-The default behavior for sync and install will install the development dependencies but no others
-
 <h3 class="cli-reference">Usage</h3>
 
 ```
@@ -1463,8 +1461,6 @@ uv sync [OPTIONS]
 <p>When two or more extras are declared as conflicting in <code>tool.uv.conflicts</code>, using this flag will always result in an error.</p>
 
 <p>Note that all optional dependencies are always included in the resolution; this option only affects the selection of packages to install.</p>
-
-<p>The default behavior for sync and install will install the development dependencies but no others</p>
 
 </dd><dt><code>--all-groups</code></dt><dd><p>Include dependencies from all dependency groups.</p>
 
@@ -4682,8 +4678,6 @@ A `python` executable is not made globally available, managed Python versions ar
 
 See `uv help python` to view supported request formats.
 
-The default behavior for sync and install will install the development dependencies but no others
-
 <h3 class="cli-reference">Usage</h3>
 
 ```
@@ -6307,8 +6301,6 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
 </dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
-<p>The default behavior for sync and install will install the development dependencies but no others</p>
 
 </dd></dl>
 
