@@ -182,9 +182,6 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Set up Python
-        run: uv python install
-
       - name: Install the project
         run: uv sync --all-extras --dev
 
