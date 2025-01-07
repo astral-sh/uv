@@ -173,10 +173,7 @@ impl BatchPrefetcher {
             return (0, false);
         };
 
-        let num_tried = self
-            .tried_versions
-            .get(name)
-            .map_or(0, |versions| versions.len());
+        let num_tried = self.tried_versions.get(name).map_or(0, FxHashSet::len);
         let previous_prefetch = self.last_prefetch.get(name).copied().unwrap_or_default();
         let do_prefetch = (num_tried >= 5 && previous_prefetch < 5)
             || (num_tried >= 10 && previous_prefetch < 10)
@@ -186,11 +183,8 @@ impl BatchPrefetcher {
     }
 
     /// Log stats about how many versions we tried.
-    ///
-    /// Note that they may be inflated when we count the same version repeatedly during
-    /// backtracking.
     pub(crate) fn log_tried_versions(&self) {
-        let total_versions: usize = self.tried_versions.values().map(|v| v.len()).sum();
+        let total_versions: usize = self.tried_versions.values().map(FxHashSet::len).sum();
         let mut tried_versions: Vec<_> = self
             .tried_versions
             .iter()
