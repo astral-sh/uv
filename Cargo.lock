@@ -5282,7 +5282,6 @@ name = "uv-performance-flate2-backend"
 version = "0.1.0"
 dependencies = [
  "flate2",
- "libz-ng-sys",
 ]
 
 [[package]]
