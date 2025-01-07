@@ -11,6 +11,7 @@ use anstream::eprintln;
 use anyhow::{bail, Context, Result};
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
+use futures::FutureExt;
 use owo_colors::OwoColorize;
 use settings::PipTreeSettings;
 use tokio::task::spawn_blocking;
@@ -1705,6 +1706,7 @@ async fn run_project(
                 printer,
                 globals.preview,
             )
+            .boxed_local()
             .await
         }
     }

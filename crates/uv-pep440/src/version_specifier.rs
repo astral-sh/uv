@@ -86,7 +86,7 @@ impl VersionSpecifiers {
                 // Ex) [3.7, 3.8), (3.8, 3.9] -> >=3.7,!=3.8.*,<=3.9
                 (Bound::Excluded(prev), Bound::Included(lower))
                     if prev.release().len() == 2
-                        && lower.release() == [prev.release()[0], prev.release()[1] + 1] =>
+                        && *lower.release() == [prev.release()[0], prev.release()[1] + 1] =>
                 {
                     specifiers.push(VersionSpecifier::not_equals_star_version(prev.clone()));
                 }
@@ -415,7 +415,7 @@ impl VersionSpecifier {
             // `v >= 3.7 && v < 3.8` is equivalent to `v == 3.7.*`
             (Bound::Included(v1), Bound::Excluded(v2))
                 if v1.release().len() == 2
-                    && v2.release() == [v1.release()[0], v1.release()[1] + 1] =>
+                    && *v2.release() == [v1.release()[0], v1.release()[1] + 1] =>
             {
                 (
                     Some(VersionSpecifier::equals_star_version(v1.clone())),
@@ -484,7 +484,7 @@ impl VersionSpecifier {
                         .version
                         .release()
                         .iter()
-                        .zip(other.release())
+                        .zip(&*other.release())
                         .all(|(this, other)| this == other)
             }
             #[allow(deprecated)]
@@ -501,7 +501,7 @@ impl VersionSpecifier {
                     || !this
                         .release()
                         .iter()
-                        .zip(version.release())
+                        .zip(&*version.release())
                         .all(|(this, other)| this == other)
             }
             Operator::TildeEqual => {
@@ -516,7 +516,7 @@ impl VersionSpecifier {
 
                 if !this.release()[..this.release().len() - 1]
                     .iter()
-                    .zip(other.release())
+                    .zip(&*other.release())
                     .all(|(this, other)| this == other)
                 {
                     return false;
@@ -530,7 +530,7 @@ impl VersionSpecifier {
             Operator::GreaterThanEqual => Self::greater_than(&this, &other) || other >= this,
             Operator::LessThan => {
                 Self::less_than(&this, &other)
-                    && !(version::compare_release(this.release(), other.release())
+                    && !(version::compare_release(&this.release(), &other.release())
                         == Ordering::Equal
                         && other.any_prerelease())
             }
@@ -549,7 +549,7 @@ impl VersionSpecifier {
         // not match 3.1.dev0, but should match 3.0.dev0).
         if !this.any_prerelease()
             && other.is_pre()
-            && version::compare_release(this.release(), other.release()) == Ordering::Equal
+            && version::compare_release(&this.release(), &other.release()) == Ordering::Equal
         {
             return false;
         }
@@ -562,7 +562,7 @@ impl VersionSpecifier {
             return true;
         }
 
-        if version::compare_release(this.release(), other.release()) == Ordering::Equal {
+        if version::compare_release(&this.release(), &other.release()) == Ordering::Equal {
             // This special case is here so that, unless the specifier itself
             // includes is a post-release version, that we do not accept
             // post-release versions for the version mentioned in the specifier
