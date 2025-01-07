@@ -2776,8 +2776,6 @@ fn init_app_build_backend_maturin() -> Result<()> {
     }, {
         assert_snapshot!(
             pyi_contents, @r###"
-        from __future__ import annotations
-
         def hello_from_bin() -> str: ...
         "###
         );
@@ -2906,8 +2904,6 @@ fn init_app_build_backend_scikit() -> Result<()> {
     }, {
         assert_snapshot!(
             pyi_contents, @r###"
-        from __future__ import annotations
-
         def hello_from_bin() -> str: ...
         "###
         );
@@ -3029,8 +3025,6 @@ fn init_lib_build_backend_maturin() -> Result<()> {
     }, {
         assert_snapshot!(
             pyi_contents, @r###"
-        from __future__ import annotations
-
         def hello_from_bin() -> str: ...
         "###
         );
@@ -3156,8 +3150,6 @@ fn init_lib_build_backend_scikit() -> Result<()> {
     }, {
         assert_snapshot!(
             pyi_contents, @r###"
-        from __future__ import annotations
-
         def hello_from_bin() -> str: ...
         "###
         );

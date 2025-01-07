@@ -1069,8 +1069,6 @@ fn generate_package_scripts(
 
     // .pyi file for binary script
     let pyi_contents = indoc::indoc! {r"
-        from __future__ import annotations
-
         def hello_from_bin() -> str: ...
     "};
 
