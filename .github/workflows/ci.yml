@@ -570,21 +570,32 @@ jobs:
       - name: Download LLVM (aarch64)
         uses: robinraju/release-downloader@v1
         with:
-          repository: 'llvm/llvm-project'
-          tag: 'llvmorg-19.1.5'
-          filename: 'LLVM-19.1.5-woa64.exe'
-          
+          repository: "llvm/llvm-project"
+          tag: "llvmorg-19.1.5"
+          filename: "LLVM-19.1.5-woa64.exe"
+
       - name: Install LLVM (aarch64)
         run: |
           Start-Process -FilePath "LLVM-19.1.5-woa64.exe" -ArgumentList '/S' -NoNewWindow -Wait
-          
+
       - name: Install Build Tools (aarch64)
         run: |
           Set-ExecutionPolicy Bypass -Scope Process -Force
           [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
           iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1')) 
           Add-Content -Path $env:GITHUB_PATH -Value "C:\ProgramData\chocolatey\bin" -Encoding utf8
-          choco install visualstudio2022buildtools -y --no-progress --package-parameters "--add Microsoft.VisualStudio.Component.VC.Tools.ARM64 --add Microsoft.VisualStudio.Component.Windows11SDK.22621 --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.VC.Llvm.Clang --add Microsoft.VisualStudio.ComponentGroup.NativeDesktop.Llvm.Clang --add Microsoft.VisualStudio.Component.VC.Llvm.ClangToolset --add Microsoft.VisualStudio.Component.VC.CMake.Project --add Microsoft.VisualStudio.Component.VC.ATL --add Microsoft.VisualStudio.Component.VC.ATL.ARM --add Microsoft.VisualStudio.Component.VC.ASAN"
+          choco install visualstudio2022buildtools -y --no-progress --package-parameters "^
+            --add Microsoft.VisualStudio.Component.VC.Tools.ARM64 ^
+            --add Microsoft.VisualStudio.Component.Windows11SDK.22621 ^
+            --add Microsoft.VisualStudio.Workload.VCTools ^
+            --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 ^
+            --add Microsoft.VisualStudio.Component.VC.Llvm.Clang ^
+            --add Microsoft.VisualStudio.ComponentGroup.NativeDesktop.Llvm.Clang ^
+            --add Microsoft.VisualStudio.Component.VC.Llvm.ClangToolset ^
+            --add Microsoft.VisualStudio.Component.VC.CMake.Project ^
+            --add Microsoft.VisualStudio.Component.VC.ATL ^
+            --add Microsoft.VisualStudio.Component.VC.ATL.ARM ^
+            --add Microsoft.VisualStudio.Component.VC.ASAN"
 
       - name: Install Nightly Rust (aarch64)
         run: |
@@ -595,10 +606,10 @@ jobs:
       - name: Download Git for Windows (aarch64)
         uses: robinraju/release-downloader@v1
         with:
-          repository: 'git-for-windows/git'
-          tag: 'v2.48.0-rc1.windows.1'
-          filename: 'Git-2.48.0-rc1-arm64.exe'
-          
+          repository: "git-for-windows/git"
+          tag: "v2.48.0-rc1.windows.1"
+          filename: "Git-2.48.0-rc1-arm64.exe"
+
       - name: Install Git for Windows (aarch64)
         run: |
           Start-Process -FilePath "Git-2.48.0-rc1-arm64.exe" -ArgumentList "/VERYSILENT" -NoNewWindow -Wait
