@@ -596,7 +596,7 @@ inclusion or exclusion of its dependencies. Additionally, the `dev` group is
 
 To install dependencies you can use install or sync
 ```console
-$ uv pip install
+$ uv python install
 $ uv sync --all-extras # installs all optional dependencies
 $ uv sync --group lint # installs dependency group lint
 $ uv sync --only-group lint # installs ONLY dependency group lint
