@@ -142,6 +142,7 @@ performance = [
 ]
 performance-memory-allocator = ["dep:uv-performance-memory-allocator"]
 performance-flate2-backend = ["dep:uv-performance-flate2-backend"]
+tracing-durations-export = ["dep:tracing-durations-export", "uv-resolver/tracing-durations-export"]
 
 # Introduces a dependency on a local Python installation.
 python = []
