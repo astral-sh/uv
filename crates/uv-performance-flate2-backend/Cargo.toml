@@ -7,5 +7,12 @@ edition = "2021"
 [lib]
 doctest = false
 
-[dependencies]
+# Use `zlib-ng` on x86_64 targets, apart from FreeBSD.
+[target.'cfg(all(target_arch = "x86_64", not(target_os = "freebsd")))'.dependencies]
+flate2 = { version = "1.0.28", default-features = false, features = ["zlib-ng"] }
+# See: https://github.com/rust-lang/libz-sys/issues/225
+libz-ng-sys = { version = "<1.1.20" }
+
+# Use `zlib-rs` everywhere else.
+[target.'cfg(not(all(target_arch = "x86_64", not(target_os = "freebsd"))))'.dependencies]
 flate2 = { version = "1.0.28", default-features = false, features = ["zlib-rs"] }
