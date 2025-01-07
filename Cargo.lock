@@ -5470,7 +5470,6 @@ dependencies = [
 name = "uv-resolver"
 version = "0.0.1"
 dependencies = [
- "anyhow",
  "clap",
  "dashmap",
  "either",
