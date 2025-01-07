@@ -4000,11 +4000,11 @@ mod tests {
     #[test]
     fn preserve_trailing_zeros() {
         let v1: Version = "1.2.0".parse().unwrap();
-        assert_eq!(v1.release(), &[1, 2, 0]);
+        assert_eq!(&*v1.release(), &[1, 2, 0]);
         assert_eq!(v1.to_string(), "1.2.0");
 
         let v2: Version = "1.2".parse().unwrap();
-        assert_eq!(v2.release(), &[1, 2]);
+        assert_eq!(&*v2.release(), &[1, 2]);
         assert_eq!(v2.to_string(), "1.2");
     }
 }
