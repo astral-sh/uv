@@ -3272,7 +3272,7 @@ pub struct AddArgs {
 pub struct RemoveArgs {
     /// The names of the dependencies to remove (e.g., `ruff`).
     #[arg(required = true)]
-    pub packages: Vec<PackageName>,
+    pub packages: Vec<Requirement<VerbatimParsedUrl>>,
 
     /// Remove the packages from the development dependency group.
     ///
