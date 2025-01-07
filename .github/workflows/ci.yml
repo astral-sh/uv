@@ -607,6 +607,8 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - uses: actions/checkout@v4
+
       - name: "Build"
         run: cargo build  -vv --target aarch64-pc-windows-msvc
 
