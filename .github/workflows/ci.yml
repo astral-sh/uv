@@ -561,7 +561,7 @@ jobs:
 
   build-binary-windows-aarch64:
     needs: determine_changes
-    timeout-minutes: 10
+    timeout-minutes: 30
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
       labels: github-windows-11-aarch64-4
