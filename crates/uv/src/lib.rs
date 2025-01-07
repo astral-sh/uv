@@ -119,7 +119,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Some(FilesystemOptions::from_file(config_file)?)
     } else if deprecated_isolated || cli.top_level.no_config {
         None
-    } else if matches!(&*cli.command, Commands::Tool(_)) {
+    } else if matches!(&*cli.command, Commands::Tool(_) | Commands::Self_(_)) {
         // For commands that operate at the user-level, ignore local configuration.
         FilesystemOptions::user()?.combine(FilesystemOptions::system()?)
     } else if let Ok(workspace) =
