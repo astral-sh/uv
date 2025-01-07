@@ -569,6 +569,9 @@ Unlike optional dependencies, development dependencies are local-only and will _
 the project requirements when published to PyPI or other indexes. As such, development dependencies
 are not included in the `[project]` table.
 
+uv sync and install commands install the dev dependencies by default
+To install other dependency groups (such as lint group), `--all-extras` or a group cli arg is required
+
 Development dependencies can have entries in `tool.uv.sources` the same as normal dependencies.
 
 To add a development dependency, use the `--dev` flag:
@@ -590,6 +593,14 @@ dev = [
 The `dev` group is special-cased; there are `--dev`, `--only-dev`, and `--no-dev` flags to toggle
 inclusion or exclusion of its dependencies. Additionally, the `dev` group is
 [synced by default](#default-groups).
+
+To install dependencies you can use install or sync
+```console
+$ uv pip install
+$ uv sync --all-extras # installs all optional dependencies
+$ uv sync --group lint # installs dependency group lint
+$ uv sync --only-group lint # installs ONLY dependency group lint
+```
 
 ### Dependency groups
 
