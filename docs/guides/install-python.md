@@ -73,6 +73,15 @@ documentation for more details.
 
 <!--TODO(zanieb): The above should probably link to a CLI reference and that content should be moved out of that file -->
 
+## Upgrading a Python version
+
+To upgrade the version of Python associated with a version number use the `--reinstall` option:
+
+```console
+$ uv python install --reinstall 3.13
+```
+This is useful for upgrading from previously installed alpha or pre-release versions.
+
 ## Automatic Python downloads
 
 Note that Python does not need to be explicitly installed to use uv. By default, uv will
