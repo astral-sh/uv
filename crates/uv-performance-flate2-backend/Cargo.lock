@@ -61,9 +61,9 @@ checksum = "b5aba8db14291edd000dfcc4d620c7ebfb122c613afb886ca8803fa4e128a20a"
 
 [[package]]
 name = "libz-ng-sys"
-version = "1.1.16"
+version = "1.1.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4436751a01da56f1277f323c80d584ffad94a3d14aecd959dd0dff75aa73a438"
+checksum = "7cee1488e961a80d172564fd6fcda11d8a4ac6672c06fe008e9213fa60520c2b"
 dependencies = [
  "cmake",
  "libc",
@@ -98,7 +98,6 @@ name = "uv-performance-flate2-backend"
 version = "0.1.0"
 dependencies = [
  "flate2",
- "libz-ng-sys",
 ]
 
 [[package]]
