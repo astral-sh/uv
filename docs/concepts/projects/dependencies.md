@@ -595,6 +595,7 @@ inclusion or exclusion of its dependencies. Additionally, the `dev` group is
 [synced by default](#default-groups).
 
 To install dependencies you can use install or sync
+
 ```console
 $ uv python install
 $ uv sync --all-extras # installs all optional dependencies
