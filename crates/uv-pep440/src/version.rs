@@ -1418,6 +1418,8 @@ impl FromStr for VersionPattern {
     }
 }
 
+/// Release digits of a [`Version`].
+///
 /// Lifetime and indexing workaround to allow accessing the release as `&[u64]` even though the
 /// digits may be stored in a compressed representation.
 pub struct Release<'a> {
