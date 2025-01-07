@@ -37,13 +37,6 @@ pub static GIT: LazyLock<Result<PathBuf, GitError>> = LazyLock::new(|| {
     })
 });
 
-/// A global cache of the result of `which git-lfs`.
-///
-/// We search for the Git LFS binary instead of using `git lfs` so that we can
-/// distinguish Git LFS not being installed (which we can ignore) from
-/// LFS errors (which should be returned).
-static GIT_LFS: LazyLock<Option<PathBuf>> = LazyLock::new(|| which::which("git-lfs").ok());
-
 /// A reference to commit or commit-ish.
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
@@ -650,16 +643,29 @@ fn fetch_with_cli(
     Ok(())
 }
 
+/// A global cache of the `git lfs` command.
+///
+/// Returns an error if Git LFS isn't available.
+/// Caching the command allows us to only check if LFS is installed once.
+static GIT_LFS: LazyLock<Result<ProcessBuilder>> = LazyLock::new(|| {
+    let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+    cmd.arg("lfs");
+
+    // Run a simple command to verify LFS is installed
+    cmd.clone().arg("version").exec_with_output()?;
+    Ok(cmd)
+});
+
 /// Attempts to use `git-lfs` CLI to fetch required LFS objects for a given revision.
 fn fetch_lfs(repo: &mut GitRepository, url: &str, revision: &GitOid) -> Result<()> {
-    let lfs = if let Some(lfs) = GIT_LFS.as_ref() {
+    let mut cmd = if let Ok(lfs) = GIT_LFS.as_ref() {
         debug!("Fetching Git LFS objects");
-        lfs
+        lfs.clone()
     } else {
-        debug!("Git lfs is not installed, skipping lfs fetch");
+        debug!("Git lfs is not available, skipping lfs fetch");
         return Ok(());
     };
-    let mut cmd = ProcessBuilder::new(lfs);
+
     cmd.arg("fetch")
         .arg(url)
         .arg(revision.as_str())
