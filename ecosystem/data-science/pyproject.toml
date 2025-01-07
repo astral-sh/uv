@@ -1,0 +1,23 @@
+[project]
+name = "data-science"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "beautifulsoup4>=4.12.3,<5",
+  "httpx>=0.27.0,<0.28",
+  "matplotlib>=3.9.1,<4",
+  "numpy>=2.0.1,<3",
+  "pandas>=2.2.2,<3",
+  "pydantic>=2.8.2",
+  "scikit-learn>=1.5.1,<2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = [
+  "ruff<=0.6.2,<0.7",
+  "jupyter>=1.0.0,<2.0.0",
+]

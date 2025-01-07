@@ -357,6 +357,7 @@ pub(crate) async fn pip_sync(
         &reinstall,
         &upgrade,
         Some(&tags),
+        Vec::new(),
         ResolverEnvironment::specific(marker_env.clone()),
         python_requirement,
         Conflicts::empty(),

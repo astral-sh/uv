@@ -255,7 +255,10 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
     }
 
     /// Resolve a set of requirements into a set of pinned versions.
-    pub async fn resolve(self) -> Result<ResolverOutput, ResolveError> {
+    pub async fn resolve(
+        self,
+        prefetch_packages: Vec<PackageName>,
+    ) -> Result<ResolverOutput, ResolveError> {
         let state = Arc::new(self.state);
         let provider = Arc::new(self.provider);
 
@@ -273,7 +276,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         thread::Builder::new()
             .name("uv-resolver".into())
             .spawn(move || {
-                let result = solver.solve(request_sink);
+                let result = solver.solve(request_sink, prefetch_packages);
 
                 // This may fail if the main thread returned early due to an error.
                 let _ = tx.send(result);
@@ -295,6 +298,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     fn solve(
         self: Arc<Self>,
         request_sink: Sender<Request>,
+        prefetch_packages: Vec<PackageName>,
     ) -> Result<ResolverOutput, ResolveError> {
         debug!(
             "Solving with installed Python version: {}",
@@ -304,6 +308,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             "Solving with target Python version: {}",
             self.python_requirement.target()
         );
+
+        // For packages we know we have to refresh, prefetch them.
+        for prefetch_package in prefetch_packages {
+            request_sink.blocking_send(Request::Package(prefetch_package, None))?;
+        }
 
         let mut visited = FxHashSet::default();
 

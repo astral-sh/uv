@@ -593,13 +593,23 @@ async fn do_lock(
         // The lockfile did not contain enough information to obtain a resolution, fallback
         // to a fresh resolve.
         _ => {
-            // Determine whether we can reuse the existing package versions.
-            let versions_lock = existing_lock.as_ref().and_then(|lock| match &lock {
-                ValidatedLock::Satisfies(lock) => Some(lock),
-                ValidatedLock::Preferable(lock) => Some(lock),
-                ValidatedLock::Versions(lock) => Some(lock),
-                ValidatedLock::Unusable(_) => None,
-            });
+            // Determine whether we can reuse the existing package versions, or whether we should
+            // prefetch the version lists.
+            let (versions_lock, package_prefetches) = match &existing_lock {
+                Some(
+                    ValidatedLock::Preferable(lock)
+                    | ValidatedLock::Satisfies(lock)
+                    | ValidatedLock::Versions(lock),
+                ) => (Some(lock), Vec::new()),
+                Some(ValidatedLock::Unusable(lock)) => (
+                    None,
+                    lock.packages()
+                        .iter()
+                        .map(|package| package.name().clone())
+                        .collect(),
+                ),
+                None => (None, Vec::new()),
+            };
 
             // If an existing lockfile exists, build up a set of preferences.
             let LockedRequirements { preferences, git } = versions_lock
@@ -686,6 +696,7 @@ async fn do_lock(
                 &Reinstall::default(),
                 upgrade,
                 None,
+                package_prefetches,
                 resolver_env,
                 python_requirement,
                 conflicts,

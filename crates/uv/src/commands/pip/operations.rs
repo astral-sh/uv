@@ -102,6 +102,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     reinstall: &Reinstall,
     upgrade: &Upgrade,
     tags: Option<&Tags>,
+    prefetch_packages: Vec<PackageName>,
     resolver_env: ResolverEnvironment,
     python_requirement: PythonRequirement,
     conflicts: Conflicts,
@@ -300,7 +301,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         )?
         .with_reporter(Arc::new(reporter));
 
-        resolver.resolve().await?
+        resolver.resolve(prefetch_packages).await?
     };
 
     logger.on_complete(resolution.len(), start, printer)?;

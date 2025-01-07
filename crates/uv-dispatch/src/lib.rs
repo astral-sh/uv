@@ -236,15 +236,16 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             DistributionDatabase::new(self.client, self, self.concurrency.downloads)
                 .with_build_stack(build_stack),
         )?;
-        let resolution = Resolution::from(resolver.resolve().await.with_context(|| {
-            format!(
-                "No solution found when resolving: {}",
-                requirements
-                    .iter()
-                    .map(|requirement| format!("`{requirement}`"))
-                    .join(", ")
-            )
-        })?);
+        let resolution =
+            Resolution::from(resolver.resolve(Vec::new()).await.with_context(|| {
+                format!(
+                    "No solution found when resolving: {}",
+                    requirements
+                        .iter()
+                        .map(|requirement| format!("`{requirement}`"))
+                        .join(", ")
+                )
+            })?);
         Ok(resolution)
     }
 
