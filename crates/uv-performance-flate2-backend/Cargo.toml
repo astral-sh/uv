@@ -7,12 +7,12 @@ edition = "2021"
 [lib]
 doctest = false
 
-# Use `zlib-ng` on x86_64 targets, apart from FreeBSD.
-[target.'cfg(all(target_arch = "x86_64", not(target_os = "freebsd")))'.dependencies]
+# Use `zlib-ng` on all supported platforms.
+[target.'cfg(not(any(target_arch = "s390x", target_arch = "powerpc64", target_os = "freebsd")))'.dependencies]
 flate2 = { version = "1.0.28", default-features = false, features = ["zlib-ng"] }
 # See: https://github.com/rust-lang/libz-sys/issues/225
 libz-ng-sys = { version = "<1.1.20" }
 
 # Use `zlib-rs` everywhere else.
-[target.'cfg(not(all(target_arch = "x86_64", not(target_os = "freebsd"))))'.dependencies]
+[target.'cfg(any(target_arch = "s390x", target_arch = "powerpc64", target_os = "freebsd"))'.dependencies]
 flate2 = { version = "1.0.28", default-features = false, features = ["zlib-rs"] }
