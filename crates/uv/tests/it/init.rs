@@ -2764,6 +2764,7 @@ fn init_app_build_backend_maturin() -> Result<()> {
             init, @r###"
         from foo._core import hello_from_bin
 
+
         def main() -> None:
             print(hello_from_bin())
         "###
@@ -2892,6 +2893,7 @@ fn init_app_build_backend_scikit() -> Result<()> {
             init, @r###"
         from foo._core import hello_from_bin
 
+
         def main() -> None:
             print(hello_from_bin())
         "###
@@ -3012,6 +3014,7 @@ fn init_lib_build_backend_maturin() -> Result<()> {
         assert_snapshot!(
             init, @r###"
         from foo._core import hello_from_bin
+
 
         def hello() -> str:
             return hello_from_bin()
@@ -3137,6 +3140,7 @@ fn init_lib_build_backend_scikit() -> Result<()> {
         assert_snapshot!(
             init, @r###"
         from foo._core import hello_from_bin
+
 
         def hello() -> str:
             return hello_from_bin()
