@@ -35,7 +35,9 @@ pub enum PyprojectTomlError {
     #[error(transparent)]
     TomlSchema(#[from] toml_edit::de::Error),
     #[error("`pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set")]
-    MissingName(#[source] toml_edit::de::Error),
+    MissingName,
+    #[error("`pyproject.toml` is using the `[project]` table, but the required `project.version` field is neither set nor present in the `project.dynamic` list")]
+    MissingVersion,
 }
 
 /// A `pyproject.toml` as specified in PEP 517.
@@ -63,15 +65,8 @@ impl PyProjectToml {
     pub fn from_string(raw: String) -> Result<Self, PyprojectTomlError> {
         let pyproject: toml_edit::ImDocument<_> =
             toml_edit::ImDocument::from_str(&raw).map_err(PyprojectTomlError::TomlSyntax)?;
-        let pyproject =
-            PyProjectToml::deserialize(pyproject.into_deserializer()).map_err(|err| {
-                // TODO(konsti): A typed error would be nicer, this can break on toml upgrades.
-                if err.message().contains("missing field `name`") {
-                    PyprojectTomlError::MissingName(err)
-                } else {
-                    PyprojectTomlError::TomlSchema(err)
-                }
-            })?;
+        let pyproject = PyProjectToml::deserialize(pyproject.into_deserializer())
+            .map_err(PyprojectTomlError::TomlSchema)?;
         Ok(PyProjectToml { raw, ..pyproject })
     }
 
@@ -207,7 +202,7 @@ impl<'de> Deserialize<'de> for DependencyGroupSpecifier {
 /// See <https://packaging.python.org/en/latest/specifications/pyproject-toml>.
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[cfg_attr(test, derive(Serialize))]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", try_from = "ProjectWire")]
 pub struct Project {
     /// The name of the project
     pub name: PackageName,
@@ -226,6 +221,48 @@ pub struct Project {
     /// Used to determine whether a `scripts` section is present.
     #[serde(default, skip_serializing)]
     pub(crate) scripts: Option<serde::de::IgnoredAny>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+struct ProjectWire {
+    name: Option<PackageName>,
+    version: Option<Version>,
+    dynamic: Option<Vec<String>>,
+    requires_python: Option<VersionSpecifiers>,
+    dependencies: Option<Vec<String>>,
+    optional_dependencies: Option<BTreeMap<ExtraName, Vec<String>>>,
+    gui_scripts: Option<serde::de::IgnoredAny>,
+    scripts: Option<serde::de::IgnoredAny>,
+}
+
+impl TryFrom<ProjectWire> for Project {
+    type Error = PyprojectTomlError;
+
+    fn try_from(value: ProjectWire) -> Result<Self, Self::Error> {
+        // If `[project.name]` is not present, show a dedicated error message.
+        let name = value.name.ok_or(PyprojectTomlError::MissingName)?;
+
+        // If `[project.version]` is not present (or listed in `[project.dynamic]`), show a dedicated error message.
+        if value.version.is_none()
+            && !value
+                .dynamic
+                .as_ref()
+                .is_some_and(|dynamic| dynamic.iter().any(|field| field == "version"))
+        {
+            return Err(PyprojectTomlError::MissingVersion);
+        }
+
+        Ok(Project {
+            name,
+            version: value.version,
+            requires_python: value.requires_python,
+            dependencies: value.dependencies,
+            optional_dependencies: value.optional_dependencies,
+            gui_scripts: value.gui_scripts,
+            scripts: value.scripts,
+        })
+    }
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -255,7 +292,7 @@ pub struct ToolUv {
         example = r#"
             [tool.uv.sources]
             httpx = { git = "https://github.com/encode/httpx", tag = "0.27.0" }
-            pytest =  { url = "https://files.pythonhosted.org/packages/6b/77/7440a06a8ead44c7757a64362dd22df5760f9b12dc5f11b6188cd2fc27a0/pytest-8.3.3-py3-none-any.whl" }
+            pytest = { url = "https://files.pythonhosted.org/packages/6b/77/7440a06a8ead44c7757a64362dd22df5760f9b12dc5f11b6188cd2fc27a0/pytest-8.3.3-py3-none-any.whl" }
             pydantic = { path = "/path/to/pydantic", editable = true }
         "#
     )]
@@ -1361,9 +1398,11 @@ impl Source {
                 group: None,
             },
             RequirementSource::Url {
-                subdirectory, url, ..
+                location,
+                subdirectory,
+                ..
             } => Source::Url {
-                url: url.to_url(),
+                url: location,
                 subdirectory: subdirectory.map(PortablePathBuf::from),
                 marker: MarkerTree::TRUE,
                 extra: None,

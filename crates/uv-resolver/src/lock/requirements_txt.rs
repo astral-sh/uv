@@ -20,8 +20,7 @@ use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
 
 use crate::graph_ops::marker_reachability;
 use crate::lock::{Package, PackageId, Source};
-use crate::universal_marker::{ConflictMarker, UniversalMarker};
-use crate::{InstallTarget, LockError};
+use crate::{Installable, LockError};
 
 /// An export of a [`Lock`] that renders in `requirements.txt` format.
 #[derive(Debug)]
@@ -33,7 +32,7 @@ pub struct RequirementsTxtExport<'lock> {
 
 impl<'lock> RequirementsTxtExport<'lock> {
     pub fn from_lock(
-        target: InstallTarget<'lock>,
+        target: &impl Installable<'lock>,
         prune: &[PackageName],
         extras: &ExtrasSpecification,
         dev: &DevGroupsManifest,
@@ -50,8 +49,8 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
         let root = petgraph.add_node(Node::Root);
 
-        // Add the workspace package to the queue.
-        for root_name in target.packages() {
+        // Add the workspace packages to the queue.
+        for root_name in target.roots() {
             if prune.contains(root_name) {
                 continue;
             }
@@ -70,7 +69,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
                 // Add an edge from the root.
                 let index = inverse[&dist.id];
-                petgraph.add_edge(root, index, UniversalMarker::TRUE);
+                petgraph.add_edge(root, index, MarkerTree::TRUE);
 
                 // Push its dependencies on the queue.
                 queue.push_back((dist, None));
@@ -110,17 +109,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 petgraph.add_edge(
                     root,
                     dep_index,
-                    UniversalMarker::new(
-                        dep.simplified_marker.as_simplified_marker_tree(),
-                        // OK because we've verified above that we do not have any
-                        // conflicting extras/groups.
-                        //
-                        // So why use `UniversalMarker`? Because that's what
-                        // `marker_reachability` wants and it (probably) isn't
-                        // worth inventing a new abstraction so that it can accept
-                        // graphs with either `MarkerTree` or `UniversalMarker`.
-                        ConflictMarker::TRUE,
-                    ),
+                    dep.simplified_marker.as_simplified_marker_tree(),
                 );
 
                 // Push its dependencies on the queue.
@@ -130,6 +119,91 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 for extra in &dep.extra {
                     if seen.insert((&dep.package_id, Some(extra))) {
                         queue.push_back((dep_dist, Some(extra)));
+                    }
+                }
+            }
+        }
+
+        // Add requirements that are exclusive to the workspace root (e.g., dependency groups in
+        // (legacy) non-project workspace roots).
+        let root_requirements = target
+            .lock()
+            .requirements()
+            .iter()
+            .chain(
+                target
+                    .lock()
+                    .dependency_groups()
+                    .iter()
+                    .filter_map(|(group, deps)| {
+                        if dev.contains(group) {
+                            Some(deps)
+                        } else {
+                            None
+                        }
+                    })
+                    .flatten(),
+            )
+            .filter(|dep| !prune.contains(&dep.name))
+            .collect::<Vec<_>>();
+
+        // Index the lockfile by package name, to avoid making multiple passes over the lockfile.
+        if !root_requirements.is_empty() {
+            let by_name: FxHashMap<_, Vec<_>> = {
+                let names = root_requirements
+                    .iter()
+                    .map(|dep| &dep.name)
+                    .collect::<FxHashSet<_>>();
+                target.lock().packages().iter().fold(
+                    FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher),
+                    |mut map, package| {
+                        if names.contains(&package.id.name) {
+                            map.entry(&package.id.name).or_default().push(package);
+                        }
+                        map
+                    },
+                )
+            };
+
+            for requirement in root_requirements {
+                for dist in by_name.get(&requirement.name).into_iter().flatten() {
+                    // Determine whether this entry is "relevant" for the requirement, by intersecting
+                    // the markers.
+                    let marker = if dist.fork_markers.is_empty() {
+                        requirement.marker
+                    } else {
+                        let mut combined = MarkerTree::FALSE;
+                        for fork_marker in &dist.fork_markers {
+                            combined.or(fork_marker.pep508());
+                        }
+                        combined.and(requirement.marker);
+                        combined
+                    };
+
+                    if marker.is_false() {
+                        continue;
+                    }
+
+                    // Simplify the marker.
+                    let marker = target.lock().simplify_environment(marker);
+
+                    // Add the dependency to the graph.
+                    if let Entry::Vacant(entry) = inverse.entry(&dist.id) {
+                        entry.insert(petgraph.add_node(Node::Package(dist)));
+                    }
+
+                    // Add an edge from the root.
+                    let dep_index = inverse[&dist.id];
+                    petgraph.add_edge(root, dep_index, marker);
+
+                    // Push its dependencies on the queue.
+                    if seen.insert((&dist.id, None)) {
+                        queue.push_back((dist, None));
+                    }
+                    for extra in &requirement.extras {
+                        if seen.insert((&dist.id, Some(extra))) {
+                            queue.push_back((dist, Some(extra)));
+                        }
                     }
                 }
             }
@@ -168,12 +242,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 petgraph.add_edge(
                     index,
                     dep_index,
-                    UniversalMarker::new(
-                        dep.simplified_marker.as_simplified_marker_tree(),
-                        // See note above for other `UniversalMarker::new` for
-                        // why this is OK.
-                        ConflictMarker::TRUE,
-                    ),
+                    dep.simplified_marker.as_simplified_marker_tree(),
                 );
 
                 // Push its dependencies on the queue.
@@ -206,9 +275,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
             })
             .map(|(index, package)| Requirement {
                 package,
-                // As above, we've verified that there are no conflicting extras/groups
-                // specified, so it's safe to completely ignore the conflict marker.
-                marker: reachability.remove(&index).unwrap_or_default().pep508(),
+                marker: reachability.remove(&index).unwrap_or_default(),
             })
             .collect::<Vec<_>>();
 
@@ -236,7 +303,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                 Source::Git(url, git) => {
                     // Remove the fragment and query from the URL; they're already present in the
                     // `GitSource`.
-                    let mut url = url.to_url();
+                    let mut url = url.to_url().map_err(|_| std::fmt::Error)?;
                     url.set_fragment(None);
                     url.set_query(None);
 
@@ -258,7 +325,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                 Source::Direct(url, direct) => {
                     let subdirectory = direct.subdirectory.as_ref().map(PathBuf::from);
                     let url = Url::from(ParsedArchiveUrl {
-                        url: url.to_url(),
+                        url: url.to_url().map_err(|_| std::fmt::Error)?,
                         subdirectory: subdirectory.clone(),
                         ext: DistExtension::Source(SourceDistExtension::TarGz),
                     });
@@ -266,7 +333,11 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                 }
                 Source::Path(path) | Source::Directory(path) => {
                     if path.is_absolute() {
-                        write!(f, "{}", Url::from_file_path(path).unwrap())?;
+                        write!(
+                            f,
+                            "{}",
+                            Url::from_file_path(path).map_err(|()| std::fmt::Error)?
+                        )?;
                     } else {
                         write!(f, "{}", anchor(path).portable_display())?;
                     }
@@ -277,7 +348,11 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                     }
                     EditableMode::NonEditable => {
                         if path.is_absolute() {
-                            write!(f, "{}", Url::from_file_path(path).unwrap())?;
+                            write!(
+                                f,
+                                "{}",
+                                Url::from_file_path(path).map_err(|()| std::fmt::Error)?
+                            )?;
                         } else {
                             write!(f, "{}", anchor(path).portable_display())?;
                         }

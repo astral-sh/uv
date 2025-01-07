@@ -68,6 +68,11 @@ pub fn read_lock_requirements(
     install_path: &Path,
     upgrade: &Upgrade,
 ) -> Result<LockedRequirements, LockError> {
+    // As an optimization, skip iterating over the lockfile is we're upgrading all packages anyway.
+    if upgrade.is_all() {
+        return Ok(LockedRequirements::default());
+    }
+
     let mut preferences = Vec::new();
     let mut git = Vec::new();
 
@@ -81,7 +86,7 @@ pub fn read_lock_requirements(
         preferences.push(Preference::from_lock(package, install_path)?);
 
         // Map each entry in the lockfile to a Git SHA.
-        if let Some(git_ref) = package.as_git_ref() {
+        if let Some(git_ref) = package.as_git_ref()? {
             git.push(git_ref);
         }
     }

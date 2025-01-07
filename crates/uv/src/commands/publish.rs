@@ -173,7 +173,7 @@ pub(crate) async fn publish(
             }
         } else if check_url.is_none() {
             warn_user_once!(
-                "Using `--keyring-provider` with a password or token and no check url has no effect"
+                "Using `--keyring-provider` with a password or token and no check URL has no effect"
             );
         } else {
             // We may be using the keyring for the simple index.

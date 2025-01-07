@@ -86,7 +86,7 @@ pub(crate) async fn tree(
                 connectivity,
                 native_tls,
                 allow_insecure_host,
-                install_mirrors,
+                &install_mirrors,
                 no_config,
                 cache,
                 printer,
@@ -111,7 +111,7 @@ pub(crate) async fn tree(
     // Update the lockfile, if necessary.
     let lock = match do_safe_lock(
         mode,
-        &workspace,
+        (&workspace).into(),
         settings.as_ref(),
         LowerBound::Allow,
         &state,
@@ -169,6 +169,7 @@ pub(crate) async fn tree(
                 keyring_provider,
                 resolution: _,
                 prerelease: _,
+                fork_strategy: _,
                 dependency_metadata: _,
                 config_setting: _,
                 no_build_isolation: _,

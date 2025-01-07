@@ -26,13 +26,13 @@ use uv_python::{
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_shell::{shlex_posix, shlex_windows, Shell};
-use uv_types::{BuildContext, BuildIsolation, HashStrategy};
+use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::pip::operations::{report_interpreter, Changelog};
-use crate::commands::project::{validate_requires_python, WorkspacePython};
+use crate::commands::project::{validate_project_requires_python, WorkspacePython};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -113,7 +113,7 @@ enum VenvError {
 
     #[error("Failed to install seed packages")]
     #[diagnostic(code(uv::venv::seed))]
-    Seed(#[source] anyhow::Error),
+    Seed(#[source] AnyErrorBuild),
 
     #[error("Failed to extract interpreter tags")]
     #[diagnostic(code(uv::venv::tags))]
@@ -231,7 +231,7 @@ async fn venv_impl(
 
     // Check if the discovered Python version is incompatible with the current workspace
     if let Some(requires_python) = requires_python {
-        match validate_requires_python(
+        match validate_project_requires_python(
             &interpreter,
             project.as_ref().map(VirtualProject::workspace),
             &requires_python,
@@ -353,18 +353,20 @@ async fn venv_impl(
             )]
         };
 
+        let build_stack = BuildStack::default();
+
         // Resolve and install the requirements.
         //
         // Since the virtual environment is empty, and the set of requirements is trivial (no
         // constraints, no editables, etc.), we can use the build dispatch APIs directly.
         let resolution = build_dispatch
-            .resolve(&requirements)
+            .resolve(&requirements, &build_stack)
             .await
-            .map_err(VenvError::Seed)?;
+            .map_err(|err| VenvError::Seed(err.into()))?;
         let installed = build_dispatch
-            .install(&resolution, &venv)
+            .install(&resolution, &venv, &build_stack)
             .await
-            .map_err(VenvError::Seed)?;
+            .map_err(|err| VenvError::Seed(err.into()))?;
 
         let changelog = Changelog::from_installed(installed);
         DefaultInstallLogger

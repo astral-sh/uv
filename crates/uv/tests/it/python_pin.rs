@@ -217,7 +217,7 @@ fn python_pin_no_python() {
 }
 
 #[test]
-fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
+fn python_pin_compatible_with_requires_python() -> Result<()> {
     let context: TestContext =
         TestContext::new_with_versions(&["3.10", "3.11"]).with_filtered_python_sources();
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -388,7 +388,7 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
 }
 
 #[test]
-fn warning_pinned_python_version_not_installed() -> anyhow::Result<()> {
+fn warning_pinned_python_version_not_installed() -> Result<()> {
     let context: TestContext = TestContext::new_with_versions(&["3.10", "3.11"]);
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(

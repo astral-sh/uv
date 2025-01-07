@@ -1,15 +1,18 @@
-use crate::{
-    LenientRequirement, LenientVersionSpecifiers, MetadataError, ResolutionMetadata,
-    VerbatimParsedUrl,
-};
+use std::str::FromStr;
+
 use indexmap::IndexMap;
 use itertools::Itertools;
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
+
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::Requirement;
+
+use crate::{
+    LenientRequirement, LenientVersionSpecifiers, MetadataError, ResolutionMetadata,
+    VerbatimParsedUrl,
+};
 
 /// Extract the metadata from a `pyproject.toml` file, as specified in PEP 621.
 ///
@@ -112,14 +115,7 @@ impl PyProjectToml {
         let pyproject_toml: toml_edit::ImDocument<_> = toml_edit::ImDocument::from_str(toml)
             .map_err(MetadataError::InvalidPyprojectTomlSyntax)?;
         let pyproject_toml: Self = PyProjectToml::deserialize(pyproject_toml.into_deserializer())
-            .map_err(|err| {
-            // TODO(konsti): A typed error would be nicer, this can break on toml upgrades.
-            if err.message().contains("missing field `name`") {
-                MetadataError::InvalidPyprojectTomlMissingName(err)
-            } else {
-                MetadataError::InvalidPyprojectTomlSchema(err)
-            }
-        })?;
+            .map_err(MetadataError::InvalidPyprojectTomlSchema)?;
         Ok(pyproject_toml)
     }
 }
@@ -131,7 +127,7 @@ impl PyProjectToml {
 ///
 /// See <https://packaging.python.org/en/latest/specifications/pyproject-toml>.
 #[derive(Deserialize, Debug)]
-#[serde(rename_all = "kebab-case")]
+#[serde(try_from = "PyprojectTomlWire")]
 struct Project {
     /// The name of the project
     name: PackageName,
@@ -146,6 +142,33 @@ struct Project {
     /// Specifies which fields listed by PEP 621 were intentionally unspecified
     /// so another tool can/will provide such metadata dynamically.
     dynamic: Option<Vec<String>>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+struct PyprojectTomlWire {
+    name: Option<PackageName>,
+    version: Option<Version>,
+    requires_python: Option<String>,
+    dependencies: Option<Vec<String>>,
+    optional_dependencies: Option<IndexMap<ExtraName, Vec<String>>>,
+    dynamic: Option<Vec<String>>,
+}
+
+impl TryFrom<PyprojectTomlWire> for Project {
+    type Error = MetadataError;
+
+    fn try_from(wire: PyprojectTomlWire) -> Result<Self, Self::Error> {
+        let name = wire.name.ok_or(MetadataError::MissingName)?;
+        Ok(Project {
+            name,
+            version: wire.version,
+            requires_python: wire.requires_python,
+            dependencies: wire.dependencies,
+            optional_dependencies: wire.optional_dependencies,
+            dynamic: wire.dynamic,
+        })
+    }
 }
 
 #[derive(Deserialize, Debug)]

@@ -42,7 +42,7 @@ use uv_python::{
 use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
 use uv_settings::PythonInstallMirrors;
-use uv_types::{BuildContext, BuildIsolation, HashStrategy};
+use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceError};
 
 #[derive(Debug, Error)]
@@ -66,7 +66,7 @@ enum Error {
     #[error(transparent)]
     BuildBackend(#[from] uv_build_backend::Error),
     #[error(transparent)]
-    BuildDispatch(anyhow::Error),
+    BuildDispatch(AnyErrorBuild),
     #[error(transparent)]
     BuildFrontend(#[from] uv_build_frontend::Error),
     #[error("Failed to write message")]
@@ -205,6 +205,7 @@ async fn build_impl(
         keyring_provider,
         resolution: _,
         prerelease: _,
+        fork_strategy: _,
         dependency_metadata,
         config_setting,
         no_build_isolation,
@@ -920,9 +921,10 @@ async fn build_sdist(
                     sources,
                     BuildKind::Sdist,
                     build_output,
+                    BuildStack::default(),
                 )
                 .await
-                .map_err(Error::BuildDispatch)?;
+                .map_err(|err| Error::BuildDispatch(err.into()))?;
             let filename = builder.build(output_dir).await?;
             BuildMessage::Build {
                 filename: DistFilename::SourceDistFilename(
@@ -1017,9 +1019,10 @@ async fn build_wheel(
                     sources,
                     BuildKind::Wheel,
                     build_output,
+                    BuildStack::default(),
                 )
                 .await
-                .map_err(Error::BuildDispatch)?;
+                .map_err(|err| Error::BuildDispatch(err.into()))?;
             let filename = builder.build(output_dir).await?;
             BuildMessage::Build {
                 filename: DistFilename::WheelFilename(
@@ -1091,8 +1094,8 @@ impl<'a> From<Source<'a>> for AnnotatedSource<'a> {
     }
 }
 
-impl std::fmt::Display for AnnotatedSource<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for AnnotatedSource<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(package) = &self.package {
             write!(f, "{} @ {}", package, self.path().simplified_display())
         } else {
@@ -1109,7 +1112,7 @@ enum Source<'a> {
     Directory(Cow<'a, Path>),
 }
 
-impl<'a> Source<'a> {
+impl Source<'_> {
     fn path(&self) -> &Path {
         match self {
             Self::File(path) => path.as_ref(),

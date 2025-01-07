@@ -246,7 +246,7 @@ pub enum Error {
 /// Notably, "system" environments are excluded. See [`python_executables_from_installed`].
 fn python_executables_from_virtual_environments<'a>(
 ) -> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a {
-    let from_active_environment = std::iter::once_with(|| {
+    let from_active_environment = iter::once_with(|| {
         virtualenv_from_env()
             .into_iter()
             .map(virtualenv_python_executable)
@@ -255,7 +255,7 @@ fn python_executables_from_virtual_environments<'a>(
     .flatten();
 
     // N.B. we prefer the conda environment over discovered virtual environments
-    let from_conda_environment = std::iter::once_with(|| {
+    let from_conda_environment = iter::once_with(|| {
         conda_environment_from_env(CondaEnvironmentKind::Child)
             .into_iter()
             .map(virtualenv_python_executable)
@@ -263,7 +263,7 @@ fn python_executables_from_virtual_environments<'a>(
     })
     .flatten();
 
-    let from_discovered_environment = std::iter::once_with(|| {
+    let from_discovered_environment = iter::once_with(|| {
         virtualenv_from_working_dir()
             .map(|path| {
                 path.map(virtualenv_python_executable)
@@ -302,7 +302,7 @@ fn python_executables_from_installed<'a>(
     implementation: Option<&'a ImplementationName>,
     preference: PythonPreference,
 ) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
-    let from_managed_installations = std::iter::once_with(move || {
+    let from_managed_installations = iter::once_with(move || {
         ManagedPythonInstallations::from_settings(None)
             .map_err(Error::from)
             .and_then(|installed_installations| {
@@ -328,13 +328,13 @@ fn python_executables_from_installed<'a>(
     })
     .flatten_ok();
 
-    let from_search_path = std::iter::once_with(move || {
+    let from_search_path = iter::once_with(move || {
         python_executables_from_search_path(version, implementation)
             .map(|path| Ok((PythonSource::SearchPath, path)))
     })
     .flatten();
 
-    let from_windows_registry = std::iter::once_with(move || {
+    let from_windows_registry = iter::once_with(move || {
         #[cfg(windows)]
         {
             // Skip interpreter probing if we already know the version doesn't match.
@@ -407,15 +407,15 @@ fn python_executables<'a>(
     preference: PythonPreference,
 ) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
     // Always read from `UV_INTERNAL__PARENT_INTERPRETER` — it could be a system interpreter
-    let from_parent_interpreter = std::iter::once_with(|| {
-        std::env::var_os(EnvVars::UV_INTERNAL__PARENT_INTERPRETER)
+    let from_parent_interpreter = iter::once_with(|| {
+        env::var_os(EnvVars::UV_INTERNAL__PARENT_INTERPRETER)
             .into_iter()
             .map(|path| Ok((PythonSource::ParentInterpreter, PathBuf::from(path))))
     })
     .flatten();
 
     // Check if the the base conda environment is active
-    let from_base_conda_environment = std::iter::once_with(|| {
+    let from_base_conda_environment = iter::once_with(|| {
         conda_environment_from_env(CondaEnvironmentKind::Base)
             .into_iter()
             .map(virtualenv_python_executable)
@@ -803,18 +803,16 @@ pub fn find_python_installations<'a>(
     .sources(request);
 
     match request {
-        PythonRequest::File(path) => Box::new(std::iter::once({
+        PythonRequest::File(path) => Box::new(iter::once({
             if preference.allows(PythonSource::ProvidedPath) {
                 debug!("Checking for Python interpreter at {request}");
                 match python_installation_from_executable(path, cache) {
-                    Ok(installation) => Ok(FindPythonResult::Ok(installation)),
-                    Err(InterpreterError::NotFound(_)) => {
-                        Ok(FindPythonResult::Err(PythonNotFound {
-                            request: request.clone(),
-                            python_preference: preference,
-                            environment_preference: environments,
-                        }))
-                    }
+                    Ok(installation) => Ok(Ok(installation)),
+                    Err(InterpreterError::NotFound(_)) => Ok(Err(PythonNotFound {
+                        request: request.clone(),
+                        python_preference: preference,
+                        environment_preference: environments,
+                    })),
                     Err(err) => Err(Error::Query(
                         Box::new(err),
                         path.clone(),
@@ -829,18 +827,16 @@ pub fn find_python_installations<'a>(
                 ))
             }
         })),
-        PythonRequest::Directory(path) => Box::new(std::iter::once({
+        PythonRequest::Directory(path) => Box::new(iter::once({
             if preference.allows(PythonSource::ProvidedPath) {
                 debug!("Checking for Python interpreter in {request}");
                 match python_installation_from_directory(path, cache) {
-                    Ok(installation) => Ok(FindPythonResult::Ok(installation)),
-                    Err(InterpreterError::NotFound(_)) => {
-                        Ok(FindPythonResult::Err(PythonNotFound {
-                            request: request.clone(),
-                            python_preference: preference,
-                            environment_preference: environments,
-                        }))
-                    }
+                    Ok(installation) => Ok(Ok(installation)),
+                    Err(InterpreterError::NotFound(_)) => Ok(Err(PythonNotFound {
+                        request: request.clone(),
+                        python_preference: preference,
+                        environment_preference: environments,
+                    })),
                     Err(err) => Err(Error::Query(
                         Box::new(err),
                         path.clone(),
@@ -863,14 +859,10 @@ pub fn find_python_installations<'a>(
                         .filter(move |result| {
                             result_satisfies_environment_preference(result, environments)
                         })
-                        .map(|result| {
-                            result
-                                .map(PythonInstallation::from_tuple)
-                                .map(FindPythonResult::Ok)
-                        }),
+                        .map(|result| result.map(PythonInstallation::from_tuple).map(Ok)),
                 )
             } else {
-                Box::new(std::iter::once(Err(Error::SourceNotAllowed(
+                Box::new(iter::once(Err(Error::SourceNotAllowed(
                     request.clone(),
                     PythonSource::SearchPath,
                     preference,
@@ -879,13 +871,8 @@ pub fn find_python_installations<'a>(
         }
         PythonRequest::Any => Box::new({
             debug!("Searching for any Python interpreter in {sources}");
-            python_interpreters(&VersionRequest::Any, None, environments, preference, cache).map(
-                |result| {
-                    result
-                        .map(PythonInstallation::from_tuple)
-                        .map(FindPythonResult::Ok)
-                },
-            )
+            python_interpreters(&VersionRequest::Any, None, environments, preference, cache)
+                .map(|result| result.map(PythonInstallation::from_tuple).map(Ok))
         }),
         PythonRequest::Default => Box::new({
             debug!("Searching for default Python interpreter in {sources}");
@@ -896,23 +883,16 @@ pub fn find_python_installations<'a>(
                 preference,
                 cache,
             )
-            .map(|result| {
-                result
-                    .map(PythonInstallation::from_tuple)
-                    .map(FindPythonResult::Ok)
-            })
+            .map(|result| result.map(PythonInstallation::from_tuple).map(Ok))
         }),
         PythonRequest::Version(version) => {
             if let Err(err) = version.check_supported() {
-                return Box::new(std::iter::once(Err(Error::InvalidVersionRequest(err))));
+                return Box::new(iter::once(Err(Error::InvalidVersionRequest(err))));
             };
             Box::new({
                 debug!("Searching for {request} in {sources}");
-                python_interpreters(version, None, environments, preference, cache).map(|result| {
-                    result
-                        .map(PythonInstallation::from_tuple)
-                        .map(FindPythonResult::Ok)
-                })
+                python_interpreters(version, None, environments, preference, cache)
+                    .map(|result| result.map(PythonInstallation::from_tuple).map(Ok))
             })
         }
         PythonRequest::Implementation(implementation) => Box::new({
@@ -930,15 +910,11 @@ pub fn find_python_installations<'a>(
                     .implementation_name()
                     .eq_ignore_ascii_case(implementation.into()),
             })
-            .map(|result| {
-                result
-                    .map(PythonInstallation::from_tuple)
-                    .map(FindPythonResult::Ok)
-            })
+            .map(|result| result.map(PythonInstallation::from_tuple).map(Ok))
         }),
         PythonRequest::ImplementationVersion(implementation, version) => {
             if let Err(err) = version.check_supported() {
-                return Box::new(std::iter::once(Err(Error::InvalidVersionRequest(err))));
+                return Box::new(iter::once(Err(Error::InvalidVersionRequest(err))));
             };
             Box::new({
                 debug!("Searching for {request} in {sources}");
@@ -955,17 +931,13 @@ pub fn find_python_installations<'a>(
                         .implementation_name()
                         .eq_ignore_ascii_case(implementation.into()),
                 })
-                .map(|result| {
-                    result
-                        .map(PythonInstallation::from_tuple)
-                        .map(FindPythonResult::Ok)
-                })
+                .map(|result| result.map(PythonInstallation::from_tuple).map(Ok))
             })
         }
         PythonRequest::Key(request) => {
             if let Some(version) = request.version() {
                 if let Err(err) = version.check_supported() {
-                    return Box::new(std::iter::once(Err(Error::InvalidVersionRequest(err))));
+                    return Box::new(iter::once(Err(Error::InvalidVersionRequest(err))));
                 };
             };
             Box::new({
@@ -981,11 +953,7 @@ pub fn find_python_installations<'a>(
                     Err(_) => true,
                     Ok((_source, interpreter)) => request.satisfied_by_interpreter(interpreter),
                 })
-                .map(|result| {
-                    result
-                        .map(PythonInstallation::from_tuple)
-                        .map(FindPythonResult::Ok)
-                })
+                .map(|result| result.map(PythonInstallation::from_tuple).map(Ok))
             })
         }
     }
@@ -1058,7 +1026,7 @@ pub(crate) fn find_python_installation(
         return Ok(Ok(installation));
     }
 
-    Ok(FindPythonResult::Err(PythonNotFound {
+    Ok(Err(PythonNotFound {
         request: request.clone(),
         environment_preference: environments,
         python_preference: preference,
@@ -1193,17 +1161,17 @@ pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
     }
 
     // Ex) `WindowsApps`
-    if !components
+    if components
         .next()
-        .is_some_and(|component| component.as_os_str() == "WindowsApps")
+        .is_none_or(|component| component.as_os_str() != "WindowsApps")
     {
         return false;
     }
 
     // Ex) `Microsoft`
-    if !components
+    if components
         .next()
-        .is_some_and(|component| component.as_os_str() == "Microsoft")
+        .is_none_or(|component| component.as_os_str() != "Microsoft")
     {
         return false;
     }
@@ -1768,8 +1736,8 @@ impl ExecutableName {
     }
 }
 
-impl std::fmt::Display for ExecutableName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for ExecutableName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         if let Some(implementation) = self.implementation {
             write!(f, "{implementation}")?;
         } else {
@@ -1788,7 +1756,7 @@ impl std::fmt::Display for ExecutableName {
             write!(f, "{prerelease}")?;
         }
         f.write_str(self.variant.suffix())?;
-        f.write_str(std::env::consts::EXE_SUFFIX)?;
+        f.write_str(EXE_SUFFIX)?;
         Ok(())
     }
 }
@@ -2307,7 +2275,7 @@ impl FromStr for PythonVariant {
     }
 }
 
-impl std::fmt::Display for PythonVariant {
+impl fmt::Display for PythonVariant {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Default => f.write_str("default"),
@@ -2518,7 +2486,7 @@ fn disjunction(items: &[&str]) -> String {
 fn try_into_u8_slice(release: &[u64]) -> Result<Vec<u8>, std::num::TryFromIntError> {
     release
         .iter()
-        .map(|x| match (*x).try_into() {
+        .map(|x| match u8::try_from(*x) {
             Ok(x) => Ok(x),
             Err(e) => Err(e),
         })
@@ -2527,7 +2495,7 @@ fn try_into_u8_slice(release: &[u64]) -> Result<Vec<u8>, std::num::TryFromIntErr
 
 /// Convert a wheel tag formatted version (e.g., `38`) to multiple components (e.g., `3.8`).
 ///
-/// The major version is always assumed to be a single digit 0-9. The minor version is all of
+/// The major version is always assumed to be a single digit 0-9. The minor version is all
 /// the following content.
 ///
 /// If not a wheel tag formatted version, the input is returned unchanged.

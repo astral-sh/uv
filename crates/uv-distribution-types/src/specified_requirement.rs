@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 
 use uv_normalize::ExtraName;
 use uv_pep508::{MarkerEnvironment, UnnamedRequirement};
-use uv_pypi_types::{Hashes, ParsedUrl, Requirement, RequirementSource};
+use uv_pypi_types::{Hashes, Requirement, RequirementSource};
 
 use crate::VerbatimParsedUrl;
 
@@ -98,10 +98,7 @@ impl UnresolvedRequirement {
         match self {
             Self::Named(requirement) => requirement.hashes(),
             Self::Unnamed(requirement) => {
-                let ParsedUrl::Archive(ref url) = requirement.url.parsed_url else {
-                    return None;
-                };
-                let fragment = url.url.fragment()?;
+                let fragment = requirement.url.verbatim.fragment()?;
                 Hashes::parse_fragment(fragment).ok()
             }
         }

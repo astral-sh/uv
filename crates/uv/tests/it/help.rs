@@ -52,12 +52,12 @@ fn help() {
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -132,12 +132,12 @@ fn help_flag() {
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -211,12 +211,12 @@ fn help_short_flag() {
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -347,9 +347,9 @@ fn help_subcommand() {
               (<https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>)
 
           --color <COLOR_CHOICE>
-              Control colors in output
+              Control the use of color in output.
               
-              [default: auto]
+              By default, uv will automatically detect support for colors when writing to a terminal.
 
               Possible values:
               - auto:   Enables colored output only when the output is going to a terminal or TTY with
@@ -374,6 +374,8 @@ fn help_subcommand() {
               Disable network access.
               
               When disabled, uv will only use locally cached data and locally available files.
+              
+              [env: UV_OFFLINE=]
 
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host.
@@ -458,8 +460,8 @@ fn help_subsubcommand() {
 
     Multiple Python versions may be requested.
 
-    Supports CPython and PyPy. CPython distributions are downloaded from the `python-build-standalone`
-    project. PyPy distributions are downloaded from `python.org`.
+    Supports CPython and PyPy. CPython distributions are downloaded from the Astral
+    `python-build-standalone` project. PyPy distributions are downloaded from `python.org`.
 
     Python versions are installed into the uv Python directory, which can be retrieved with `uv python
     dir`.
@@ -498,8 +500,8 @@ fn help_subsubcommand() {
               Set the URL to use as the source for downloading Python installations.
               
               The provided URL will replace
-              `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g.,
-              `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+              `https://github.com/astral-sh/python-build-standalone/releases/download` in, e.g.,
+              `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
               
               Distributions can be read from a local directory by using the `file://` URL scheme.
               
@@ -538,8 +540,7 @@ fn help_subsubcommand() {
               3.13+freethreaded with `--default` will include in `python3t` and `pythont`, not `python3`
               and `python`.
               
-              If multiple Python versions are requested during the installation, the first request will
-              be the default.
+              If multiple Python versions are requested, uv will exit with an error.
 
     Cache options:
       -n, --no-cache
@@ -590,9 +591,9 @@ fn help_subsubcommand() {
               (<https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>)
 
           --color <COLOR_CHOICE>
-              Control colors in output
+              Control the use of color in output.
               
-              [default: auto]
+              By default, uv will automatically detect support for colors when writing to a terminal.
 
               Possible values:
               - auto:   Enables colored output only when the output is going to a terminal or TTY with
@@ -617,6 +618,8 @@ fn help_subsubcommand() {
               Disable network access.
               
               When disabled, uv will only use locally cached data and locally available files.
+              
+              [env: UV_OFFLINE=]
 
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host.
@@ -725,12 +728,12 @@ fn help_flag_subcommand() {
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -798,12 +801,12 @@ fn help_flag_subsubcommand() {
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -955,12 +958,12 @@ fn help_with_global_option() {
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -1071,12 +1074,12 @@ fn help_with_no_pager() {
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress

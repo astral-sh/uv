@@ -474,7 +474,7 @@ impl RegistryClient {
                         }
                     }
                     FileLocation::AbsoluteUrl(url) => {
-                        let url = url.to_url();
+                        let url = url.to_url().map_err(ErrorKind::InvalidUrl)?;
                         if url.scheme() == "file" {
                             let path = url
                                 .to_file_path()
@@ -786,15 +786,13 @@ impl VersionFiles {
     }
 
     pub fn all(self) -> impl Iterator<Item = (DistFilename, File)> {
-        self.wheels
+        self.source_dists
             .into_iter()
-            .map(|VersionWheel { name, file }| (DistFilename::WheelFilename(name), file))
+            .map(|VersionSourceDist { name, file }| (DistFilename::SourceDistFilename(name), file))
             .chain(
-                self.source_dists
+                self.wheels
                     .into_iter()
-                    .map(|VersionSourceDist { name, file }| {
-                        (DistFilename::SourceDistFilename(name), file)
-                    }),
+                    .map(|VersionWheel { name, file }| (DistFilename::WheelFilename(name), file)),
             )
     }
 }
@@ -1039,7 +1037,7 @@ mod tests {
             .iter()
             .map(|file| uv_pypi_types::base_url_join_relative(base.as_url().as_str(), &file.url))
             .collect::<Result<Vec<_>, JoinRelativeError>>()?;
-        let urls = urls.iter().map(reqwest::Url::as_str).collect::<Vec<_>>();
+        let urls = urls.iter().map(Url::as_str).collect::<Vec<_>>();
         insta::assert_debug_snapshot!(urls, @r###"
     [
         "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/0.1/Flask-0.1.tar.gz#sha256=9da884457e910bf0847d396cb4b778ad9f3c3d17db1c5997cb861937bd284237",

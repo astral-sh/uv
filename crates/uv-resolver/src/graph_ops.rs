@@ -5,6 +5,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use std::collections::hash_map::Entry;
 
 use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_pep508::MarkerTree;
 use uv_pypi_types::{ConflictItem, Conflicts};
 
 use crate::resolution::ResolutionGraphNode;
@@ -17,10 +18,10 @@ use crate::universal_marker::UniversalMarker;
 /// marker), we re-queue the node and update all its children. This implicitly handles cycles,
 /// whenever we re-reach a node through a cycle the marker we have is a more
 /// specific marker/longer path, so we don't update the node and don't re-queue it.
-pub(crate) fn marker_reachability<T>(
-    graph: &Graph<T, UniversalMarker>,
-    fork_markers: &[UniversalMarker],
-) -> FxHashMap<NodeIndex, UniversalMarker> {
+pub(crate) fn marker_reachability<Node, Edge: Reachable + Copy + PartialEq>(
+    graph: &Graph<Node, Edge>,
+    fork_markers: &[Edge],
+) -> FxHashMap<NodeIndex, Edge> {
     // Note that we build including the virtual packages due to how we propagate markers through
     // the graph, even though we then only read the markers for base packages.
     let mut reachability = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
@@ -42,11 +43,11 @@ pub(crate) fn marker_reachability<T>(
     // The root nodes are always applicable, unless the user has restricted resolver
     // environments with `tool.uv.environments`.
     let root_markers = if fork_markers.is_empty() {
-        UniversalMarker::TRUE
+        Edge::true_marker()
     } else {
         fork_markers
             .iter()
-            .fold(UniversalMarker::FALSE, |mut acc, marker| {
+            .fold(Edge::false_marker(), |mut acc, marker| {
                 acc.or(*marker);
                 acc
             })
@@ -192,7 +193,7 @@ pub(crate) fn simplify_conflict_markers(
 
     let mut inferences: FxHashMap<NodeIndex, Vec<FxHashSet<Inference>>> = FxHashMap::default();
     for (node_id, sets) in activated {
-        let mut new_sets = vec![];
+        let mut new_sets = Vec::with_capacity(sets.len());
         for set in sets {
             let mut new_set = FxHashSet::default();
             for item in set {
@@ -262,5 +263,56 @@ pub(crate) fn simplify_conflict_markers(
                 }
             }
         }
+    }
+}
+
+/// A trait for types that can be used as markers in the dependency graph.
+pub(crate) trait Reachable {
+    /// The marker representing the "true" value.
+    fn true_marker() -> Self;
+
+    /// The marker representing the "false" value.
+    fn false_marker() -> Self;
+
+    /// Perform a logical AND operation with another marker.
+    fn and(&mut self, other: Self);
+
+    /// Perform a logical OR operation with another marker.
+    fn or(&mut self, other: Self);
+}
+
+impl Reachable for UniversalMarker {
+    fn true_marker() -> Self {
+        Self::TRUE
+    }
+
+    fn false_marker() -> Self {
+        Self::FALSE
+    }
+
+    fn and(&mut self, other: Self) {
+        self.and(other);
+    }
+
+    fn or(&mut self, other: Self) {
+        self.or(other);
+    }
+}
+
+impl Reachable for MarkerTree {
+    fn true_marker() -> Self {
+        Self::TRUE
+    }
+
+    fn false_marker() -> Self {
+        Self::FALSE
+    }
+
+    fn and(&mut self, other: Self) {
+        self.and(other);
+    }
+
+    fn or(&mut self, other: Self) {
+        self.or(other);
     }
 }

@@ -76,6 +76,7 @@ pub(crate) fn create(
             base_executable,
             interpreter.python_major(),
             interpreter.python_minor(),
+            interpreter.variant().suffix(),
         ) {
             Ok(path) => path,
             Err(err) => {
@@ -104,9 +105,19 @@ pub(crate) fn create(
                 if allow_existing {
                     debug!("Allowing existing directory");
                 } else if location.join("pyvenv.cfg").is_file() {
-                    // TODO(charlie): On Windows, if the current executable is in the directory,
-                    // we need to use `safe_delete`.
                     debug!("Removing existing directory");
+
+                    // On Windows, if the current executable is in the directory, guard against
+                    // self-deletion.
+                    #[cfg(windows)]
+                    if let Ok(itself) = std::env::current_exe() {
+                        let target = std::path::absolute(location)?;
+                        if itself.starts_with(&target) {
+                            debug!("Detected self-delete of executable: {}", itself.display());
+                            self_replace::self_delete_outside_path(location)?;
+                        }
+                    }
+
                     fs::remove_dir_all(location)?;
                     fs::create_dir_all(location)?;
                 } else if location
@@ -654,16 +665,27 @@ fn copy_launcher_windows(
 ///    environments.
 ///
 /// See: <https://github.com/python/cpython/blob/a03efb533a58fd13fb0cc7f4a5c02c8406a407bd/Modules/getpath.py#L591-L594>
-fn find_base_python(executable: &Path, major: u8, minor: u8) -> Result<PathBuf, io::Error> {
+fn find_base_python(
+    executable: &Path,
+    major: u8,
+    minor: u8,
+    suffix: &str,
+) -> Result<PathBuf, io::Error> {
+    /// Returns `true` if `path` is the root directory.
+    fn is_root(path: &Path) -> bool {
+        let mut components = path.components();
+        components.next() == Some(std::path::Component::RootDir) && components.next().is_none()
+    }
+
     /// Determining whether `dir` is a valid Python prefix by searching for a "landmark".
     ///
     /// See: <https://github.com/python/cpython/blob/a03efb533a58fd13fb0cc7f4a5c02c8406a407bd/Modules/getpath.py#L183>
-    fn is_prefix(dir: &Path, major: u8, minor: u8) -> bool {
+    fn is_prefix(dir: &Path, major: u8, minor: u8, suffix: &str) -> bool {
         if cfg!(windows) {
             dir.join("Lib").join("os.py").is_file()
         } else {
             dir.join("lib")
-                .join(format!("python{major}.{minor}"))
+                .join(format!("python{major}.{minor}{suffix}"))
                 .join("os.py")
                 .is_file()
         }
@@ -678,8 +700,8 @@ fn find_base_python(executable: &Path, major: u8, minor: u8) -> Result<PathBuf, 
         );
 
         // Determine whether this executable will produce a valid `home` for a virtual environment.
-        for prefix in executable.ancestors() {
-            if is_prefix(prefix, major, minor) {
+        for prefix in executable.ancestors().take_while(|path| !is_root(path)) {
+            if is_prefix(prefix, major, minor, suffix) {
                 return Ok(executable.into_owned());
             }
         }

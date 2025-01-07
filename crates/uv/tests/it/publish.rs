@@ -241,8 +241,9 @@ fn check_keyring_behaviours() {
     ----- stderr -----
     warning: `uv publish` is experimental and may change without warning
     Publishing 1 file to https://test.pypi.org/legacy/?ok
-    error: Failed to query check URL
-      Caused by: Package `ok` was not found in the registry
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
+      Caused by: Upload failed with status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "###
     );
 
@@ -265,7 +266,7 @@ fn check_keyring_behaviours() {
     ----- stderr -----
     warning: `uv publish` is experimental and may change without warning
     Publishing 1 file to https://test.pypi.org/legacy/?ok
-    warning: Using `--keyring-provider` with a password or token and no check url has no effect
+    warning: Using `--keyring-provider` with a password or token and no check URL has no effect
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
     error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
       Caused by: Upload failed with status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
@@ -295,8 +296,11 @@ fn check_keyring_behaviours() {
     Request for dummy@https://test.pypi.org/legacy/?ok
     Request for dummy@test.pypi.org
     warning: Keyring has no password for URL `https://test.pypi.org/legacy/?ok` and username `dummy`
-    error: Failed to query check URL
-      Caused by: Package `ok` was not found in the registry
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    Request for dummy@https://test.pypi.org/legacy/?ok
+    Request for dummy@test.pypi.org
+    error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
+      Caused by: Upload failed with status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "###
     );
 
@@ -337,6 +341,7 @@ fn invalid_index() {
         version = "0.1.0"
 
         [[tool.uv.index]]
+        explicit = true
         name = "foo"
         url = "https://example.com"
 

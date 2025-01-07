@@ -1,10 +1,10 @@
 use std::borrow::Cow;
-use std::env;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::stdout;
 use std::path::Path;
 use std::process::ExitCode;
+use std::str::FromStr;
 use std::sync::atomic::Ordering;
 
 use anstream::eprintln;
@@ -175,9 +175,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 Some(RunCommand::PythonRemote(script, _)) => {
                     Pep723Metadata::read(&script).await?.map(Pep723Item::Remote)
                 }
-                Some(RunCommand::PythonStdin(contents)) => {
-                    Pep723Metadata::parse(contents)?.map(Pep723Item::Stdin)
-                }
+                Some(
+                    RunCommand::PythonStdin(contents, _) | RunCommand::PythonGuiStdin(contents, _),
+                ) => Pep723Metadata::parse(contents)?.map(Pep723Item::Stdin),
                 _ => None,
             }
         } else if let ProjectCommand::Remove(uv_cli::RemoveArgs {
@@ -208,6 +208,16 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     // Resolve the cache settings.
     let cache_settings = CacheSettings::resolve(*cli.top_level.cache_args, filesystem.as_ref());
+
+    // Enforce the required version.
+    if let Some(required_version) = globals.required_version.as_ref() {
+        let package_version = uv_pep440::Version::from_str(uv_version::version())?;
+        if !required_version.contains(&package_version) {
+            return Err(anyhow::anyhow!(
+                "Required version `{required_version}` does not match the running version `{package_version}`",
+            ));
+        }
+    }
 
     // Configure the `tracing` crate, which controls internal logging.
     #[cfg(feature = "tracing-durations-export")]
@@ -339,6 +349,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.output_file.as_deref(),
                 args.settings.resolution,
                 args.settings.prerelease,
+                args.settings.fork_strategy,
                 args.settings.dependency_mode,
                 args.settings.upgrade,
                 args.settings.generate_hashes,
@@ -671,12 +682,23 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &args.package,
                 args.no_dedupe,
                 args.invert,
-                args.shared.strict,
-                args.shared.python.as_deref(),
-                args.shared.system,
+                args.outdated,
+                args.settings.prerelease,
+                args.settings.index_locations,
+                args.settings.index_strategy,
+                args.settings.keyring_provider,
+                globals.allow_insecure_host,
+                globals.connectivity,
+                globals.concurrency,
+                args.settings.strict,
+                args.settings.exclude_newer,
+                args.settings.python.as_deref(),
+                args.settings.system,
+                globals.native_tls,
                 &cache,
                 printer,
             )
+            .await
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Check(args),
@@ -1223,7 +1245,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let (publish_url, check_url) = if let Some(index_name) = index {
                 debug!("Publishing with index {index_name}");
                 let index = index_locations
-                    .indexes()
+                    .simple_indexes()
                     .find(|index| {
                         index
                             .name
@@ -1232,7 +1254,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     })
                     .with_context(|| {
                         let mut index_names: Vec<String> = index_locations
-                            .indexes()
+                            .simple_indexes()
                             .filter_map(|index| index.name.as_ref())
                             .map(ToString::to_string)
                             .collect();
@@ -1355,6 +1377,7 @@ async fn run_project(
                 args.name,
                 args.package,
                 args.kind,
+                args.description,
                 args.vcs,
                 args.build_backend,
                 args.no_readme,
@@ -1420,6 +1443,7 @@ async fn run_project(
                 args.extras,
                 args.dev,
                 args.editable,
+                args.modifications,
                 args.python,
                 args.install_mirrors,
                 args.settings,
@@ -1698,7 +1722,7 @@ async fn run_project(
 /// uv binary interface is the official public API. When using this entry
 /// point, uv assumes it is running in a process it controls and that the
 /// entire process lifetime is managed by uv. Unexpected behavior may be
-/// encountered if this entry pointis called multiple times in a single process.
+/// encountered if this entry point is called multiple times in a single process.
 pub fn main<I, T>(args: I) -> ExitCode
 where
     I: IntoIterator<Item = T>,

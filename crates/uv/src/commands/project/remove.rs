@@ -1,9 +1,9 @@
-use anyhow::{Context, Result};
 use std::fmt::Write;
 use std::path::Path;
-use uv_settings::PythonInstallMirrors;
 
+use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
+
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{
@@ -15,15 +15,16 @@ use uv_fs::Simplified;
 use uv_normalize::DEV_DEPENDENCIES;
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
-use uv_resolver::InstallTarget;
 use uv_scripts::Pep723Script;
-use uv_warnings::{warn_user, warn_user_once};
+use uv_settings::PythonInstallMirrors;
+use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
+use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::{default_dependency_groups, ProjectError};
 use crate::commands::{diagnostics, project, ExitStatus};
@@ -110,10 +111,10 @@ pub(crate) async fn remove(
             DependencyType::Production => {
                 let deps = toml.remove_dependency(&package)?;
                 if deps.is_empty() {
-                    warn_if_present(&package, &toml);
+                    show_other_dependency_type_hint(printer, &package, &toml)?;
                     anyhow::bail!(
-                        "The dependency `{package}` could not be found in `dependencies`"
-                    );
+                        "The dependency `{package}` could not be found in `project.dependencies`"
+                    )
                 }
             }
             DependencyType::Dev => {
@@ -121,18 +122,18 @@ pub(crate) async fn remove(
                 let group_deps =
                     toml.remove_dependency_group_requirement(&package, &DEV_DEPENDENCIES)?;
                 if dev_deps.is_empty() && group_deps.is_empty() {
-                    warn_if_present(&package, &toml);
+                    show_other_dependency_type_hint(printer, &package, &toml)?;
                     anyhow::bail!(
-                        "The dependency `{package}` could not be found in `dev-dependencies` or `dependency-groups.dev`"
+                        "The dependency `{package}` could not be found in `tool.uv.dev-dependencies` or `tool.uv.dependency-groups.dev`"
                     );
                 }
             }
             DependencyType::Optional(ref extra) => {
                 let deps = toml.remove_optional_dependency(&package, extra)?;
                 if deps.is_empty() {
-                    warn_if_present(&package, &toml);
+                    show_other_dependency_type_hint(printer, &package, &toml)?;
                     anyhow::bail!(
-                        "The dependency `{package}` could not be found in `optional-dependencies`"
+                        "The dependency `{package}` could not be found in `project.optional-dependencies.{extra}`"
                     );
                 }
             }
@@ -142,17 +143,17 @@ pub(crate) async fn remove(
                     let group_deps =
                         toml.remove_dependency_group_requirement(&package, &DEV_DEPENDENCIES)?;
                     if dev_deps.is_empty() && group_deps.is_empty() {
-                        warn_if_present(&package, &toml);
+                        show_other_dependency_type_hint(printer, &package, &toml)?;
                         anyhow::bail!(
-                            "The dependency `{package}` could not be found in `dev-dependencies` or `dependency-groups.dev`"
+                            "The dependency `{package}` could not be found in `tool.uv.dev-dependencies` or `tool.uv.dependency-groups.dev`"
                         );
                     }
                 } else {
                     let deps = toml.remove_dependency_group_requirement(&package, group)?;
                     if deps.is_empty() {
-                        warn_if_present(&package, &toml);
+                        show_other_dependency_type_hint(printer, &package, &toml)?;
                         anyhow::bail!(
-                            "The dependency `{package}` could not be found in `dependency-groups`"
+                            "The dependency `{package}` could not be found in `dependency-groups.{group}`"
                         );
                     }
                 }
@@ -194,7 +195,7 @@ pub(crate) async fn remove(
     let venv = project::get_or_init_environment(
         project.workspace(),
         python.as_deref().map(PythonRequest::parse),
-        install_mirrors,
+        &install_mirrors,
         python_preference,
         python_downloads,
         connectivity,
@@ -221,7 +222,7 @@ pub(crate) async fn remove(
     // Lock and sync the environment, if necessary.
     let lock = match project::lock::do_safe_lock(
         mode,
-        project.workspace(),
+        project.workspace().into(),
         settings.as_ref().into(),
         LowerBound::Allow,
         &state,
@@ -312,29 +313,48 @@ enum Target {
     Script(Pep723Script),
 }
 
-/// Emit a warning if a dependency with the given name is present as any dependency type.
+/// Show a hint if a dependency with the given name is present as any dependency type.
 ///
 /// This is useful when a dependency of the user-specified type was not found, but it may be present
 /// elsewhere.
-fn warn_if_present(name: &PackageName, pyproject: &PyProjectTomlMut) {
+fn show_other_dependency_type_hint(
+    printer: Printer,
+    name: &PackageName,
+    pyproject: &PyProjectTomlMut,
+) -> Result<()> {
+    // TODO(zanieb): Attach these hints to the error so they render _after_ in accordance our
+    // typical styling
     for dep_ty in pyproject.find_dependency(name, None) {
         match dep_ty {
-            DependencyType::Production => {
-                warn_user!("`{name}` is a production dependency");
-            }
-            DependencyType::Dev => {
-                warn_user!("`{name}` is a development dependency; try calling `uv remove --dev`");
-            }
-            DependencyType::Optional(group) => {
-                warn_user!(
-                    "`{name}` is an optional dependency; try calling `uv remove --optional {group}`",
-                );
-            }
-            DependencyType::Group(group) => {
-                warn_user!(
-                    "`{name}` is in the `{group}` group; try calling `uv remove --group {group}`",
-                );
-            }
+            DependencyType::Production => writeln!(
+                printer.stderr(),
+                "{}{} `{name}` is a production dependency",
+                "hint".bold().cyan(),
+                ":".bold(),
+            )?,
+            DependencyType::Dev => writeln!(
+                printer.stderr(),
+                "{}{} `{name}` is a development dependency (try: `{}`)",
+                "hint".bold().cyan(),
+                ":".bold(),
+                format!("uv remove {name} --dev`").bold()
+            )?,
+            DependencyType::Optional(group) => writeln!(
+                printer.stderr(),
+                "{}{} `{name}` is an optional dependency (try: `{}`)",
+                "hint".bold().cyan(),
+                ":".bold(),
+                format!("uv remove {name} --optional {group}").bold()
+            )?,
+            DependencyType::Group(group) => writeln!(
+                printer.stderr(),
+                "{}{} `{name}` is in the `{group}` group (try: `{}`)",
+                "hint".bold().cyan(),
+                ":".bold(),
+                format!("uv remove {name} --group {group}").bold()
+            )?,
         }
     }
+
+    Ok(())
 }

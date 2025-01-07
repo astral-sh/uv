@@ -1,5 +1,13 @@
 //! Fetch and build source distributions from remote sources.
 
+// This is to squash warnings about `|r| r.into_git_reporter()`. Clippy wants
+// me to eta-reduce that and write it as
+// `<(dyn reporter::Reporter + 'static)>::into_git_reporter`
+// instead. But that's a monster. On the other hand, applying this suppression
+// instruction more granularly is annoying. So we just slap it on the module
+// for now. ---AG
+#![allow(clippy::redundant_closure_for_method_calls)]
+
 use std::borrow::Cow;
 use std::ops::Bound;
 use std::path::{Path, PathBuf};
@@ -9,7 +17,6 @@ use std::sync::Arc;
 use crate::distribution_database::ManagedClient;
 use crate::error::Error;
 use crate::metadata::{ArchiveMetadata, GitWorkspaceMember, Metadata};
-use crate::reporter::Facade;
 use crate::source::built_wheel_metadata::BuiltWheelMetadata;
 use crate::source::revision::Revision;
 use crate::{Reporter, RequiresDist};
@@ -38,7 +45,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{release_specifiers_to_ranges, Version};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata12, RequiresTxt, ResolutionMetadata};
-use uv_types::{BuildContext, SourceBuildTrait};
+use uv_types::{BuildContext, BuildStack, SourceBuildTrait};
 use zip::ZipArchive;
 
 mod built_wheel_metadata;
@@ -47,6 +54,7 @@ mod revision;
 /// Fetch and build a source distribution from a remote source, or from a local cache.
 pub(crate) struct SourceDistributionBuilder<'a, T: BuildContext> {
     build_context: &'a T,
+    build_stack: Option<&'a BuildStack>,
     reporter: Option<Arc<dyn Reporter>>,
 }
 
@@ -67,11 +75,21 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     pub(crate) fn new(build_context: &'a T) -> Self {
         Self {
             build_context,
+            build_stack: None,
             reporter: None,
         }
     }
 
-    /// Set the [`Reporter`] to use for this source distribution fetcher.
+    /// Set the [`BuildStack`] to use for the [`SourceDistributionBuilder`].
+    #[must_use]
+    pub(crate) fn with_build_stack(self, build_stack: &'a BuildStack) -> Self {
+        Self {
+            build_stack: Some(build_stack),
+            ..self
+        }
+    }
+
+    /// Set the [`Reporter`] to use for the [`SourceDistributionBuilder`].
     #[must_use]
     pub(crate) fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
@@ -103,7 +121,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     FileLocation::RelativeUrl(base, url) => {
                         uv_pypi_types::base_url_join_relative(base, url)?
                     }
-                    FileLocation::AbsoluteUrl(url) => url.to_url(),
+                    FileLocation::AbsoluteUrl(url) => url.to_url()?,
                 };
 
                 // If the URL is a file URL, use the local path directly.
@@ -252,7 +270,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     FileLocation::RelativeUrl(base, url) => {
                         uv_pypi_types::base_url_join_relative(base, url)?
                     }
-                    FileLocation::AbsoluteUrl(url) => url.to_url(),
+                    FileLocation::AbsoluteUrl(url) => url.to_url()?,
                 };
 
                 // If the URL is a file URL, use the local path directly.
@@ -1319,7 +1337,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 resource.git,
                 client.unmanaged.uncached_client(resource.url).clone(),
                 self.build_context.cache().bucket(CacheBucket::Git),
-                self.reporter.clone().map(Facade::from),
+                self.reporter
+                    .clone()
+                    .map(|reporter| reporter.into_git_reporter()),
             )
             .await?;
 
@@ -1416,7 +1436,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 resource.git,
                 client.unmanaged.uncached_client(resource.url).clone(),
                 self.build_context.cache().bucket(CacheBucket::Git),
-                self.reporter.clone().map(Facade::from),
+                self.reporter
+                    .clone()
+                    .map(|reporter| reporter.into_git_reporter()),
             )
             .await?;
 
@@ -1592,7 +1614,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         &source.git,
                         client.unmanaged.uncached_client(&source.url).clone(),
                         self.build_context.cache().bucket(CacheBucket::Git),
-                        self.reporter.clone().map(Facade::from),
+                        self.reporter
+                            .clone()
+                            .map(|reporter| reporter.into_git_reporter()),
                     )
                     .await?;
             }
@@ -1603,7 +1627,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         source.git,
                         client.unmanaged.uncached_client(source.url).clone(),
                         self.build_context.cache().bucket(CacheBucket::Git),
-                        self.reporter.clone().map(Facade::from),
+                        self.reporter
+                            .clone()
+                            .map(|reporter| reporter.into_git_reporter()),
                     )
                     .await?;
             }
@@ -1755,7 +1781,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
         if let Err(err) = rename_with_retry(extracted, target).await {
             // If the directory already exists, accept it.
-            if target.is_dir() {
+            if err.kind() == std::io::ErrorKind::AlreadyExists {
                 warn!("Directory already exists: {}", target.display());
             } else {
                 return Err(Error::CacheWrite(err));
@@ -1816,7 +1842,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
         if let Err(err) = rename_with_retry(extracted, target).await {
             // If the directory already exists, accept it.
-            if target.is_dir() {
+            if err.kind() == std::io::ErrorKind::AlreadyExists {
                 warn!("Directory already exists: {}", target.display());
             } else {
                 return Err(Error::CacheWrite(err));
@@ -1879,7 +1905,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Some(&source.to_string()),
             )
             .await
-            .map_err(Error::Build)?
+            .map_err(|err| Error::Build(err.into()))?
         {
             // In the uv build backend, the normalized filename and the disk filename are the same.
             name.to_string()
@@ -1898,9 +1924,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         BuildKind::Wheel
                     },
                     BuildOutput::Debug,
+                    self.build_stack.cloned().unwrap_or_default(),
                 )
                 .await
-                .map_err(Error::Build)?
+                .map_err(|err| Error::Build(err.into()))?
                 .wheel(temp_dir.path())
                 .await
                 .map_err(Error::Build)?
@@ -1974,9 +2001,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     BuildKind::Wheel
                 },
                 BuildOutput::Debug,
+                self.build_stack.cloned().unwrap_or_default(),
             )
             .await
-            .map_err(Error::Build)?;
+            .map_err(|err| Error::Build(err.into()))?;
 
         // Build the metadata.
         let dist_info = builder.metadata().await.map_err(Error::Build)?;
@@ -2377,8 +2405,8 @@ async fn read_egg_info(
                         continue;
                     };
                     if let Some(name) = name {
-                        debug!("Skipping `{file_stem}.egg-info` due to name mismatch (expected: `{name}`)");
                         if file_name.name != *name {
+                            debug!("Skipping `{file_stem}.egg-info` due to name mismatch (expected: `{name}`)");
                             continue;
                         }
                     }

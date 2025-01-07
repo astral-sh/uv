@@ -69,6 +69,8 @@ def prepare_arch(arch: dict) -> tuple[str, str]:
             family = "X86_32(target_lexicon::X86_32Architecture::I686)"
         case "aarch64":
             family = "Aarch64(target_lexicon::Aarch64Architecture::Aarch64)"
+        case "armv5tel":
+            family = "Arm(target_lexicon::ArmArchitecture::Armv5te)"
         case "armv7":
             family = "Arm(target_lexicon::ArmArchitecture::Armv7)"
         case value:
@@ -81,17 +83,27 @@ def prepare_arch(arch: dict) -> tuple[str, str]:
     return family, variant
 
 
+def prepare_os(os: str) -> str:
+    match os:
+        # Special constructors
+        case "darwin":
+            return "Darwin(None)"
+
+    return os.title()
+
+
 def prepare_prerelease(prerelease: str) -> str:
     if not prerelease:
         return "None"
     if not (match := PRERELEASE_PATTERN.match(prerelease)):
         raise ValueError(f"Invalid prerelease: {prerelease!r}")
     kind, number = match.groups()
-    return f"Some(Prerelease {{ kind: PrereleaseKind::{kind.capitalize()}, number: {number} }})"
+    kind_mapping = {"a": "Alpha", "b": "Beta", "rc": "Rc"}
+    return f"Some(Prerelease {{ kind: PrereleaseKind::{kind_mapping[kind]}, number: {number} }})"
 
 
 def prepare_value(value: dict) -> dict:
-    value["os"] = value["os"].title()
+    value["os"] = prepare_os(value["os"])
     value["arch_family"], value["arch_variant"] = prepare_arch(value["arch"])
     value["name"] = prepare_name(value["name"])
     value["libc"] = prepare_libc(value["libc"])

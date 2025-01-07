@@ -1,10 +1,12 @@
-use crate::git_info::{Commit, Tags};
-use crate::timestamp::Timestamp;
+use std::cmp::max;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
-use std::cmp::max;
-use std::path::{Path, PathBuf};
 use tracing::{debug, warn};
+
+use crate::git_info::{Commit, Tags};
+use crate::timestamp::Timestamp;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CacheInfoError {
@@ -28,6 +30,9 @@ pub struct CacheInfo {
     commit: Option<Commit>,
     /// The Git tags present at the time of the build.
     tags: Option<Tags>,
+    /// Environment variables to include in the cache key.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    env: BTreeMap<String, Option<String>>,
 }
 
 impl CacheInfo {
@@ -54,6 +59,7 @@ impl CacheInfo {
         let mut commit = None;
         let mut tags = None;
         let mut timestamp = None;
+        let mut env = BTreeMap::new();
 
         // Read the cache keys.
         let cache_keys =
@@ -81,7 +87,7 @@ impl CacheInfo {
 
         // Incorporate timestamps from any direct filepaths.
         let mut globs = vec![];
-        for cache_key in &cache_keys {
+        for cache_key in cache_keys {
             match cache_key {
                 CacheKey::Path(file) | CacheKey::File { file } => {
                     if file.chars().any(|c| matches!(c, '*' | '?' | '[' | '{')) {
@@ -91,7 +97,7 @@ impl CacheInfo {
                     }
 
                     // Treat the path as a file.
-                    let path = directory.join(file);
+                    let path = directory.join(&file);
                     let metadata = match path.metadata() {
                         Ok(metadata) => metadata,
                         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -142,6 +148,10 @@ impl CacheInfo {
                 CacheKey::Git {
                     git: GitPattern::Bool(false),
                 } => {}
+                CacheKey::Environment { env: var } => {
+                    let value = std::env::var(&var).ok();
+                    env.insert(var, value);
+                }
             }
         }
 
@@ -180,6 +190,7 @@ impl CacheInfo {
             timestamp,
             commit,
             tags,
+            env,
         })
     }
 
@@ -194,8 +205,12 @@ impl CacheInfo {
         })
     }
 
+    /// Returns `true` if the cache info is empty.
     pub fn is_empty(&self) -> bool {
-        self.timestamp.is_none() && self.commit.is_none() && self.tags.is_none()
+        self.timestamp.is_none()
+            && self.commit.is_none()
+            && self.tags.is_none()
+            && self.env.is_empty()
     }
 }
 
@@ -228,6 +243,8 @@ pub enum CacheKey {
     File { file: String },
     /// Ex) `{ git = true }` or `{ git = { commit = true, tags = false } }`
     Git { git: GitPattern },
+    /// Ex) `{ env = "UV_CACHE_INFO" }`
+    Environment { env: String },
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]

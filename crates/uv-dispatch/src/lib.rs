@@ -5,10 +5,11 @@
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use futures::FutureExt;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
+use thiserror::Error;
 use tracing::{debug, instrument, trace};
 use uv_build_backend::check_direct_build;
 use uv_build_frontend::{SourceBuild, SourceBuildContext};
@@ -22,8 +23,8 @@ use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, Name, Resolution,
-    SourceDist, VersionOrUrlRef,
+    CachedDist, DependencyMetadata, Identifier, IndexCapabilities, IndexLocations,
+    IsBuildBackendError, Name, Resolution, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
@@ -33,7 +34,44 @@ use uv_resolver::{
     ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
     PythonRequirement, Resolver, ResolverEnvironment,
 };
-use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
+use uv_types::{
+    AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages, HashStrategy,
+    InFlight,
+};
+
+#[derive(Debug, Error)]
+pub enum BuildDispatchError {
+    #[error(transparent)]
+    BuildFrontend(#[from] AnyErrorBuild),
+
+    #[error(transparent)]
+    Tags(#[from] uv_platform_tags::TagsError),
+
+    #[error(transparent)]
+    Resolve(#[from] uv_resolver::ResolveError),
+
+    #[error(transparent)]
+    Join(#[from] tokio::task::JoinError),
+
+    #[error(transparent)]
+    Anyhow(#[from] anyhow::Error),
+
+    #[error(transparent)]
+    Prepare(#[from] uv_installer::PrepareError),
+}
+
+impl IsBuildBackendError for BuildDispatchError {
+    fn is_build_backend_error(&self) -> bool {
+        match self {
+            BuildDispatchError::Tags(_)
+            | BuildDispatchError::Resolve(_)
+            | BuildDispatchError::Join(_)
+            | BuildDispatchError::Anyhow(_)
+            | BuildDispatchError::Prepare(_) => false,
+            BuildDispatchError::BuildFrontend(err) => err.is_build_backend_error(),
+        }
+    }
+}
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
 /// documentation.
@@ -124,6 +162,7 @@ impl<'a> BuildDispatch<'a> {
     }
 }
 
+#[allow(refining_impl_trait)]
 impl<'a> BuildContext for BuildDispatch<'a> {
     type SourceDistBuilder = SourceBuild;
 
@@ -167,7 +206,11 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.index_locations
     }
 
-    async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {
+    async fn resolve<'data>(
+        &'data self,
+        requirements: &'data [Requirement],
+        build_stack: &'data BuildStack,
+    ) -> Result<Resolution, BuildDispatchError> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
         let marker_env = self.interpreter.resolver_marker_environment();
         let tags = self.interpreter.tags()?;
@@ -177,12 +220,12 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             OptionsBuilder::new()
                 .exclude_newer(self.exclude_newer)
                 .index_strategy(self.index_strategy)
+                .build_options(self.build_options.clone())
                 .flexibility(Flexibility::Fixed)
                 .build(),
             &python_requirement,
             ResolverEnvironment::specific(marker_env),
-            // Conflicting groups only make sense when doing
-            // universal resolution.
+            // Conflicting groups only make sense when doing universal resolution.
             Conflicts::empty(),
             Some(tags),
             self.flat_index,
@@ -190,7 +233,8 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.hasher,
             self,
             EmptyInstalledPackages,
-            DistributionDatabase::new(self.client, self, self.concurrency.downloads),
+            DistributionDatabase::new(self.client, self, self.concurrency.downloads)
+                .with_build_stack(build_stack),
         )?;
         let resolution = Resolution::from(resolver.resolve().await.with_context(|| {
             format!(
@@ -215,7 +259,8 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         &'data self,
         resolution: &'data Resolution,
         venv: &'data PythonEnvironment,
-    ) -> Result<Vec<CachedDist>> {
+        build_stack: &'data BuildStack,
+    ) -> Result<Vec<CachedDist>, BuildDispatchError> {
         debug!(
             "Installing in {} in {}",
             resolution
@@ -254,17 +299,27 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             return Ok(vec![]);
         }
 
+        // Verify that none of the missing distributions are already in the build stack.
+        for dist in &remote {
+            let id = dist.distribution_id();
+            if build_stack.contains(&id) {
+                return Err(BuildDispatchError::BuildFrontend(
+                    uv_build_frontend::Error::CyclicBuildDependency(dist.name().clone()).into(),
+                ));
+            }
+        }
+
         // Download any missing distributions.
         let wheels = if remote.is_empty() {
             vec![]
         } else {
-            // TODO(konstin): Check that there is no endless recursion.
             let preparer = Preparer::new(
                 self.cache,
                 tags,
                 self.hasher,
                 self.build_options,
-                DistributionDatabase::new(self.client, self, self.concurrency.downloads),
+                DistributionDatabase::new(self.client, self, self.concurrency.downloads)
+                    .with_build_stack(build_stack),
             );
 
             debug!(
@@ -325,7 +380,8 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         sources: SourceStrategy,
         build_kind: BuildKind,
         build_output: BuildOutput,
-    ) -> Result<SourceBuild> {
+        mut build_stack: BuildStack,
+    ) -> Result<SourceBuild, uv_build_frontend::Error> {
         let dist_name = dist.map(uv_distribution_types::Name::name);
         let dist_version = dist
             .map(uv_distribution_types::DistributionMetadata::version_or_url)
@@ -342,13 +398,17 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             // We always allow editable builds
             && !matches!(build_kind, BuildKind::Editable)
         {
-            if let Some(dist) = dist {
-                return Err(anyhow!(
-                    "Building source distributions for {} is disabled",
-                    dist.name()
-                ));
-            }
-            return Err(anyhow!("Building source distributions is disabled"));
+            let err = if let Some(dist) = dist {
+                uv_build_frontend::Error::NoSourceDistBuild(dist.name().clone())
+            } else {
+                uv_build_frontend::Error::NoSourceDistBuilds
+            };
+            return Err(err);
+        }
+
+        // Push the current distribution onto the build stack, to prevent cyclic dependencies.
+        if let Some(dist) = dist {
+            build_stack.insert(dist.distribution_id());
         }
 
         let builder = SourceBuild::setup(
@@ -365,6 +425,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             sources,
             self.config_settings.clone(),
             self.build_isolation,
+            &build_stack,
             build_kind,
             self.build_extra_env_vars.clone(),
             build_output,
@@ -382,7 +443,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         output_dir: &'data Path,
         build_kind: BuildKind,
         version_id: Option<&'data str>,
-    ) -> Result<Option<DistFilename>> {
+    ) -> Result<Option<DistFilename>, BuildDispatchError> {
         // Direct builds are a preview feature with the uv build backend.
         if self.preview.is_disabled() {
             trace!("Preview is disabled, not checking for direct build");

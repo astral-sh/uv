@@ -165,17 +165,7 @@ pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std
             .expect("Write path must have a parent"),
     )?;
     fs_err::tokio::write(&temp_file, &data).await?;
-    temp_file.persist(&path).map_err(|err| {
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!(
-                "Failed to persist temporary file to {}: {}",
-                path.user_display(),
-                err.error
-            ),
-        )
-    })?;
-    Ok(())
+    persist_with_retry(temp_file, path.as_ref()).await
 }
 
 /// Write `data` to `path` atomically using a temporary file and atomic rename.
@@ -186,36 +176,17 @@ pub fn write_atomic_sync(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std:
             .expect("Write path must have a parent"),
     )?;
     fs_err::write(&temp_file, &data)?;
-    temp_file.persist(&path).map_err(|err| {
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!(
-                "Failed to persist temporary file to {}: {}",
-                path.user_display(),
-                err.error
-            ),
-        )
-    })?;
-    Ok(())
+    persist_with_retry_sync(temp_file, path.as_ref())
 }
 
 /// Copy `from` to `to` atomically using a temporary file and atomic rename.
 pub fn copy_atomic_sync(from: impl AsRef<Path>, to: impl AsRef<Path>) -> std::io::Result<()> {
     let temp_file = tempfile_in(to.as_ref().parent().expect("Write path must have a parent"))?;
     fs_err::copy(from.as_ref(), &temp_file)?;
-    temp_file.persist(&to).map_err(|err| {
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!(
-                "Failed to persist temporary file to {}: {}",
-                to.user_display(),
-                err.error
-            ),
-        )
-    })?;
-    Ok(())
+    persist_with_retry_sync(temp_file, to.as_ref())
 }
 
+#[cfg(windows)]
 fn backoff_file_move() -> backoff::ExponentialBackoff {
     backoff::ExponentialBackoffBuilder::default()
         .with_initial_interval(std::time::Duration::from_millis(10))
@@ -229,7 +200,8 @@ pub async fn rename_with_retry(
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
 ) -> Result<(), std::io::Error> {
-    if cfg!(windows) {
+    #[cfg(windows)]
+    {
         // On Windows, antivirus software can lock files temporarily, making them inaccessible.
         // This is most common for DLLs, and the common suggestion is to retry the operation with
         // some backoff.
@@ -255,7 +227,9 @@ pub async fn rename_with_retry(
             }
         })
         .await
-    } else {
+    }
+    #[cfg(not(windows))]
+    {
         fs_err::tokio::rename(from, to).await
     }
 }
@@ -265,7 +239,8 @@ pub fn rename_with_retry_sync(
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
 ) -> Result<(), std::io::Error> {
-    if cfg!(windows) {
+    #[cfg(windows)]
+    {
         // On Windows, antivirus software can lock files temporarily, making them inaccessible.
         // This is most common for DLLs, and the common suggestion is to retry the operation with
         // some backoff.
@@ -299,8 +274,84 @@ pub fn rename_with_retry_sync(
                 ),
             )
         })
-    } else {
+    }
+    #[cfg(not(windows))]
+    {
         fs_err::rename(from, to)
+    }
+}
+
+/// Persist a `NamedTempFile`, retrying (on Windows) if it fails due to transient operating system errors, in a synchronous context.
+pub async fn persist_with_retry(
+    from: NamedTempFile,
+    to: impl AsRef<Path>,
+) -> Result<(), std::io::Error> {
+    #[cfg(windows)]
+    {
+        // On Windows, antivirus software can lock files temporarily, making them inaccessible.
+        // This is most common for DLLs, and the common suggestion is to retry the operation with
+        // some backoff.
+        //
+        // See: <https://github.com/astral-sh/uv/issues/1491> & <https://github.com/astral-sh/uv/issues/9531>
+        let to = to.as_ref();
+
+        // the `NamedTempFile` `persist` method consumes `self`, and returns it back inside the Error in case of `PersistError`
+        // https://docs.rs/tempfile/latest/tempfile/struct.NamedTempFile.html#method.persist
+        // So we will update the `from` optional value in safe and borrow-checker friendly way every retry
+        // Allows us to use the NamedTempFile inside a FnMut closure used for backoff::retry
+        let mut from = Some(from);
+
+        let backoff = backoff_file_move();
+        let persisted = backoff::future::retry(backoff, move || {
+            // Needed because we cannot move out of `from`, a captured variable in an `FnMut` closure, and then pass it to the async move block
+            let mut from = from.take();
+
+            async move {
+                if let Some(file) = from.take() {
+                    file.persist(to).map_err(|err| {
+                        let error_message = err.to_string();
+                        warn!(
+                            "Retrying to persist temporary file to {}: {}",
+                            to.display(),
+                            error_message
+                        );
+
+                        // Set back the NamedTempFile returned back by the Error
+                        from = Some(err.file);
+
+                        backoff::Error::transient(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!(
+                                "Failed to persist temporary file to {}: {}",
+                                to.display(),
+                                error_message
+                            ),
+                        ))
+                    })
+                } else {
+                    Err(backoff::Error::permanent(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!(
+                            "Failed to retrieve temporary file while trying to persist to {}",
+                            to.display()
+                        ),
+                    )))
+                }
+            }
+        })
+        .await;
+
+        match persisted {
+            Ok(_) => Ok(()),
+            Err(err) => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                err.to_string(),
+            )),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        async { fs_err::rename(from, to) }.await
     }
 }
 
@@ -309,7 +360,8 @@ pub fn persist_with_retry_sync(
     from: NamedTempFile,
     to: impl AsRef<Path>,
 ) -> Result<(), std::io::Error> {
-    if cfg!(windows) {
+    #[cfg(windows)]
+    {
         // On Windows, antivirus software can lock files temporarily, making them inaccessible.
         // This is most common for DLLs, and the common suggestion is to retry the operation with
         // some backoff.
@@ -361,10 +413,12 @@ pub fn persist_with_retry_sync(
             Ok(_) => Ok(()),
             Err(err) => Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("{err:?}"),
+                err.to_string(),
             )),
         }
-    } else {
+    }
+    #[cfg(not(windows))]
+    {
         fs_err::rename(from, to)
     }
 }

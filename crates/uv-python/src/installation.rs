@@ -89,7 +89,7 @@ impl PythonInstallation {
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
     ) -> Result<Self, Error> {
-        let request = request.unwrap_or_else(|| &PythonRequest::Default);
+        let request = request.unwrap_or(&PythonRequest::Default);
 
         // Search for the installation
         match Self::find(request, environments, preference, cache) {
@@ -163,6 +163,7 @@ impl PythonInstallation {
 
         let installed = ManagedPythonInstallation::new(path)?;
         installed.ensure_externally_managed()?;
+        installed.ensure_sysconfig_patched()?;
         installed.ensure_canonical_executables()?;
 
         Ok(Self {
@@ -228,6 +229,7 @@ impl PythonInstallation {
         &self.interpreter
     }
 
+    /// Consume the [`PythonInstallation`] and return the [`Interpreter`].
     pub fn into_interpreter(self) -> Interpreter {
         self.interpreter
     }

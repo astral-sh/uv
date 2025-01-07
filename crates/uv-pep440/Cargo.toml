@@ -11,11 +11,6 @@ documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 
-[lib]
-name = "uv_pep440"
-crate-type = ["rlib", "cdylib"]
-doctest = false
-
 [lints]
 workspace = true
 

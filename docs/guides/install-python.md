@@ -23,26 +23,17 @@ system. If you've previously installed Python with uv, a new version will not be
 
 !!! note
 
-    Python does not publish official distributable binaries. As such, uv uses third-party distributions from the [`python-build-standalone`](https://github.com/indygreg/python-build-standalone) project. The project is partially maintained by the uv maintainers and is used by other prominent Python projects (e.g., [Rye](https://github.com/astral-sh/rye), [Bazel](https://github.com/bazelbuild/rules_python)). See the [Python distributions](../concepts/python-versions.md#managed-python-distributions) documentation for more details.
-
-<!-- TODO(zanieb): Restore when Python shim management is added
-Note that when an automatic Python installation occurs, the `python` command will not be added to the shell. Use `uv python install-shim` to ensure the `python` shim is installed.
-
-Once Python is installed, it can be invoked via `python`:
-
-```console
-$ python --version
-```
-
-To prevent uv from managing Python system-wide, provide the `--no-shim` option during installation.
--->
+    Python does not publish official distributable binaries. As such, uv uses distributions from Astral [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone) project. See the [Python distributions](../concepts/python-versions.md#managed-python-distributions) documentation for more details.
 
 Once Python is installed, it will be used by `uv` commands automatically.
 
 !!! important
 
     When Python is installed by uv, it will not be available globally (i.e. via the `python` command).
-    Support for this feature is planned for a future release. In the meantime, use
+    Support for this feature is in _preview_. See [Installing Python executables](../concepts/python-versions.md#installing-python-executables)
+    for details.
+
+    You can still use
     [`uv run`](../guides/scripts.md#using-different-python-versions) or
     [create and activate a virtual environment](../pip/environments.md) to use `python` directly.
 
@@ -89,7 +80,7 @@ automatically download Python versions when they are required. For example, the 
 download Python 3.12 if it was not installed:
 
 ```console
-$ uv run --python 3.12 python -c 'print("hello world")'
+$ uv run --python 3.12 python -c "print('hello world')"
 ```
 
 Even if a specific Python version is not requested, uv will download the latest version on demand.

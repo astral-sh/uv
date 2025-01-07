@@ -160,7 +160,7 @@ Tool upgrades will respect the version constraints provided when installing the 
 `uv tool install black >=23,<24` followed by `uv tool upgrade black` will upgrade Black to the
 latest version in the range `>=23,<24`.
 
-To instead replace the version constraints, re-install the tool with `uv tool install`:
+To instead replace the version constraints, reinstall the tool with `uv tool install`:
 
 ```console
 $ uv tool install black>=24

@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, mem};
@@ -277,10 +278,10 @@ impl PyProjectTomlMut {
 
         // If necessary, update the name.
         if let Some(index) = index.name.as_deref() {
-            if !table
+            if table
                 .get("name")
                 .and_then(|name| name.as_str())
-                .is_some_and(|name| name == index)
+                .is_none_or(|name| name != index)
             {
                 let mut formatted = Formatted::new(index.to_string());
                 if let Some(value) = table.get("name").and_then(Item::as_value) {
@@ -296,13 +297,13 @@ impl PyProjectTomlMut {
         }
 
         // If necessary, update the URL.
-        if !table
+        if table
             .get("url")
             .and_then(|item| item.as_str())
             .and_then(|url| Url::parse(url).ok())
-            .is_some_and(|url| CanonicalUrl::new(&url) == CanonicalUrl::new(index.url.url()))
+            .is_none_or(|url| CanonicalUrl::new(&url) != CanonicalUrl::new(index.url.url()))
         {
-            let mut formatted = Formatted::new(index.url.to_string());
+            let mut formatted = Formatted::new(index.url.redacted().to_string());
             if let Some(value) = table.get("url").and_then(Item::as_value) {
                 if let Some(prefix) = value.decor().prefix() {
                     formatted.decor_mut().set_prefix(prefix.clone());
@@ -318,7 +319,7 @@ impl PyProjectTomlMut {
         if index.default {
             if !table
                 .get("default")
-                .and_then(toml_edit::Item::as_bool)
+                .and_then(Item::as_bool)
                 .is_some_and(|default| default)
             {
                 let mut formatted = Formatted::new(true);
@@ -370,7 +371,7 @@ impl PyProjectTomlMut {
         });
 
         // Set the position to the minimum, if it's not already the first element.
-        if let Some(min) = existing.iter().filter_map(toml_edit::Table::position).min() {
+        if let Some(min) = existing.iter().filter_map(Table::position).min() {
             table.set_position(min);
 
             // Increment the position of all existing elements.
@@ -918,12 +919,33 @@ pub fn add_dependency(
         [] => {
             #[derive(Debug, Copy, Clone)]
             enum Sort {
-                /// The list is sorted in a case-sensitive manner.
-                CaseSensitive,
                 /// The list is sorted in a case-insensitive manner.
                 CaseInsensitive,
+                /// The list is sorted in a case-sensitive manner.
+                CaseSensitive,
                 /// The list is unsorted.
                 Unsorted,
+            }
+
+            /// Compare two [`Value`] requirements case-insensitively.
+            fn case_insensitive(a: &Value, b: &Value) -> Ordering {
+                a.as_str()
+                    .map(str::to_lowercase)
+                    .as_deref()
+                    .map(split_specifiers)
+                    .cmp(
+                        &b.as_str()
+                            .map(str::to_lowercase)
+                            .as_deref()
+                            .map(split_specifiers),
+                    )
+            }
+
+            /// Compare two [`Value`] requirements case-sensitively.
+            fn case_sensitive(a: &Value, b: &Value) -> Ordering {
+                a.as_str()
+                    .map(split_specifiers)
+                    .cmp(&b.as_str().map(split_specifiers))
             }
 
             // Determine if the dependency list is sorted prior to
@@ -940,18 +962,11 @@ pub fn add_dependency(
                 .all(Value::is_str)
                 .then(|| {
                     if deps.iter().tuple_windows().all(|(a, b)| {
-                        a.as_str()
-                            .map(str::to_lowercase)
-                            .as_deref()
-                            .map(split_specifiers)
-                            <= b.as_str()
-                                .map(str::to_lowercase)
-                                .as_deref()
-                                .map(split_specifiers)
+                        matches!(case_insensitive(a, b), Ordering::Less | Ordering::Equal)
                     }) {
                         Some(Sort::CaseInsensitive)
                     } else if deps.iter().tuple_windows().all(|(a, b)| {
-                        a.as_str().map(split_specifiers) <= b.as_str().map(split_specifiers)
+                        matches!(case_sensitive(a, b), Ordering::Less | Ordering::Equal)
                     }) {
                         Some(Sort::CaseSensitive)
                     } else {
@@ -963,11 +978,11 @@ pub fn add_dependency(
 
             let req_string = req.to_string();
             let index = match sort {
-                Sort::CaseSensitive => deps
-                    .iter()
-                    .position(|d| d.as_str() > Some(req_string.as_str())),
                 Sort::CaseInsensitive => deps.iter().position(|d| {
-                    d.as_str().map(str::to_lowercase) > Some(req_string.as_str().to_lowercase())
+                    case_insensitive(d, &Value::from(req_string.as_str())) == Ordering::Greater
+                }),
+                Sort::CaseSensitive => deps.iter().position(|d| {
+                    case_sensitive(d, &Value::from(req_string.as_str())) == Ordering::Greater
                 }),
                 Sort::Unsorted => None,
             };

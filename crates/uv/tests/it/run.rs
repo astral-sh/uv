@@ -196,7 +196,8 @@ fn run_args() -> Result<()> {
     Ok(())
 }
 
-/// Run without specifying any argunments.
+/// Run without specifying any arguments.
+///
 /// This should list the available scripts.
 #[test]
 fn run_no_args() -> Result<()> {
@@ -802,6 +803,75 @@ fn run_managed_false() -> Result<()> {
     Python 3.12.[X]
 
     ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_exact() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["iniconfig"]
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    // Remove `iniconfig`.
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio"]
+        "#
+    })?;
+
+    // By default, `uv run` uses inexact semantics, so both `iniconfig` and `anyio` should still be available.
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import iniconfig; import anyio"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    // But under `--exact`, `iniconfig` should not be available.
+    uv_snapshot!(context.filters(), context.run().arg("--exact").arg("python").arg("-c").arg("import iniconfig"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - iniconfig==2.0.0
+    Traceback (most recent call last):
+      File "<string>", line 1, in <module>
+    ModuleNotFoundError: No module named 'iniconfig'
     "###);
 
     Ok(())
@@ -2493,6 +2563,20 @@ fn run_zipapp() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn run_stdin_args() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.argv)").arg("foo").arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ['-c', 'foo', 'bar']
+
+    ----- stderr -----
+    "###);
+}
+
 /// Run a module equivalent to `python -m foo`.
 #[test]
 fn run_module() {
@@ -2528,6 +2612,20 @@ fn run_module() {
 
     ----- stderr -----
     "#);
+}
+
+#[test]
+fn run_module_stdin() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.run().arg("-m").arg("-"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot run a Python module from stdin
+    "###);
 }
 
 /// When the `pyproject.toml` file is invalid.
@@ -2774,13 +2872,11 @@ fn run_invalid_project_table() -> Result<()> {
 
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      Caused by: `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
       Caused by: TOML parse error at line 1, column 2
       |
     1 | [project.urls]
       |  ^^^^^^^
-    missing field `name`
-
+    `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
     "###);
 
     Ok(())
@@ -2863,6 +2959,40 @@ fn run_script_explicit() -> Result<()> {
 }
 
 #[test]
+fn run_script_explicit_stdin() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("script");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+        import iniconfig
+        print("Hello, world!")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--script").arg("-").stdin(std::fs::File::open(test_script)?), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Reading inline script metadata from `stdin`
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn run_script_explicit_no_file() {
     let context = TestContext::new("3.12");
     context
@@ -2931,6 +3061,41 @@ fn run_gui_script_explicit_windows() -> Result<()> {
 }
 
 #[test]
+#[cfg(windows)]
+fn run_gui_script_explicit_stdin_windows() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("script");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+        import iniconfig
+        print("Hello, world!")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("-").stdin(std::fs::File::open(test_script)?), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Reading inline script metadata from `stdin`
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
 #[cfg(not(windows))]
 fn run_gui_script_explicit_unix() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2957,6 +3122,41 @@ fn run_gui_script_explicit_unix() -> Result<()> {
     Resolved in [TIME]
     Audited in [TIME]
     Using executable: python3
+    "###);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(not(windows))]
+fn run_gui_script_explicit_stdin_unix() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("script");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+        import iniconfig
+        print("Hello, world!")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("-").stdin(std::fs::File::open(test_script)?), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Reading inline script metadata from `stdin`
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
     "###);
 
     Ok(())
@@ -3175,7 +3375,7 @@ fn run_with_multiple_env_files() -> Result<()> {
     ----- stderr -----
     "###);
 
-    uv_snapshot!(context.filters(), context.run().arg("test.py").env("UV_ENV_FILE", ".env1 .env2"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("test.py").env(EnvVars::UV_ENV_FILE, ".env1 .env2"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----

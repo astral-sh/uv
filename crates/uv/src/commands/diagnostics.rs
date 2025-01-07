@@ -5,7 +5,9 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use version_ranges::Ranges;
 
-use uv_distribution_types::{DerivationChain, DerivationStep, Dist, DistErrorKind, Name};
+use uv_distribution_types::{
+    DerivationChain, DerivationStep, Dist, DistErrorKind, Name, RequestedDist,
+};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_resolver::SentinelRange;
@@ -78,7 +80,7 @@ impl OperationDiagnostic {
                 chain,
                 err,
             )) => {
-                dist_error(kind, dist, &chain, err);
+                requested_dist_error(kind, dist, &chain, err);
                 None
             }
             pip::operations::Error::Requirements(uv_requirements::Error::Dist(kind, dist, err)) => {
@@ -122,6 +124,51 @@ pub(crate) fn dist_error(
     struct Diagnostic {
         kind: DistErrorKind,
         dist: Box<Dist>,
+        #[source]
+        cause: Arc<uv_distribution::Error>,
+        #[help]
+        help: Option<String>,
+    }
+
+    let help = SUGGESTIONS
+        .get(dist.name())
+        .map(|suggestion| {
+            format!(
+                "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
+                dist.name().cyan(),
+                suggestion.cyan(),
+                suggestion.cyan(),
+            )
+        })
+        .or_else(|| {
+            if chain.is_empty() {
+                None
+            } else {
+                Some(format_chain(dist.name(), dist.version(), chain))
+            }
+        });
+    let report = miette::Report::new(Diagnostic {
+        kind,
+        dist,
+        cause,
+        help,
+    });
+    anstream::eprint!("{report:?}");
+}
+
+/// Render a requested distribution failure (read, download or build) with a help message.
+pub(crate) fn requested_dist_error(
+    kind: DistErrorKind,
+    dist: Box<RequestedDist>,
+    chain: &DerivationChain,
+    cause: Arc<uv_distribution::Error>,
+) {
+    #[derive(Debug, miette::Diagnostic, thiserror::Error)]
+    #[error("{kind} `{dist}`")]
+    #[diagnostic()]
+    struct Diagnostic {
+        kind: DistErrorKind,
+        dist: Box<RequestedDist>,
         #[source]
         cause: Arc<uv_distribution::Error>,
         #[help]

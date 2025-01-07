@@ -155,15 +155,15 @@ impl PubGrubPackage {
 
     /// Returns the marker expression associated with this PubGrub package, if
     /// it has one.
-    pub(crate) fn marker(&self) -> Option<MarkerTree> {
+    pub(crate) fn marker(&self) -> MarkerTree {
         match &**self {
             // A root can never be a dependency of another package, and a `Python` pubgrub
             // package is never returned by `get_dependencies`. So these cases never occur.
-            PubGrubPackageInner::Root(_) | PubGrubPackageInner::Python(_) => None,
+            PubGrubPackageInner::Root(_) | PubGrubPackageInner::Python(_) => MarkerTree::TRUE,
             PubGrubPackageInner::Package { marker, .. }
             | PubGrubPackageInner::Extra { marker, .. }
-            | PubGrubPackageInner::Dev { marker, .. } => Some(*marker),
-            PubGrubPackageInner::Marker { marker, .. } => Some(*marker),
+            | PubGrubPackageInner::Dev { marker, .. } => *marker,
+            PubGrubPackageInner::Marker { marker, .. } => *marker,
         }
     }
 

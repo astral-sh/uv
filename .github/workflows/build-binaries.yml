@@ -17,6 +17,7 @@ on:
       # When we change project metadata, we want to ensure that the maturin builds still work.
       - pyproject.toml
       - Cargo.toml
+      - Cargo.lock
       # And when we change this workflow itself...
       - .github/workflows/build-binaries.yml
 
@@ -155,7 +156,7 @@ jobs:
 
   windows:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
-    runs-on: windows-latest-large
+    runs-on: github-windows-2022-x86_64-8
     strategy:
       matrix:
         platform:
@@ -577,11 +578,6 @@ jobs:
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
           - target: armv7-unknown-linux-musleabihf
             arch: armv7
-          - target: powerpc64le-unknown-linux-musl
-            arch: ppc64le
-            # see https://github.com/astral-sh/uv/issues/6528
-            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
-            toolchain: nightly
       fail-fast: false
 
     steps:
@@ -598,7 +594,7 @@ jobs:
         with:
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
-          args: ${{ matrix.platform.arch == 'ppc64le' && '--profile release-no-lto' || '--release'}} --locked --out dist --features self-update ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}}
+          args: --release --locked --out dist --features self-update ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}}
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
       - uses: uraimo/run-on-arch-action@v2

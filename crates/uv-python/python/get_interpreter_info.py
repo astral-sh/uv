@@ -461,6 +461,14 @@ def get_operating_system_and_architecture():
         # noinspection PyProtectedMember
         from .packaging._musllinux import _get_musl_version
 
+        # https://github.com/pypa/packaging/blob/4dc334c86d43f83371b194ca91618ed99e0e49ca/src/packaging/tags.py#L539-L543
+        # https://github.com/astral-sh/uv/issues/9842
+        if struct.calcsize("P") == 4:
+            if architecture == "x86_64":
+                architecture = "i686"
+            elif architecture == "aarch64":
+                architecture = "armv8l"
+
         musl_version = _get_musl_version(sys.executable)
         glibc_version = _get_glibc_version()
 
@@ -573,7 +581,10 @@ def main() -> None:
         "sys_executable": sys.executable,
         "sys_path": sys.path,
         "stdlib": sysconfig.get_path("stdlib"),
-        "sysconfig_prefix": sysconfig.get_config_var("prefix"),
+        # Prior to the introduction of `sysconfig` patching, python-build-standalone installations would always use
+        # "/install" as the prefix. With `sysconfig` patching, we rewrite the prefix to match the actual installation
+        # location. So in newer versions, we also write a dedicated flag to indicate standalone builds.
+        "standalone": sysconfig.get_config_var("prefix") == "/install" or bool(sysconfig.get_config_var("PYTHON_BUILD_STANDALONE")),
         "scheme": get_scheme(),
         "virtualenv": get_virtualenv(),
         "platform": os_and_arch,

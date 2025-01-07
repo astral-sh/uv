@@ -34,20 +34,8 @@ pub enum Error {
 
 impl Error {
     /// Create an [`Error`] from a distribution error.
-    pub(crate) fn from_dist(dist: Dist, cause: uv_distribution::Error) -> Self {
-        match dist {
-            Dist::Built(dist) => {
-                Self::Dist(DistErrorKind::Download, Box::new(Dist::Built(dist)), cause)
-            }
-            Dist::Source(dist) => {
-                let kind = if dist.is_local() {
-                    DistErrorKind::Build
-                } else {
-                    DistErrorKind::DownloadAndBuild
-                };
-                Self::Dist(kind, Box::new(Dist::Source(dist)), cause)
-            }
-        }
+    pub(crate) fn from_dist(dist: Dist, err: uv_distribution::Error) -> Self {
+        Self::Dist(DistErrorKind::from_dist(&dist, &err), Box::new(dist), err)
     }
 }
 

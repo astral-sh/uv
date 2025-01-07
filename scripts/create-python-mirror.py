@@ -18,6 +18,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 from urllib.parse import unquote
@@ -30,7 +31,7 @@ SELF_DIR = Path(__file__).parent
 REPO_ROOT = SELF_DIR.parent
 VERSIONS_FILE = REPO_ROOT / "crates" / "uv-python" / "download-metadata.json"
 PREFIXES = [
-    "https://github.com/indygreg/python-build-standalone/releases/download/",
+    "https://github.com/astral-sh/python-build-standalone/releases/download/",
     "https://downloads.python.org/pypy/",
 ]
 
@@ -89,16 +90,38 @@ def collect_metadata_from_git_history() -> List[Dict]:
     return metadata
 
 
+def check_arch(entry, arch):
+    """Checks whether arch entry in metadata matches the provided filter."""
+    if isinstance(entry, str):
+        return entry == arch
+    elif isinstance(entry, dict) and "family" in entry:
+        return entry["family"] == arch
+    return False
+
+
+def match_version(entry, pattern):
+    """Checks whether pattern matches against the entries version."""
+    vers = f"{entry['major']}.{entry['minor']}.{entry['patch']}"
+    if entry["prerelease"] != "":
+        vers += f"-{entry['prerelease']}"
+    return pattern.match(vers) is not None
+
+
 def filter_metadata(
-    metadata: List[Dict], name: Optional[str], arch: Optional[str], os: Optional[str]
+    metadata: List[Dict],
+    name: Optional[str],
+    arch: Optional[str],
+    os: Optional[str],
+    version: Optional[re.Pattern],
 ) -> List[Dict]:
     """Filter the metadata based on name, architecture, and OS, ensuring unique URLs."""
     filtered = [
         entry
         for entry in metadata
         if (not name or entry["name"] == name)
-        and (not arch or entry["arch"] == arch)
+        and (not arch or check_arch(entry["arch"], arch))
         and (not os or entry["os"] == os)
+        and (not version or match_version(entry, version))
     ]
     # Use a set to ensure unique URLs
     unique_urls = set()
@@ -206,6 +229,9 @@ def parse_arguments():
     parser.add_argument("--arch", help="Filter by architecture (e.g., 'aarch64').")
     parser.add_argument("--os", help="Filter by operating system (e.g., 'darwin').")
     parser.add_argument(
+        "--version", help="Filter version by regex (e.g., '3.13.\\d+$')."
+    )
+    parser.add_argument(
         "--max-concurrent",
         type=int,
         default=20,
@@ -234,7 +260,10 @@ def main():
         with open(VERSIONS_FILE) as f:
             metadata = list(json.load(f).values())
 
-    filtered_metadata = filter_metadata(metadata, args.name, args.arch, args.os)
+    version = re.compile(args.version) if args.version else None
+    filtered_metadata = filter_metadata(
+        metadata, args.name, args.arch, args.os, version
+    )
     urls = {(entry["url"], entry["sha256"]) for entry in filtered_metadata}
 
     if not urls:

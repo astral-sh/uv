@@ -1,12 +1,12 @@
-use std::collections::hash_map::Entry;
-use std::fmt::Write;
-use std::io;
-use std::path::{Path, PathBuf};
-
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
+use std::collections::hash_map::Entry;
+use std::fmt::Write;
+use std::io;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tracing::debug;
 use url::Url;
 
@@ -26,13 +26,10 @@ use uv_git::{GitReference, GIT_STORE};
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_pep508::{ExtraName, Requirement, UnnamedRequirement, VersionOrUrl};
 use uv_pypi_types::{redact_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
-use uv_python::{
-    EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest,
-};
+use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
-use uv_resolver::{FlatIndex, InstallTarget};
-use uv_scripts::{Pep723Item, Pep723Script};
+use uv_resolver::FlatIndex;
+use uv_scripts::{Pep723ItemRef, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
@@ -44,10 +41,11 @@ use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryResolveLogger,
 };
 use crate::commands::pip::operations::Modifications;
+use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
+use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    init_script_python_requirement, lock, validate_script_requires_python, ProjectError,
-    ProjectInterpreter, ScriptPython,
+    init_script_python_requirement, ProjectError, ProjectInterpreter, ScriptInterpreter,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{diagnostics, project, ExitStatus};
@@ -144,7 +142,7 @@ pub(crate) async fn add(
         } else {
             let requires_python = init_script_python_requirement(
                 python.as_deref(),
-                install_mirrors.clone(),
+                &install_mirrors,
                 project_dir,
                 false,
                 python_preference,
@@ -158,41 +156,22 @@ pub(crate) async fn add(
             Pep723Script::init(&script, requires_python.specifiers()).await?
         };
 
-        let ScriptPython {
-            source,
-            python_request,
-            requires_python,
-        } = ScriptPython::from_request(
+        // Discover the interpreter.
+        let interpreter = ScriptInterpreter::discover(
+            Pep723ItemRef::Script(&script),
             python.as_deref().map(PythonRequest::parse),
-            None,
-            &Pep723Item::Script(script.clone()),
-            no_config,
-        )
-        .await?;
-
-        let interpreter = PythonInstallation::find_or_download(
-            python_request.as_ref(),
-            EnvironmentPreference::Any,
             python_preference,
             python_downloads,
-            &client_builder,
+            connectivity,
+            native_tls,
+            allow_insecure_host,
+            &install_mirrors,
+            no_config,
             cache,
-            Some(&reporter),
-            install_mirrors.python_install_mirror.as_deref(),
-            install_mirrors.pypy_install_mirror.as_deref(),
+            printer,
         )
         .await?
         .into_interpreter();
-
-        if let Some((requires_python, requires_python_source)) = requires_python {
-            validate_script_requires_python(
-                &interpreter,
-                None,
-                &requires_python,
-                &requires_python_source,
-                &source,
-            )?;
-        }
 
         Target::Script(script, Box::new(interpreter))
     } else {
@@ -234,7 +213,7 @@ pub(crate) async fn add(
                 connectivity,
                 native_tls,
                 allow_insecure_host,
-                install_mirrors.clone(),
+                &install_mirrors,
                 no_config,
                 cache,
                 printer,
@@ -248,7 +227,7 @@ pub(crate) async fn add(
             let venv = project::get_or_init_environment(
                 project.workspace(),
                 python.as_deref().map(PythonRequest::parse),
-                install_mirrors.clone(),
+                &install_mirrors,
                 python_preference,
                 python_downloads,
                 connectivity,
@@ -274,75 +253,8 @@ pub(crate) async fn add(
     let RequirementsSpecification { requirements, .. } =
         RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
 
-    // TODO(charlie): These are all default values. We should consider whether we want to make them
-    // optional on the downstream APIs.
-    let bounds = LowerBound::default();
-    let build_constraints = Constraints::default();
-    let build_hasher = HashStrategy::default();
-    let hasher = HashStrategy::default();
-    let sources = SourceStrategy::Enabled;
-
-    // Add all authenticated sources to the cache.
-    for index in settings.index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
-            uv_auth::store_credentials(index.raw_url(), credentials);
-        }
-    }
-
-    // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .index_urls(settings.index_locations.index_urls())
-        .index_strategy(settings.index_strategy)
-        .markers(target.interpreter().markers())
-        .platform(target.interpreter().platform())
-        .build();
-
-    // Determine whether to enable build isolation.
-    let environment;
-    let build_isolation = if settings.no_build_isolation {
-        environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
-        BuildIsolation::Shared(&environment)
-    } else if settings.no_build_isolation_package.is_empty() {
-        BuildIsolation::Isolated
-    } else {
-        environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
-        BuildIsolation::SharedPackage(&environment, &settings.no_build_isolation_package)
-    };
-
     // Initialize any shared state.
     let state = SharedState::default();
-
-    // Resolve the flat indexes from `--find-links`.
-    let flat_index = {
-        let client = FlatIndexClient::new(&client, cache);
-        let entries = client
-            .fetch(settings.index_locations.flat_indexes().map(Index::url))
-            .await?;
-        FlatIndex::from_entries(entries, None, &hasher, &settings.build_options)
-    };
-
-    // Create a build dispatch.
-    let build_dispatch = BuildDispatch::new(
-        &client,
-        cache,
-        build_constraints,
-        target.interpreter(),
-        &settings.index_locations,
-        &flat_index,
-        &settings.dependency_metadata,
-        state.clone(),
-        settings.index_strategy,
-        &settings.config_setting,
-        build_isolation,
-        settings.link_mode,
-        &settings.build_options,
-        &build_hasher,
-        settings.exclude_newer,
-        bounds,
-        sources,
-        concurrency,
-        preview,
-    );
 
     // Resolve any unnamed requirements.
     let requirements = {
@@ -366,13 +278,79 @@ pub(crate) async fn add(
 
         // Resolve any unnamed requirements.
         if !unnamed.is_empty() {
+            // TODO(charlie): These are all default values. We should consider whether we want to
+            // make them optional on the downstream APIs.
+            let build_constraints = Constraints::default();
+            let build_hasher = HashStrategy::default();
+            let hasher = HashStrategy::default();
+            let sources = SourceStrategy::Enabled;
+
+            // Add all authenticated sources to the cache.
+            for index in settings.index_locations.allowed_indexes() {
+                if let Some(credentials) = index.credentials() {
+                    uv_auth::store_credentials(index.raw_url(), credentials);
+                }
+            }
+
+            // Initialize the registry client.
+            let client = RegistryClientBuilder::try_from(client_builder)?
+                .index_urls(settings.index_locations.index_urls())
+                .index_strategy(settings.index_strategy)
+                .markers(target.interpreter().markers())
+                .platform(target.interpreter().platform())
+                .build();
+
+            // Determine whether to enable build isolation.
+            let environment;
+            let build_isolation = if settings.no_build_isolation {
+                environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
+                BuildIsolation::Shared(&environment)
+            } else if settings.no_build_isolation_package.is_empty() {
+                BuildIsolation::Isolated
+            } else {
+                environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
+                BuildIsolation::SharedPackage(&environment, &settings.no_build_isolation_package)
+            };
+
+            // Resolve the flat indexes from `--find-links`.
+            let flat_index = {
+                let client = FlatIndexClient::new(&client, cache);
+                let entries = client
+                    .fetch(settings.index_locations.flat_indexes().map(Index::url))
+                    .await?;
+                FlatIndex::from_entries(entries, None, &hasher, &settings.build_options)
+            };
+
+            // Create a build dispatch.
+            let build_dispatch = BuildDispatch::new(
+                &client,
+                cache,
+                build_constraints,
+                target.interpreter(),
+                &settings.index_locations,
+                &flat_index,
+                &settings.dependency_metadata,
+                state.clone(),
+                settings.index_strategy,
+                &settings.config_setting,
+                build_isolation,
+                settings.link_mode,
+                &settings.build_options,
+                &build_hasher,
+                settings.exclude_newer,
+                LowerBound::default(),
+                sources,
+                concurrency,
+                preview,
+            );
+
             requirements.extend(
                 NamedRequirementsResolver::new(
                     &hasher,
                     state.index(),
                     DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
                 )
-                .with_reporter(ResolverReporter::from(printer))
+                .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(unnamed.into_iter())
                 .await?,
             );
@@ -633,7 +611,7 @@ pub(crate) async fn add(
     let project_root = project.root().to_path_buf();
     let workspace_root = project.workspace().install_path().clone();
     let existing_pyproject_toml = project.pyproject_toml().as_ref().to_vec();
-    let existing_uv_lock = lock::read_bytes(project.workspace()).await?;
+    let existing_uv_lock = LockTarget::from(project.workspace()).read_bytes().await?;
 
     // Update the `pypackage.toml` in-memory.
     let project = project
@@ -675,7 +653,6 @@ pub(crate) async fn add(
         &dependency_type,
         raw_sources,
         settings.as_ref(),
-        bounds,
         installer_metadata,
         connectivity,
         concurrency,
@@ -719,7 +696,6 @@ async fn lock_and_sync(
     dependency_type: &DependencyType,
     raw_sources: bool,
     settings: ResolverInstallerSettingsRef<'_>,
-    bounds: LowerBound,
     installer_metadata: bool,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -737,9 +713,9 @@ async fn lock_and_sync(
 
     let mut lock = project::lock::do_safe_lock(
         mode,
-        project.workspace(),
+        project.workspace().into(),
         settings.into(),
-        bounds,
+        LowerBound::default(),
         &state,
         Box::new(DefaultResolveLogger),
         connectivity,
@@ -856,9 +832,9 @@ async fn lock_and_sync(
             // the addition of the minimum version specifiers.
             lock = project::lock::do_safe_lock(
                 mode,
-                project.workspace(),
+                project.workspace().into(),
                 settings.into(),
-                bounds,
+                LowerBound::default(),
                 &state,
                 Box::new(SummaryResolveLogger),
                 connectivity,

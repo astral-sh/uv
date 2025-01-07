@@ -21,6 +21,7 @@ uv-cli = { workspace = true }
 uv-client = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
+uv-extract = { workspace = true, optional = true }
 uv-installer = { workspace = true }
 uv-macros = { workspace = true }
 uv-options-metadata = { workspace = true }
@@ -52,8 +53,9 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-durations-export = { workspace = true, features = ["plot"] }
 tracing-subscriber = { workspace = true }
-walkdir = { workspace = true }
+uv-performance-flate2-backend = { path = "../uv-performance-flate2-backend", optional = true }
 uv-performance-memory-allocator = { path = "../uv-performance-memory-allocator", optional = true }
+walkdir = { workspace = true }
 
 [[bin]]
 name = "uv-dev"
@@ -64,8 +66,14 @@ required-features = ["dev"]
 default = ["performance"]
 # Actually build the dev CLI.
 dev = []
-performance = ["dep:uv-performance-memory-allocator"]
+performance = [
+  "performance-memory-allocator",
+  "performance-flate2-backend",
+  "uv-extract/performance"
+]
+performance-memory-allocator = ["dep:uv-performance-memory-allocator"]
+performance-flate2-backend = ["dep:uv-performance-flate2-backend"]
 render = ["poloto", "resvg", "tagu"]
 
 [package.metadata.cargo-shear]
-ignored = ["flate2", "uv-performance-memory-allocator", "uv-performance-flate2-backend"]
+ignored = ["flate2", "uv-extract", "uv-performance-memory-allocator", "uv-performance-flate2-backend"]

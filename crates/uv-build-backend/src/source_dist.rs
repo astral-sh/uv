@@ -95,7 +95,7 @@ fn source_dist_matcher(
     }
 
     // Include the license files
-    for license_files in pyproject_toml.license_files().into_iter().flatten() {
+    for license_files in pyproject_toml.license_files_source_dist() {
         trace!("Including license files at: `{license_files}`");
         let glob = parse_portable_glob(license_files).map_err(|err| Error::PortableGlob {
             field: "project.license-files".to_string(),

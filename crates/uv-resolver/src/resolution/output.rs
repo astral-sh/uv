@@ -915,14 +915,6 @@ fn report_missing_lower_bounds(
             // Ignore the root package.
             continue;
         };
-        if dist.dev.is_some() {
-            // TODO(konsti): Dev dependencies are modelled incorrectly in the graph. There should
-            // be an edge from root to project-with-dev, just like to project-with-extra, but
-            // currently there is only an edge from project to to project-with-dev that we then
-            // have to drop.
-            continue;
-        }
-
         if !has_lower_bound(node_index, dist.name(), graph, constraints, overrides) {
             diagnostics.push(ResolutionDiagnostic::MissingLowerBound {
                 package_name: dist.name().clone(),

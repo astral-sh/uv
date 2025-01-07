@@ -110,7 +110,7 @@ pub(crate) fn derive_impl(input: DeriveInput) -> syn::Result<TokenStream> {
 /// For a field with type `Option<Foobar>` where `Foobar` itself is a struct
 /// deriving `ConfigurationOptions`, create code that calls retrieves options
 /// from that group: `Foobar::get_available_options()`
-fn handle_option_group(field: &Field) -> syn::Result<proc_macro2::TokenStream> {
+fn handle_option_group(field: &Field) -> syn::Result<TokenStream> {
     let ident = field
         .ident
         .as_ref()
@@ -145,7 +145,7 @@ fn handle_option_group(field: &Field) -> syn::Result<proc_macro2::TokenStream> {
 /// Parse a `doc` attribute into it a string literal.
 fn parse_doc(doc: &Attribute) -> syn::Result<String> {
     match &doc.meta {
-        syn::Meta::NameValue(syn::MetaNameValue {
+        Meta::NameValue(syn::MetaNameValue {
             value:
                 syn::Expr::Lit(ExprLit {
                     lit: Lit::Str(lit_str),
@@ -159,7 +159,7 @@ fn parse_doc(doc: &Attribute) -> syn::Result<String> {
 
 /// Parse an `#[option(doc="...", default="...", value_type="...",
 /// example="...")]` attribute and return data in the form of an `OptionField`.
-fn handle_option(field: &Field, attr: &Attribute) -> syn::Result<proc_macro2::TokenStream> {
+fn handle_option(field: &Field, attr: &Attribute) -> syn::Result<TokenStream> {
     let docs: Vec<&Attribute> = field
         .attrs
         .iter()

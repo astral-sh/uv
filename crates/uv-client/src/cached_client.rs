@@ -45,7 +45,7 @@ pub trait Cacheable: Sized {
     /// Deserialize a value from bytes aligned to a 16-byte boundary.
     fn from_aligned_bytes(bytes: AlignedVec) -> Result<Self::Target, Error>;
     /// Serialize bytes to a possibly owned byte buffer.
-    fn to_bytes(&self) -> Result<Cow<'_, [u8]>, crate::Error>;
+    fn to_bytes(&self) -> Result<Cow<'_, [u8]>, Error>;
     /// Convert this type into its final form.
     fn into_target(self) -> Self::Target;
 }
@@ -814,7 +814,7 @@ impl DataWithCachePolicy {
     /// If the given byte buffer is not in a valid format or if the reader
     /// fails, then this returns an error.
     pub fn from_reader(mut rdr: impl std::io::Read) -> Result<Self, Error> {
-        let mut aligned_bytes = rkyv::util::AlignedVec::new();
+        let mut aligned_bytes = AlignedVec::new();
         aligned_bytes
             .extend_from_reader(&mut rdr)
             .map_err(ErrorKind::Io)?;

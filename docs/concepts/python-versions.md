@@ -53,7 +53,7 @@ This behavior can be
 
 The `.python-version` file can be used to create a default Python version request. uv searches for a
 `.python-version` file in the working directory and each of its parents. Any of the request formats
-described above can be used, though use of a version number is recommended for interopability with
+described above can be used, though use of a version number is recommended for interoperability with
 other tools.
 
 A `.python-version` file can be created in the current directory with the
@@ -109,6 +109,45 @@ By default `uv python install` will verify that a managed Python version is inst
 latest version. If a `.python-version` file is present, uv will install the Python version listed in
 the file. A project that requires multiple Python versions may define a `.python-versions` file. If
 present, uv will install all of the Python versions listed in the file.
+
+### Installing Python executables
+
+!!! important
+
+    Support for installing Python executables is in _preview_, this means the behavior is experimental
+    and subject to change.
+
+To install Python executables into your `PATH`, provide the `--preview` option:
+
+```console
+$ uv python install 3.12 --preview
+```
+
+This will install a Python executable for the requested version into `~/.local/bin`, e.g., as
+`python3.12`.
+
+!!! tip
+
+    If `~/.local/bin` is not in your `PATH`, you can add it with `uv tool update-shell`.
+
+To install `python` and `python3` executables, include the `--default` option:
+
+```console
+$ uv python install 3.12 --default --preview
+```
+
+When installing Python executables, uv will only overwrite an existing executable if it is managed
+by uv — e.g., if `~/.local/bin/python3.12` exists already uv will not overwrite it without the
+`--force` flag.
+
+uv will update executables that it manages. However, it will prefer the latest patch version of each
+Python minor version by default. For example:
+
+```console
+$ uv python install 3.12.7 --preview  # Adds `python3.12` to `~/.local/bin`
+$ uv python install 3.12.6 --preview  # Does not update `python3.12`
+$ uv python install 3.12.8 --preview  # Updates `python3.12` to point to 3.12.8
+```
 
 ## Project Python versions
 
@@ -272,10 +311,10 @@ uv supports downloading and installing CPython and PyPy distributions.
 ### CPython distributions
 
 As Python does not publish official distributable CPython binaries, uv instead uses pre-built
-third-party distributions from the
-[`python-build-standalone`](https://github.com/indygreg/python-build-standalone) project.
-`python-build-standalone` is partially maintained by the uv maintainers and is used in many other
-Python projects, like [Rye](https://github.com/astral-sh/rye) and
+distributions from the Astral
+[`python-build-standalone`](https://github.com/astral-sh/python-build-standalone) project.
+`python-build-standalone` is also is used in many other Python projects, like
+[Rye](https://github.com/astral-sh/rye), [Mise](https://mise.jdx.dev/lang/python.html), and
 [bazelbuild/rules_python](https://github.com/bazelbuild/rules_python).
 
 The uv Python distributions are self-contained, highly-portable, and performant. While Python can be

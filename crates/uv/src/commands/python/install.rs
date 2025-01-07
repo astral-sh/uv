@@ -48,7 +48,7 @@ impl InstallRequest {
         let download_request = PythonDownloadRequest::from_request(&request)
             .ok_or_else(|| {
                 anyhow::anyhow!(
-                    "`{}` is not a valid Python download request; see `uv python help` for supported formats and `uv python list --only-downloads` for available versions",
+                    "`{}` is not a valid Python download request; see `uv help python` for supported formats and `uv python list --only-downloads` for available versions",
                     request.to_canonical_string()
                 )
             })?
@@ -310,6 +310,7 @@ pub(crate) async fn install(
     // installations that match the request
     for installation in &installations {
         installation.ensure_externally_managed()?;
+        installation.ensure_sysconfig_patched()?;
         installation.ensure_canonical_executables()?;
 
         if preview.is_disabled() {

@@ -82,6 +82,7 @@ impl IgnoreCurrentlyBeingDeleted for Result<(), std::io::Error> {
     fn ignore_currently_being_deleted(self) -> Self {
         match self {
             Ok(()) => Ok(()),
+            Err(err) if err.kind() == std::io::ErrorKind::DirectoryNotEmpty => Ok(()),
             Err(err) if err.is_in_process_of_being_deleted() => Ok(()),
             Err(err) => Err(err),
         }

@@ -48,15 +48,16 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
 
     /// Set the [`Reporter`] to use for operations.
     #[must_use]
-    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
-        let reporter: Arc<dyn Reporter> = Arc::new(reporter);
+    pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
             tags: self.tags,
             cache: self.cache,
             hashes: self.hashes,
             build_options: self.build_options,
-            database: self.database.with_reporter(Facade::from(reporter.clone())),
-            reporter: Some(reporter.clone()),
+            database: self
+                .database
+                .with_reporter(reporter.clone().into_distribution_reporter()),
+            reporter: Some(reporter),
         }
     }
 
@@ -220,26 +221,23 @@ pub enum Error {
         DerivationChain,
         #[source] uv_distribution::Error,
     ),
+    #[error("Cyclic build dependency detected for `{0}`")]
+    CyclicBuildDependency(PackageName),
     #[error("Unzip failed in another thread: {0}")]
     Thread(String),
 }
 
 impl Error {
     /// Create an [`Error`] from a distribution error.
-    fn from_dist(dist: Dist, cause: uv_distribution::Error, resolution: &Resolution) -> Self {
-        let kind = match &dist {
-            Dist::Built(_) => DistErrorKind::Download,
-            Dist::Source(dist) => {
-                if dist.is_local() {
-                    DistErrorKind::Build
-                } else {
-                    DistErrorKind::DownloadAndBuild
-                }
-            }
-        };
+    fn from_dist(dist: Dist, err: uv_distribution::Error, resolution: &Resolution) -> Self {
         let chain =
             DerivationChain::from_resolution(resolution, (&dist).into()).unwrap_or_default();
-        Self::Dist(kind, Box::new(dist), chain, cause)
+        Self::Dist(
+            DistErrorKind::from_dist(&dist, &err),
+            Box::new(dist),
+            chain,
+            err,
+        )
     }
 }
 
@@ -274,15 +272,20 @@ pub trait Reporter: Send + Sync {
     fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize);
 }
 
-/// A facade for converting from [`Reporter`] to [`uv_git::Reporter`].
-struct Facade {
-    reporter: Arc<dyn Reporter>,
+impl dyn Reporter {
+    /// Converts this reporter to a [`uv_distribution::Reporter`].
+    pub(crate) fn into_distribution_reporter(
+        self: Arc<dyn Reporter>,
+    ) -> Arc<dyn uv_distribution::Reporter> {
+        Arc::new(Facade {
+            reporter: self.clone(),
+        })
+    }
 }
 
-impl From<Arc<dyn Reporter>> for Facade {
-    fn from(reporter: Arc<dyn Reporter>) -> Self {
-        Self { reporter }
-    }
+/// A facade for converting from [`Reporter`] to [`uv_distribution::Reporter`].
+struct Facade {
+    reporter: Arc<dyn Reporter>,
 }
 
 impl uv_distribution::Reporter for Facade {

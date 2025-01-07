@@ -13,7 +13,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2021"
-rust-version = "1.81"
+rust-version = "1.83"
 homepage = "https://pypi.org/project/uv/"
 documentation = "https://pypi.org/project/uv/"
 repository = "https://github.com/astral-sh/uv"
@@ -76,7 +76,7 @@ async-compression = { version = "0.4.12", features = ["bzip2", "gzip", "xz", "zs
 async-trait = { version = "0.1.82" }
 async_http_range_reader = { version = "0.9.1" }
 async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "c909fda63fcafe4af496a07bfda28a5aae97e58d", features = ["deflate", "tokio"] }
-axoupdater = { version = "0.8.2", default-features = false }
+axoupdater = { version = "0.9.0", default-features = false }
 backoff = { version = "0.4.0" }
 base64 = { version = "0.22.1" }
 bitflags = { version = "2.6.0" }
@@ -113,7 +113,7 @@ http = { version = "1.1.0" }
 indexmap = { version = "2.5.0" }
 indicatif = { version = "0.17.8" }
 indoc = { version = "2.0.5" }
-itertools = { version = "0.13.0" }
+itertools = { version = "0.14.0" }
 jiff = { version = "0.1.14", features = ["serde"] }
 junction = { version = "1.2.0" }
 krata-tokio-tar = { version = "0.4.2" }
@@ -130,7 +130,7 @@ petgraph = { version = "0.6.5" }
 platform-info = { version = "2.0.3" }
 proc-macro2 = { version = "1.0.86" }
 procfs = { version = "0.17.0", default-features = false, features = ["flate2"] }
-pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "57832d0588fbb7aab824813481104761dc1c7740" }
+pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "648aa343486e5529953153781fc86025c73c4a61" }
 quote = { version = "1.0.37" }
 rayon = { version = "1.10.0" }
 reflink-copy = { version = "0.1.19" }
@@ -157,7 +157,7 @@ spdx = { version = "0.10.6" }
 syn = { version = "2.0.77" }
 sys-info = { version = "0.9.1" }
 tar = { version = "0.4.43" }
-target-lexicon = { version = "0.12.16" }
+target-lexicon = { version = "0.13.0" }
 tempfile = { version = "3.14.0" }
 textwrap = { version = "0.16.1" }
 thiserror = { version = "2.0.0" }
@@ -175,7 +175,7 @@ unicode-width = { version = "0.1.13" }
 unscanny = { version = "0.1.0" }
 url = { version = "2.5.2", features = ["serde"] }
 urlencoding = { version = "2.1.3" }
-version-ranges = { git = "https://github.com/astral-sh/pubgrub", rev = "57832d0588fbb7aab824813481104761dc1c7740" }
+version-ranges = { git = "https://github.com/astral-sh/pubgrub", rev = "648aa343486e5529953153781fc86025c73c4a61" }
 walkdir = { version = "2.5.0" }
 which = { version = "7.0.0", features = ["regex"] }
 windows-registry = { version = "0.3.0" }
@@ -227,11 +227,6 @@ if_not_else = "allow"
 [profile.release]
 strip = true
 lto = "fat"
-
-# This profile disables LTO and is used for ppc64le musl cross builds which fail otherwise
-[profile.release-no-lto]
-inherits = "release"
-lto = false
 
 # This profile is meant to mimic the `release` profile as closely as
 # possible, but using settings that are more beneficial for iterative
@@ -287,7 +282,7 @@ inherits = "release"
 # Config for 'dist'
 [workspace.metadata.dist]
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.25.2-prerelease.3"
+cargo-dist-version = "0.27.0"
 # CI backends to support
 ci = "github"
 # The installers to generate for each app
@@ -339,3 +334,9 @@ github-custom-job-permissions = { "build-docker" = { packages = "write", content
 install-updater = false
 # Path that installers should place binaries in
 install-path = ["$XDG_BIN_HOME/", "$XDG_DATA_HOME/../bin", "~/.local/bin"]
+
+[workspace.metadata.dist.min-glibc-version]
+# Override glibc version for specific target triplets.
+aarch64-unknown-linux-gnu = "2.28"
+# Override all remaining glibc versions.
+"*" = "2.17"

@@ -1,12 +1,23 @@
-use crate::{DistRef, Edge, Name, Node, Resolution, ResolvedDist};
+use std::collections::VecDeque;
+use std::fmt::{Debug, Display, Formatter};
+
 use petgraph::prelude::EdgeRef;
 use petgraph::Direction;
 use rustc_hash::FxHashSet;
-use std::collections::VecDeque;
-use std::fmt::{Display, Formatter};
+use version_ranges::Ranges;
+
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use version_ranges::Ranges;
+
+use crate::{
+    BuiltDist, Dist, DistRef, Edge, Name, Node, RequestedDist, Resolution, ResolvedDist, SourceDist,
+};
+
+/// Inspect whether an error type is a build error.
+pub trait IsBuildBackendError: std::error::Error + Send + Sync + 'static {
+    /// Returns whether the build backend failed to build the package, so it's not a uv error.
+    fn is_build_backend_error(&self) -> bool;
+}
 
 /// The operation(s) that failed when reporting an error with a distribution.
 #[derive(Debug)]
@@ -16,6 +27,36 @@ pub enum DistErrorKind {
     Build,
     BuildBackend,
     Read,
+}
+
+impl DistErrorKind {
+    pub fn from_requested_dist(dist: &RequestedDist, err: &impl IsBuildBackendError) -> Self {
+        match dist {
+            RequestedDist::Installed(_) => DistErrorKind::Read,
+            RequestedDist::Installable(dist) => Self::from_dist(dist, err),
+        }
+    }
+
+    pub fn from_dist(dist: &Dist, err: &impl IsBuildBackendError) -> Self {
+        if err.is_build_backend_error() {
+            DistErrorKind::BuildBackend
+        } else {
+            match dist {
+                Dist::Built(BuiltDist::Path(_)) => DistErrorKind::Read,
+                Dist::Source(SourceDist::Path(_) | SourceDist::Directory(_)) => {
+                    DistErrorKind::Build
+                }
+                Dist::Built(_) => DistErrorKind::Download,
+                Dist::Source(source_dist) => {
+                    if source_dist.is_local() {
+                        DistErrorKind::Build
+                    } else {
+                        DistErrorKind::DownloadAndBuild
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl Display for DistErrorKind {

@@ -15,10 +15,11 @@ use uv_configuration::{
 use uv_dispatch::SharedState;
 use uv_normalize::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
-use uv_resolver::{InstallTarget, RequirementsTxtExport};
+use uv_resolver::RequirementsTxtExport;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
+use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::{
     default_dependency_groups, detect_conflicts, DependencyGroupsTarget, ProjectError,
@@ -81,22 +82,23 @@ pub(crate) async fn export(
         VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
     };
 
-    let VirtualProject::Project(project) = &project else {
-        return Err(anyhow::anyhow!("Legacy non-project roots are not supported in `uv export`; add a `[project]` table to your `pyproject.toml` to enable exports"));
-    };
-
     // Validate that any referenced dependency groups are defined in the workspace.
     if !frozen {
-        let target = if all_packages {
-            DependencyGroupsTarget::Workspace(project.workspace())
-        } else {
-            DependencyGroupsTarget::Project(project)
+        let target = match &project {
+            VirtualProject::Project(project) => {
+                if all_packages {
+                    DependencyGroupsTarget::Workspace(project.workspace())
+                } else {
+                    DependencyGroupsTarget::Project(project)
+                }
+            }
+            VirtualProject::NonProject(workspace) => DependencyGroupsTarget::Workspace(workspace),
         };
         target.validate(&dev)?;
     }
 
     // Determine the default groups to include.
-    let defaults = default_dependency_groups(project.current_project().pyproject_toml())?;
+    let defaults = default_dependency_groups(project.pyproject_toml())?;
     let dev = dev.with_defaults(defaults);
 
     // Determine the lock mode.
@@ -114,7 +116,7 @@ pub(crate) async fn export(
             connectivity,
             native_tls,
             allow_insecure_host,
-            install_mirrors,
+            &install_mirrors,
             no_config,
             cache,
             printer,
@@ -135,7 +137,7 @@ pub(crate) async fn export(
     // Lock the project.
     let lock = match do_safe_lock(
         mode,
-        project.workspace(),
+        project.workspace().into(),
         settings.as_ref(),
         LowerBound::Warn,
         &state,
@@ -163,19 +165,47 @@ pub(crate) async fn export(
     detect_conflicts(&lock, &extras, &dev)?;
 
     // Identify the installation target.
-    let target = if all_packages {
-        InstallTarget::Workspace {
-            workspace: project.workspace(),
-            lock: &lock,
+    let target = match &project {
+        VirtualProject::Project(project) => {
+            if all_packages {
+                InstallTarget::Workspace {
+                    workspace: project.workspace(),
+                    lock: &lock,
+                }
+            } else if let Some(package) = package.as_ref() {
+                InstallTarget::Project {
+                    workspace: project.workspace(),
+                    name: package,
+                    lock: &lock,
+                }
+            } else {
+                // By default, install the root package.
+                InstallTarget::Project {
+                    workspace: project.workspace(),
+                    name: project.project_name(),
+                    lock: &lock,
+                }
+            }
         }
-    } else {
-        InstallTarget::Project {
-            workspace: project.workspace(),
-            // If `--frozen --package` is specified, and only the root `pyproject.toml` was
-            // discovered, the child won't be present in the workspace; but we _know_ that
-            // we want to install it, so we override the package name.
-            name: package.as_ref().unwrap_or(project.project_name()),
-            lock: &lock,
+        VirtualProject::NonProject(workspace) => {
+            if all_packages {
+                InstallTarget::NonProjectWorkspace {
+                    workspace,
+                    lock: &lock,
+                }
+            } else if let Some(package) = package.as_ref() {
+                InstallTarget::Project {
+                    workspace,
+                    name: package,
+                    lock: &lock,
+                }
+            } else {
+                // By default, install the entire workspace.
+                InstallTarget::NonProjectWorkspace {
+                    workspace,
+                    lock: &lock,
+                }
+            }
         }
     };
 
@@ -186,7 +216,7 @@ pub(crate) async fn export(
     match format {
         ExportFormat::RequirementsTxt => {
             let export = RequirementsTxtExport::from_lock(
-                target,
+                &target,
                 &prune,
                 &extras,
                 &dev,

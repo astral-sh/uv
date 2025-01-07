@@ -77,6 +77,7 @@ impl fmt::Display for Os {
 pub enum Arch {
     #[serde(alias = "arm64")]
     Aarch64,
+    Armv5TEL,
     Armv6L,
     #[serde(alias = "armv8l")]
     Armv7L,
@@ -89,6 +90,7 @@ pub enum Arch {
     #[serde(alias = "amd64")]
     X86_64,
     S390X,
+    LoongArch64,
     Riscv64,
 }
 
@@ -96,6 +98,7 @@ impl fmt::Display for Arch {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Self::Aarch64 => write!(f, "aarch64"),
+            Self::Armv5TEL => write!(f, "armv5tel"),
             Self::Armv6L => write!(f, "armv6l"),
             Self::Armv7L => write!(f, "armv7l"),
             Self::Powerpc64Le => write!(f, "ppc64le"),
@@ -103,6 +106,7 @@ impl fmt::Display for Arch {
             Self::X86 => write!(f, "i686"),
             Self::X86_64 => write!(f, "x86_64"),
             Self::S390X => write!(f, "s390x"),
+            Self::LoongArch64 => write!(f, "loongarch64"),
             Self::Riscv64 => write!(f, "riscv64"),
         }
     }
@@ -122,7 +126,7 @@ impl Arch {
             // manylinux_2_31
             Self::Riscv64 => Some(31),
             // unsupported
-            Self::Armv6L => None,
+            Self::Armv5TEL | Self::Armv6L | Self::LoongArch64 => None,
         }
     }
 }
