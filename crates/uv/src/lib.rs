@@ -193,6 +193,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }) = &**command
         {
             Pep723Script::read(&script).await?.map(Pep723Item::Script)
+        } else if let ProjectCommand::Tree(uv_cli::TreeArgs {
+            script: Some(script),
+            ..
+        }) = &**command
+        {
+            Pep723Script::read(&script).await?.map(Pep723Item::Script)
         } else {
             None
         }
@@ -1652,7 +1658,14 @@ async fn run_project(
             // Initialize the cache.
             let cache = cache.init()?;
 
-            commands::tree(
+            // Unwrap the script.
+            let script = script.map(|script| match script {
+                Pep723Item::Script(script) => script,
+                Pep723Item::Stdin(_) => unreachable!("`uv tree` does not support stdin"),
+                Pep723Item::Remote(_) => unreachable!("`uv tree` does not support remote files"),
+            });
+
+            Box::pin(commands::tree(
                 project_dir,
                 args.dev,
                 args.locked,
@@ -1669,6 +1682,7 @@ async fn run_project(
                 args.python,
                 args.install_mirrors,
                 args.resolver,
+                script,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.connectivity,
@@ -1679,7 +1693,7 @@ async fn run_project(
                 &cache,
                 printer,
                 globals.preview,
-            )
+            ))
             .await
         }
         ProjectCommand::Export(args) => {

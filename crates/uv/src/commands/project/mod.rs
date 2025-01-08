@@ -143,6 +143,9 @@ pub(crate) enum ProjectError {
     #[error("Group `{0}` is not defined in any project's `dependency-group` table")]
     MissingGroupWorkspace(GroupName),
 
+    #[error("PEP 723 scripts do not support dependency groups, but group `{0}` was specified")]
+    MissingGroupScript(GroupName),
+
     #[error("Default group `{0}` (from `tool.uv.default-groups`) is not defined in the project's `dependency-group` table")]
     MissingDefaultGroup(GroupName),
 
@@ -1730,6 +1733,8 @@ pub(crate) enum DependencyGroupsTarget<'env> {
     Workspace(&'env Workspace),
     /// The dependency groups must be defined in the target project.
     Project(&'env ProjectWorkspace),
+    /// The dependency groups must be defined in the target script.
+    Script,
 }
 
 impl DependencyGroupsTarget<'_> {
@@ -1759,6 +1764,9 @@ impl DependencyGroupsTarget<'_> {
                     {
                         return Err(ProjectError::MissingGroupProject(group.clone()));
                     }
+                }
+                Self::Script => {
+                    return Err(ProjectError::MissingGroupScript(group.clone()));
                 }
             }
         }
