@@ -588,12 +588,12 @@ jobs:
 
       - name: Add clang to PATH and check if clang exists
         run: |
-          $env:PATH += ";C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\bin"
+          "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\bin" >> $env:GITHUB_PATH
           clang --version
       
       - name: Add cmake to PATH and check if cmake exists
         run: |
-          $env:Path += ";C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\"
+          "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\" >> $env:GITHUB_PATH
           cmake --version
 
       - name: Install Nightly Rust (aarch64)
