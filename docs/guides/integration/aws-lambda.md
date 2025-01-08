@@ -1,3 +1,10 @@
+---
+title: Using uv with AWS Lambda
+description:
+  A complete guide to using uv with AWS Lambda to manage Python dependencies and deploy serverless
+  functions via Docker containers or zip archives.
+---
+
 # Using uv with AWS Lambda
 
 [AWS Lambda](https://aws.amazon.com/lambda/) is a serverless computing service that lets you run
@@ -90,8 +97,11 @@ FROM ghcr.io/astral-sh/uv:0.5.16 AS uv
 # First, bundle the dependencies into the task root.
 FROM public.ecr.aws/lambda/python:3.13 AS builder
 
-# Enable bytecode compilation.
+# Enable bytecode compilation, to improve cold-start performance.
 ENV UV_COMPILE_BYTECODE=1
+
+# Disable installer metadata, to create a deterministic layer.
+ENV UV_NO_INSTALLER_METADATA=1
 
 # Enable copy mode to support bind mount caching.
 ENV UV_LINK_MODE=copy
@@ -289,8 +299,11 @@ FROM ghcr.io/astral-sh/uv:0.5.16 AS uv
 # First, bundle the dependencies into the task root.
 FROM public.ecr.aws/lambda/python:3.13 AS builder
 
-# Enable bytecode compilation.
+# Enable bytecode compilation, to improve cold-start performance.
 ENV UV_COMPILE_BYTECODE=1
+
+# Disable installer metadata, to create a deterministic layer.
+ENV UV_NO_INSTALLER_METADATA=1
 
 # Enable copy mode to support bind mount caching.
 ENV UV_LINK_MODE=copy
@@ -352,9 +365,10 @@ for AWS Lambda via:
 ```console
 $ uv export --frozen --no-dev --no-editable -o requirements.txt
 $ uv pip install \
+   --no-installer-metadata \
    --no-compile-bytecode \
    --python-platform x86_64-manylinux2014 \
-   --python-version 3.13 \
+   --python 3.13 \
    --target packages \
    -r requirements.txt
 ```
@@ -370,12 +384,12 @@ then bundle these dependencies into a zip as follows:
 ```console
 $ cd packages
 $ zip -r ../package.zip .
+$ cd ..
 ```
 
 Finally, we can add the application code to the zip archive:
 
 ```console
-$ cd ..
 $ zip -r package.zip app
 ```
 
@@ -386,7 +400,7 @@ e.g.:
 $ aws lambda create-function \
    --function-name myFunction \
    --runtime python3.13 \
-   --zip-file fileb://package.zip
+   --zip-file fileb://package.zip \
    --handler app.main.handler \
    --role arn:aws:iam::111122223333:role/service-role/my-lambda-role
 ```
@@ -414,3 +428,93 @@ $ aws lambda update-function-code \
     By default, the AWS Management Console assumes a Lambda entrypoint of `lambda_function.lambda_handler`.
     If your application uses a different entrypoint, you'll need to modify it in the AWS Management Console.
     For example, the above FastAPI application uses `app.main.handler`.
+
+### Using a Lambda layer
+
+AWS Lambda also supports the deployment of multiple composed
+[Lambda layers](https://docs.aws.amazon.com/lambda/latest/dg/python-layers.html) when working with
+zip archives. These layers are conceptually similar to layers in a Docker image, allowing you to
+separate application code from dependencies.
+
+In particular, we can create a lambda layer for application dependencies and attach it to the Lambda
+function, separate from the application code itself. This setup can improve cold-start performance
+for application updates, as the dependencies layer can be reused across deployments.
+
+To create a Lambda layer, we'll follow similar steps, but create two separate zip archives: one for
+the application code and one for the application dependencies.
+
+First, we'll create the dependency layer. Lambda layers are expected to follow a slightly different
+structure, so we'll use `--prefix` rather than `--target`:
+
+```console
+$ uv export --frozen --no-dev --no-editable -o requirements.txt
+$ uv pip install \
+   --no-installer-metadata \
+   --no-compile-bytecode \
+   --python-platform x86_64-manylinux2014 \
+   --python 3.13 \
+   --prefix packages \
+   -r requirements.txt
+```
+
+We'll then zip the dependencies in adherence with the expected layout for Lambda layers:
+
+```console
+$ mkdir python
+$ cp -r packages/lib python/
+$ zip -r layer_content.zip python
+```
+
+!!! tip
+
+    To generate deterministic zip archives, consider passing the `-X` flag to `zip` to exclude
+    extended attributes and file system metadata.
+
+And publish the Lambda layer:
+
+```console
+$ aws lambda publish-layer-version --layer-name dependencies-layer \
+   --zip-file fileb://layer_content.zip \
+   --compatible-runtimes python3.13 \
+   --compatible-architectures "x86_64"
+```
+
+We can then create the Lambda function as in the previous example, omitting the dependencies:
+
+```console
+$ # Zip the application code.
+$ zip -r app.zip app
+
+$ # Create the Lambda function.
+$ aws lambda create-function \
+   --function-name myFunction \
+   --runtime python3.13 \
+   --zip-file fileb://app.zip \
+   --handler app.main.handler \
+   --role arn:aws:iam::111122223333:role/service-role/my-lambda-role
+```
+
+Finally, we can attach the dependencies layer to the Lambda function, using the ARN returned by the
+`publish-layer-version` step:
+
+```console
+$ aws lambda update-function-configuration --function-name myFunction \
+    --cli-binary-format raw-in-base64-out \
+    --layers "arn:aws:lambda:region:111122223333:layer:dependencies-layer:1"
+```
+
+When the application dependencies change, the layer can be updated independently of the application
+by republishing the layer and updating the Lambda function configuration:
+
+```console
+$ # Update the dependencies in the layer.
+$ aws lambda publish-layer-version --layer-name dependencies-layer \
+   --zip-file fileb://layer_content.zip \
+   --compatible-runtimes python3.13 \
+   --compatible-architectures "x86_64"
+
+$ # Update the Lambda function configuration.
+$ aws lambda update-function-configuration --function-name myFunction \
+    --cli-binary-format raw-in-base64-out \
+    --layers "arn:aws:lambda:region:111122223333:layer:dependencies-layer:2"
+```
