@@ -3108,6 +3108,13 @@ pub struct LockArgs {
     #[arg(long, conflicts_with = "check_exists", conflicts_with = "check")]
     pub dry_run: bool,
 
+    /// Lock the specified Python script, rather than the current project.
+    ///
+    /// If provided, uv will lock the script (based on its inline metadata table, in adherence with
+    /// PEP 723) to a `.lock` file adjacent to the script itself.
+    #[arg(long)]
+    pub script: Option<PathBuf>,
+
     #[command(flatten)]
     pub resolver: ResolverArgs,
 
