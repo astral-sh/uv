@@ -588,11 +588,13 @@ jobs:
 
       - name: Add clang to PATH and check if clang exists
         run: |
+          $env:Path += ";C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\bin"
           Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\bin" -Encoding utf8
           clang --version
       
       - name: Add cmake to PATH and check if cmake exists
         run: |
+          $env:Path += ";C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\"
           Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin" -Encoding utf8
           cmake --version
 
@@ -620,7 +622,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: "Build"
-        run: cargo build --target aarch64-pc-windows-msvc
+        run: $env:Path += ";C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\bin"; $env:Path += ";C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\"; cargo build --target aarch64-pc-windows-msvc
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
