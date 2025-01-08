@@ -1,4 +1,7 @@
-.venv
+.venv/
+debug/
+target/
+target-alpine/
 CHANGELOG.md
 PREVIEW-CHANGELOG.md
 docs/reference/cli.md
