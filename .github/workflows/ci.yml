@@ -526,7 +526,7 @@ jobs:
           path: ./target/debug/uv
           retention-days: 1
 
-  build-binary-windows:
+  build-binary-windows-x86_64:
     needs: determine_changes
     timeout-minutes: 10
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
@@ -555,7 +555,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
-          name: uv-windows-${{ github.sha }}
+          name: uv-windows-x86_64-${{ github.sha }}
           path: ${{ env.UV_WORKSPACE }}/target/debug/uv.exe
           retention-days: 1
 
@@ -822,9 +822,9 @@ jobs:
         run: |
           ./uv pip install -v anyio
 
-  integration-test-free-threaded-windows:
+  integration-test-free-threaded-windows-x86_64:
     timeout-minutes: 10
-    needs: build-binary-windows
+    needs: build-binary-windows-x86_64
     name: "integration test | free-threaded on windows"
     runs-on: windows-latest
     env:
@@ -835,7 +835,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-windows-${{ github.sha }}
+          name: uv-windows-x86_64-${{ github.sha }}
 
       - name: "Install free-threaded Python via uv"
         run: |
@@ -869,6 +869,55 @@ jobs:
         run: |
           ./uv run python -c ""
           ./uv run -p 3.13t python -c ""
+  
+  integration-test-free-threaded-windows-aarch64:
+    timeout-minutes: 10
+    needs: build-binary-windows-aarch64
+    name: "integration test | free-threaded on windows"
+    runs-on: github-windows-11-aarch64-4
+    env:
+      # Avoid debug build stack overflows.
+      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
+
+    steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-aarch64-${{ github.sha }}
+
+      - name: "Install free-threaded Python via uv"
+        run: |
+          ./uv python install -v 3.13t
+
+      - name: "Create a virtual environment (stdlib)"
+        run: |
+          & (./uv python find 3.13t) -m venv .venv
+
+      - name: "Check version (stdlib)"
+        run: |
+          .venv/Scripts/python --version
+
+      - name: "Create a virtual environment (uv)"
+        run: |
+          ./uv venv -p 3.13t --python-preference only-managed
+
+      - name: "Check version (uv)"
+        run: |
+          .venv/Scripts/python --version
+
+      - name: "Check is free-threaded"
+        run: |
+          .venv/Scripts/python -c "import sys; exit(1) if sys._is_gil_enabled() else exit(0)"
+
+      - name: "Check install"
+        run: |
+          ./uv pip install -v anyio
+
+      - name: "Check uv run"
+        run: |
+          ./uv run python -c ""
+          ./uv run -p 3.13t python -c ""
+
 
   integration-test-pypy-linux:
     timeout-minutes: 10
@@ -934,9 +983,9 @@ jobs:
         run: |
           ./uv pip install anyio
 
-  integration-test-pypy-windows:
+  integration-test-pypy-windows-x86_64:
     timeout-minutes: 10
-    needs: build-binary-windows
+    needs: build-binary-windows-x86_64
     name: "integration test | pypy on windows"
     runs-on: windows-latest
 
@@ -944,7 +993,70 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-windows-${{ github.sha }}
+          name: uv-windows-x86_64-${{ github.sha }}
+
+      - name: "Install PyPy"
+        run: .\uv.exe python install pypy3.9
+
+      - name: "Create a virtual environment"
+        run: |
+          .\uv.exe venv -p pypy3.9 --python-preference only-managed
+
+      - name: "Check for executables"
+        shell: python
+        run: |
+          import sys
+          from pathlib import Path
+
+          def binary_exist(binary):
+            binaries_path = Path(".venv\\Scripts")
+            if (binaries_path / binary).exists():
+              return True
+            print(f"Executable '{binary}' not found in folder '{binaries_path}'.")
+
+          all_found = True
+          expected_binaries = [
+              "pypy3.9.exe",
+              "pypy3.9w.exe",
+              "pypy3.exe",
+              "pypyw.exe",
+              "python.exe",
+              "python3.9.exe",
+              "python3.exe",
+              "pythonw.exe",
+          ]
+          for binary in expected_binaries:
+            if not binary_exist(binary):
+              all_found = False
+
+          if not all_found:
+            print("One or more expected executables were not found.")
+            sys.exit(1)
+
+      - name: "Check version"
+        run: |
+          & .venv\Scripts\pypy3.9.exe --version
+          & .venv\Scripts\pypy3.exe --version
+          & .venv\Scripts\python.exe --version
+
+      - name: "Check install"
+        env:
+          # Avoid debug build stack overflows.
+          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
+        run: |
+          .\uv.exe pip install anyio
+  
+  integration-test-pypy-windows-aarch64:
+    timeout-minutes: 10
+    needs: build-binary-windows-aarch64
+    name: "integration test | pypy on windows"
+    runs-on: github-windows-11-aarch64-4
+
+    steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-aarch64-${{ github.sha }}
 
       - name: "Install PyPy"
         run: .\uv.exe python install pypy3.9
@@ -1066,9 +1178,9 @@ jobs:
         run: |
           ./uv pip install anyio
 
-  integration-test-graalpy-windows:
+  integration-test-graalpy-windows-x86_64:
     timeout-minutes: 10
-    needs: build-binary-windows
+    needs: build-binary-windows-x86_64
     name: "integration test | graalpy on windows"
     runs-on: windows-latest
 
@@ -1080,7 +1192,70 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-windows-${{ github.sha }}
+          name: uv-windows-x86_64-${{ github.sha }}
+
+      - name: Graalpy info
+        run: Get-Command graalpy
+
+      - name: "Create a virtual environment"
+        run: |
+          $graalpy = (Get-Command graalpy).source
+          .\uv.exe venv -p $graalpy
+
+      - name: "Check for executables"
+        shell: python
+        run: |
+          import sys
+          from pathlib import Path
+
+          def binary_exist(binary):
+            binaries_path = Path(".venv\\Scripts")
+            if (binaries_path / binary).exists():
+              return True
+            print(f"Executable '{binary}' not found in folder '{binaries_path}'.")
+
+          all_found = True
+          expected_binaries = [
+              "graalpy.exe",
+              "python.exe",
+              "python3.exe",
+          ]
+          for binary in expected_binaries:
+            if not binary_exist(binary):
+              all_found = False
+
+          if not all_found:
+            print("One or more expected executables were not found.")
+            sys.exit(1)
+
+      - name: "Check version"
+        run: |
+          & .venv\Scripts\graalpy.exe --version
+          & .venv\Scripts\python3.exe --version
+          & .venv\Scripts\python.exe --version
+
+      - name: "Check install"
+        env:
+          # Avoid debug build stack overflows.
+          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
+        run: |
+          .\uv.exe pip install anyio
+ 
+  integration-test-graalpy-windows-aarch64:
+    timeout-minutes: 10
+    needs: build-binary-windows-aarch64
+    name: "integration test | graalpy on windows"
+    runs-on: github-windows-11-aarch64-4
+
+    steps:
+      - uses: timfel/setup-python@fc9bcb4a04f5b1ea7d678c2ca7ea1c479a2468d7
+        with:
+          python-version: "graalpy24.1"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-aarch64-${{ github.sha }}
 
       - name: Graalpy info
         run: Get-Command graalpy
@@ -1614,8 +1789,8 @@ jobs:
 
   system-test-windows-python-310:
     timeout-minutes: 10
-    needs: build-binary-windows
-    name: "check system | python3.10 on windows"
+    needs: build-binary-windows-x86_64
+    name: "check system | python3.10 on windows x86_64"
     runs-on: windows-latest
     env:
       # Avoid debug build stack overflows.
@@ -1630,7 +1805,33 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-windows-${{ github.sha }}
+          name: uv-windows-x86_64-${{ github.sha }}
+
+      - name: "Print Python path"
+        run: echo $(which python)
+
+      - name: "Validate global Python install"
+        run: py -3.10 ./scripts/check_system_python.py --uv ./uv.exe
+
+  system-test-windows-python-310-aarch64:
+    timeout-minutes: 10
+    needs: build-binary-windows-aarch64
+    name: "check system | python3.10 on windows aarch64"
+    runs-on: github-windows-11-aarch64-4
+    env:
+      # Avoid debug build stack overflows.
+      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-aarch64-${{ github.sha }}
 
       - name: "Print Python path"
         run: echo $(which python)
@@ -1640,7 +1841,7 @@ jobs:
 
   system-test-windows-x86-python-310:
     timeout-minutes: 10
-    needs: build-binary-windows
+    needs: build-binary-windows-x86_64
     name: "check system | python3.10 on windows x86"
     runs-on: windows-latest
     env:
@@ -1657,7 +1858,34 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-windows-${{ github.sha }}
+          name: uv-windows-x86_64-${{ github.sha }}
+
+      - name: "Print Python path"
+        run: echo $(which python)
+
+      - name: "Validate global Python install"
+        run: python ./scripts/check_system_python.py --uv ./uv.exe
+  
+  system-test-windows-aarch64-python-310:
+    timeout-minutes: 10
+    needs: build-binary-windows-aarch64
+    name: "check system | python3.10 on windows aarch64"
+    runs-on: github-windows-11-aarch64-4
+    env:
+      # Avoid debug build stack overflows.
+      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          architecture: "aarch64"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-aarch64-${{ github.sha }}
 
       - name: "Print Python path"
         run: echo $(which python)
@@ -1665,10 +1893,10 @@ jobs:
       - name: "Validate global Python install"
         run: python ./scripts/check_system_python.py --uv ./uv.exe
 
-  system-test-windows-python-313:
+  system-test-windows-x86_64-python-313:
     timeout-minutes: 10
-    needs: build-binary-windows
-    name: "check system | python3.13 on windows"
+    needs: build-binary-windows-x86_64
+    name: "check system | python3.13 on windows x86_64"
     runs-on: windows-latest
     env:
       # Avoid debug build stack overflows.
@@ -1685,7 +1913,35 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-windows-${{ github.sha }}
+          name: uv-windows-x86_64-${{ github.sha }}
+
+      - name: "Print Python path"
+        run: echo $(which python)
+
+      - name: "Validate global Python install"
+        run: py -3.13 ./scripts/check_system_python.py --uv ./uv.exe
+  
+  system-test-windows-aarch64-python-313:
+    timeout-minutes: 10
+    needs: build-binary-windows-aarch64
+    name: "check system | python3.13 on windows aarch64"
+    runs-on: github-windows-11-aarch64-4
+    env:
+      # Avoid debug build stack overflows.
+      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          allow-prereleases: true
+          cache: pip
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-aarch64-${{ github.sha }}
 
       - name: "Print Python path"
         run: echo $(which python)
@@ -1695,7 +1951,7 @@ jobs:
 
   system-test-choco:
     timeout-minutes: 10
-    needs: build-binary-windows
+    needs: build-binary-windows-x86_64
     name: "check system | python3.12 via chocolatey"
     runs-on: windows-latest
     env:
@@ -1710,13 +1966,39 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-windows-${{ github.sha }}
+          name: uv-windows-x86_64-${{ github.sha }}
 
       - name: "Print Python path"
         run: echo $(which python3)
 
       - name: "Validate global Python install"
         run: py -3.9 ./scripts/check_system_python.py --uv ./uv.exe
+
+  system-test-choco-aarch64:
+    timeout-minutes: 10
+    needs: build-binary-windows-aarch64
+    name: "check system | python3.12 via chocolatey"
+    runs-on: github-windows-11-aarch64-4
+    env:
+      # Avoid debug build stack overflows.
+      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install Python"
+        run: choco install python3 --verbose --version=3.9.13
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-aarch64-${{ github.sha }}
+
+      - name: "Print Python path"
+        run: echo $(which python3)
+
+      - name: "Validate global Python install"
+        run: py -3.9 ./scripts/check_system_python.py --uv ./uv.exe
+
 
   system-test-pyenv:
     timeout-minutes: 10
@@ -1789,7 +2071,7 @@ jobs:
   system-test-conda:
     timeout-minutes: 10
     needs:
-      [build-binary-windows, build-binary-macos-aarch64, build-binary-linux]
+      [build-binary-windows-x86_64, build-binary-windows-aarch64, build-binary-macos-aarch64, build-binary-linux]
     name: check system | conda${{ matrix.python-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -1799,7 +2081,8 @@ jobs:
         python-version: ["3.8", "3.11"]
         include:
           - { os: "linux", target: "linux", runner: "ubuntu-latest" }
-          - { os: "windows", target: "windows", runner: "windows-latest" }
+          - { os: "windows", target: "windows-x86_64", runner: "windows-latest" }
+          - { os: "windows", target: "windows-aarch64", runner: "github-windows-11-aarch64-4" }
           - { os: "macos", target: "macos-aarch64", runner: "macos-14" }
     steps:
       - uses: actions/checkout@v4
@@ -1869,8 +2152,8 @@ jobs:
 
   system-test-windows-embedded-python-310:
     timeout-minutes: 10
-    needs: build-binary-windows
-    name: "check system | embedded python3.10 on windows"
+    needs: build-binary-windows-x86_64
+    name: "check system | embedded python3.10 on windows x86_64"
     runs-on: windows-latest
     env:
       # Avoid debug build stack overflows.
@@ -1881,7 +2164,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-windows-${{ github.sha }}
+          name: uv-windows-x86_64-${{ github.sha }}
 
       # Download embedded Python.
       - name: "Download embedded Python"
@@ -1901,6 +2184,41 @@ jobs:
 
       - name: "Validate embedded Python install"
         run: python ./scripts/check_embedded_python.py --uv ./uv.exe
+
+  system-test-windows-embedded-python-310-aarch64:
+    timeout-minutes: 10
+    needs: build-binary-windows-aarch64
+    name: "check system | embedded python3.10 on windows aarch64"
+    runs-on: github-windows-11-aarch64-4
+    env:
+      # Avoid debug build stack overflows.
+      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-aarch64-${{ github.sha }}
+
+      # Download embedded Python.
+      - name: "Download embedded Python"
+        run: curl -LsSf https://www.python.org/ftp/python/3.11.8/python-3.11.8-embed-arm64.zip -o python-3.11.8-embed-arm64.zip
+
+      - name: "Unzip embedded Python"
+        run: 7z x python-3.11.8-embed-arm64.zip -oembedded-python
+
+      - name: "Show embedded Python contents"
+        run: ls embedded-python
+
+      - name: "Set PATH"
+        run: echo "${{ github.workspace }}\embedded-python" >> $env:GITHUB_PATH
+
+      - name: "Print Python path"
+        run: echo "${{ github.workspace }}\embedded-python" >> $env:GITHUB_PATH; echo $(which python)
+
+      - name: "Validate embedded Python install"
+        run: echo "${{ github.workspace }}\embedded-python" >> $env:GITHUB_PATH; python ./scripts/check_embedded_python.py --uv ./uv.exe
 
   benchmarks:
     runs-on: ubuntu-latest
