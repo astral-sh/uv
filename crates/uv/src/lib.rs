@@ -836,6 +836,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.no_project,
                 &cache,
                 printer,
+                args.activatable,
                 args.relocatable,
                 globals.preview,
             )

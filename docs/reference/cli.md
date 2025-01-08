@@ -7810,7 +7810,7 @@ If in a project, the default environment name can be changed with the `UV_PROJEC
 
 If a virtual environment exists at the target path, it will be removed and a new, empty virtual environment will be created.
 
-When using uv, the virtual environment does not need to be activated. uv will find a virtual environment (named `.venv`) in the working directory or any parent directories.
+When using uv, the virtual environment does not need to be activated. uv will find a virtual environment (named `.venv`) in the working directory or any parent directories. See `--not-activatable` if you wish to disable the creation of activation scripts entirely.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -7991,6 +7991,10 @@ uv venv [OPTIONS] [PATH]
 <p>By default, uv searches for projects in the current directory or any parent directory to determine the default path of the virtual environment and check for Python version constraints, if any.</p>
 
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
+
+</dd><dt><code>--not-activatable</code></dt><dd><p>Disable the creation of activation scripts in the environment.</p>
+
+<p>By default, uv will include activation scripts in the environment. When using <code>uv run</code>, these are often not required and can be skipped with <code>--not-activatable</code>.</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 

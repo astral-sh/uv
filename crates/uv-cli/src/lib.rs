@@ -404,7 +404,8 @@ pub enum Commands {
     ///
     /// When using uv, the virtual environment does not need to be activated. uv
     /// will find a virtual environment (named `.venv`) in the working directory
-    /// or any parent directories.
+    /// or any parent directories. See `--not-activatable` if you wish to disable
+    /// the creation of activation scripts entirely.
     #[command(
         alias = "virtualenv",
         alias = "v",
@@ -2395,6 +2396,20 @@ pub struct VenvArgs {
     /// behavior of uv commands.
     #[arg(long)]
     pub system_site_packages: bool,
+
+    #[arg(long, overrides_with("not_activatable"), hide = true)]
+    pub activatable: bool,
+
+    /// Disable the creation of activation scripts in the environment.
+    ///
+    /// By default, uv will include activation scripts in the environment. When using `uv run`,
+    /// these are often not required and can be skipped with `--not-activatable`.
+    #[arg(
+        long,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("activatable"),
+    )]
+    pub not_activatable: bool,
 
     /// Make the virtual environment relocatable.
     ///
