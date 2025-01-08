@@ -83,11 +83,11 @@ impl Tags {
     pub fn new(tags: Vec<(String, String, String)>) -> Self {
         let mut map = FxHashMap::default();
         for (index, (py, abi, platform)) in tags.into_iter().rev().enumerate() {
-            map.entry(py.to_string())
+            map.entry(py)
                 .or_insert(FxHashMap::default())
-                .entry(abi.to_string())
+                .entry(abi)
                 .or_insert(FxHashMap::default())
-                .entry(platform.to_string())
+                .entry(platform)
                 .or_insert(TagPriority::try_from(index).expect("valid tag priority"));
         }
         Self { map: Arc::new(map) }
