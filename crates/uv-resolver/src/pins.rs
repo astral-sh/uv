@@ -12,11 +12,14 @@ use crate::candidate_selector::Candidate;
 #[derive(Clone, Debug, Default)]
 pub(crate) struct FilePins(FxHashMap<(PackageName, uv_pep440::Version), ResolvedDist>);
 
+// Inserts are common (every time we select a version) while reads are rare (converting the
+// final resolution).
 impl FilePins {
     /// Pin a candidate package.
     pub(crate) fn insert(&mut self, candidate: &Candidate, dist: &CompatibleDist) {
         self.0
             .entry((candidate.name().clone(), candidate.version().clone()))
+            // Avoid the expensive clone when a version is selected again.
             .or_insert_with(|| dist.for_installation().to_owned());
     }
 
@@ -26,7 +29,6 @@ impl FilePins {
         name: &PackageName,
         version: &uv_pep440::Version,
     ) -> Option<&ResolvedDist> {
-        // Inserts are common while reads are rare, so the clone here is overall faster.
         self.0.get(&(name.clone(), version.clone()))
     }
 }
