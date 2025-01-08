@@ -939,7 +939,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 )
                 .collect::<Vec<_>>();
 
-            commands::tool_run(
+            Box::pin(commands::tool_run(
                 args.command,
                 args.from,
                 &requirements,
@@ -959,7 +959,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 cache,
                 printer,
                 globals.preview,
-            )
+            ))
             .await
         }
         Commands::Tool(ToolNamespace {

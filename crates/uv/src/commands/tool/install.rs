@@ -29,12 +29,10 @@ use crate::commands::project::{
     resolve_environment, resolve_names, sync_environment, update_environment,
     EnvironmentSpecification, ProjectError,
 };
-use crate::commands::tool::common::remove_entrypoints;
+use crate::commands::tool::common::{install_executables, refine_interpreter, remove_entrypoints};
 use crate::commands::tool::Target;
 use crate::commands::ExitStatus;
-use crate::commands::{
-    diagnostics, reporters::PythonDownloadReporter, tool::common::install_executables,
-};
+use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -448,10 +446,12 @@ pub(crate) async fn install(
 
         environment
     } else {
+        let spec = EnvironmentSpecification::from(spec);
+
         // If we're creating a new environment, ensure that we can resolve the requirements prior
         // to removing any existing tools.
-        let resolution = match resolve_environment(
-            EnvironmentSpecification::from(spec),
+        let resolution = resolve_environment(
+            spec.clone(),
             &interpreter,
             settings.as_ref().into(),
             &state,
@@ -464,15 +464,71 @@ pub(crate) async fn install(
             printer,
             preview,
         )
-        .await
-        {
+        .await;
+
+        // If the resolution failed, retry with the inferred `requires-python` constraint.
+        let resolution = match resolution {
             Ok(resolution) => resolution,
-            Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::default()
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
-            }
-            Err(err) => return Err(err.into()),
+            Err(err) => match err {
+                ProjectError::Operation(err) => {
+                    // If the resolution failed due to the discovered interpreter not satisfying the
+                    // `requires-python` constraint, we can try to refine the interpreter.
+                    //
+                    // For example, if we discovered a Python 3.8 interpreter on the user's machine,
+                    // but the tool requires Python 3.10 or later, we can try to download a
+                    // Python 3.10 interpreter and re-resolve.
+                    let Some(interpreter) = refine_interpreter(
+                        &interpreter,
+                        python_request.as_ref(),
+                        &err,
+                        &client_builder,
+                        &reporter,
+                        &install_mirrors,
+                        python_preference,
+                        python_downloads,
+                        &cache,
+                    )
+                    .await
+                    .ok()
+                    .flatten() else {
+                        return diagnostics::OperationDiagnostic::default()
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    };
+
+                    debug!(
+                        "Re-resolving with Python {} (`{}`)",
+                        interpreter.python_version(),
+                        interpreter.sys_executable().display()
+                    );
+
+                    match resolve_environment(
+                        spec,
+                        &interpreter,
+                        settings.as_ref().into(),
+                        &state,
+                        Box::new(DefaultResolveLogger),
+                        connectivity,
+                        concurrency,
+                        native_tls,
+                        allow_insecure_host,
+                        &cache,
+                        printer,
+                        preview,
+                    )
+                    .await
+                    {
+                        Ok(resolution) => resolution,
+                        Err(ProjectError::Operation(err)) => {
+                            return diagnostics::OperationDiagnostic::default()
+                                .report(err)
+                                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        }
+                        Err(err) => return Err(err.into()),
+                    }
+                }
+                err => return Err(err.into()),
+            },
         };
 
         let environment = installed_tools.create_environment(&from.name, interpreter)?;

@@ -22,6 +22,7 @@ use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter};
 use crate::python_requirement::PythonRequirement;
+use crate::requires_python::LowerBound;
 use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{
     MetadataUnavailable, ResolverEnvironment, UnavailablePackage, UnavailableReason,
@@ -292,6 +293,33 @@ impl NoSolutionError {
         }
 
         strip(derivation_tree).expect("derivation tree should contain at least one term")
+    }
+
+    /// Given a [`DerivationTree`], identify the largest required Python version that is missing.
+    pub fn find_requires_python(&self) -> LowerBound {
+        fn find(derivation_tree: &ErrorTree, minimum: &mut LowerBound) {
+            match derivation_tree {
+                DerivationTree::Derived(derived) => {
+                    find(derived.cause1.as_ref(), minimum);
+                    find(derived.cause2.as_ref(), minimum);
+                }
+                DerivationTree::External(External::FromDependencyOf(.., package, version)) => {
+                    if let PubGrubPackageInner::Python(_) = &**package {
+                        if let Some((lower, ..)) = version.bounding_range() {
+                            let lower = LowerBound::new(lower.cloned());
+                            if lower > *minimum {
+                                *minimum = lower;
+                            }
+                        }
+                    }
+                }
+                DerivationTree::External(_) => {}
+            }
+        }
+
+        let mut minimum = LowerBound::default();
+        find(&self.error, &mut minimum);
+        minimum
     }
 
     /// Initialize a [`NoSolutionHeader`] for this error.

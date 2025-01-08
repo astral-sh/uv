@@ -296,7 +296,7 @@ pub(crate) async fn run(
                 RequirementsSpecification::from_overrides(requirements, constraints, overrides);
             let result = CachedEnvironment::get_or_create(
                 EnvironmentSpecification::from(spec),
-                interpreter,
+                &interpreter,
                 &settings,
                 &state,
                 if show_resolution {
@@ -852,7 +852,7 @@ pub(crate) async fn run(
                         lock.as_ref()
                             .map(|(lock, install_path)| (lock, install_path.as_ref())),
                     ),
-                    base_interpreter.clone(),
+                    &base_interpreter,
                     &settings,
                     &state,
                     if show_resolution {

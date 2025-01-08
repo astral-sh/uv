@@ -1086,7 +1086,7 @@ pub(crate) async fn resolve_names(
     Ok(requirements)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct EnvironmentSpecification<'lock> {
     /// The requirements to include in the environment.
     requirements: RequirementsSpecification,
