@@ -13940,25 +13940,8 @@ fn invalid_platform() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of open3d are available:
-              open3d==0.8.0.0
-              open3d==0.9.0.0
-              open3d==0.10.0.0
-              open3d==0.10.0.1
-              open3d==0.11.0
-              open3d==0.11.1
-              open3d==0.11.2
-              open3d==0.12.0
-              open3d==0.13.0
-              open3d==0.14.1
-              open3d==0.15.1
-              open3d==0.15.2
-              open3d==0.16.0
-              open3d==0.16.1
-              open3d==0.17.0
-              open3d==0.18.0
-          and open3d<=0.15.2 has no wheels with a matching Python ABI tag, we can conclude that open3d<=0.15.2 cannot be used.
-          And because open3d>=0.16.0 has no wheels with a matching platform tag and you require open3d, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only open3d<=0.18.0 is available and open3d<=0.15.2 has no wheels with a matching Python ABI tag, we can conclude that open3d<=0.15.2 cannot be used.
+          And because open3d>=0.16.0,<=0.18.0 has no wheels with a matching platform tag and you require open3d, we can conclude that your requirements are unsatisfiable.
     "###);
 
     Ok(())
