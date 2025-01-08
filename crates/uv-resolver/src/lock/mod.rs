@@ -1820,7 +1820,7 @@ impl Package {
                         });
                         let direct_dist = DirectUrlBuiltDist {
                             filename,
-                            location: url.clone(),
+                            location: Box::new(url.clone()),
                             url: VerbatimUrl::from_url(url),
                         };
                         let built_dist = BuiltDist::DirectUrl(direct_dist);
