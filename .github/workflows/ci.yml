@@ -584,11 +584,11 @@ jobs:
           [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
           iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1')) 
           Add-Content -Path $env:GITHUB_PATH -Value "C:\ProgramData\chocolatey\bin" -Encoding utf8
-          choco install visualstudio2022buildtools -y --no-progress --package-parameters "--add Microsoft.VisualStudio.Component.VC.Tools.ARM64 --add Microsoft.VisualStudio.Component.Windows11SDK.22621 --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.VC.Llvm.Clang --add Microsoft.VisualStudio.ComponentGroup.NativeDesktop.Llvm.Clang --add Microsoft.VisualStudio.Component.VC.Llvm.ClangToolset --add Microsoft.VisualStudio.Component.VC.CMake.Project --add Microsoft.VisualStudio.Component.VC.ATL --add Microsoft.VisualStudio.Component.VC.ATL.ARM --add Microsoft.VisualStudio.Component.VC.ASAN"
+          choco install visualstudio2022buildtools -y --no-progress --package-parameters "--add Microsoft.VisualStudio.Component.VC.Tools.ARM64 --add Microsoft.VisualStudio.Component.Windows11SDK.22621 --add Microsoft.VisualStudio.ComponentGroup.NativeDesktop.Llvm.Clang"
 
       - name: Add clang to PATH and check if clang exists
         run: |
-          $env:PATH += ";C:\Program Files\Microsoft Visual Studio\2022\BuildTools\Llvm\ARM64\bin\"
+          $env:PATH += ";C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\bin"
           clang --version
 
       - name: Install Nightly Rust (aarch64)
@@ -615,13 +615,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: "Build"
-        run: cargo build  -vv --target aarch64-pc-windows-msvc
+        run: cargo build --target aarch64-pc-windows-msvc
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
-          name: uv-windows-${{ github.sha }}
-          path: target/debug/uv.exe
+          name: uv-windows-aarch64-${{ github.sha }}
+          path: target/aarch64-pc-windows-msvc/debug/uv.exe
           retention-days: 1
 
   cargo-build-msrv:
