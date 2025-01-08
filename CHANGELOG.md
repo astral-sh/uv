@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.5.16
+
+### Enhancements
+
+- Accept full requirements in `uv remove` ([#10338](https://github.com/astral-sh/uv/pull/10338))
+
+### Performance
+
+- Avoid over-counting versions in batch prefetcher ([#10350](https://github.com/astral-sh/uv/pull/10350))
+- Deactivate tracing for version-choosing ([#10351](https://github.com/astral-sh/uv/pull/10351))
+- Force a niche into `VersionSmall` ([#10385](https://github.com/astral-sh/uv/pull/10385))
+- Optimize `requirements_for_extra` ([#10348](https://github.com/astral-sh/uv/pull/10348))
+- Re-enable `zlib-ng` on x86 platforms ([#10365](https://github.com/astral-sh/uv/pull/10365))
+- Re-enable zlib-ng on all platforms (except s390x, PowerPC, and FreeBSD) ([#10370](https://github.com/astral-sh/uv/pull/10370))
+- Remove `[u64; 4]` from small version to move `Arc` to full version ([#10345](https://github.com/astral-sh/uv/pull/10345))
+- Shrink `Dist` from 352 to 288 bytes ([#10389](https://github.com/astral-sh/uv/pull/10389))
+- Speed up file pins by removing nested hash map ([#10346](https://github.com/astral-sh/uv/pull/10346))
+- Buffer file reads in `serde_json::from_reader` ([#10341](https://github.com/astral-sh/uv/pull/10341))
+
+### Bug fixes
+
+- Avoid enforcing project-level required version for `uv self` ([#10374](https://github.com/astral-sh/uv/pull/10374))
+- Fix Ruff linting warnings from generated template files for extension modules ([#10371](https://github.com/astral-sh/uv/pull/10371))
+
+### Documentation
+
+- Add AWS Lambda integration guide ([#10278](https://github.com/astral-sh/uv/pull/10278))
+
 ## 0.5.15
 
 ### Python
