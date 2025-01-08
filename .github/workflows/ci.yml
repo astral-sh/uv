@@ -582,7 +582,7 @@ jobs:
         run: |
           Set-ExecutionPolicy Bypass -Scope Process -Force
           [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-          iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1')) 
+          iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
           Add-Content -Path $env:GITHUB_PATH -Value "C:\ProgramData\chocolatey\bin" -Encoding utf8
           choco install visualstudio2022buildtools -y --no-progress --package-parameters "--add Microsoft.VisualStudio.Component.VC.Tools.ARM64 --add Microsoft.VisualStudio.Component.Windows11SDK.22621 --add Microsoft.VisualStudio.ComponentGroup.NativeDesktop.Llvm.Clang --add Microsoft.VisualStudio.Component.VC.CMake.Project"
 
@@ -617,9 +617,9 @@ jobs:
           Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files\Git\cmd" -Encoding utf8
           Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files\Git\bin" -Encoding utf8
 
-      - uses: Swatinem/rust-cache@v2
-
       - uses: actions/checkout@v4
+
+      - uses: Swatinem/rust-cache@v2
 
       - name: "Build"
         run: $env:Path += ";C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\bin"; $env:Path += ";C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\"; cargo build --target aarch64-pc-windows-msvc
