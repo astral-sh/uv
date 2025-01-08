@@ -119,9 +119,14 @@ with the default build system.
     installable. Similarly, if you add a dependency on a local package or install it with `uv pip`,
     uv will always attempt to build and install it.
 
-!!! tip
+### Build system options
 
-    To utilize build-system-specific features (e.g., including or excluding files in the distribution), refer to the documentation of your chosen build system (build backend).
+Build systems are used to power the following features:
+
+- Including or excluding files from distributions
+- Editable install behavior
+
+To configure these features, refer to the documentation of your chosen build system.
 
 ## Project packaging
 
