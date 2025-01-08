@@ -591,7 +591,7 @@ jobs:
           $env:Path += ";C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\bin"
           Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\bin" -Encoding utf8
           clang --version
-      
+
       - name: Add cmake to PATH and check if cmake exists
         run: |
           $env:Path += ";C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\"
