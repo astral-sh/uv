@@ -126,7 +126,7 @@ nix = { version = "0.29.0" }
 owo-colors = { version = "4.1.0" }
 path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
-petgraph = { version = "0.7.0" }
+petgraph = { version = "0.7.1" }
 platform-info = { version = "2.0.3" }
 proc-macro2 = { version = "1.0.86" }
 procfs = { version = "0.17.0", default-features = false, features = ["flate2"] }
