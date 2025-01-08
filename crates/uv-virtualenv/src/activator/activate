@@ -31,9 +31,12 @@ if [ -n "${BASH_VERSION:+x}" ] ; then
         exit 33
     fi
 elif [ -n "${ZSH_VERSION:+x}" ] ; then
-    SCRIPT_PATH="${(%):-%x}"
+    # we use eval in these paths to "hide" the fact that these branches
+    # genuinely don't work when run in the wrong shell. Any shell or
+    # linter that eagerly checks them would be right to complain!
+    eval 'SCRIPT_PATH="${(%):-%x}"'
 elif [ -n "${KSH_VERSION:+x}" ] ; then
-    SCRIPT_PATH="${.sh.file}"
+    eval 'SCRIPT_PATH="${.sh.file}"'
 fi
 
 deactivate () {
@@ -41,12 +44,12 @@ deactivate () {
 
     # reset old environment variables
     # ! [ -z ${VAR+_} ] returns true if VAR is declared at all
-    if ! [ -z "${_OLD_VIRTUAL_PATH:+_}" ] ; then
+    if [ -n "${_OLD_VIRTUAL_PATH:+_}" ] ; then
         PATH="$_OLD_VIRTUAL_PATH"
         export PATH
         unset _OLD_VIRTUAL_PATH
     fi
-    if ! [ -z "${_OLD_VIRTUAL_PYTHONHOME+_}" ] ; then
+    if [ -n "${_OLD_VIRTUAL_PYTHONHOME+_}" ] ; then
         PYTHONHOME="$_OLD_VIRTUAL_PYTHONHOME"
         export PYTHONHOME
         unset _OLD_VIRTUAL_PYTHONHOME
@@ -57,7 +60,7 @@ deactivate () {
     # we made may not be respected
     hash -r 2>/dev/null
 
-    if ! [ -z "${_OLD_VIRTUAL_PS1+_}" ] ; then
+    if [ -n "${_OLD_VIRTUAL_PS1+_}" ] ; then
         PS1="$_OLD_VIRTUAL_PS1"
         export PS1
         unset _OLD_VIRTUAL_PS1
@@ -75,7 +78,7 @@ deactivate () {
 deactivate nondestructive
 
 VIRTUAL_ENV='{{ VIRTUAL_ENV_DIR }}'
-if ([ "$OSTYPE" = "cygwin" ] || [ "$OSTYPE" = "msys" ]) && $(command -v cygpath &> /dev/null) ; then
+if { [ "$OSTYPE" = "cygwin" ] || [ "$OSTYPE" = "msys" ]; } && command -v cygpath &> /dev/null ; then
     VIRTUAL_ENV=$(cygpath -u "$VIRTUAL_ENV")
 fi
 export VIRTUAL_ENV
@@ -84,6 +87,8 @@ _OLD_VIRTUAL_PATH="$PATH"
 PATH="$VIRTUAL_ENV/{{ BIN_NAME }}:$PATH"
 export PATH
 
+# this file is templated, so the constant comparison here actually varies
+# shellcheck disable=SC2050
 if [ "x{{ VIRTUAL_PROMPT }}" != x ] ; then
     VIRTUAL_ENV_PROMPT="({{ VIRTUAL_PROMPT }}) "
 else
@@ -92,7 +97,7 @@ fi
 export VIRTUAL_ENV_PROMPT
 
 # unset PYTHONHOME if set
-if ! [ -z "${PYTHONHOME+_}" ] ; then
+if [ -n "${PYTHONHOME+_}" ] ; then
     _OLD_VIRTUAL_PYTHONHOME="$PYTHONHOME"
     unset PYTHONHOME
 fi
@@ -104,7 +109,7 @@ if [ -z "${VIRTUAL_ENV_DISABLE_PROMPT-}" ] ; then
 fi
 
 # Make sure to unalias pydoc if it's already there
-alias pydoc 2>/dev/null >/dev/null && unalias pydoc || true
+{ alias pydoc 2>/dev/null >/dev/null && unalias pydoc; } || true
 
 pydoc () {
     python -m pydoc "$@"
