@@ -586,6 +586,17 @@ impl SimplifiedMarkerTree {
 pub struct LowerBound(Bound<Version>);
 
 impl LowerBound {
+    /// Initialize a [`LowerBound`] with the given bound.
+    ///
+    /// These bounds use release-only semantics when comparing versions.
+    pub fn new(bound: Bound<Version>) -> Self {
+        Self(match bound {
+            Bound::Included(version) => Bound::Included(version.only_release()),
+            Bound::Excluded(version) => Bound::Excluded(version.only_release()),
+            Bound::Unbounded => Bound::Unbounded,
+        })
+    }
+
     /// Return the [`LowerBound`] truncated to the major and minor version.
     fn major_minor(&self) -> Self {
         match &self.0 {
@@ -598,6 +609,15 @@ impl LowerBound {
                 version.release().iter().take(2),
             ))),
             Bound::Unbounded => Self(Bound::Unbounded),
+        }
+    }
+
+    /// Returns `true` if the lower bound contains the given version.
+    pub fn contains(&self, version: &Version) -> bool {
+        match self.0 {
+            Bound::Included(ref bound) => bound <= version,
+            Bound::Excluded(ref bound) => bound < version,
+            Bound::Unbounded => true,
         }
     }
 }
@@ -668,19 +688,6 @@ impl Default for LowerBound {
     }
 }
 
-impl LowerBound {
-    /// Initialize a [`LowerBound`] with the given bound.
-    ///
-    /// These bounds use release-only semantics when comparing versions.
-    pub fn new(bound: Bound<Version>) -> Self {
-        Self(match bound {
-            Bound::Included(version) => Bound::Included(version.only_release()),
-            Bound::Excluded(version) => Bound::Excluded(version.only_release()),
-            Bound::Unbounded => Bound::Unbounded,
-        })
-    }
-}
-
 impl Deref for LowerBound {
     type Target = Bound<Version>;
 
@@ -699,6 +706,17 @@ impl From<LowerBound> for Bound<Version> {
 pub struct UpperBound(Bound<Version>);
 
 impl UpperBound {
+    /// Initialize a [`UpperBound`] with the given bound.
+    ///
+    /// These bounds use release-only semantics when comparing versions.
+    pub fn new(bound: Bound<Version>) -> Self {
+        Self(match bound {
+            Bound::Included(version) => Bound::Included(version.only_release()),
+            Bound::Excluded(version) => Bound::Excluded(version.only_release()),
+            Bound::Unbounded => Bound::Unbounded,
+        })
+    }
+
     /// Return the [`UpperBound`] truncated to the major and minor version.
     fn major_minor(&self) -> Self {
         match &self.0 {
@@ -719,6 +737,15 @@ impl UpperBound {
                 }
             }
             Bound::Unbounded => Self(Bound::Unbounded),
+        }
+    }
+
+    /// Returns `true` if the upper bound contains the given version.
+    pub fn contains(&self, version: &Version) -> bool {
+        match self.0 {
+            Bound::Included(ref bound) => bound >= version,
+            Bound::Excluded(ref bound) => bound > version,
+            Bound::Unbounded => true,
         }
     }
 }
@@ -784,19 +811,6 @@ impl Ord for UpperBound {
 impl Default for UpperBound {
     fn default() -> Self {
         Self(Bound::Unbounded)
-    }
-}
-
-impl UpperBound {
-    /// Initialize a [`UpperBound`] with the given bound.
-    ///
-    /// These bounds use release-only semantics when comparing versions.
-    pub fn new(bound: Bound<Version>) -> Self {
-        Self(match bound {
-            Bound::Included(version) => Bound::Included(version.only_release()),
-            Bound::Excluded(version) => Bound::Excluded(version.only_release()),
-            Bound::Unbounded => Bound::Unbounded,
-        })
     }
 }
 

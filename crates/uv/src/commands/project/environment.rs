@@ -29,7 +29,7 @@ impl CachedEnvironment {
     /// interpreter.
     pub(crate) async fn get_or_create(
         spec: EnvironmentSpecification<'_>,
-        interpreter: Interpreter,
+        interpreter: &Interpreter,
         settings: &ResolverInstallerSettings,
         state: &SharedState,
         resolve: Box<dyn ResolveLogger>,
@@ -56,7 +56,7 @@ impl CachedEnvironment {
                 "Caching via interpreter: `{}`",
                 interpreter.sys_executable().display()
             );
-            interpreter
+            interpreter.clone()
         };
 
         // Resolve the requirements with the interpreter.
