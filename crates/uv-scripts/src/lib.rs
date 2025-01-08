@@ -230,7 +230,7 @@ impl Pep723Script {
     }
 
     /// Replace the existing metadata in the file with new metadata and write the updated content.
-    pub async fn write(&self, metadata: &str) -> Result<(), Pep723Error> {
+    pub fn write(&self, metadata: &str) -> Result<(), io::Error> {
         let content = format!(
             "{}{}{}",
             self.prelude,
@@ -238,7 +238,7 @@ impl Pep723Script {
             self.postlude
         );
 
-        fs_err::tokio::write(&self.path, content).await?;
+        fs_err::write(&self.path, content)?;
 
         Ok(())
     }
@@ -307,7 +307,7 @@ impl Pep723Metadata {
 }
 
 impl FromStr for Pep723Metadata {
-    type Err = Pep723Error;
+    type Err = toml::de::Error;
 
     /// Parse `Pep723Metadata` from a raw TOML string.
     fn from_str(raw: &str) -> Result<Self, Self::Err> {

@@ -1,12 +1,14 @@
-use anyhow::{bail, Context, Result};
-use itertools::Itertools;
-use owo_colors::OwoColorize;
-use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::collections::hash_map::Entry;
 use std::fmt::Write;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Arc;
+
+use anyhow::{bail, Context, Result};
+use itertools::Itertools;
+use owo_colors::OwoColorize;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 use url::Url;
 
@@ -29,7 +31,7 @@ use uv_pypi_types::{redact_credentials, ParsedUrl, RequirementSource, VerbatimPa
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::FlatIndex;
-use uv_scripts::{Pep723ItemRef, Pep723Script};
+use uv_scripts::{Pep723ItemRef, Pep723Metadata, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
@@ -173,7 +175,7 @@ pub(crate) async fn add(
         .await?
         .into_interpreter();
 
-        Target::Script(script, Box::new(interpreter))
+        AddTarget::Script(script, Box::new(interpreter))
     } else {
         // Find the project in the workspace.
         let project = if let Some(package) = package {
@@ -221,7 +223,7 @@ pub(crate) async fn add(
             .await?
             .into_interpreter();
 
-            Target::Project(project, Box::new(PythonTarget::Interpreter(interpreter)))
+            AddTarget::Project(project, Box::new(PythonTarget::Interpreter(interpreter)))
         } else {
             // Discover or create the virtual environment.
             let venv = project::get_or_init_environment(
@@ -239,7 +241,7 @@ pub(crate) async fn add(
             )
             .await?;
 
-            Target::Project(project, Box::new(PythonTarget::Environment(venv)))
+            AddTarget::Project(project, Box::new(PythonTarget::Environment(venv)))
         }
     };
 
@@ -361,7 +363,7 @@ pub(crate) async fn add(
 
     // If any of the requirements are self-dependencies, bail.
     if matches!(dependency_type, DependencyType::Production) {
-        if let Target::Project(project, _) = &target {
+        if let AddTarget::Project(project, _) = &target {
             if let Some(project_name) = project.project_name() {
                 for requirement in &requirements {
                     if requirement.name == *project_name {
@@ -389,10 +391,10 @@ pub(crate) async fn add(
 
     // Add the requirements to the `pyproject.toml` or script.
     let mut toml = match &target {
-        Target::Script(script, _) => {
+        AddTarget::Script(script, _) => {
             PyProjectTomlMut::from_toml(&script.metadata.raw, DependencyTarget::Script)
         }
-        Target::Project(project, _) => PyProjectTomlMut::from_toml(
+        AddTarget::Project(project, _) => PyProjectTomlMut::from_toml(
             &project.pyproject_toml().raw,
             DependencyTarget::PyProjectToml,
         ),
@@ -405,10 +407,10 @@ pub(crate) async fn add(
         requirement.extras.dedup();
 
         let (requirement, source) = match target {
-            Target::Script(_, _) | Target::Project(_, _) if raw_sources => {
+            AddTarget::Script(_, _) | AddTarget::Project(_, _) if raw_sources => {
                 (uv_pep508::Requirement::from(requirement), None)
             }
-            Target::Script(ref script, _) => {
+            AddTarget::Script(ref script, _) => {
                 let script_path = std::path::absolute(&script.path)?;
                 let script_dir = script_path.parent().expect("script path has no parent");
                 resolve_requirement(
@@ -422,7 +424,7 @@ pub(crate) async fn add(
                     script_dir,
                 )?
             }
-            Target::Project(ref project, _) => {
+            AddTarget::Project(ref project, _) => {
                 let workspace = project
                     .workspace()
                     .packages()
@@ -566,33 +568,17 @@ pub(crate) async fn add(
     let content = toml.to_string();
 
     // Save the modified `pyproject.toml` or script.
-    let modified = match &target {
-        Target::Script(script, _) => {
-            if content == script.metadata.raw {
-                debug!("No changes to dependencies; skipping update");
-                false
-            } else {
-                script.write(&content).await?;
-                true
-            }
-        }
-        Target::Project(project, _) => {
-            if content == *project.pyproject_toml().raw {
-                debug!("No changes to dependencies; skipping update");
-                false
-            } else {
-                let pyproject_path = project.root().join("pyproject.toml");
-                fs_err::write(pyproject_path, &content)?;
-                true
-            }
-        }
-    };
+    let modified = target.write(&content)?;
 
-    let (project, environment) = match target {
-        Target::Project(project, environment) => (project, environment),
-        // If `--script`, exit early. There's no reason to lock and sync.
-        Target::Script(script, _) => {
-            // TODO(charlie): Lock the script, if a lockfile already exists.
+    // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
+    // to exist at all.
+    if frozen {
+        return Ok(ExitStatus::Success);
+    }
+
+    // If we're modifying a script, and lockfile doesn't exist, don't create it.
+    if let AddTarget::Script(ref script, _) = target {
+        if !LockTarget::from(script).lock_path().is_file() {
             writeln!(
                 printer.stderr(),
                 "Updated `{}`",
@@ -600,39 +586,20 @@ pub(crate) async fn add(
             )?;
             return Ok(ExitStatus::Success);
         }
-    };
-
-    // If `--frozen`, exit early. There's no reason to lock and sync, and we don't need a `uv.lock`
-    // to exist at all.
-    if frozen {
-        return Ok(ExitStatus::Success);
     }
 
     // Store the content prior to any modifications.
-    let project_root = project.root().to_path_buf();
-    let workspace_root = project.workspace().install_path().clone();
-    let existing_pyproject_toml = project.pyproject_toml().as_ref().to_vec();
-    let existing_uv_lock = LockTarget::from(project.workspace()).read_bytes().await?;
+    let snapshot = target.snapshot().await?;
 
     // Update the `pypackage.toml` in-memory.
-    let project = project
-        .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::PyprojectTomlParse)?)
-        .ok_or(ProjectError::PyprojectTomlUpdate)?;
+    let target = target.update(&content)?;
 
     // Set the Ctrl-C handler to revert changes on exit.
     let _ = ctrlc::set_handler({
-        let project_root = project_root.clone();
-        let workspace_root = workspace_root.clone();
-        let existing_pyproject_toml = existing_pyproject_toml.clone();
-        let existing_uv_lock = existing_uv_lock.clone();
+        let snapshot = snapshot.clone();
         move || {
             if modified {
-                let _ = revert(
-                    &project_root,
-                    &workspace_root,
-                    &existing_pyproject_toml,
-                    existing_uv_lock.as_deref(),
-                );
+                let _ = snapshot.revert();
             }
 
             #[allow(clippy::exit, clippy::cast_possible_wrap)]
@@ -645,10 +612,9 @@ pub(crate) async fn add(
     });
 
     match lock_and_sync(
-        project,
+        target,
         &mut toml,
         &edits,
-        &environment,
         state,
         locked,
         &dependency_type,
@@ -668,12 +634,7 @@ pub(crate) async fn add(
         Ok(()) => Ok(ExitStatus::Success),
         Err(err) => {
             if modified {
-                let _ = revert(
-                    &project_root,
-                    &workspace_root,
-                    &existing_pyproject_toml,
-                    existing_uv_lock.as_deref(),
-                );
+                let _ = snapshot.revert();
             }
             match err {
                 ProjectError::Operation(err) => diagnostics::OperationDiagnostic::with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()))
@@ -688,10 +649,9 @@ pub(crate) async fn add(
 /// Re-lock and re-sync the project after a series of edits.
 #[allow(clippy::fn_params_excessive_bools)]
 async fn lock_and_sync(
-    mut project: VirtualProject,
+    mut target: AddTarget,
     toml: &mut PyProjectTomlMut,
     edits: &[DependencyEdit],
-    environment: &PythonTarget,
     state: SharedState,
     locked: bool,
     dependency_type: &DependencyType,
@@ -706,15 +666,13 @@ async fn lock_and_sync(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<(), ProjectError> {
-    let mode = if locked {
-        LockMode::Locked(environment.interpreter())
-    } else {
-        LockMode::Write(environment.interpreter())
-    };
-
     let mut lock = project::lock::do_safe_lock(
-        mode,
-        project.workspace().into(),
+        if locked {
+            LockMode::Locked(target.interpreter())
+        } else {
+            LockMode::Write(target.interpreter())
+        },
+        (&target).into(),
         settings.into(),
         LowerBound::default(),
         &state,
@@ -811,17 +769,13 @@ async fn lock_and_sync(
             let content = toml.to_string();
 
             // Write the updated `pyproject.toml` to disk.
-            fs_err::write(project.root().join("pyproject.toml"), &content)?;
+            target.write(&content)?;
 
             // Update the `pypackage.toml` in-memory.
-            project = project
-                .with_pyproject_toml(
-                    toml::from_str(&content).map_err(ProjectError::PyprojectTomlParse)?,
-                )
-                .ok_or(ProjectError::PyprojectTomlUpdate)?;
+            target = target.update(&content)?;
 
             // Invalidate the project metadata.
-            if let VirtualProject::Project(ref project) = project {
+            if let AddTarget::Project(VirtualProject::Project(ref project), _) = target {
                 let url = Url::from_file_path(project.project_root())
                     .expect("project root is a valid URL");
                 let version_id = VersionId::from_url(&url);
@@ -832,8 +786,12 @@ async fn lock_and_sync(
             // If the file was modified, we have to lock again, though the only expected change is
             // the addition of the minimum version specifiers.
             lock = project::lock::do_safe_lock(
-                mode,
-                project.workspace().into(),
+                if locked {
+                    LockMode::Locked(target.interpreter())
+                } else {
+                    LockMode::Write(target.interpreter())
+                },
+                (&target).into(),
                 settings.into(),
                 LowerBound::default(),
                 &state,
@@ -851,7 +809,12 @@ async fn lock_and_sync(
         }
     }
 
-    let PythonTarget::Environment(venv) = environment else {
+    let AddTarget::Project(project, environment) = target else {
+        // If we're not adding to a project, exit early.
+        return Ok(());
+    };
+
+    let PythonTarget::Environment(venv) = &*environment else {
         // If we're not syncing, exit early.
         return Ok(());
     };
@@ -915,25 +878,6 @@ async fn lock_and_sync(
     )
     .await?;
 
-    Ok(())
-}
-
-/// Revert the changes to the `pyproject.toml` and `uv.lock`, if necessary.
-fn revert(
-    project_root: &Path,
-    workspace_root: &Path,
-    pyproject_toml: &[u8],
-    uv_lock: Option<&[u8]>,
-) -> Result<(), io::Error> {
-    debug!("Reverting changes to `pyproject.toml`");
-    let () = fs_err::write(project_root.join("pyproject.toml"), pyproject_toml)?;
-    if let Some(uv_lock) = uv_lock.as_ref() {
-        debug!("Reverting changes to `uv.lock`");
-        let () = fs_err::write(workspace_root.join("uv.lock"), uv_lock)?;
-    } else {
-        debug!("Removing `uv.lock`");
-        let () = fs_err::remove_file(workspace_root.join("uv.lock"))?;
-    }
     Ok(())
 }
 
@@ -1047,8 +991,8 @@ fn resolve_requirement(
 }
 
 /// Represents the destination where dependencies are added, either to a project or a script.
-#[derive(Debug)]
-enum Target {
+#[derive(Debug, Clone)]
+enum AddTarget {
     /// A PEP 723 script, with inline metadata.
     Script(Pep723Script, Box<Interpreter>),
 
@@ -1056,7 +1000,16 @@ enum Target {
     Project(VirtualProject, Box<PythonTarget>),
 }
 
-impl Target {
+impl<'lock> From<&'lock AddTarget> for LockTarget<'lock> {
+    fn from(value: &'lock AddTarget) -> Self {
+        match value {
+            AddTarget::Script(script, _) => LockTarget::Script(script),
+            AddTarget::Project(project, _) => LockTarget::Workspace(project.workspace()),
+        }
+    }
+}
+
+impl AddTarget {
     /// Returns the [`Interpreter`] for the target.
     fn interpreter(&self) -> &Interpreter {
         match self {
@@ -1064,10 +1017,122 @@ impl Target {
             Self::Project(_, venv) => venv.interpreter(),
         }
     }
+
+    /// Write the updated content to the target.
+    ///
+    /// Returns `true` if the content was modified.
+    fn write(&self, content: &str) -> Result<bool, io::Error> {
+        match self {
+            Self::Script(script, _) => {
+                if content == script.metadata.raw {
+                    debug!("No changes to dependencies; skipping update");
+                    Ok(false)
+                } else {
+                    script.write(content)?;
+                    Ok(true)
+                }
+            }
+            Self::Project(project, _) => {
+                if content == project.pyproject_toml().raw {
+                    debug!("No changes to dependencies; skipping update");
+                    Ok(false)
+                } else {
+                    let pyproject_path = project.root().join("pyproject.toml");
+                    fs_err::write(pyproject_path, content)?;
+                    Ok(true)
+                }
+            }
+        }
+    }
+
+    /// Update the target in-memory to incorporate the new content.
+    #[allow(clippy::result_large_err)]
+    fn update(self, content: &str) -> Result<Self, ProjectError> {
+        match self {
+            Self::Script(mut script, interpreter) => {
+                script.metadata = Pep723Metadata::from_str(content)
+                    .map_err(ProjectError::Pep723ScriptTomlParse)?;
+                Ok(Self::Script(script, interpreter))
+            }
+            Self::Project(project, venv) => {
+                let project = project
+                    .with_pyproject_toml(
+                        toml::from_str(content).map_err(ProjectError::PyprojectTomlParse)?,
+                    )
+                    .ok_or(ProjectError::PyprojectTomlUpdate)?;
+                Ok(Self::Project(project, venv))
+            }
+        }
+    }
+
+    /// Take a snapshot of the target.
+    async fn snapshot(&self) -> Result<AddTargetSnapshot, io::Error> {
+        // Read the lockfile into memory.
+        let target = match self {
+            Self::Script(script, _) => LockTarget::from(script),
+            Self::Project(project, _) => LockTarget::Workspace(project.workspace()),
+        };
+        let lock = target.read_bytes().await?;
+
+        // Clone the target.
+        match self {
+            Self::Script(script, _) => Ok(AddTargetSnapshot::Script(script.clone(), lock)),
+            Self::Project(project, _) => Ok(AddTargetSnapshot::Project(project.clone(), lock)),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+enum AddTargetSnapshot {
+    Script(Pep723Script, Option<Vec<u8>>),
+    Project(VirtualProject, Option<Vec<u8>>),
+}
+
+impl AddTargetSnapshot {
+    /// Write the snapshot back to disk (e.g., to a `pyproject.toml` and `uv.lock`).
+    fn revert(&self) -> Result<(), io::Error> {
+        match self {
+            Self::Script(script, lock) => {
+                // Write the PEP 723 script back to disk.
+                debug!("Reverting changes to PEP 723 script block");
+                script.write(&script.metadata.raw)?;
+
+                // Write the lockfile back to disk.
+                let target = LockTarget::from(script);
+                if let Some(lock) = lock {
+                    debug!("Reverting changes to `uv.lock`");
+                    fs_err::write(target.lock_path(), lock)?;
+                } else {
+                    debug!("Removing `uv.lock`");
+                    fs_err::remove_file(target.lock_path())?;
+                }
+                Ok(())
+            }
+            Self::Project(project, lock) => {
+                // Write the `pyproject.toml` back to disk.
+                debug!("Reverting changes to `pyproject.toml`");
+                fs_err::write(
+                    project.root().join("pyproject.toml"),
+                    project.pyproject_toml().as_ref(),
+                )?;
+
+                // Write the lockfile back to disk.
+                let target = LockTarget::from(project.workspace());
+                if let Some(lock) = lock {
+                    debug!("Reverting changes to `uv.lock`");
+                    fs_err::write(target.lock_path(), lock)?;
+                } else {
+                    debug!("Removing `uv.lock`");
+                    fs_err::remove_file(target.lock_path())?;
+                }
+                Ok(())
+            }
+        }
+    }
 }
 
 /// A Python [`Interpreter`] or [`PythonEnvironment`] for a project.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
 enum PythonTarget {
     Interpreter(Interpreter),
