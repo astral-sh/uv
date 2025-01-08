@@ -1,4 +1,5 @@
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use std::num::NonZero;
 use std::ops::Deref;
 use std::sync::LazyLock;
 use std::{
@@ -933,14 +934,13 @@ impl FromStr for Version {
 struct VersionSmall {
     /// The number of segments in the release component.
     ///
-    /// Strictly speaking, this isn't necessary since `1.2` is considered
-    /// equivalent to `1.2.0.0`. But in practice it's nice to be able
-    /// to truncate the zero components. And always filling out to 4
-    /// places somewhat exposes internal details, since the "full" version
-    /// representation would not do that.
+    /// PEP 440 considers `1.2`  equivalent to `1.2.0.0`, but we want to preserve trailing zeroes
+    /// in roundtrips, as the "full" version representation also does.
     len: u8,
     /// The representation discussed above.
     repr: u64,
+    /// Force a niche into the aligned type so the [`Version`] enum is two words instead of three.
+    _force_niche: NonZero<u8>,
 }
 
 impl VersionSmall {
@@ -989,6 +989,7 @@ impl VersionSmall {
     #[inline]
     fn new() -> Self {
         Self {
+            _force_niche: NonZero::<u8>::MIN,
             repr: Self::SUFFIX_NONE << Self::SUFFIX_VERSION_BIT_LEN,
             len: 0,
         }
@@ -1800,6 +1801,7 @@ impl<'a> Parser<'a> {
         *release.get_mut(usize::from(len))? = cur;
         len += 1;
         let small = VersionSmall {
+            _force_niche: NonZero::<u8>::MIN,
             repr: (u64::from(release[0]) << 48)
                 | (u64::from(release[1]) << 40)
                 | (u64::from(release[2]) << 32)
@@ -4006,5 +4008,11 @@ mod tests {
         let v2: Version = "1.2".parse().unwrap();
         assert_eq!(&*v2.release(), &[1, 2]);
         assert_eq!(v2.to_string(), "1.2");
+    }
+
+    #[test]
+    fn type_size() {
+        assert_eq!(size_of::<VersionSmall>(), size_of::<usize>() * 2);
+        assert_eq!(size_of::<Version>(), size_of::<usize>() * 2);
     }
 }
