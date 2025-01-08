@@ -316,7 +316,7 @@ impl From<GroupsSpecification> for DevGroupsSpecification {
 
 /// The manifest of `dependency-groups` to include, taking into account the user-provided
 /// [`DevGroupsSpecification`] and the project-specific default groups.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct DevGroupsManifest {
     /// The specification for the development dependencies.
     pub(crate) spec: DevGroupsSpecification,
@@ -347,7 +347,7 @@ impl DevGroupsManifest {
     }
 
     /// Returns `true` if the group was enabled by default.
-    pub fn default(&self, group: &GroupName) -> bool {
+    pub fn is_default(&self, group: &GroupName) -> bool {
         if self.spec.contains(group) {
             // If the group was explicitly requested, then it wasn't enabled by default.
             false

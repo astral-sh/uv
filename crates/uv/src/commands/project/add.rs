@@ -592,6 +592,7 @@ pub(crate) async fn add(
         Target::Project(project, environment) => (project, environment),
         // If `--script`, exit early. There's no reason to lock and sync.
         Target::Script(script, _) => {
+            // TODO(charlie): Lock the script, if a lockfile already exists.
             writeln!(
                 printer.stderr(),
                 "Updated `{}`",
