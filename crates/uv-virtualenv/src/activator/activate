@@ -31,9 +31,12 @@ if [ -n "${BASH_VERSION:+x}" ] ; then
         exit 33
     fi
 elif [ -n "${ZSH_VERSION:+x}" ] ; then
-    SCRIPT_PATH="${(%):-%x}"
+    # we use eval in these paths to "hide" the fact that these branches
+    # genuinely don't work when run in the wrong shell. Any shell or
+    # linter that eagerly checks them would be right to complain!
+    eval 'SCRIPT_PATH="${(%):-%x}"'
 elif [ -n "${KSH_VERSION:+x}" ] ; then
-    SCRIPT_PATH="${.sh.file}"
+    eval 'SCRIPT_PATH="${.sh.file}"'
 fi
 
 deactivate () {
