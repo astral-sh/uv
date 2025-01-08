@@ -21,7 +21,7 @@ async fn remote_metadata_with_and_without_cache() -> Result<()> {
         let filename = WheelFilename::from_str(url.rsplit_once('/').unwrap().1)?;
         let dist = BuiltDist::DirectUrl(DirectUrlBuiltDist {
             filename,
-            location: Url::parse(url).unwrap(),
+            location: Box::new(Url::parse(url).unwrap()),
             url: VerbatimUrl::from_str(url).unwrap(),
         });
         let capabilities = IndexCapabilities::default();
