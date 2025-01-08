@@ -1369,6 +1369,7 @@ pub(crate) struct ExportSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) include_header: bool,
+    pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
@@ -1409,6 +1410,7 @@ impl ExportSettings {
             resolver,
             build,
             refresh,
+            script,
             python,
         } = args;
         let install_mirrors = filesystem
@@ -1440,6 +1442,7 @@ impl ExportSettings {
             locked,
             frozen,
             include_header: flag(header, no_header).unwrap_or(true),
+            script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),

@@ -1003,8 +1003,8 @@ enum AddTarget {
 impl<'lock> From<&'lock AddTarget> for LockTarget<'lock> {
     fn from(value: &'lock AddTarget) -> Self {
         match value {
-            AddTarget::Script(script, _) => LockTarget::Script(script),
-            AddTarget::Project(project, _) => LockTarget::Workspace(project.workspace()),
+            AddTarget::Script(script, _) => Self::Script(script),
+            AddTarget::Project(project, _) => Self::Workspace(project.workspace()),
         }
     }
 }
