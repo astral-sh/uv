@@ -236,6 +236,7 @@ impl CandidateSelector {
                             return Some(Candidate {
                                 name: package_name,
                                 version,
+                                prioritized: None,
                                 dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(
                                     dist,
                                 )),
@@ -302,6 +303,7 @@ impl CandidateSelector {
                 return Some(Candidate {
                     name: package_name,
                     version,
+                    prioritized: None,
                     dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(dist)),
                     choice_kind: VersionChoiceKind::Installed,
                 });
@@ -583,6 +585,8 @@ pub(crate) struct Candidate<'a> {
     name: &'a PackageName,
     /// The version of the package.
     version: &'a Version,
+    /// The prioritized distribution for the package.
+    prioritized: Option<&'a PrioritizedDist>,
     /// The distributions to use for resolving and installing the package.
     dist: CandidateDist<'a>,
     /// Whether this candidate was selected from a preference.
@@ -599,6 +603,7 @@ impl<'a> Candidate<'a> {
         Self {
             name,
             version,
+            prioritized: Some(dist),
             dist: CandidateDist::from(dist),
             choice_kind,
         }
@@ -631,6 +636,11 @@ impl<'a> Candidate<'a> {
     /// Return the distribution for the candidate.
     pub(crate) fn dist(&self) -> &CandidateDist<'a> {
         &self.dist
+    }
+
+    /// Return the prioritized distribution for the candidate.
+    pub(crate) fn prioritized(&self) -> Option<&PrioritizedDist> {
+        self.prioritized
     }
 }
 

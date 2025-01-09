@@ -113,6 +113,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     dependency_mode: DependencyMode,
     hasher: HashStrategy,
     env: ResolverEnvironment,
+    tags: Option<Tags>,
     python_requirement: PythonRequirement,
     conflicts: Conflicts,
     workspace_members: BTreeSet<PackageName>,
@@ -181,6 +182,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             options,
             hasher,
             env,
+            tags.cloned(),
             python_requirement,
             conflicts,
             index,
@@ -202,6 +204,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         options: Options,
         hasher: &HashStrategy,
         env: ResolverEnvironment,
+        tags: Option<Tags>,
         python_requirement: &PythonRequirement,
         conflicts: Conflicts,
         index: &InMemoryIndex,
@@ -229,6 +232,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             hasher: hasher.clone(),
             locations: locations.clone(),
             env,
+            tags,
             python_requirement: python_requirement.clone(),
             conflicts,
             installed_packages,
@@ -346,11 +350,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 return Err(self.convert_no_solution_err(
                                     err,
                                     state.fork_urls,
-                                    &state.fork_indexes,
+                                    state.fork_indexes,
                                     state.env,
                                     &visited,
-                                    &self.locations,
-                                    &self.capabilities,
                                 ));
                             }
                             Ok(conflicts) => {
@@ -829,6 +831,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             forks.len(),
             if forks.len() == 1 { "" } else { "s" }
         );
+        for fork in &forks {
+            debug!("{:?}", fork.env);
+        }
         assert!(forks.len() >= 2);
         // This is a somewhat tortured technique to ensure
         // that our resolver state is only cloned as much
@@ -1217,8 +1222,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             CandidateDist::Compatible(dist) => dist,
             CandidateDist::Incompatible(incompatibility) => {
                 // If the version is incompatible because no distributions are compatible, exit early.
+                //
+                // In this case, we _do_ want to know the set of available tags.
                 return Ok(Some(ResolverVersion::Unavailable(
                     candidate.version().clone(),
+                    // TODO(charlie): This clone should be avoidable.
                     UnavailableVersion::IncompatibleDist(incompatibility.clone()),
                 )));
             }
@@ -2338,11 +2346,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &self,
         mut err: pubgrub::NoSolutionError<UvDependencyProvider>,
         fork_urls: ForkUrls,
-        fork_indexes: &ForkIndexes,
+        fork_indexes: ForkIndexes,
         env: ResolverEnvironment,
         visited: &FxHashSet<PackageName>,
-        index_locations: &IndexLocations,
-        index_capabilities: &IndexCapabilities,
     ) -> ResolveError {
         err = NoSolutionError::collapse_local_version_segments(NoSolutionError::collapse_proxies(
             err,
@@ -2413,16 +2419,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         ResolveError::NoSolution(NoSolutionError::new(
             err,
+            self.index.clone(),
             available_versions,
             available_indexes,
             self.selector.clone(),
             self.python_requirement.clone(),
-            index_locations.clone(),
-            index_capabilities.clone(),
+            self.locations.clone(),
+            self.capabilities.clone(),
             unavailable_packages,
             incomplete_packages,
             fork_urls,
+            fork_indexes,
             env,
+            self.tags.clone(),
             self.workspace_members.clone(),
             self.options.clone(),
         ))

@@ -5019,6 +5019,7 @@ dependencies = [
  "fs-err 3.0.0",
  "itertools 0.14.0",
  "jiff",
+ "owo-colors",
  "petgraph",
  "rkyv",
  "rustc-hash",

@@ -1,12 +1,14 @@
-use std::fmt::{Display, Formatter};
-
 use arcstr::ArcStr;
+use owo_colors::OwoColorize;
+use std::collections::BTreeSet;
+use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 use tracing::debug;
 
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
-use uv_platform_tags::{IncompatibleTag, TagPriority};
+use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, TagPriority, Tags};
 use uv_pypi_types::{HashDigest, Yanked};
 
 use crate::{
@@ -164,6 +166,36 @@ impl IncompatibleDist {
             Self::Unavailable => format!("have {self}"),
         }
     }
+
+    pub fn context_message(&self, tags: Option<&Tags>) -> Option<String> {
+        match self {
+            Self::Wheel(incompatibility) => match incompatibility {
+                IncompatibleWheel::Tag(IncompatibleTag::Python) => {
+                    let tag = tags?.python_tag().map(ToString::to_string)?;
+                    Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
+                }
+                IncompatibleWheel::Tag(IncompatibleTag::Abi) => {
+                    let tag = tags?.abi_tag().map(ToString::to_string)?;
+                    Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
+                }
+                IncompatibleWheel::Tag(IncompatibleTag::AbiPythonVersion) => {
+                    let tag = tags?.abi_tag().map(ToString::to_string)?;
+                    Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
+                }
+                IncompatibleWheel::Tag(IncompatibleTag::Platform) => {
+                    let tag = tags?.platform_tag().map(ToString::to_string)?;
+                    Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
+                }
+                IncompatibleWheel::Tag(IncompatibleTag::Invalid) => None,
+                IncompatibleWheel::NoBinary => None,
+                IncompatibleWheel::Yanked(..) => None,
+                IncompatibleWheel::ExcludeNewer(..) => None,
+                IncompatibleWheel::RequiresPython(..) => None,
+            },
+            Self::Source(..) => None,
+            Self::Unavailable => None,
+        }
+    }
 }
 
 impl Display for IncompatibleDist {
@@ -239,6 +271,8 @@ pub enum WheelCompatibility {
     Compatible(HashComparison, Option<TagPriority>, Option<BuildTag>),
 }
 
+pub type ExampleTag = String;
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum IncompatibleWheel {
     /// The wheel was published after the exclude newer time.
@@ -246,6 +280,8 @@ pub enum IncompatibleWheel {
     /// The wheel tags do not match those of the target Python platform.
     Tag(IncompatibleTag),
     /// The required Python version is not a superset of the target Python version range.
+    ///
+    /// TODO(charlie): Consider making this two variants to reduce enum size.
     RequiresPython(VersionSpecifiers, PythonRequirementKind),
     /// The wheel was yanked.
     Yanked(Yanked),
@@ -482,6 +518,108 @@ impl PrioritizedDist {
     /// exists.
     pub fn best_wheel(&self) -> Option<&(RegistryBuiltWheel, WheelCompatibility)> {
         self.0.best_wheel_index.map(|i| &self.0.wheels[i])
+    }
+
+    /// Returns the set of all Python tags for the distribution.
+    pub fn python_tags(&self) -> BTreeSet<&str> {
+        self.0
+            .wheels
+            .iter()
+            .flat_map(|(wheel, _)| wheel.filename.python_tag.iter().map(String::as_str))
+            .collect()
+    }
+
+    /// Returns the set of all ABI tags for the distribution.
+    pub fn abi_tags(&self) -> BTreeSet<&str> {
+        self.0
+            .wheels
+            .iter()
+            .flat_map(|(wheel, _)| wheel.filename.abi_tag.iter().map(String::as_str))
+            .collect()
+    }
+
+    /// Returns the set of all platform tags for the distribution.
+    pub fn platform_tags(&self) -> BTreeSet<&str> {
+        self.0
+            .wheels
+            .iter()
+            .flat_map(|(wheel, _)| wheel.filename.platform_tag.iter().map(String::as_str))
+            .collect()
+    }
+
+    /// Returns the set of all ABI tags for the distribution.
+    pub fn available_platform_tags<'a>(&'a self, tags: &'a Tags) -> BTreeSet<&'a str> {
+        // We might need to... invert the order? So that it goes from platform, to ABI, to Python?
+        // I have no idea if that will fix it. Otherwise, I might have to hardcode tags or
+        // something.
+        //
+        // We could always just filter out tags that we know are always applicable (like `none`).
+        //
+        // What do we want? Like, the other two tags are compatible, but the third isn't?
+        let mut candidates = BTreeSet::new();
+        for (wheel, _) in &self.0.wheels {
+            // For each wheel, if the Python and ABI tags are compatible, return the platform tags.
+            for wheel_py in &wheel.filename.python_tag {
+                for wheel_abi in &wheel.filename.abi_tag {
+                    if tags.is_compatible_abi(wheel_py.as_str(), wheel_abi.as_str()) {
+                        candidates.extend(wheel.filename.platform_tag.iter().map(String::as_str));
+                    }
+                }
+            }
+        }
+        candidates
+    }
+
+    pub fn closest_tag(&self, tags: &Tags) -> Option<(&str, &str, &str)> {
+        let mut closest: Option<(&str, &str, &str, TagPriority)> = None;
+        for (py, abi, platform, priority) in tags.iter() {
+            for (wheel, _) in &self.0.wheels {
+                for wheel_py in &wheel.filename.python_tag {
+                    for wheel_abi in &wheel.filename.abi_tag {
+                        for wheel_platform in &wheel.filename.platform_tag {
+                            // If two of the three tags match...
+                            let compatiblity = u8::from(py == wheel_py)
+                                + u8::from(abi == wheel_abi)
+                                + u8::from(platform == wheel_platform);
+                            if compatiblity > 1 {
+                                if let Some((py, abi, .., existing_priority)) = closest {
+                                    if priority > existing_priority {
+                                        closest = Some((
+                                            wheel_py.as_str(),
+                                            wheel_abi.as_str(),
+                                            wheel_platform.as_str(),
+                                            priority,
+                                        ));
+                                    } else if priority == existing_priority {
+                                        // Break ties based on tag comparisons.
+                                        if LanguageTag::from_str(wheel_py)
+                                            >= LanguageTag::from_str(py)
+                                            && AbiTag::from_str(wheel_abi) >= AbiTag::from_str(abi)
+                                        {
+                                            closest = Some((
+                                                wheel_py.as_str(),
+                                                wheel_abi.as_str(),
+                                                wheel_platform.as_str(),
+                                                priority,
+                                            ));
+                                        }
+                                    }
+                                } else {
+                                    closest = Some((
+                                        wheel_py.as_str(),
+                                        wheel_abi.as_str(),
+                                        wheel_platform.as_str(),
+                                        priority,
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        closest.map(|(py, abi, platform, _)| (py, abi, platform))
     }
 }
 
