@@ -1,12 +1,13 @@
 use std::collections::BTreeSet;
 use std::fmt::Formatter;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::{cmp, num::NonZeroU32};
 
 use rustc_hash::FxHashMap;
 
-use crate::abi_tag::AbiTag;
-use crate::{Arch, LanguageTag, Os, Platform, PlatformError};
+use crate::{AbiTag, Arch, LanguageTag, Os, Platform, PlatformError};
+
 
 #[derive(Debug, thiserror::Error)]
 pub enum TagsError {
@@ -75,6 +76,8 @@ pub struct Tags {
     /// `python_tag` |--> `abi_tag` |--> `platform_tag` |--> priority
     #[allow(clippy::type_complexity)]
     map: Arc<FxHashMap<String, FxHashMap<String, FxHashMap<String, TagPriority>>>>,
+    /// The highest-priority tag for the Python version and platform.
+    best: Option<(String, String, String)>,
 }
 
 impl Tags {
@@ -83,6 +86,9 @@ impl Tags {
     /// Tags are prioritized based on their position in the given vector. Specifically, tags that
     /// appear earlier in the vector are given higher priority than tags that appear later.
     pub fn new(tags: Vec<(String, String, String)>) -> Self {
+        // Store the highest-priority tag for each component.
+        let best = tags.first().cloned();
+
         // Index the tags by Python version, ABI, and platform.
         let mut map = FxHashMap::default();
         for (index, (py, abi, platform)) in tags.into_iter().rev().enumerate() {
@@ -93,7 +99,11 @@ impl Tags {
                 .entry(platform)
                 .or_insert(TagPriority::try_from(index).expect("valid tag priority"));
         }
-        Self { map: Arc::new(map) }
+
+        Self {
+            map: Arc::new(map),
+            best,
+        }
     }
 
     /// Returns the compatible tags for the given Python implementation (e.g., `cpython`), version,
@@ -290,6 +300,62 @@ impl Tags {
             }
         }
         max_compatibility
+    }
+
+    /// Return the highest-priority Python tag.
+    pub fn python_tag(&self) -> Option<&str> {
+        self.best.as_ref().map(|(py, _, _)| py.as_str())
+    }
+
+    /// Return the highest-priority ABI tag.
+    pub fn abi_tag(&self) -> Option<&str> {
+        self.best.as_ref().map(|(_, abi, _)| abi.as_str())
+    }
+
+    /// Return the highest-priority platform tag.
+    pub fn platform_tag(&self) -> Option<&str> {
+        self.best.as_ref().map(|(_, _, platform)| platform.as_str())
+    }
+
+    pub fn abi_tags(&self, python_tag: &str) -> impl Iterator<Item = &str> + '_ {
+        self.map
+            .get(python_tag)
+            .into_iter()
+            .flat_map(|abis| abis.keys().map(String::as_str))
+    }
+
+    pub fn is_compatible_abi<'a>(&'a self, python_tag: &'a str, abi_tag: &'a str) -> bool {
+        self.map
+            .get(python_tag)
+            .map(|abis| abis.contains_key(abi_tag))
+            .unwrap_or(false)
+    }
+
+    // pub fn python_tags(&self) -> impl Iterator<Item = &str> + '_ {
+    //     self.map.keys().map(String::as_str)
+    // }
+    //
+    // pub fn abi_tags(&self) -> impl Iterator<Item = &str> + '_ {
+    //     self.map.values().flat_map(|abis| abis.keys().map(String::as_str))
+    // }
+    //
+    // pub fn platform_tags(&self) -> impl Iterator<Item = &str> + '_ {
+    //     self.map.values().flat_map(|abis| abis.values().flat_map(|platforms| platforms.keys().map(String::as_str)))
+    // }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str, &str, TagPriority)> + '_ {
+        self.map.iter().flat_map(|(python_tag, abi_tags)| {
+            abi_tags.iter().flat_map(move |(abi_tag, platform_tags)| {
+                platform_tags.iter().map(move |(platform_tag, priority)| {
+                    (
+                        python_tag.as_str(),
+                        abi_tag.as_str(),
+                        platform_tag.as_str(),
+                        *priority,
+                    )
+                })
+            })
+        })
     }
 }
 

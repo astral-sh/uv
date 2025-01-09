@@ -14,10 +14,12 @@ use uv_distribution_types::{
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{LocalVersionSlice, Version};
+use uv_platform_tags::Tags;
 use uv_static::EnvVars;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
+use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter};
@@ -27,7 +29,7 @@ use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{
     MetadataUnavailable, ResolverEnvironment, UnavailablePackage, UnavailableReason,
 };
-use crate::Options;
+use crate::{InMemoryIndex, Options};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
@@ -130,9 +132,9 @@ impl<T> From<tokio::sync::mpsc::error::SendError<T>> for ResolveError {
 pub(crate) type ErrorTree = DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>;
 
 /// A wrapper around [`pubgrub::error::NoSolutionError`] that displays a resolution failure report.
-#[derive(Debug)]
 pub struct NoSolutionError {
     error: pubgrub::NoSolutionError<UvDependencyProvider>,
+    index: InMemoryIndex,
     available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
     available_indexes: FxHashMap<PackageName, BTreeSet<IndexUrl>>,
     selector: CandidateSelector,
@@ -142,7 +144,9 @@ pub struct NoSolutionError {
     unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
     incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, MetadataUnavailable>>,
     fork_urls: ForkUrls,
+    fork_indexes: ForkIndexes,
     env: ResolverEnvironment,
+    tags: Option<Tags>,
     workspace_members: BTreeSet<PackageName>,
     options: Options,
 }
@@ -151,6 +155,7 @@ impl NoSolutionError {
     /// Create a new [`NoSolutionError`] from a [`pubgrub::NoSolutionError`].
     pub(crate) fn new(
         error: pubgrub::NoSolutionError<UvDependencyProvider>,
+        index: InMemoryIndex,
         available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
         available_indexes: FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         selector: CandidateSelector,
@@ -160,12 +165,15 @@ impl NoSolutionError {
         unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, MetadataUnavailable>>,
         fork_urls: ForkUrls,
+        fork_indexes: ForkIndexes,
         env: ResolverEnvironment,
+        tags: Option<Tags>,
         workspace_members: BTreeSet<PackageName>,
         options: Options,
     ) -> Self {
         Self {
             error,
+            index,
             available_versions,
             available_indexes,
             selector,
@@ -175,7 +183,9 @@ impl NoSolutionError {
             unavailable_packages,
             incomplete_packages,
             fork_urls,
+            fork_indexes,
             env,
+            tags,
             workspace_members,
             options,
         }
@@ -328,6 +338,28 @@ impl NoSolutionError {
     }
 }
 
+impl std::fmt::Debug for NoSolutionError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NoSolutionError")
+            .field("error", &self.error)
+            .field("available_versions", &self.available_versions)
+            .field("available_indexes", &self.available_indexes)
+            .field("selector", &self.selector)
+            .field("python_requirement", &self.python_requirement)
+            .field("index_locations", &self.index_locations)
+            .field("index_capabilities", &self.index_capabilities)
+            .field("unavailable_packages", &self.unavailable_packages)
+            .field("incomplete_packages", &self.incomplete_packages)
+            .field("fork_urls", &self.fork_urls)
+            .field("fork_indexes", &self.fork_indexes)
+            .field("env", &self.env)
+            .field("tags", &self.tags)
+            .field("workspace_members", &self.workspace_members)
+            .field("options", &self.options)
+            .finish()
+    }
+}
+
 impl std::error::Error for NoSolutionError {}
 
 impl std::fmt::Display for NoSolutionError {
@@ -337,6 +369,7 @@ impl std::fmt::Display for NoSolutionError {
             available_versions: &self.available_versions,
             python_requirement: &self.python_requirement,
             workspace_members: &self.workspace_members,
+            tags: self.tags.as_ref(),
         };
 
         // Transform the error tree for reporting
@@ -385,6 +418,7 @@ impl std::fmt::Display for NoSolutionError {
         let mut additional_hints = IndexSet::default();
         formatter.generate_hints(
             &tree,
+            &self.index,
             &self.selector,
             &self.index_locations,
             &self.index_capabilities,
@@ -392,7 +426,9 @@ impl std::fmt::Display for NoSolutionError {
             &self.unavailable_packages,
             &self.incomplete_packages,
             &self.fork_urls,
+            &self.fork_indexes,
             &self.env,
+            self.tags.as_ref(),
             &self.workspace_members,
             &self.options,
             &mut additional_hints,
