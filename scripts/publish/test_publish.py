@@ -371,8 +371,8 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
         ):
             raise RuntimeError(
                 f"PyPI re-upload of the same files failed: "
-                f"{output.count("Uploading")} != {len(expected_filenames)}, "
-                f"{output.count("already exists")} != 0\n"
+                f"{output.count('Uploading')} != {len(expected_filenames)}, "
+                f"{output.count('already exists')} != 0\n"
                 f"---\n{output}\n---"
             )
 
@@ -407,8 +407,8 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
     ):
         raise RuntimeError(
             f"Re-upload with check URL failed: "
-            f"{output.count("Uploading")} != 0, "
-            f"{output.count("already exists")} != {len(expected_filenames)}\n"
+            f"{output.count('Uploading')} != 0, "
+            f"{output.count('already exists')} != {len(expected_filenames)}\n"
             f"---\n{output}\n---"
         )
 
