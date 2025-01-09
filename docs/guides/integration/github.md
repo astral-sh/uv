@@ -1,3 +1,10 @@
+---
+title: Using uv in GitHub Actions
+description:
+  A guide to using uv in GitHub Actions, including installation, setting up Python, installing
+  dependencies, and more.
+---
+
 # Using uv in GitHub Actions
 
 ## Installation

@@ -1,3 +1,9 @@
+---
+title: Using uv in GitLab CI/CD
+description: A guide to using uv in GitLab CI/CD, including installation, setting up Python,
+  installing dependencies, and more.
+---
+
 # Using uv in GitLab CI/CD
 
 ## Using the uv image
