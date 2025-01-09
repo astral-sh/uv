@@ -1,3 +1,10 @@
+---
+title: Using uv in Docker
+description:
+  A complete guide to using uv in Docker to manage Python dependencies while optimizing build times
+  and image size via multi-stage builds, intermediate layers, and more.
+---
+
 # Using uv in Docker
 
 ## Getting started
