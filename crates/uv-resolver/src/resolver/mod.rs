@@ -2591,7 +2591,9 @@ impl ForkState {
                 }
             }
 
-            if let Some(name) = self.pubgrub.package_store[for_package]
+            let for_package = &self.pubgrub.package_store[for_package];
+
+            if let Some(name) = for_package
                 .name_no_root()
                 .filter(|name| !workspace_members.contains(name))
             {
@@ -2622,7 +2624,9 @@ impl ForkState {
             }
 
             // Update the package priorities.
-            self.priorities.insert(package, version, &self.fork_urls);
+            if !for_package.is_proxy() {
+                self.priorities.insert(package, version, &self.fork_urls);
+            }
         }
 
         let conflict = self.pubgrub.add_package_version_dependencies(

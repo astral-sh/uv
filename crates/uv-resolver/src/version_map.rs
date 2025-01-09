@@ -162,6 +162,8 @@ impl VersionMap {
         range: &Ranges<Version>,
     ) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle)> {
         // Performance optimization: If we only have a single version, return that version directly.
+        //
+        // TODO(charlie): Now that we use local version sentinels, does this ever trigger?
         if let Some(version) = range.as_singleton() {
             either::Either::Left(match self.inner {
                 VersionMapInner::Eager(ref eager) => {
