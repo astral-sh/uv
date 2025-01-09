@@ -578,6 +578,15 @@ jobs:
         run: |
           Start-Process -FilePath "LLVM-19.1.5-woa64.exe" -ArgumentList '/S' -NoNewWindow -Wait
 
+      - name: Cache VS Build Tools Packages
+        id: cache-vs-build-tools
+        uses: actions/cache@v3
+        with:
+          path: |
+            C:\ProgramData\Microsoft\VisualStudio\Packages
+            C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools
+          key: vs-build-tools-${{ runner.os }}-aarch64
+
       - name: Install Build Tools (aarch64)
         run: |
           Set-ExecutionPolicy Bypass -Scope Process -Force
@@ -620,6 +629,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "v1"
 
       - name: "Build"
         run: $env:Path += ";C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\bin"; $env:Path += ";C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\"; cargo build --target aarch64-pc-windows-msvc
