@@ -53,8 +53,8 @@ pub(crate) async fn list(
             Err(e) => {
                 if let uv_tool::Error::EnvironmentError(e) = e {
                     warn_user!(
-                        "{e} (run `{}` to remove)",
-                        format!("uv tool uninstall {name}").green()
+                        "{e} (run `{}` to reinstall)",
+                        format!("uv tool install {name} --reinstall").green()
                     );
                 } else {
                     writeln!(printer.stderr(), "{e}")?;
