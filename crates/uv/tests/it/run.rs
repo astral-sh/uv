@@ -2124,19 +2124,51 @@ fn run_requirements_txt() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    // But reject `-` as a requirements file.
+    // Allow `-` for stdin.
     uv_snapshot!(context.filters(), context.run()
         .arg("--with-requirements")
         .arg("-")
         .arg("--with")
         .arg("iniconfig")
-        .arg("main.py"), @r###"
+        .arg("main.py")
+        .stdin(std::fs::File::open(&requirements_txt)?), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Audited 4 packages in [TIME]
+    Resolved 2 packages in [TIME]
+    "###);
+
+    // But not in combination with reading the script from stdin
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--with-requirements")
+        .arg("-")
+        // The script to run
+        .arg("-")
+        .stdin(std::fs::File::open(&requirements_txt)?), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Reading requirements from stdin is not supported in `uv run`
+    error: Cannot read both requirements file and script from stdin
+    "###);
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--with-requirements")
+        .arg("-")
+        .arg("--script")
+        .arg("-")
+        .stdin(std::fs::File::open(&requirements_txt)?), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot read both requirements file and script from stdin
     "###);
 
     Ok(())

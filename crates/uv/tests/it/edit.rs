@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_types)]
+
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
@@ -4610,6 +4612,17 @@ fn add_requirements_file() -> Result<()> {
         "###
         );
     });
+
+    // Passing stdin should succeed
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("-").stdin(std::fs::File::open(requirements_txt)?), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Audited [N] packages in [TIME]
+    "###);
 
     // Passing a `setup.py` should fail.
     uv_snapshot!(context.filters(), context.add().arg("-r").arg("setup.py"), @r###"
