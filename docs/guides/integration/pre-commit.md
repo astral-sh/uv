@@ -1,3 +1,10 @@
+---
+title: Using uv with pre-commit
+description:
+  A guide to using uv with pre-commit to automatically update lock files, export requirements, and
+  compile requirements files.
+---
+
 # Using uv in pre-commit
 
 An official pre-commit hook is provided at

@@ -1,3 +1,10 @@
+---
+title: Using uv with Jupyter
+description:
+  A complete guide to using uv with Jupyter notebooks for interactive computing, data analysis, and
+  visualization, including kernel management and virtual environment integration.
+---
+
 # Using uv with Jupyter
 
 The [Jupyter](https://jupyter.org/) notebook is a popular tool for interactive computing, data
