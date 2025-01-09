@@ -1,14 +1,15 @@
-use async_http_range_reader::AsyncHttpRangeReader;
-use futures::{FutureExt, TryStreamExt};
-use http::HeaderMap;
-use itertools::Either;
-use reqwest::{Client, Response, StatusCode};
-use reqwest_middleware::ClientWithMiddleware;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
+
+use async_http_range_reader::AsyncHttpRangeReader;
+use futures::{FutureExt, StreamExt, TryStreamExt};
+use http::HeaderMap;
+use itertools::Either;
+use reqwest::{Client, Response, StatusCode};
+use reqwest_middleware::ClientWithMiddleware;
 use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
@@ -247,38 +248,86 @@ impl RegistryClient {
         }
 
         let mut results = Vec::new();
-        for index in it {
-            match self.simple_single_index(package_name, index).await {
-                Ok(metadata) => {
-                    results.push((index, metadata));
 
-                    // If we're only using the first match, we can stop here.
-                    if self.index_strategy == IndexStrategy::FirstIndex {
-                        break;
+        match self.index_strategy {
+            // If we're searching for the first index that contains the package, fetch serially.
+            IndexStrategy::FirstIndex => {
+                for index in it {
+                    match self.simple_single_index(package_name, index).await {
+                        Ok(metadata) => {
+                            results.push((index, metadata));
+                            break;
+                        }
+                        Err(err) => match err.into_kind() {
+                            // The package could not be found in the remote index.
+                            ErrorKind::WrappedReqwestError(url, err) => match err.status() {
+                                Some(StatusCode::NOT_FOUND) => {}
+                                Some(StatusCode::UNAUTHORIZED) => {
+                                    capabilities.set_unauthorized(index.clone());
+                                }
+                                Some(StatusCode::FORBIDDEN) => {
+                                    capabilities.set_forbidden(index.clone());
+                                }
+                                _ => return Err(ErrorKind::WrappedReqwestError(url, err).into()),
+                            },
+
+                            // The package is unavailable due to a lack of connectivity.
+                            ErrorKind::Offline(_) => {}
+
+                            // The package could not be found in the local index.
+                            ErrorKind::FileNotFound(_) => {}
+
+                            err => return Err(err.into()),
+                        },
+                    };
+                }
+            }
+
+            // Otherwise, fetch concurrently.
+            IndexStrategy::UnsafeBestMatch | IndexStrategy::UnsafeFirstMatch => {
+                let fetches = futures::stream::iter(it)
+                    .map(|index| async move {
+                        match self.simple_single_index(package_name, index).await {
+                            Ok(metadata) => Ok(Some((index, metadata))),
+                            Err(err) => match err.into_kind() {
+                                // The package could not be found in the remote index.
+                                ErrorKind::WrappedReqwestError(url, err) => match err.status() {
+                                    Some(StatusCode::NOT_FOUND) => Ok(None),
+                                    Some(StatusCode::UNAUTHORIZED) => {
+                                        capabilities.set_unauthorized(index.clone());
+                                        Ok(None)
+                                    }
+                                    Some(StatusCode::FORBIDDEN) => {
+                                        capabilities.set_forbidden(index.clone());
+                                        Ok(None)
+                                    }
+                                    _ => Err(ErrorKind::WrappedReqwestError(url, err).into()),
+                                },
+
+                                // The package is unavailable due to a lack of connectivity.
+                                ErrorKind::Offline(_) => Ok(None),
+
+                                // The package could not be found in the local index.
+                                ErrorKind::FileNotFound(_) => Ok(None),
+
+                                err => Err(err.into()),
+                            },
+                        }
+                    })
+                    .buffered(8);
+
+                futures::pin_mut!(fetches);
+
+                while let Some(result) = fetches.next().await {
+                    match result {
+                        Ok(Some((index, metadata))) => {
+                            results.push((index, metadata));
+                        }
+                        Ok(None) => continue,
+                        Err(err) => return Err(err),
                     }
                 }
-                Err(err) => match err.into_kind() {
-                    // The package could not be found in the remote index.
-                    ErrorKind::WrappedReqwestError(url, err) => match err.status() {
-                        Some(StatusCode::NOT_FOUND) => {}
-                        Some(StatusCode::UNAUTHORIZED) => {
-                            capabilities.set_unauthorized(index.clone());
-                        }
-                        Some(StatusCode::FORBIDDEN) => {
-                            capabilities.set_forbidden(index.clone());
-                        }
-                        _ => return Err(ErrorKind::WrappedReqwestError(url, err).into()),
-                    },
-
-                    // The package is unavailable due to a lack of connectivity.
-                    ErrorKind::Offline(_) => {}
-
-                    // The package could not be found in the local index.
-                    ErrorKind::FileNotFound(_) => {}
-
-                    other => return Err(other.into()),
-                },
-            };
+            }
         }
 
         if results.is_empty() {
