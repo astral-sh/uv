@@ -48,8 +48,8 @@
 use std::cmp::Ordering;
 use std::fmt;
 use std::ops::Bound;
-use std::sync::Mutex;
 use std::sync::MutexGuard;
+use std::sync::{Arc, Mutex};
 
 use itertools::{Either, Itertools};
 use rustc_hash::FxHashMap;
@@ -287,28 +287,27 @@ impl InternerGuard<'_> {
                 // values in `exclusions`.
                 //
                 // See: https://discuss.python.org/t/clarify-usage-of-platform-system/70900
-                let (key, value) = match (key, value.as_str()) {
+                let (key, value) = match (key, value.as_ref()) {
                     (MarkerValueString::PlatformSystem, "Windows") => {
-                        (CanonicalMarkerValueString::SysPlatform, "win32".to_string())
+                        (CanonicalMarkerValueString::SysPlatform, Arc::from("win32"))
                     }
-                    (MarkerValueString::PlatformSystem, "Darwin") => (
-                        CanonicalMarkerValueString::SysPlatform,
-                        "darwin".to_string(),
-                    ),
+                    (MarkerValueString::PlatformSystem, "Darwin") => {
+                        (CanonicalMarkerValueString::SysPlatform, Arc::from("darwin"))
+                    }
                     (MarkerValueString::PlatformSystem, "Linux") => {
-                        (CanonicalMarkerValueString::SysPlatform, "linux".to_string())
+                        (CanonicalMarkerValueString::SysPlatform, Arc::from("linux"))
                     }
                     (MarkerValueString::PlatformSystem, "AIX") => {
-                        (CanonicalMarkerValueString::SysPlatform, "aix".to_string())
+                        (CanonicalMarkerValueString::SysPlatform, Arc::from("aix"))
                     }
                     (MarkerValueString::PlatformSystem, "Emscripten") => (
                         CanonicalMarkerValueString::SysPlatform,
-                        "emscripten".to_string(),
+                        Arc::from("emscripten"),
                     ),
                     // See: https://peps.python.org/pep-0738/#sys
                     (MarkerValueString::PlatformSystem, "Android") => (
                         CanonicalMarkerValueString::SysPlatform,
-                        "android".to_string(),
+                        Arc::from("android"),
                     ),
                     _ => (key.into(), value),
                 };
@@ -869,48 +868,48 @@ impl InternerGuard<'_> {
                 MarkerExpression::String {
                     key: MarkerValueString::OsName,
                     operator: MarkerOperator::Equal,
-                    value: "nt".to_string(),
+                    value: Arc::from("nt"),
                 },
                 MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: "linux".to_string(),
+                    value: Arc::from("linux"),
                 },
             ),
             (
                 MarkerExpression::String {
                     key: MarkerValueString::OsName,
                     operator: MarkerOperator::Equal,
-                    value: "nt".to_string(),
+                    value: Arc::from("nt"),
                 },
                 MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: "darwin".to_string(),
+                    value: Arc::from("darwin"),
                 },
             ),
             (
                 MarkerExpression::String {
                     key: MarkerValueString::OsName,
                     operator: MarkerOperator::Equal,
-                    value: "nt".to_string(),
+                    value: Arc::from("nt"),
                 },
                 MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: "ios".to_string(),
+                    value: Arc::from("ios"),
                 },
             ),
             (
                 MarkerExpression::String {
                     key: MarkerValueString::OsName,
                     operator: MarkerOperator::Equal,
-                    value: "posix".to_string(),
+                    value: Arc::from("posix"),
                 },
                 MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: "win32".to_string(),
+                    value: Arc::from("win32"),
                 },
             ),
         ];
@@ -950,12 +949,12 @@ impl InternerGuard<'_> {
                     MarkerExpression::String {
                         key: MarkerValueString::PlatformSystem,
                         operator: MarkerOperator::Equal,
-                        value: platform_system.to_string(),
+                        value: Arc::from(platform_system),
                     },
                     MarkerExpression::String {
                         key: MarkerValueString::SysPlatform,
                         operator: MarkerOperator::Equal,
-                        value: sys_platform.to_string(),
+                        value: Arc::from(sys_platform),
                     },
                 ));
             }
@@ -996,13 +995,13 @@ pub(crate) enum Variable {
     /// string marker and value.
     In {
         key: CanonicalMarkerValueString,
-        value: String,
+        value: Arc<str>,
     },
     /// A variable representing a `<value> in <key>` expression for a particular
     /// string marker and value.
     Contains {
         key: CanonicalMarkerValueString,
-        value: String,
+        value: Arc<str>,
     },
     /// A variable representing the existence or absence of a given extra.
     ///
@@ -1128,7 +1127,7 @@ pub(crate) enum Edges {
     // Invariant: All ranges are simple, meaning they can be represented by a bounded
     // interval without gaps. Additionally, there are at least two edges in the set.
     String {
-        edges: SmallVec<(Ranges<String>, NodeId)>,
+        edges: SmallVec<(Ranges<Arc<str>>, NodeId)>,
     },
     // The edges of a boolean variable, representing the values `true` (the `high` child)
     // and `false` (the `low` child).
@@ -1158,8 +1157,8 @@ impl Edges {
     ///
     /// This function will panic for the `In` and `Contains` marker operators, which
     /// should be represented as separate boolean variables.
-    fn from_string(operator: MarkerOperator, value: String) -> Edges {
-        let range: Ranges<String> = match operator {
+    fn from_string(operator: MarkerOperator, value: Arc<str>) -> Edges {
+        let range: Ranges<Arc<str>> = match operator {
             MarkerOperator::Equal => Ranges::singleton(value),
             MarkerOperator::NotEqual => Ranges::singleton(value).complement(),
             MarkerOperator::GreaterThan => Ranges::strictly_higher_than(value),

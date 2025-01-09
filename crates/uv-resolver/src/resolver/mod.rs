@@ -1424,11 +1424,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // macOS. But if _neither_ version supports Intel macOS, we'd rather use `sys_platform == 'darwin'`
         // instead of `sys_platform == 'darwin' and platform_machine == 'arm64'`, since it's much
         // simpler, and _neither_ version will succeed with Intel macOS anyway.
-        for sys_platform in &["darwin", "linux", "win32"] {
+        for sys_platform in ["darwin", "linux", "win32"] {
             let sys_platform = MarkerTree::expression(MarkerExpression::String {
                 key: MarkerValueString::SysPlatform,
                 operator: MarkerOperator::Equal,
-                value: (*sys_platform).to_string(),
+                value: Arc::from(sys_platform),
             });
             if dist.implied_markers().is_disjoint(sys_platform)
                 && !remainder.is_disjoint(sys_platform)
