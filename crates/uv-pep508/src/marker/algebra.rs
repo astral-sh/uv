@@ -1412,8 +1412,7 @@ impl Edges {
         // not the resulting edges.
         for (left_range, left_child) in left_edges {
             for (right_range, right_child) in right_edges {
-                let intersection = right_range.intersection(left_range);
-                if intersection.is_empty() {
+                if right_range.is_disjoint(left_range) {
                     continue;
                 }
 
