@@ -486,6 +486,39 @@ fn install_requirements_txt() -> Result<()> {
     Ok(())
 }
 
+/// Warn (but don't fail) when unsupported flags are set in the `requirements.txt`.
+#[test]
+fn install_unsupported_flag() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! {r"
+        --pre
+        --prefer-binary :all:
+        iniconfig
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Ignoring unsupported option in `requirements.txt`: `--pre` (hint: pass `--pre` on the command line instead)
+    warning: Ignoring unsupported option in `requirements.txt`: `--prefer-binary`
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###
+    );
+
+    Ok(())
+}
+
 /// Install a requirements file with pins that conflict
 ///
 /// This is likely to occur in the real world when compiled on one platform then installed on another.
