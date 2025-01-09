@@ -93,6 +93,7 @@ pub(crate) async fn run(
 ) -> anyhow::Result<ExitStatus> {
     // These cases seem quite complex because (in theory) they should change the "current package".
     // Let's ban them entirely for now.
+    let mut requirements_from_stdin: bool = false;
     for source in &requirements {
         match source {
             RequirementsSource::PyprojectToml(_) => {
@@ -106,11 +107,20 @@ pub(crate) async fn run(
             }
             RequirementsSource::RequirementsTxt(path) => {
                 if path == Path::new("-") {
-                    bail!("Reading requirements from stdin is not supported in `uv run`");
+                    requirements_from_stdin = true;
                 }
             }
             _ => {}
         }
+    }
+
+    // Fail early if stdin is used for multiple purposes.
+    if matches!(
+        command,
+        Some(RunCommand::PythonStdin(..) | RunCommand::PythonGuiStdin(..))
+    ) && requirements_from_stdin
+    {
+        bail!("Cannot read both requirements file and script from stdin");
     }
 
     // Initialize any shared state.
@@ -169,6 +179,9 @@ pub(crate) async fn run(
                 )?;
             }
             Pep723Item::Stdin(_) => {
+                if requirements_from_stdin {
+                    bail!("Cannot read both requirements file and script from stdin");
+                }
                 writeln!(
                     printer.stderr(),
                     "Reading inline script metadata from `{}`",

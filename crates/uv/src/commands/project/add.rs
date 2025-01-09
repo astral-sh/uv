@@ -98,11 +98,6 @@ pub(crate) async fn add(
             RequirementsSource::SetupCfg(_) => {
                 bail!("Adding requirements from a `setup.cfg` is not supported in `uv add`");
             }
-            RequirementsSource::RequirementsTxt(path) => {
-                if path == Path::new("-") {
-                    bail!("Reading requirements from stdin is not supported in `uv add`");
-                }
-            }
             _ => {}
         }
     }
