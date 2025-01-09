@@ -59,7 +59,7 @@ def build_wheel(
     wheel_directory: str,
     config_settings: "dict | None" = None,
     metadata_directory: "str | None" = None,
-):
+) -> str:
     """PEP 517 hook `build_wheel`."""
     args = ["build-backend", "build-wheel", wheel_directory]
     if metadata_directory:
