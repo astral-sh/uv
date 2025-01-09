@@ -35,6 +35,15 @@ pub enum VersionFormat {
     Json,
 }
 
+#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
+pub enum PythonListFormat {
+    /// Display the version as plain text.
+    #[default]
+    Text,
+    /// Display the version as JSON.
+    Json,
+}
+
 #[derive(Debug, Default, Clone, clap::ValueEnum)]
 pub enum ListFormat {
     /// Display the list of packages in a human-readable table.
@@ -4288,6 +4297,10 @@ pub struct PythonListArgs {
     /// By default, these display as `<download available>`.
     #[arg(long)]
     pub show_urls: bool,
+
+    /// Select the output format between: `text` (default)  or `json`.
+    #[arg(long, value_enum, default_value_t = PythonListFormat::default())]
+    pub format: PythonListFormat,
 }
 
 #[derive(Args)]

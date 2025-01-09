@@ -1,5 +1,7 @@
+use serde::Serialize;
 use std::collections::BTreeSet;
 use std::fmt::Write;
+use uv_cli::PythonListFormat;
 
 use anyhow::Result;
 use itertools::Either;
@@ -24,6 +26,20 @@ enum Kind {
     System,
 }
 
+#[derive(Default, Debug, Serialize)]
+struct PrintData {
+    key: String,
+    version: String,
+    path: Option<String>,
+    symlink: Option<String>,
+    url: Option<String>,
+    os: String,
+    variant: String,
+    implementation: String,
+    arch: String,
+    libc: String,
+}
+
 /// List available Python installations.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn list(
@@ -32,6 +48,7 @@ pub(crate) async fn list(
     all_platforms: bool,
     all_arches: bool,
     show_urls: bool,
+    format: PythonListFormat,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     cache: &Cache,
@@ -167,40 +184,93 @@ pub(crate) async fn list(
         include.push((key, uri));
     }
 
-    // Compute the width of the first column.
-    let width = include
-        .iter()
-        .fold(0usize, |acc, (key, _)| acc.max(key.to_string().len()));
+    match format {
+        PythonListFormat::Json => {
+            let data: Vec<PrintData> = include
+                .iter()
+                .map(|(key, uri)| match uri {
+                    Either::Left(path) => {
+                        let is_symlink = fs_err::symlink_metadata(path).unwrap().is_symlink();
+                        if is_symlink {
+                            return PrintData {
+                                key: key.to_string(),
+                                version: key.version().to_string(),
+                                path: Some(path.user_display().to_string()),
+                                symlink: Some(path.read_link().unwrap().user_display().to_string()),
+                                arch: key.arch().to_string(),
+                                implementation: key.implementation().to_string(),
+                                os: key.os().to_string(),
+                                variant: key.variant().to_string(),
+                                libc: key.libc().to_string(),
+                                ..Default::default()
+                            };
+                        }
+                        return PrintData {
+                            key: key.to_string(),
+                            version: key.version().to_string(),
+                            path: Some(path.user_display().to_string()),
+                            arch: key.arch().to_string(),
+                            implementation: key.implementation().to_string(),
+                            os: key.os().to_string(),
+                            variant: key.variant().to_string(),
+                            libc: key.libc().to_string(),
+                            ..Default::default()
+                        };
+                    }
+                    Either::Right(url) => {
+                        return PrintData {
+                            key: key.to_string(),
+                            version: key.version().to_string(),
+                            url: Some(url.to_string()),
+                            arch: key.arch().to_string(),
+                            implementation: key.implementation().to_string(),
+                            os: key.os().to_string(),
+                            variant: key.variant().to_string(),
+                            libc: key.libc().to_string(),
+                            ..Default::default()
+                        };
+                    }
+                })
+                .collect();
+            writeln!(printer.stdout(), "{}", serde_json::to_string(&data)?)?;
+        }
+        PythonListFormat::Text => {
+            // Compute the width of the first column.
+            let width = include
+                .iter()
+                .fold(0usize, |acc, (key, _)| acc.max(key.to_string().len()));
 
-    for (key, uri) in include {
-        let key = key.to_string();
-        match uri {
-            Either::Left(path) => {
-                let is_symlink = fs_err::symlink_metadata(path)?.is_symlink();
-                if is_symlink {
-                    writeln!(
-                        printer.stdout(),
-                        "{key:width$}    {} -> {}",
-                        path.user_display().cyan(),
-                        path.read_link()?.user_display().cyan()
-                    )?;
-                } else {
-                    writeln!(
-                        printer.stdout(),
-                        "{key:width$}    {}",
-                        path.user_display().cyan()
-                    )?;
-                }
-            }
-            Either::Right(url) => {
-                if show_urls {
-                    writeln!(printer.stdout(), "{key:width$}    {}", url.dimmed())?;
-                } else {
-                    writeln!(
-                        printer.stdout(),
-                        "{key:width$}    {}",
-                        "<download available>".dimmed()
-                    )?;
+            for (key, uri) in include {
+                let key = key.to_string();
+                match uri {
+                    Either::Left(path) => {
+                        let is_symlink = fs_err::symlink_metadata(path)?.is_symlink();
+                        if is_symlink {
+                            writeln!(
+                                printer.stdout(),
+                                "{key:width$}    {} -> {}",
+                                path.user_display().cyan(),
+                                path.read_link()?.user_display().cyan()
+                            )?;
+                        } else {
+                            writeln!(
+                                printer.stdout(),
+                                "{key:width$}    {}",
+                                path.user_display().cyan()
+                            )?;
+                        }
+                    }
+                    Either::Right(url) => {
+                        if show_urls {
+                            writeln!(printer.stdout(), "{key:width$}    {}", url.dimmed())?;
+                        } else {
+                            writeln!(
+                                printer.stdout(),
+                                "{key:width$}    {}",
+                                "<download available>".dimmed()
+                            )?;
+                        }
+                    }
                 }
             }
         }
