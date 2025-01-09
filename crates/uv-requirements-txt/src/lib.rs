@@ -416,6 +416,11 @@ impl RequirementsTxt {
     }
 }
 
+/// Returns `true` if the character is a newline or a comment character.
+const fn is_terminal(c: char) -> bool {
+    matches!(c, '\n' | '\r' | '#')
+}
+
 /// Parse a single entry, that is a requirement, an inclusion or a comment line
 ///
 /// Consumes all preceding trivia (whitespace and comments). If it returns None, we've reached
@@ -436,7 +441,7 @@ fn parse_entry(
 
     let start = s.cursor();
     Ok(Some(if s.eat_if("-r") || s.eat_if("--requirement") {
-        let requirements_file = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
+        let requirements_file = parse_value(content, s, |c: char| !is_terminal(c))?;
         let end = s.cursor();
         RequirementsTxtStatement::Requirements {
             filename: requirements_file.to_string(),
@@ -444,7 +449,7 @@ fn parse_entry(
             end,
         }
     } else if s.eat_if("-c") || s.eat_if("--constraint") {
-        let constraints_file = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
+        let constraints_file = parse_value(content, s, |c: char| !is_terminal(c))?;
         let end = s.cursor();
         RequirementsTxtStatement::Constraint {
             filename: constraints_file.to_string(),
@@ -475,7 +480,7 @@ fn parse_entry(
             hashes,
         })
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
-        let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
+        let given = parse_value(content, s, |c: char| !is_terminal(c))?;
         let expanded = expand_env_vars(given);
         let url = if let Some(path) = std::path::absolute(expanded.as_ref())
             .ok()
@@ -501,7 +506,7 @@ fn parse_entry(
         };
         RequirementsTxtStatement::IndexUrl(url.with_given(given))
     } else if s.eat_if("--extra-index-url") {
-        let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
+        let given = parse_value(content, s, |c: char| !is_terminal(c))?;
         let expanded = expand_env_vars(given);
         let url = if let Some(path) = std::path::absolute(expanded.as_ref())
             .ok()
@@ -529,7 +534,7 @@ fn parse_entry(
     } else if s.eat_if("--no-index") {
         RequirementsTxtStatement::NoIndex
     } else if s.eat_if("--find-links") || s.eat_if("-f") {
-        let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
+        let given = parse_value(content, s, |c: char| !is_terminal(c))?;
         let expanded = expand_env_vars(given);
         let url = if let Some(path) = std::path::absolute(expanded.as_ref())
             .ok()
@@ -555,7 +560,7 @@ fn parse_entry(
         };
         RequirementsTxtStatement::FindLinks(url.with_given(given))
     } else if s.eat_if("--no-binary") {
-        let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
+        let given = parse_value(content, s, |c: char| !is_terminal(c))?;
         let specifier = PackageNameSpecifier::from_str(given).map_err(|err| {
             RequirementsTxtParserError::NoBinary {
                 source: err,
@@ -566,7 +571,7 @@ fn parse_entry(
         })?;
         RequirementsTxtStatement::NoBinary(NoBinary::from_pip_arg(specifier))
     } else if s.eat_if("--only-binary") {
-        let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
+        let given = parse_value(content, s, |c: char| !is_terminal(c))?;
         let specifier = PackageNameSpecifier::from_str(given).map_err(|err| {
             RequirementsTxtParserError::NoBinary {
                 source: err,
