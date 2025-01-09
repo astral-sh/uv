@@ -217,19 +217,17 @@ pub(crate) async fn list(
                             ..Default::default()
                         };
                     }
-                    Either::Right(url) => {
-                        return PrintData {
-                            key: key.to_string(),
-                            version: key.version().to_string(),
-                            url: Some(url.to_string()),
-                            arch: key.arch().to_string(),
-                            implementation: key.implementation().to_string(),
-                            os: key.os().to_string(),
-                            variant: key.variant().to_string(),
-                            libc: key.libc().to_string(),
-                            ..Default::default()
-                        };
-                    }
+                    Either::Right(url) => PrintData {
+                        key: key.to_string(),
+                        version: key.version().to_string(),
+                        url: Some((*url).to_string()),
+                        arch: key.arch().to_string(),
+                        implementation: key.implementation().to_string(),
+                        os: key.os().to_string(),
+                        variant: key.variant().to_string(),
+                        libc: key.libc().to_string(),
+                        ..Default::default()
+                    },
                 })
                 .collect();
             writeln!(printer.stdout(), "{}", serde_json::to_string(&data)?)?;

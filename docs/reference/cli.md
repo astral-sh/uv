@@ -4571,6 +4571,16 @@ uv python list [OPTIONS]
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
+</dd><dt><code>--format</code> <i>format</i></dt><dd><p>Select the output format between: <code>text</code> (default) or <code>json</code></p>
+
+<p>[default: text]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>text</code>:  Display the version as plain text</li>
+
+<li><code>json</code>:  Display the version as JSON</li>
+</ul>
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
