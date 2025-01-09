@@ -177,12 +177,23 @@ $ uv run example.py
 Alternatively, you can use `uv sync` to manually update the environment then activate it before
 executing a command:
 
-```console
-$ uv sync
-$ source .venv/bin/activate
-$ flask run -p 3000
-$ python example.py
-```
+=== "macOS and Linux"
+
+    ```console
+    $ uv sync
+    $ source .venv/bin/activate
+    $ flask run -p 3000
+    $ python example.py
+    ```
+
+=== "Windows"
+
+    ```powershell
+    uv sync
+    source .venv\Scripts\activate
+    flask run -p 3000
+    python example.py
+    ```
 
 !!! note
 
