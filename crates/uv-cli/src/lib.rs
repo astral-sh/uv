@@ -4298,7 +4298,7 @@ pub struct PythonListArgs {
     #[arg(long)]
     pub show_urls: bool,
 
-    /// Select the output format between: `text` (default)  or `json`.
+    /// Select the output format between: `text` (default) or `json`.
     #[arg(long, value_enum, default_value_t = PythonListFormat::default())]
     pub format: PythonListFormat,
 }
