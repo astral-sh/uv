@@ -187,10 +187,15 @@ pub fn copy_atomic_sync(from: impl AsRef<Path>, to: impl AsRef<Path>) -> std::io
 }
 
 #[cfg(windows)]
-fn backoff_file_move() -> backoff::ExponentialBackoff {
-    backoff::ExponentialBackoffBuilder::default()
-        .with_initial_interval(std::time::Duration::from_millis(10))
-        .with_max_elapsed_time(Some(std::time::Duration::from_secs(10)))
+fn backoff_file_move() -> backon::ExponentialBackoff {
+    use backon::BackoffBuilder;
+    // This amounts to 10 total seconds of trying the operation.
+    // We start at 10 milliseconds and try 9 times, doubling each time, so the last try will take
+    // about 10*(2^9) milliseconds ~= 5 seconds. All other attempts combined should equal
+    // the length of the last attempt (because it's a sum of powers of 2), so 10 seconds overall.
+    backon::ExponentialBuilder::default()
+        .with_min_delay(std::time::Duration::from_millis(10))
+        .with_max_times(9)
         .build()
 }
 
@@ -202,6 +207,7 @@ pub async fn rename_with_retry(
 ) -> Result<(), std::io::Error> {
     #[cfg(windows)]
     {
+        use backon::Retryable;
         // On Windows, antivirus software can lock files temporarily, making them inaccessible.
         // This is most common for DLLs, and the common suggestion is to retry the operation with
         // some backoff.
@@ -210,23 +216,21 @@ pub async fn rename_with_retry(
         let from = from.as_ref();
         let to = to.as_ref();
 
-        let backoff = backoff_file_move();
-        backoff::future::retry(backoff, || async move {
-            match fs_err::rename(from, to) {
-                Ok(()) => Ok(()),
-                Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
-                    warn!(
-                        "Retrying rename from {} to {} due to transient error: {}",
-                        from.display(),
-                        to.display(),
-                        err
-                    );
-                    Err(backoff::Error::transient(err))
-                }
-                Err(err) => Err(backoff::Error::permanent(err)),
-            }
-        })
-        .await
+        let rename = || async { fs_err::rename(from, to) };
+
+        rename
+            .retry(backoff_file_move())
+            .sleep(tokio::time::sleep)
+            .when(|e| e.kind() == std::io::ErrorKind::PermissionDenied)
+            .notify(|err, _dur| {
+                warn!(
+                    "Retrying rename from {} to {} due to transient error: {}",
+                    from.display(),
+                    to.display(),
+                    err
+                );
+            })
+            .await
     }
     #[cfg(not(windows))]
     {
@@ -241,6 +245,7 @@ pub fn rename_with_retry_sync(
 ) -> Result<(), std::io::Error> {
     #[cfg(windows)]
     {
+        use backon::BlockingRetryable;
         // On Windows, antivirus software can lock files temporarily, making them inaccessible.
         // This is most common for DLLs, and the common suggestion is to retry the operation with
         // some backoff.
@@ -248,37 +253,46 @@ pub fn rename_with_retry_sync(
         // See: <https://github.com/astral-sh/uv/issues/1491> & <https://github.com/astral-sh/uv/issues/9531>
         let from = from.as_ref();
         let to = to.as_ref();
+        let rename = || fs_err::rename(from, to);
 
-        let backoff = backoff_file_move();
-        backoff::retry(backoff, || match fs_err::rename(from, to) {
-            Ok(()) => Ok(()),
-            Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
+        rename
+            .retry(backoff_file_move())
+            .sleep(std::thread::sleep)
+            .when(|err| err.kind() == std::io::ErrorKind::PermissionDenied)
+            .notify(|err, _dur| {
                 warn!(
                     "Retrying rename from {} to {} due to transient error: {}",
                     from.display(),
                     to.display(),
                     err
                 );
-                Err(backoff::Error::transient(err))
-            }
-            Err(err) => Err(backoff::Error::permanent(err)),
-        })
-        .map_err(|err| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "Failed to rename {} to {}: {}",
-                    from.display(),
-                    to.display(),
-                    err
-                ),
-            )
-        })
+            })
+            .call()
+            .map_err(|err| {
+                std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!(
+                        "Failed to rename {} to {}: {}",
+                        from.display(),
+                        to.display(),
+                        err
+                    ),
+                )
+            })
     }
     #[cfg(not(windows))]
     {
         fs_err::rename(from, to)
     }
+}
+
+/// Why a file persist failed
+#[cfg(windows)]
+enum PersistRetryError {
+    /// Something went wrong while persisting, maybe retry (contains error message)
+    Persist(String),
+    /// Something went wrong trying to retrieve the file to persist, we must bail
+    LostState,
 }
 
 /// Persist a `NamedTempFile`, retrying (on Windows) if it fails due to transient operating system errors, in a synchronous context.
@@ -288,6 +302,7 @@ pub async fn persist_with_retry(
 ) -> Result<(), std::io::Error> {
     #[cfg(windows)]
     {
+        use backon::Retryable;
         // On Windows, antivirus software can lock files temporarily, making them inaccessible.
         // This is most common for DLLs, and the common suggestion is to retry the operation with
         // some backoff.
@@ -300,52 +315,55 @@ pub async fn persist_with_retry(
         // So we will update the `from` optional value in safe and borrow-checker friendly way every retry
         // Allows us to use the NamedTempFile inside a FnMut closure used for backoff::retry
         let mut from = Some(from);
-
-        let backoff = backoff_file_move();
-        let persisted = backoff::future::retry(backoff, move || {
+        let persist = move || {
             // Needed because we cannot move out of `from`, a captured variable in an `FnMut` closure, and then pass it to the async move block
-            let mut from = from.take();
+            let mut from: Option<NamedTempFile> = from.take();
 
             async move {
                 if let Some(file) = from.take() {
                     file.persist(to).map_err(|err| {
                         let error_message = err.to_string();
-                        warn!(
-                            "Retrying to persist temporary file to {}: {}",
-                            to.display(),
-                            error_message
-                        );
-
                         // Set back the NamedTempFile returned back by the Error
                         from = Some(err.file);
-
-                        backoff::Error::transient(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            format!(
-                                "Failed to persist temporary file to {}: {}",
-                                to.display(),
-                                error_message
-                            ),
-                        ))
+                        PersistRetryError::Persist(error_message)
                     })
                 } else {
-                    Err(backoff::Error::permanent(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!(
-                            "Failed to retrieve temporary file while trying to persist to {}",
-                            to.display()
-                        ),
-                    )))
+                    Err(PersistRetryError::LostState)
                 }
             }
-        })
-        .await;
+        };
+
+        let persisted = persist
+            .retry(backoff_file_move())
+            .sleep(tokio::time::sleep)
+            .when(|err| matches!(err, PersistRetryError::Persist(_)))
+            .notify(|err, _dur| {
+                if let PersistRetryError::Persist(error_message) = err {
+                    warn!(
+                        "Retrying to persist temporary file to {}: {}",
+                        to.display(),
+                        error_message,
+                    );
+                };
+            })
+            .await;
 
         match persisted {
             Ok(_) => Ok(()),
-            Err(err) => Err(std::io::Error::new(
+            Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                err.to_string(),
+                format!(
+                    "Failed to persist temporary file to {}: {}",
+                    to.display(),
+                    error_message,
+                ),
+            )),
+            Err(PersistRetryError::LostState) => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!(
+                    "Failed to retrieve temporary file while trying to persist to {}",
+                    to.display()
+                ),
             )),
         }
     }
@@ -362,6 +380,7 @@ pub fn persist_with_retry_sync(
 ) -> Result<(), std::io::Error> {
     #[cfg(windows)]
     {
+        use backon::BlockingRetryable;
         // On Windows, antivirus software can lock files temporarily, making them inaccessible.
         // This is most common for DLLs, and the common suggestion is to retry the operation with
         // some backoff.
@@ -374,46 +393,51 @@ pub fn persist_with_retry_sync(
         // So we will update the `from` optional value in safe and borrow-checker friendly way every retry
         // Allows us to use the NamedTempFile inside a FnMut closure used for backoff::retry
         let mut from = Some(from);
-
-        let backoff = backoff_file_move();
-        let persisted = backoff::retry(backoff, move || {
+        let persist = || {
+            // Needed because we cannot move out of `from`, a captured variable in an `FnMut` closure, and then pass it to the async move block
             if let Some(file) = from.take() {
                 file.persist(to).map_err(|err| {
                     let error_message = err.to_string();
+                    // Set back the NamedTempFile returned back by the Error
+                    from = Some(err.file);
+                    PersistRetryError::Persist(error_message)
+                })
+            } else {
+                Err(PersistRetryError::LostState)
+            }
+        };
+
+        let persisted = persist
+            .retry(backoff_file_move())
+            .sleep(std::thread::sleep)
+            .when(|err| matches!(err, PersistRetryError::Persist(_)))
+            .notify(|err, _dur| {
+                if let PersistRetryError::Persist(error_message) = err {
                     warn!(
                         "Retrying to persist temporary file to {}: {}",
                         to.display(),
-                        error_message
+                        error_message,
                     );
-
-                    // Set back the NamedTempFile returned back by the Error
-                    from = Some(err.file);
-
-                    backoff::Error::transient(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!(
-                            "Failed to persist temporary file to {}: {}",
-                            to.display(),
-                            error_message
-                        ),
-                    ))
-                })
-            } else {
-                Err(backoff::Error::permanent(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!(
-                        "Failed to retrieve temporary file while trying to persist to {}",
-                        to.display()
-                    ),
-                )))
-            }
-        });
+                };
+            })
+            .call();
 
         match persisted {
             Ok(_) => Ok(()),
-            Err(err) => Err(std::io::Error::new(
+            Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                err.to_string(),
+                format!(
+                    "Failed to persist temporary file to {}: {}",
+                    to.display(),
+                    error_message,
+                ),
+            )),
+            Err(PersistRetryError::LostState) => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!(
+                    "Failed to retrieve temporary file while trying to persist to {}",
+                    to.display()
+                ),
             )),
         }
     }

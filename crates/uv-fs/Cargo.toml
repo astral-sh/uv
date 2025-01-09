@@ -38,9 +38,9 @@ winsafe = { workspace = true }
 rustix = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
-backoff = { workspace = true }
+backon = { workspace = true }
 junction = { workspace = true }
 
 [features]
 default = []
-tokio = ["dep:tokio", "fs-err/tokio", "backoff/tokio"]
+tokio = ["dep:tokio", "fs-err/tokio"]
