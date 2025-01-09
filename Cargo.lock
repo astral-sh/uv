@@ -5485,6 +5485,7 @@ dependencies = [
  "uv-normalize",
  "uv-pep508",
  "uv-pypi-types",
+ "uv-warnings",
 ]
 
 [[package]]
