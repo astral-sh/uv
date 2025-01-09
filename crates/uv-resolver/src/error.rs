@@ -235,7 +235,7 @@ impl NoSolutionError {
             match derivation_tree {
                 DerivationTree::External(External::NotRoot(_, _)) => Some(derivation_tree),
                 DerivationTree::External(External::NoVersions(package, versions)) => {
-                    if SentinelRange::from(&versions).is_sentinel() {
+                    if SentinelRange::from(&versions).is_complement() {
                         return None;
                     }
 
@@ -977,13 +977,30 @@ impl<'range> From<&'range Range<Version>> for SentinelRange<'range> {
 }
 
 impl SentinelRange<'_> {
-    /// Returns `true` if the range appears to be, e.g., `>1.0.0, <1.0.0+[max]`.
+    /// Returns `true` if the range appears to be, e.g., `>=1.0.0, <1.0.0+[max]`.
     pub fn is_sentinel(&self) -> bool {
+        self.0.iter().all(|(lower, upper)| {
+            let (Bound::Included(lower), Bound::Excluded(upper)) = (lower, upper) else {
+                return false;
+            };
+            if !lower.local().is_empty() {
+                return false;
+            }
+            if upper.local() != LocalVersionSlice::Max {
+                return false;
+            }
+            *lower == upper.clone().without_local()
+        })
+    }
+
+    /// Returns `true` if the range appears to be, e.g., `>1.0.0, <1.0.0+[max]` (i.e., a sentinel
+    /// range with the non-local version removed).
+    pub fn is_complement(&self) -> bool {
         self.0.iter().all(|(lower, upper)| {
             let (Bound::Excluded(lower), Bound::Excluded(upper)) = (lower, upper) else {
                 return false;
             };
-            if lower.local() == LocalVersionSlice::Max {
+            if !lower.local().is_empty() {
                 return false;
             }
             if upper.local() != LocalVersionSlice::Max {

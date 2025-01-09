@@ -10,6 +10,7 @@ use uv_pep440::Version;
 use crate::fork_urls::ForkUrls;
 use crate::pubgrub::package::PubGrubPackage;
 use crate::pubgrub::PubGrubPackageInner;
+use crate::SentinelRange;
 
 /// A prioritization map to guide the PubGrub resolution process.
 ///
@@ -57,8 +58,9 @@ impl PubGrubPriorities {
                 // Compute the priority.
                 let priority = if urls.get(name).is_some() {
                     PubGrubPriority::DirectUrl(Reverse(index))
-                } else if version.as_singleton().is_some() {
-                    // TODO(charlie): Take local version ranges into account (e.g., `[2.0, 2.0+[max])`).
+                } else if version.as_singleton().is_some()
+                    || SentinelRange::from(version).is_sentinel()
+                {
                     PubGrubPriority::Singleton(Reverse(index))
                 } else {
                     // Keep the conflict-causing packages to avoid loops where we seesaw between
@@ -81,8 +83,9 @@ impl PubGrubPriorities {
                 // Compute the priority.
                 let priority = if urls.get(name).is_some() {
                     PubGrubPriority::DirectUrl(Reverse(next))
-                } else if version.as_singleton().is_some() {
-                    // TODO(charlie): Take local version ranges into account (e.g., `[2.0, 2.0+[max])`).
+                } else if version.as_singleton().is_some()
+                    || SentinelRange::from(version).is_sentinel()
+                {
                     PubGrubPriority::Singleton(Reverse(next))
                 } else {
                     PubGrubPriority::Unspecified(Reverse(next))
@@ -140,10 +143,7 @@ impl PubGrubPriorities {
         };
         match self.package_priority.entry(name.clone()) {
             std::collections::hash_map::Entry::Occupied(mut entry) => {
-                if matches!(
-                    entry.get(),
-                    PubGrubPriority::ConflictEarly(_) | PubGrubPriority::Singleton(_)
-                ) {
+                if matches!(entry.get(), PubGrubPriority::ConflictEarly(_)) {
                     // Already in the right category
                     return false;
                 };
@@ -178,9 +178,7 @@ impl PubGrubPriorities {
                 // The ConflictEarly` match avoids infinite loops.
                 if matches!(
                     entry.get(),
-                    PubGrubPriority::ConflictLate(_)
-                        | PubGrubPriority::ConflictEarly(_)
-                        | PubGrubPriority::Singleton(_)
+                    PubGrubPriority::ConflictLate(_) | PubGrubPriority::ConflictEarly(_)
                 ) {
                     // Already in the right category
                     return false;
