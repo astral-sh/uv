@@ -125,6 +125,9 @@ Build systems are used to power the following features:
 
 - Including or excluding files from distributions
 - Editable install behavior
+- Dynamic project metadata
+- Compilation of native code
+- Vendoring shared libraries
 
 To configure these features, refer to the documentation of your chosen build system.
 
