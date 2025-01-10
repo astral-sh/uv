@@ -36,7 +36,6 @@ tracing = { workspace = true, optional = true }
 unicode-width = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 version-ranges = { workspace = true }
-compact_str = { version = "0.8.1" }
 
 [dev-dependencies]
 insta = { version = "1.40.0" }
