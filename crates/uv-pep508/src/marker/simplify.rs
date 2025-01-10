@@ -1,11 +1,13 @@
 use std::fmt;
 use std::ops::Bound;
 
+use arcstr::ArcStr;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use rustc_hash::FxBuildHasher;
-use uv_pep440::{Version, VersionSpecifier};
 use version_ranges::Ranges;
+
+use uv_pep440::{Version, VersionSpecifier};
 
 use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeKind};
 
@@ -131,7 +133,7 @@ fn collect_dnf(
 
                 let expr = MarkerExpression::String {
                     key: marker.key().into(),
-                    value: marker.value().to_owned(),
+                    value: ArcStr::from(marker.value()),
                     operator,
                 };
 
@@ -150,7 +152,7 @@ fn collect_dnf(
 
                 let expr = MarkerExpression::String {
                     key: marker.key().into(),
-                    value: marker.value().to_owned(),
+                    value: ArcStr::from(marker.value()),
                     operator,
                 };
 

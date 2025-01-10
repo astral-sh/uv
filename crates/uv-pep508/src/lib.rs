@@ -1334,17 +1334,17 @@ mod tests {
         let mut b = MarkerTree::expression(MarkerExpression::String {
             key: MarkerValueString::SysPlatform,
             operator: MarkerOperator::Equal,
-            value: "win32".to_string(),
+            value: arcstr::literal!("win32"),
         });
         let mut c = MarkerTree::expression(MarkerExpression::String {
             key: MarkerValueString::OsName,
             operator: MarkerOperator::Equal,
-            value: "linux".to_string(),
+            value: arcstr::literal!("linux"),
         });
         let d = MarkerTree::expression(MarkerExpression::String {
             key: MarkerValueString::ImplementationName,
             operator: MarkerOperator::Equal,
-            value: "cpython".to_string(),
+            value: arcstr::literal!("cpython"),
         });
 
         c.and(d);
