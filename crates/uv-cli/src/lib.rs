@@ -4593,6 +4593,7 @@ pub struct IndexArgs {
         long,
         short,
         env = EnvVars::UV_FIND_LINKS,
+        value_delimiter = ',',
         value_parser = parse_find_links,
         help_heading = "Index options"
     )]
