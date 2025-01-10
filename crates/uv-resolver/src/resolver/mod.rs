@@ -1,5 +1,6 @@
 //! Given a set of requirements, find a set of compatible packages.
 
+use flexstr::SharedStr;
 use dashmap::DashMap;
 use either::Either;
 use futures::{FutureExt, StreamExt};
@@ -14,7 +15,6 @@ use std::ops::Bound;
 use std::sync::Arc;
 use std::time::Instant;
 use std::{iter, slice, thread};
-use arcstr::ArcStr;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
@@ -1425,9 +1425,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // instead of `sys_platform == 'darwin' and platform_machine == 'arm64'`, since it's much
         // simpler, and _neither_ version will succeed with Intel macOS anyway.
         for value in [
-            arcstr::literal!("darwin"),
-            arcstr::literal!("linux"),
-            arcstr::literal!("win32"),
+            SharedStr::from("darwin"),
+            SharedStr::from("linux"),
+            SharedStr::from("win32"),
         ] {
             let sys_platform = MarkerTree::expression(MarkerExpression::String {
                 key: MarkerValueString::SysPlatform,

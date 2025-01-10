@@ -63,7 +63,7 @@ toml_edit = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 compact_str = { version = "0.8.1" }
-arcstr = "1.2.0"
+flexstr = "0.9.2"
 
 [dev-dependencies]
 insta = { version = "1.40.0" }

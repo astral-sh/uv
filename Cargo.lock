@@ -94,12 +94,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34ac096ce696dc2fcabef30516bb13c0a68a11d30131d3df6f04711467681b04"
 
 [[package]]
-name = "arcstr"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03918c3dbd7701a85c6b9887732e2921175f26c350b4563841d0958c21d57e6d"
-
-[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1139,6 +1133,15 @@ dependencies = [
  "libz-ng-sys",
  "libz-rs-sys",
  "miniz_oxide",
+]
+
+[[package]]
+name = "flexstr"
+version = "0.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4d50aef14619d336a54fca5a592d952eb39037b1a1e7e6afd9f91c892ac7ef65"
+dependencies = [
+ "static_assertions",
 ]
 
 [[package]]
@@ -5048,9 +5051,9 @@ name = "uv-distribution-types"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "arcstr",
  "bitflags 2.6.0",
  "compact_str",
+ "flexstr",
  "fs-err 3.0.0",
  "itertools 0.14.0",
  "jiff",
@@ -5309,9 +5312,9 @@ dependencies = [
 name = "uv-pep508"
 version = "0.6.0"
 dependencies = [
- "arcstr",
  "boxcar",
  "compact_str",
+ "flexstr",
  "indexmap",
  "insta",
  "itertools 0.14.0",
@@ -5352,8 +5355,8 @@ dependencies = [
 name = "uv-platform-tags"
 version = "0.0.1"
 dependencies = [
- "arcstr",
  "compact_str",
+ "flexstr",
  "insta",
  "rustc-hash",
  "serde",
@@ -5549,11 +5552,11 @@ dependencies = [
 name = "uv-resolver"
 version = "0.0.1"
 dependencies = [
- "arcstr",
  "clap",
  "compact_str",
  "dashmap",
  "either",
+ "flexstr",
  "futures",
  "hashbrown 0.15.2",
  "indexmap",
