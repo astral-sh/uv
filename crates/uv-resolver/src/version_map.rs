@@ -115,23 +115,9 @@ impl VersionMap {
 
     /// Return the [`DistFile`] for the given version, if any.
     pub(crate) fn get(&self, version: &Version) -> Option<&PrioritizedDist> {
-        self.get_with_version(version).map(|(_version, dist)| dist)
-    }
-
-    /// Return the [`DistFile`] and the `Version` from the map for the given
-    /// version, if any.
-    ///
-    /// This is useful when you depend on access to the specific `Version`
-    /// stored in this map. For example, the versions `1.2.0` and `1.2` are
-    /// semantically equivalent, but when converted to strings, they are
-    /// distinct.
-    pub(crate) fn get_with_version(
-        &self,
-        version: &Version,
-    ) -> Option<(&Version, &PrioritizedDist)> {
         match self.inner {
-            VersionMapInner::Eager(ref eager) => eager.map.get_key_value(version),
-            VersionMapInner::Lazy(ref lazy) => lazy.get_with_version(version),
+            VersionMapInner::Eager(ref eager) => eager.map.get(version),
+            VersionMapInner::Lazy(ref lazy) => lazy.get(version),
         }
     }
 
@@ -349,16 +335,9 @@ struct VersionMapLazy {
 impl VersionMapLazy {
     /// Returns the distribution for the given version, if it exists.
     fn get(&self, version: &Version) -> Option<&PrioritizedDist> {
-        self.get_with_version(version)
-            .map(|(_, prioritized_dist)| prioritized_dist)
-    }
-
-    /// Returns the distribution for the given version along with the version
-    /// in this map, if it exists.
-    fn get_with_version(&self, version: &Version) -> Option<(&Version, &PrioritizedDist)> {
-        let (version, lazy_dist) = self.map.get_key_value(version)?;
+        let lazy_dist = self.map.get(version)?;
         let priority_dist = self.get_lazy(lazy_dist)?;
-        Some((version, priority_dist))
+        Some(priority_dist)
     }
 
     /// Given a reference to a possibly-initialized distribution that is in
