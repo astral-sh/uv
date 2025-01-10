@@ -320,10 +320,6 @@ uv will require that all dependencies have a hash specified in the requirements 
 Equivalent to the `--resolution` command-line argument. For example, if set to
 `lowest-direct`, uv will install the lowest compatible versions of all direct dependencies.
 
-### `UV_STACK_SIZE`
-
-Use to increase the stack size used by uv in debug builds on Windows.
-
 ### `UV_SYSTEM_PYTHON`
 
 Equivalent to the `--system` command-line argument. If set to `true`, uv will
@@ -483,6 +479,15 @@ For example:
 
 See the [tracing documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#example-syntax)
 for more.
+
+### `RUST_MIN_STACK`
+
+Use to set the stack size used by uv.
+
+The value is in bytes, and the default is typically 2MB (2097152).
+Increasing this value may help resolve stack overflows exclusive to debug builds,
+especially on Windows. 3MB (3145728) is often sufficient.
+This value only affects non-main threads.
 
 ### `SHELL`
 

@@ -249,9 +249,6 @@ impl EnvVars {
     /// Use to disable line wrapping for diagnostics.
     pub const UV_NO_WRAP: &'static str = "UV_NO_WRAP";
 
-    /// Use to increase the stack size used by uv in debug builds on Windows.
-    pub const UV_STACK_SIZE: &'static str = "UV_STACK_SIZE";
-
     /// Generates the environment variable key for the HTTP Basic authentication username.
     #[attr_env_var_pattern("UV_INDEX_{name}_USERNAME")]
     pub fn index_username(name: &str) -> String {
@@ -504,6 +501,14 @@ impl EnvVars {
     /// See the [tracing documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#example-syntax)
     /// for more.
     pub const RUST_LOG: &'static str = "RUST_LOG";
+
+    /// Use to set the stack size used by uv.
+    ///
+    /// The value is in bytes, and the default is typically 2MB (2097152).
+    /// Increasing this value may help resolve stack overflows exclusive to debug builds,
+    /// especially on Windows. 3MB (3145728) is often sufficient.
+    /// This value only affects non-main threads.
+    pub const RUST_MIN_STACK: &'static str = "RUST_MIN_STACK";
 
     /// The directory containing the `Cargo.toml` manifest for a package.
     #[attr_hidden]

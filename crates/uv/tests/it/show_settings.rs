@@ -28,7 +28,7 @@ fn add_shared_args(mut command: Command, cwd: &Path) -> Command {
     if cfg!(all(windows, debug_assertions)) {
         // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
         // default windows stack of 1MB
-        command.env(EnvVars::UV_STACK_SIZE, (4 * 1024 * 1024).to_string());
+        command.env(EnvVars::RUST_MIN_STACK, (4 * 1024 * 1024).to_string());
     }
 
     command
