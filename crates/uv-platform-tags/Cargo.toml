@@ -16,6 +16,7 @@ doctest = false
 workspace = true
 
 [dependencies]
+compact_str = { version = "0.8.1" }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }

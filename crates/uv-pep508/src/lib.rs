@@ -965,7 +965,6 @@ mod tests {
 
     use std::env;
     use std::str::FromStr;
-    use std::sync::Arc;
 
     use insta::assert_snapshot;
     use url::Url;
@@ -1340,17 +1339,17 @@ mod tests {
         let mut b = MarkerTree::expression(MarkerExpression::String {
             key: MarkerValueString::SysPlatform,
             operator: MarkerOperator::Equal,
-            value: Arc::from("win32"),
+            value: "win32".to_string(),
         });
         let mut c = MarkerTree::expression(MarkerExpression::String {
             key: MarkerValueString::OsName,
             operator: MarkerOperator::Equal,
-            value: Arc::from("linux"),
+            value: "linux".to_string(),
         });
         let d = MarkerTree::expression(MarkerExpression::String {
             key: MarkerValueString::ImplementationName,
             operator: MarkerOperator::Equal,
-            value: Arc::from("cpython"),
+            value: "cpython".to_string(),
         });
 
         c.and(d);

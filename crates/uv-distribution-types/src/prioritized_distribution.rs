@@ -1,6 +1,5 @@
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
-
 use tracing::debug;
 
 use uv_distribution_filename::{BuildTag, WheelFilename};

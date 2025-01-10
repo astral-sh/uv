@@ -1,6 +1,5 @@
 use std::str::FromStr;
 use std::sync::Arc;
-
 use uv_normalize::ExtraName;
 use uv_pep440::{Version, VersionPattern, VersionSpecifier};
 
