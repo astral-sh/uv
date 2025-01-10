@@ -51,10 +51,10 @@ use std::ops::Bound;
 use std::sync::MutexGuard;
 use std::sync::{Arc, Mutex};
 
-use flexstr::SharedStr;
 use itertools::{Either, Itertools};
 use rustc_hash::FxHashMap;
 use std::sync::LazyLock;
+use arcstr::ArcStr;
 use uv_pep440::{release_specifier_to_range, Operator, Version, VersionSpecifier};
 use version_ranges::Ranges;
 
@@ -291,28 +291,28 @@ impl InternerGuard<'_> {
                 let (key, value) = match (key, value.as_ref()) {
                     (MarkerValueString::PlatformSystem, "Windows") => (
                         CanonicalMarkerValueString::SysPlatform,
-                        SharedStr::from("win32"),
+                        arcstr::literal!("win32"),
                     ),
                     (MarkerValueString::PlatformSystem, "Darwin") => (
                         CanonicalMarkerValueString::SysPlatform,
-                        SharedStr::from("darwin"),
+                        arcstr::literal!("darwin"),
                     ),
                     (MarkerValueString::PlatformSystem, "Linux") => (
                         CanonicalMarkerValueString::SysPlatform,
-                        SharedStr::from("linux"),
+                        arcstr::literal!("linux"),
                     ),
                     (MarkerValueString::PlatformSystem, "AIX") => (
                         CanonicalMarkerValueString::SysPlatform,
-                        SharedStr::from("aix"),
+                        arcstr::literal!("aix"),
                     ),
                     (MarkerValueString::PlatformSystem, "Emscripten") => (
                         CanonicalMarkerValueString::SysPlatform,
-                        SharedStr::from("emscripten"),
+                        arcstr::literal!("emscripten"),
                     ),
                     // See: https://peps.python.org/pep-0738/#sys
                     (MarkerValueString::PlatformSystem, "Android") => (
                         CanonicalMarkerValueString::SysPlatform,
-                        SharedStr::from("android"),
+                        arcstr::literal!("android"),
                     ),
                     _ => (key.into(), value),
                 };
@@ -873,48 +873,48 @@ impl InternerGuard<'_> {
                 MarkerExpression::String {
                     key: MarkerValueString::OsName,
                     operator: MarkerOperator::Equal,
-                    value: SharedStr::from("nt"),
+                    value: arcstr::literal!("nt"),
                 },
                 MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: SharedStr::from("linux"),
+                    value: arcstr::literal!("linux"),
                 },
             ),
             (
                 MarkerExpression::String {
                     key: MarkerValueString::OsName,
                     operator: MarkerOperator::Equal,
-                    value: SharedStr::from("nt"),
+                    value: arcstr::literal!("nt"),
                 },
                 MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: SharedStr::from("darwin"),
+                    value: arcstr::literal!("darwin"),
                 },
             ),
             (
                 MarkerExpression::String {
                     key: MarkerValueString::OsName,
                     operator: MarkerOperator::Equal,
-                    value: SharedStr::from("nt"),
+                    value: arcstr::literal!("nt"),
                 },
                 MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: SharedStr::from("ios"),
+                    value: arcstr::literal!("ios"),
                 },
             ),
             (
                 MarkerExpression::String {
                     key: MarkerValueString::OsName,
                     operator: MarkerOperator::Equal,
-                    value: SharedStr::from("posix"),
+                    value: arcstr::literal!("posix"),
                 },
                 MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: SharedStr::from("win32"),
+                    value: arcstr::literal!("win32"),
                 },
             ),
         ];
@@ -954,12 +954,12 @@ impl InternerGuard<'_> {
                     MarkerExpression::String {
                         key: MarkerValueString::PlatformSystem,
                         operator: MarkerOperator::Equal,
-                        value: SharedStr::from(platform_system),
+                        value: ArcStr::from(platform_system),
                     },
                     MarkerExpression::String {
                         key: MarkerValueString::SysPlatform,
                         operator: MarkerOperator::Equal,
-                        value: SharedStr::from(sys_platform),
+                        value: ArcStr::from(sys_platform),
                     },
                 ));
             }
@@ -1000,13 +1000,13 @@ pub(crate) enum Variable {
     /// string marker and value.
     In {
         key: CanonicalMarkerValueString,
-        value: SharedStr,
+        value: ArcStr,
     },
     /// A variable representing a `<value> in <key>` expression for a particular
     /// string marker and value.
     Contains {
         key: CanonicalMarkerValueString,
-        value: SharedStr,
+        value: ArcStr,
     },
     /// A variable representing the existence or absence of a given extra.
     ///
@@ -1132,7 +1132,7 @@ pub(crate) enum Edges {
     // Invariant: All ranges are simple, meaning they can be represented by a bounded
     // interval without gaps. Additionally, there are at least two edges in the set.
     String {
-        edges: SmallVec<(Ranges<SharedStr>, NodeId)>,
+        edges: SmallVec<(Ranges<ArcStr>, NodeId)>,
     },
     // The edges of a boolean variable, representing the values `true` (the `high` child)
     // and `false` (the `low` child).
@@ -1162,8 +1162,8 @@ impl Edges {
     ///
     /// This function will panic for the `In` and `Contains` marker operators, which
     /// should be represented as separate boolean variables.
-    fn from_string(operator: MarkerOperator, value: SharedStr) -> Edges {
-        let range: Ranges<SharedStr> = match operator {
+    fn from_string(operator: MarkerOperator, value: ArcStr) -> Edges {
+        let range: Ranges<ArcStr> = match operator {
             MarkerOperator::Equal => Ranges::singleton(value),
             MarkerOperator::NotEqual => Ranges::singleton(value).complement(),
             MarkerOperator::GreaterThan => Ranges::strictly_higher_than(value),

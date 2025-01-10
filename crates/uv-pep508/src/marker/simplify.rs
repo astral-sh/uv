@@ -3,7 +3,7 @@ use itertools::Itertools;
 use rustc_hash::FxBuildHasher;
 use std::fmt;
 use std::ops::Bound;
-use flexstr::SharedStr;
+use arcstr::ArcStr;
 use uv_pep440::{Version, VersionSpecifier};
 use version_ranges::Ranges;
 
@@ -131,7 +131,7 @@ fn collect_dnf(
 
                 let expr = MarkerExpression::String {
                     key: marker.key().into(),
-                    value: SharedStr::from(marker.value()),
+                    value: ArcStr::from(marker.value()),
                     operator,
                 };
 
@@ -150,7 +150,7 @@ fn collect_dnf(
 
                 let expr = MarkerExpression::String {
                     key: marker.key().into(),
-                    value: SharedStr::from(marker.value()),
+                    value: ArcStr::from(marker.value()),
                     operator,
                 };
 
