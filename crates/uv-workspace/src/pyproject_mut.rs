@@ -1302,6 +1302,7 @@ fn reformat_array_multiline(deps: &mut Array) {
         let mut comments = find_comments(Some(deps.trailing())).peekable();
         let mut rv = String::new();
         if comments.peek().is_some() {
+            indentation_prefix = indentation_prefix.or(Some("    ".to_string()));
             for comment in comments {
                 match comment.comment_type {
                     CommentType::OwnLine => {
