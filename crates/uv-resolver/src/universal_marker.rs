@@ -488,6 +488,7 @@ fn encode_package_group(package: &PackageName, group: &GroupName) -> ExtraName {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
 
     use uv_pypi_types::ConflictSet;
 
@@ -516,7 +517,7 @@ mod tests {
 
     /// Shortcut for creating a package name.
     fn create_package(name: &str) -> PackageName {
-        PackageName::new(name.to_string()).unwrap()
+        PackageName::from_str(name).unwrap()
     }
 
     /// Shortcut for creating an extra name.

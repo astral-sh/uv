@@ -11,6 +11,7 @@ doctest = false
 workspace = true
 
 [dependencies]
+arcstr = { workspace = true }
 rkyv = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
