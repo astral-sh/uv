@@ -1,4 +1,4 @@
-use compact_str::CompactString;
+use flexstr::SharedStr;
 use std::str::FromStr;
 use std::sync::Arc;
 use uv_normalize::ExtraName;
@@ -93,7 +93,7 @@ pub(crate) fn parse_marker_value<T: Pep508Url>(
         Some((start_pos, quotation_mark @ ('"' | '\''))) => {
             cursor.next();
             let (start, len) = cursor.take_while(|c| c != quotation_mark);
-            let value = CompactString::new(cursor.slice(start, len));
+            let value = SharedStr::from(cursor.slice(start, len));
             cursor.next_expect_char(quotation_mark, start_pos)?;
             Ok(MarkerValue::QuotedString(value))
         }

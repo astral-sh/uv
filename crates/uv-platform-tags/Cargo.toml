@@ -17,6 +17,7 @@ workspace = true
 
 [dependencies]
 compact_str = { version = "0.8.1" }
+flexstr = "0.9.2"
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
