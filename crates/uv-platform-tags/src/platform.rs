@@ -56,17 +56,17 @@ pub enum Os {
 impl fmt::Display for Os {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Self::Manylinux { .. } => write!(f, "Manylinux"),
-            Self::Musllinux { .. } => write!(f, "Musllinux"),
-            Self::Windows => write!(f, "Windows"),
-            Self::Macos { .. } => write!(f, "MacOS"),
-            Self::FreeBsd { .. } => write!(f, "FreeBSD"),
-            Self::NetBsd { .. } => write!(f, "NetBSD"),
-            Self::OpenBsd { .. } => write!(f, "OpenBSD"),
-            Self::Dragonfly { .. } => write!(f, "DragonFly"),
-            Self::Illumos { .. } => write!(f, "Illumos"),
-            Self::Haiku { .. } => write!(f, "Haiku"),
-            Self::Android { .. } => write!(f, "Android"),
+            Self::Manylinux { .. } => write!(f, "manylinux"),
+            Self::Musllinux { .. } => write!(f, "musllinux"),
+            Self::Windows => write!(f, "windows"),
+            Self::Macos { .. } => write!(f, "macos"),
+            Self::FreeBsd { .. } => write!(f, "freebsd"),
+            Self::NetBsd { .. } => write!(f, "netbsd"),
+            Self::OpenBsd { .. } => write!(f, "openbsd"),
+            Self::Dragonfly { .. } => write!(f, "dragonfly"),
+            Self::Illumos { .. } => write!(f, "illumos"),
+            Self::Haiku { .. } => write!(f, "haiku"),
+            Self::Android { .. } => write!(f, "android"),
         }
     }
 }

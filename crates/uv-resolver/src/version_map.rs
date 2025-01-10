@@ -521,14 +521,22 @@ impl VersionMapLazy {
         }
 
         // Determine a compatibility for the wheel based on tags.
-        let priority = match &self.tags {
-            Some(tags) => match filename.compatibility(tags) {
+        let priority = if let Some(tags) = &self.tags {
+            match filename.compatibility(tags) {
                 TagCompatibility::Incompatible(tag) => {
                     return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag))
                 }
                 TagCompatibility::Compatible(priority) => Some(priority),
-            },
-            None => None,
+            }
+        } else {
+            // Check if the wheel is compatible with the `requires-python` (i.e., the Python
+            // ABI tag is not less than the `requires-python` minimum version).
+            if !self.requires_python.matches_wheel_tag(filename) {
+                return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
+                    IncompatibleTag::AbiPythonVersion,
+                ));
+            }
+            None
         };
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
@@ -545,14 +553,6 @@ impl VersionMapLazy {
                 HashComparison::Mismatched
             }
         };
-
-        // Check if the wheel is compatible with the `requires-python` (i.e., the Python ABI tag
-        // is not less than the `requires-python` minimum version).
-        if !self.requires_python.matches_wheel_tag(filename) {
-            return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
-                IncompatibleTag::AbiPythonVersion,
-            ));
-        }
 
         // Break ties with the build tag.
         let build_tag = filename.build_tag.clone();

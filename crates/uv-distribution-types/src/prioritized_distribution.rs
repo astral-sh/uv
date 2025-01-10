@@ -222,7 +222,7 @@ impl Display for IncompatibleDist {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum PythonRequirementKind {
     /// The installed version of Python.
     Installed,
@@ -266,7 +266,7 @@ pub enum IncompatibleSource {
     NoBuild,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum HashComparison {
     /// The hash is present, but does not match the expected value.
     Mismatched,
