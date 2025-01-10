@@ -1,8 +1,10 @@
 use std::borrow::Cow;
+use std::cmp::PartialEq;
 use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
+use crate::small_string::SmallString;
 use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNameError};
 
 /// The normalized name of a package.
@@ -13,7 +15,6 @@ use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNam
 /// See: <https://packaging.python.org/en/latest/specifications/name-normalization/>
 #[derive(
     Debug,
-    Default,
     Clone,
     PartialEq,
     Eq,
@@ -27,7 +28,7 @@ use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNam
 )]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[rkyv(derive(Debug))]
-pub struct PackageName(String);
+pub struct PackageName(SmallString);
 
 impl PackageName {
     /// Create a validated, normalized package name.
@@ -56,7 +57,7 @@ impl PackageName {
 
             Cow::Owned(owned_string)
         } else {
-            Cow::Borrowed(self.0.as_str())
+            Cow::Borrowed(self.0.as_ref())
         }
     }
 
