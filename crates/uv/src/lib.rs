@@ -1820,15 +1820,21 @@ where
     };
 
     // Running out of stack has been an issue for us. We box types and futures in various places
-    // to mitigate this. `Box::pin(run())` keeps the large (non-send) main future off-stack.
-    //
-    // This is especially important on Windows, as the default main thread stack sizes is 1MB,
-    // which is lower than the linux and mac default of 8MB:
-    // https://learn.microsoft.com/en-us/cpp/build/reference/stack-stack-allocations?view=msvc-170
+    // to mitigate this, with this being an especially important case.
     //
     // Non-main threads should all have 2MB, as Rust forces platform consistency there,
     // but that can be overridden with the RUST_MIN_STACK environment variable if you need more.
-    let tokio_main = move || {
+    //
+    // Main thread stack-size is the real issue. There's BIG variety here across platforms
+    // and it's harder to control (which is why Rust doesn't by default). Notably
+    // on macOS and Linux you will typically get 8MB main thread, while on Windows you will
+    // typically get 1MB, which is *tiny*:
+    // https://learn.microsoft.com/en-us/cpp/build/reference/stack-stack-allocations?view=msvc-170
+    //
+    // To normalize this we just spawn a new thread called main2 with a size we can set
+    // ourselves. 2MB is typically too small (especially for our debug builds), while 4MB
+    // seems fine.
+    let main2 = move || {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -1845,8 +1851,9 @@ where
     };
     let result = std::thread::Builder::new()
         .name("main2".to_owned())
+        // TODO(gankra): should this also respect RUST_MIN_STACK if set?
         .stack_size(4 * 1024 * 1024)
-        .spawn(tokio_main)
+        .spawn(main2)
         .expect("Tokio executor failed, was there a panic?")
         .join()
         .expect("Tokio executor failed, was there a panic?");
