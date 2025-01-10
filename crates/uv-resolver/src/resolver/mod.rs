@@ -1,12 +1,5 @@
 //! Given a set of requirements, find a set of compatible packages.
 
-use compact_str::CompactString;
-use dashmap::DashMap;
-use either::Either;
-use futures::{FutureExt, StreamExt};
-use itertools::Itertools;
-use pubgrub::{Id, IncompId, Incompatibility, Range, Ranges, State};
-use rustc_hash::{FxHashMap, FxHashSet};
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -15,6 +8,13 @@ use std::ops::Bound;
 use std::sync::Arc;
 use std::time::Instant;
 use std::{iter, slice, thread};
+
+use dashmap::DashMap;
+use either::Either;
+use futures::{FutureExt, StreamExt};
+use itertools::Itertools;
+use pubgrub::{Id, IncompId, Incompatibility, Range, Ranges, State};
+use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
@@ -1424,15 +1424,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // macOS. But if _neither_ version supports Intel macOS, we'd rather use `sys_platform == 'darwin'`
         // instead of `sys_platform == 'darwin' and platform_machine == 'arm64'`, since it's much
         // simpler, and _neither_ version will succeed with Intel macOS anyway.
-        for value in [
-            CompactString::const_new("darwin"),
-            CompactString::const_new("linux"),
-            CompactString::const_new("win32"),
-        ] {
+        for sys_platform in ["darwin", "linux", "win32"] {
             let sys_platform = MarkerTree::expression(MarkerExpression::String {
                 key: MarkerValueString::SysPlatform,
                 operator: MarkerOperator::Equal,
-                value,
+                value: Arc::from(sys_platform),
             });
             if dist.implied_markers().is_disjoint(sys_platform)
                 && !remainder.is_disjoint(sys_platform)

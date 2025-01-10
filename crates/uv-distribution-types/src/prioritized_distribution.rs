@@ -1,4 +1,3 @@
-use compact_str::CompactString;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use tracing::debug;
@@ -663,12 +662,12 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
                 let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: CompactString::const_new("win32"),
+                    value: Arc::from("win32"),
                 });
                 tag_marker.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformMachine,
                     operator: MarkerOperator::Equal,
-                    value: CompactString::const_new("x86"),
+                    value: Arc::from("x86"),
                 }));
                 marker.or(tag_marker);
             }
@@ -676,12 +675,12 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
                 let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: CompactString::const_new("win32"),
+                    value: Arc::from("win32"),
                 });
                 tag_marker.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformMachine,
                     operator: MarkerOperator::Equal,
-                    value: CompactString::const_new("x86_64"),
+                    value: Arc::from("x86_64"),
                 }));
                 marker.or(tag_marker);
             }
@@ -689,12 +688,12 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
                 let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: CompactString::const_new("win32"),
+                    value: Arc::from("win32"),
                 });
                 tag_marker.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformMachine,
                     operator: MarkerOperator::Equal,
-                    value: CompactString::const_new("arm64"),
+                    value: Arc::from("arm64"),
                 }));
                 marker.or(tag_marker);
             }
@@ -704,7 +703,7 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
                 let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: CompactString::const_new("darwin"),
+                    value: Arc::from("darwin"),
                 });
 
                 // Parse the macOS version from the tag.
@@ -788,7 +787,7 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
                     arch_marker.or(MarkerTree::expression(MarkerExpression::String {
                         key: MarkerValueString::PlatformMachine,
                         operator: MarkerOperator::Equal,
-                        value: CompactString::from(*arch),
+                        value: Arc::from(*arch),
                     }));
                 }
                 tag_marker.and(arch_marker);
@@ -801,7 +800,7 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
                 let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: CompactString::const_new("linux"),
+                    value: Arc::from("linux"),
                 });
 
                 // Parse the architecture from the tag.
@@ -867,7 +866,7 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
                 tag_marker.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformMachine,
                     operator: MarkerOperator::Equal,
-                    value: CompactString::from(arch),
+                    value: Arc::from(arch),
                 }));
 
                 marker.or(tag_marker);

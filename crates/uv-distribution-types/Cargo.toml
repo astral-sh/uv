@@ -44,4 +44,3 @@ tracing = { workspace = true }
 url = { workspace = true }
 urlencoding = { workspace = true }
 version-ranges = { workspace = true }
-compact_str = { version = "0.8.1" }

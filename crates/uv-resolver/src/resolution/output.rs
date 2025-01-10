@@ -728,7 +728,7 @@ impl ResolverOutput {
                     MarkerExpression::String {
                         key: value_string.into(),
                         operator: MarkerOperator::Equal,
-                        value: from_env.into(),
+                        value: Arc::from(from_env),
                     }
                 }
             };
