@@ -1828,13 +1828,26 @@ where
     //
     // Non-main threads should all have 2MB, as Rust forces platform consistency there,
     // but that can be overridden with the RUST_MIN_STACK environment variable if you need more.
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("Failed building the Runtime");
-    // Box the large main future to avoid stack overflows.
-    let result = runtime.block_on(Box::pin(run(cli)));
-    runtime.shutdown_background();
+    let tokio_main = move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed building the Runtime");
+        // Box the large main future to avoid stack overflows.
+        let result = runtime.block_on(Box::pin(run(cli)));
+        // Avoid waiting for pending tasks to complete.
+        //
+        // The resolver may have kicked off HTTP requests during resolution that
+        // turned out to be unnecessary. Waiting for those to complete can cause
+        // the CLI to hang before exiting.
+        runtime.shutdown_background();
+        result
+    };
+    let result = std::thread::Builder::new()
+        .spawn(tokio_main)
+        .expect("Tokio executor failed, was there a panic?")
+        .join()
+        .expect("Tokio executor failed, was there a panic?");
 
     match result {
         Ok(code) => code.into(),
