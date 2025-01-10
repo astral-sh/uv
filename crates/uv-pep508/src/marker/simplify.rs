@@ -1,11 +1,13 @@
+use std::fmt;
+use std::ops::Bound;
+
+use arcstr::ArcStr;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use rustc_hash::FxBuildHasher;
-use std::fmt;
-use std::ops::Bound;
-use arcstr::ArcStr;
-use uv_pep440::{Version, VersionSpecifier};
 use version_ranges::Ranges;
+
+use uv_pep440::{Version, VersionSpecifier};
 
 use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeKind};
 

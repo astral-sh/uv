@@ -1,11 +1,11 @@
-
-use itertools::Itertools;
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
 use std::fmt::{self, Display, Formatter};
 use std::ops::{Bound, Deref};
 use std::str::FromStr;
+
 use arcstr::ArcStr;
+use itertools::Itertools;
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use version_ranges::Ranges;
 
 use uv_normalize::ExtraName;
@@ -292,9 +292,7 @@ impl MarkerOperator {
     }
 
     /// Returns a value specifier representing the given lower bound.
-    pub fn from_lower_bound(
-        bound: &Bound<ArcStr>,
-    ) -> Option<(MarkerOperator, ArcStr)> {
+    pub fn from_lower_bound(bound: &Bound<ArcStr>) -> Option<(MarkerOperator, ArcStr)> {
         match bound {
             Bound::Included(value) => Some((MarkerOperator::GreaterEqual, value.clone())),
             Bound::Excluded(value) => Some((MarkerOperator::GreaterThan, value.clone())),
@@ -303,9 +301,7 @@ impl MarkerOperator {
     }
 
     /// Returns a value specifier representing the given upper bound.
-    pub fn from_upper_bound(
-        bound: &Bound<ArcStr>,
-    ) -> Option<(MarkerOperator, ArcStr)> {
+    pub fn from_upper_bound(bound: &Bound<ArcStr>) -> Option<(MarkerOperator, ArcStr)> {
         match bound {
             Bound::Included(value) => Some((MarkerOperator::LessEqual, value.clone())),
             Bound::Excluded(value) => Some((MarkerOperator::LessThan, value.clone())),
@@ -1423,7 +1419,7 @@ impl Ord for StringMarkerTree<'_> {
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct InMarkerTree<'a> {
     key: CanonicalMarkerValueString,
-    value: &'a str,
+    value: &'a ArcStr,
     high: NodeId,
     low: NodeId,
 }
@@ -1435,7 +1431,7 @@ impl InMarkerTree<'_> {
     }
 
     /// The value (RHS) for this expression.
-    pub fn value(&self) -> &str {
+    pub fn value(&self) -> &ArcStr {
         self.value
     }
 
@@ -1655,11 +1651,11 @@ impl schemars::JsonSchema for MarkerTree {
 
 #[cfg(test)]
 mod test {
-    use insta::assert_snapshot;
     use std::ops::Bound;
     use std::str::FromStr;
-    use std::sync::Arc;
-    use arcstr::ArcStr;
+
+    use insta::assert_snapshot;
+
     use uv_normalize::ExtraName;
     use uv_pep440::Version;
 

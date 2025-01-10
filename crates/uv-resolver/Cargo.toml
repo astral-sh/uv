@@ -38,6 +38,7 @@ uv-types = { workspace = true }
 uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
+arcstr = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
 dashmap = { workspace = true }
 either = { workspace = true }
@@ -62,8 +63,6 @@ toml = { workspace = true }
 toml_edit = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
-compact_str = { version = "0.8.1" }
-arcstr = "1.2.0"
 
 [dev-dependencies]
 insta = { version = "1.40.0" }

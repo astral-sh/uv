@@ -1,11 +1,5 @@
 //! Given a set of requirements, find a set of compatible packages.
 
-use dashmap::DashMap;
-use either::Either;
-use futures::{FutureExt, StreamExt};
-use itertools::Itertools;
-use pubgrub::{Id, IncompId, Incompatibility, Range, Ranges, State};
-use rustc_hash::{FxHashMap, FxHashSet};
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -14,7 +8,13 @@ use std::ops::Bound;
 use std::sync::Arc;
 use std::time::Instant;
 use std::{iter, slice, thread};
-use arcstr::ArcStr;
+
+use dashmap::DashMap;
+use either::Either;
+use futures::{FutureExt, StreamExt};
+use itertools::Itertools;
+use pubgrub::{Id, IncompId, Incompatibility, Range, Ranges, State};
+use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;

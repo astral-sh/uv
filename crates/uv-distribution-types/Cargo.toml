@@ -29,6 +29,7 @@ uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 
 anyhow = { workspace = true }
+arcstr = { workspace = true }
 bitflags = { workspace = true }
 fs-err = { workspace = true }
 itertools = { workspace = true }
@@ -44,5 +45,3 @@ tracing = { workspace = true }
 url = { workspace = true }
 urlencoding = { workspace = true }
 version-ranges = { workspace = true }
-compact_str = { version = "0.8.1" }
-arcstr = "1.2.0"

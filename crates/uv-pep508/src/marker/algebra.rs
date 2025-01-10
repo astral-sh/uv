@@ -48,13 +48,13 @@
 use std::cmp::Ordering;
 use std::fmt;
 use std::ops::Bound;
+use std::sync::Mutex;
 use std::sync::MutexGuard;
-use std::sync::{Arc, Mutex};
 
+use arcstr::ArcStr;
 use itertools::{Either, Itertools};
 use rustc_hash::FxHashMap;
 use std::sync::LazyLock;
-use arcstr::ArcStr;
 use uv_pep440::{release_specifier_to_range, Operator, Version, VersionSpecifier};
 use version_ranges::Ranges;
 
