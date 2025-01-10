@@ -5043,6 +5043,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bitflags 2.6.0",
+ "compact_str",
  "fs-err 3.0.0",
  "itertools 0.14.0",
  "jiff",
@@ -5540,6 +5541,7 @@ name = "uv-resolver"
 version = "0.0.1"
 dependencies = [
  "clap",
+ "compact_str",
  "dashmap",
  "either",
  "futures",

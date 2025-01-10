@@ -62,6 +62,7 @@ toml = { workspace = true }
 toml_edit = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+compact_str = { version = "0.8.1" }
 
 [dev-dependencies]
 insta = { version = "1.40.0" }
