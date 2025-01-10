@@ -1,3 +1,10 @@
+---
+title: Using uv with pre-commit
+description:
+  A guide to using uv with pre-commit to automatically update lock files, export requirements, and
+  compile requirements files.
+---
+
 # Using uv in pre-commit
 
 An official pre-commit hook is provided at
@@ -29,7 +36,7 @@ To compile requirements via pre-commit, add the following to the `.pre-commit-co
 ```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
   # uv version.
-  rev: 0.5.14
+  rev: 0.5.16
   hooks:
     # Compile requirements
     - id: pip-compile
@@ -41,7 +48,7 @@ To compile alternative files, modify `args` and `files`:
 ```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
   # uv version.
-  rev: 0.5.14
+  rev: 0.5.16
   hooks:
     # Compile requirements
     - id: pip-compile
@@ -54,7 +61,7 @@ To run the hook over multiple files at the same time:
 ```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
   # uv version.
-  rev: 0.5.14
+  rev: 0.5.16
   hooks:
     # Compile requirements
     - id: pip-compile

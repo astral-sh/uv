@@ -43,7 +43,8 @@ impl From<VersionSpecifier> for Ranges<Version> {
             })
             .complement(),
             Operator::TildeEqual => {
-                let [rest @ .., last, _] = version.release() else {
+                let release = version.release();
+                let [rest @ .., last, _] = &*release else {
                     unreachable!("~= must have at least two segments");
                 };
                 let upper = Version::new(rest.iter().chain([&(last + 1)]))
@@ -160,7 +161,8 @@ pub fn release_specifier_to_range(specifier: VersionSpecifier) -> Ranges<Version
             Ranges::singleton(version).complement()
         }
         Operator::TildeEqual => {
-            let [rest @ .., last, _] = version.release() else {
+            let release = version.release();
+            let [rest @ .., last, _] = &*release else {
                 unreachable!("~= must have at least two segments");
             };
             let upper = Version::new(rest.iter().chain([&(last + 1)]));

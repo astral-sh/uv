@@ -1,6 +1,8 @@
-use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, num::NonZeroUsize, path::PathBuf};
+
+use serde::{Deserialize, Serialize};
 use url::Url;
+
 use uv_cache_info::CacheKey;
 use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, RequiredVersion,

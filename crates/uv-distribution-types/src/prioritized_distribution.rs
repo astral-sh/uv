@@ -45,7 +45,7 @@ impl Default for PrioritizedDistInner {
 }
 
 /// A distribution that can be used for both resolution and installation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum CompatibleDist<'a> {
     /// The distribution is already installed and can be used.
     InstalledDist(&'a InstalledDist),
@@ -222,7 +222,7 @@ impl Display for IncompatibleDist {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum PythonRequirementKind {
     /// The installed version of Python.
     Installed,
@@ -266,7 +266,7 @@ pub enum IncompatibleSource {
     NoBuild,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum HashComparison {
     /// The hash is present, but does not match the expected value.
     Mismatched,
@@ -314,6 +314,12 @@ impl PrioritizedDist {
         hashes: impl IntoIterator<Item = HashDigest>,
         compatibility: WheelCompatibility,
     ) {
+        // Track the implied markers.
+        if compatibility.is_compatible() {
+            if !self.0.markers.is_true() {
+                self.0.markers.or(implied_markers(&dist.filename));
+            }
+        }
         // Track the highest-priority wheel.
         if let Some((.., existing_compatibility)) = self.best_wheel() {
             if compatibility.is_more_compatible(existing_compatibility) {
@@ -323,9 +329,6 @@ impl PrioritizedDist {
             self.0.best_wheel_index = Some(self.0.wheels.len());
         }
         self.0.hashes.extend(hashes);
-        if !self.0.markers.is_true() {
-            self.0.markers.or(implied_markers(&dist.filename));
-        }
         self.0.wheels.push((dist, compatibility));
     }
 
@@ -336,6 +339,10 @@ impl PrioritizedDist {
         hashes: impl IntoIterator<Item = HashDigest>,
         compatibility: SourceDistCompatibility,
     ) {
+        // Track the implied markers.
+        if compatibility.is_compatible() {
+            self.0.markers = MarkerTree::TRUE;
+        }
         // Track the highest-priority source.
         if let Some((.., existing_compatibility)) = &self.0.source {
             if compatibility.is_more_compatible(existing_compatibility) {
@@ -343,9 +350,6 @@ impl PrioritizedDist {
             }
         } else {
             self.0.source = Some((dist, compatibility));
-        }
-        if !self.0.markers.is_true() {
-            self.0.markers.or(MarkerTree::TRUE);
         }
         self.0.hashes.extend(hashes);
     }
@@ -526,6 +530,7 @@ impl<'a> CompatibleDist<'a> {
 }
 
 impl WheelCompatibility {
+    /// Return `true` if the distribution is compatible.
     pub fn is_compatible(&self) -> bool {
         matches!(self, Self::Compatible(_, _, _))
     }
@@ -552,6 +557,11 @@ impl WheelCompatibility {
 }
 
 impl SourceDistCompatibility {
+    /// Return `true` if the distribution is compatible.
+    pub fn is_compatible(&self) -> bool {
+        matches!(self, Self::Compatible(_))
+    }
+
     /// Return the higher priority compatibility.
     ///
     /// Compatible source distributions are always higher priority than incompatible source distributions.

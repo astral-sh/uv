@@ -5,6 +5,7 @@ use std::process;
 use std::str::FromStr;
 
 use url::Url;
+
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
@@ -1022,6 +1023,7 @@ pub(crate) struct LockSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) dry_run: bool,
+    pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
@@ -1036,6 +1038,7 @@ impl LockSettings {
             check,
             check_exists,
             dry_run,
+            script,
             resolver,
             build,
             refresh,
@@ -1051,6 +1054,7 @@ impl LockSettings {
             locked: check,
             frozen: check_exists,
             dry_run,
+            script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
@@ -1251,6 +1255,11 @@ impl RemoveSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
+        let packages = packages
+            .into_iter()
+            .map(|requirement| requirement.name)
+            .collect();
+
         Self {
             locked,
             frozen,
@@ -1284,6 +1293,8 @@ pub(crate) struct TreeSettings {
     pub(crate) no_dedupe: bool,
     pub(crate) invert: bool,
     pub(crate) outdated: bool,
+    #[allow(dead_code)]
+    pub(crate) script: Option<PathBuf>,
     pub(crate) python_version: Option<PythonVersion>,
     pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) python: Option<String>,
@@ -1308,6 +1319,7 @@ impl TreeSettings {
             frozen,
             build,
             resolver,
+            script,
             python_version,
             python_platform,
             python,
@@ -1330,6 +1342,7 @@ impl TreeSettings {
             no_dedupe: tree.no_dedupe,
             invert: tree.invert,
             outdated: tree.outdated,
+            script,
             python_version,
             python_platform,
             python: python.and_then(Maybe::into_option),
@@ -1356,6 +1369,7 @@ pub(crate) struct ExportSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) include_header: bool,
+    pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
@@ -1396,6 +1410,7 @@ impl ExportSettings {
             resolver,
             build,
             refresh,
+            script,
             python,
         } = args;
         let install_mirrors = filesystem
@@ -1427,6 +1442,7 @@ impl ExportSettings {
             locked,
             frozen,
             include_header: flag(header, no_header).unwrap_or(true),
+            script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),

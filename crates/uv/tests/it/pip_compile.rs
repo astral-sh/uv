@@ -7629,9 +7629,9 @@ fn universal_transitive_disjoint_locals() -> Result<()> {
         #   -r requirements.in
         #   torchvision
         #   triton
-    torchvision==0.15.1 ; platform_machine != 'x86_64' or sys_platform == 'darwin' or sys_platform == 'win32'
+    torchvision==0.15.1 ; platform_machine != 'x86_64' or sys_platform == 'darwin'
         # via -r requirements.in
-    torchvision==0.15.1+rocm5.4.2 ; platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'win32'
+    torchvision==0.15.1+rocm5.4.2 ; platform_machine == 'x86_64' and sys_platform != 'darwin'
         # via -r requirements.in
     triton==2.0.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'
         # via torch
@@ -8010,7 +8010,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         # via sympy
     networkx==3.2.1
         # via torch
-    pytorch-triton-rocm==2.3.0 ; (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    pytorch-triton-rocm==2.3.0 ; (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux')
         # via torch
     sympy==1.12
         # via torch
@@ -8021,9 +8021,9 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         #   -r requirements.in
         #   example
         #   triton
-    torch==2.3.0 ; (implementation_name != 'cpython' and platform_machine == 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform == 'darwin') or (implementation_name != 'cpython' and sys_platform == 'win32')
+    torch==2.3.0 ; (implementation_name != 'cpython' and platform_machine == 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform == 'darwin')
         # via -r requirements.in
-    torch==2.3.0+rocm6.0 ; (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    torch==2.3.0+rocm6.0 ; (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux')
         # via -r requirements.in
     triton==2.0.0 ; implementation_name == 'cpython' and platform_machine == 'x86_64' and sys_platform == 'linux'
         # via torch
@@ -8174,7 +8174,7 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
         # via sympy
     networkx==3.2.1
         # via torch
-    pytorch-triton-rocm==2.3.0 ; (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    pytorch-triton-rocm==2.3.0 ; (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux')
         # via torch
     sympy==1.12
         # via torch
@@ -8189,9 +8189,9 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
         #   -r requirements.in
         #   example
         #   triton
-    torch==2.3.0 ; (os_name != 'Linux' and platform_machine == 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform == 'darwin') or (os_name != 'Linux' and sys_platform == 'win32')
+    torch==2.3.0 ; (os_name != 'Linux' and platform_machine == 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform == 'darwin')
         # via -r requirements.in
-    torch==2.3.0+rocm6.0 ; (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    torch==2.3.0+rocm6.0 ; (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux')
         # via -r requirements.in
     triton==2.0.0 ; implementation_name == 'cpython' and os_name == 'Linux' and platform_machine == 'x86_64' and sys_platform == 'linux'
         # via torch
@@ -13622,9 +13622,9 @@ fn unsupported_requires_python_dynamic_metadata() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies for split (python_full_version >= '3.10'):
-      ╰─▶ Because source-distribution{python_full_version >= '3.10'}==0.0.3 requires Python >=3.10 and you require source-distribution{python_full_version >= '3.10'}==0.0.3, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because source-distribution==0.0.3 requires Python >=3.10 and you require source-distribution{python_full_version >= '3.10'}==0.0.3, we can conclude that your requirements are unsatisfiable.
 
-          hint: The source distribution for `source-distribution{python_full_version >= '3.10'}` (v0.0.3) does not include static metadata. Generating metadata for this package requires Python >=3.10, but Python 3.8.[X] is installed.
+          hint: The source distribution for `source-distribution` (v0.0.3) does not include static metadata. Generating metadata for this package requires Python >=3.10, but Python 3.8.[X] is installed.
     "###);
 
     Ok(())
@@ -13940,25 +13940,8 @@ fn invalid_platform() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of open3d are available:
-              open3d==0.8.0.0
-              open3d==0.9.0.0
-              open3d==0.10.0.0
-              open3d==0.10.0.1
-              open3d==0.11.0
-              open3d==0.11.1
-              open3d==0.11.2
-              open3d==0.12.0
-              open3d==0.13.0
-              open3d==0.14.1
-              open3d==0.15.1
-              open3d==0.15.2
-              open3d==0.16.0
-              open3d==0.16.1
-              open3d==0.17.0
-              open3d==0.18.0
-          and open3d<=0.15.2 has no wheels with a matching Python ABI tag, we can conclude that open3d<=0.15.2 cannot be used.
-          And because open3d>=0.16.0 has no wheels with a matching platform tag and you require open3d, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only open3d<=0.18.0 is available and open3d<=0.15.2 has no wheels with a matching Python ABI tag, we can conclude that open3d<=0.15.2 cannot be used.
+          And because open3d>=0.16.0,<=0.18.0 has no wheels with a matching platform tag and you require open3d, we can conclude that your requirements are unsatisfiable.
     "###);
 
     Ok(())

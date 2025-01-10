@@ -1,3 +1,10 @@
+---
+title: Using uv with PyTorch
+description:
+  A guide to using uv with PyTorch, including installing PyTorch, configuring per-platform and
+  per-accelerator builds, and more.
+---
+
 # Using uv with PyTorch
 
 The [PyTorch](https://pytorch.org/) ecosystem is a popular choice for deep learning research and

@@ -37,11 +37,10 @@ use crate::commands::pip::loggers::{
 };
 use crate::commands::project::{resolve_names, EnvironmentSpecification, ProjectError};
 use crate::commands::reporters::PythonDownloadReporter;
+use crate::commands::tool::common::{matching_packages, refine_interpreter};
 use crate::commands::tool::Target;
 use crate::commands::ExitStatus;
-use crate::commands::{
-    diagnostics, project::environment::CachedEnvironment, tool::common::matching_packages,
-};
+use crate::commands::{diagnostics, project::environment::CachedEnvironment};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -610,20 +609,20 @@ async fn get_or_create_environment(
     }
 
     // Create a `RequirementsSpecification` from the resolved requirements, to avoid re-resolving.
-    let spec = RequirementsSpecification {
+    let spec = EnvironmentSpecification::from(RequirementsSpecification {
         requirements: requirements
             .into_iter()
             .map(UnresolvedRequirementSpecification::from)
             .collect(),
         ..spec
-    };
+    });
 
     // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
     // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
 
-    let environment = CachedEnvironment::get_or_create(
-        EnvironmentSpecification::from(spec),
-        interpreter,
+    let result = CachedEnvironment::from_spec(
+        spec.clone(),
+        &interpreter,
         settings,
         &state,
         if show_resolution {
@@ -645,7 +644,70 @@ async fn get_or_create_environment(
         printer,
         preview,
     )
-    .await?;
+    .await;
+
+    let environment = match result {
+        Ok(environment) => environment,
+        Err(err) => match err {
+            ProjectError::Operation(err) => {
+                // If the resolution failed due to the discovered interpreter not satisfying the
+                // `requires-python` constraint, we can try to refine the interpreter.
+                //
+                // For example, if we discovered a Python 3.8 interpreter on the user's machine,
+                // but the tool requires Python 3.10 or later, we can try to download a
+                // Python 3.10 interpreter and re-resolve.
+                let Some(interpreter) = refine_interpreter(
+                    &interpreter,
+                    python_request.as_ref(),
+                    &err,
+                    &client_builder,
+                    &reporter,
+                    &install_mirrors,
+                    python_preference,
+                    python_downloads,
+                    cache,
+                )
+                .await
+                .ok()
+                .flatten() else {
+                    return Err(err.into());
+                };
+
+                debug!(
+                    "Re-resolving with Python {} (`{}`)",
+                    interpreter.python_version(),
+                    interpreter.sys_executable().display()
+                );
+
+                CachedEnvironment::from_spec(
+                    spec,
+                    &interpreter,
+                    settings,
+                    &state,
+                    if show_resolution {
+                        Box::new(DefaultResolveLogger)
+                    } else {
+                        Box::new(SummaryResolveLogger)
+                    },
+                    if show_resolution {
+                        Box::new(DefaultInstallLogger)
+                    } else {
+                        Box::new(SummaryInstallLogger)
+                    },
+                    installer_metadata,
+                    connectivity,
+                    concurrency,
+                    native_tls,
+                    allow_insecure_host,
+                    cache,
+                    printer,
+                    preview,
+                )
+                .await?
+            }
+            err => return Err(err),
+        },
+    };
 
     Ok((from, environment.into()))
 }

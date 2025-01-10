@@ -1055,12 +1055,14 @@ fn generate_package_scripts(
         indoc::formatdoc! {r#"
         from {module_name}._core import hello_from_bin
 
+
         def hello() -> str:
             return hello_from_bin()
         "#}
     } else {
         indoc::formatdoc! {r#"
         from {module_name}._core import hello_from_bin
+
 
         def main() -> None:
             print(hello_from_bin())
@@ -1069,8 +1071,6 @@ fn generate_package_scripts(
 
     // .pyi file for binary script
     let pyi_contents = indoc::indoc! {r"
-        from __future__ import annotations
-
         def hello_from_bin() -> str: ...
     "};
 

@@ -1,5 +1,67 @@
 # Changelog
 
+## 0.5.16
+
+### Enhancements
+
+- Accept full requirements in `uv remove` ([#10338](https://github.com/astral-sh/uv/pull/10338))
+
+### Performance
+
+- Avoid over-counting versions in batch prefetcher ([#10350](https://github.com/astral-sh/uv/pull/10350))
+- Deactivate tracing for version-choosing ([#10351](https://github.com/astral-sh/uv/pull/10351))
+- Force a niche into `VersionSmall` ([#10385](https://github.com/astral-sh/uv/pull/10385))
+- Optimize `requirements_for_extra` ([#10348](https://github.com/astral-sh/uv/pull/10348))
+- Re-enable `zlib-ng` on x86 platforms ([#10365](https://github.com/astral-sh/uv/pull/10365))
+- Re-enable zlib-ng on all platforms (except s390x, PowerPC, and FreeBSD) ([#10370](https://github.com/astral-sh/uv/pull/10370))
+- Remove `[u64; 4]` from small version to move `Arc` to full version ([#10345](https://github.com/astral-sh/uv/pull/10345))
+- Shrink `Dist` from 352 to 288 bytes ([#10389](https://github.com/astral-sh/uv/pull/10389))
+- Speed up file pins by removing nested hash map ([#10346](https://github.com/astral-sh/uv/pull/10346))
+- Buffer file reads in `serde_json::from_reader` ([#10341](https://github.com/astral-sh/uv/pull/10341))
+
+### Bug fixes
+
+- Avoid enforcing project-level required version for `uv self` ([#10374](https://github.com/astral-sh/uv/pull/10374))
+- Fix Ruff linting warnings from generated template files for extension modules ([#10371](https://github.com/astral-sh/uv/pull/10371))
+
+### Documentation
+
+- Add AWS Lambda integration guide ([#10278](https://github.com/astral-sh/uv/pull/10278))
+
+## 0.5.15
+
+### Python
+
+The managed Python distributions have been updated, including:
+
+- Python 3.14.0a3 support on macOS and Linux
+- Performance improvements
+- Fixes to SQLite feature detection
+
+See the [`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250106) for more details.
+
+### Enhancements
+
+- Respect `FORCE_COLOR` environment variable ([#10315](https://github.com/astral-sh/uv/pull/10315))
+
+### Performance
+
+- Avoid generating unused hashes during `uv lock` ([#10307](https://github.com/astral-sh/uv/pull/10307))
+- Visit source distributions before wheels ([#10291](https://github.com/astral-sh/uv/pull/10291))
+
+### Bug fixes
+
+- Avoid downgrading packages when `--upgrade` is provided ([#10097](https://github.com/astral-sh/uv/pull/10097))
+- Extract supported architectures from wheel tags ([#10179](https://github.com/astral-sh/uv/pull/10179))
+- Redact new index credentials in `uv add` ([#10329](https://github.com/astral-sh/uv/pull/10329))
+
+### Documentation
+
+- Clarify `exclude-newer` only allows full timestamps in settings documentation ([#9135](https://github.com/astral-sh/uv/pull/9135))
+- Tweak script `--no-project` comment ([#10331](https://github.com/astral-sh/uv/pull/10331))
+- Update copyright year ([#10297](https://github.com/astral-sh/uv/pull/10297))
+- Add instructinos for installing with Scoop ([#10332](https://github.com/astral-sh/uv/pull/10332))
+
 ## 0.5.14
 
 ### Enhancements
