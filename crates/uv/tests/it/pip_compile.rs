@@ -7629,9 +7629,9 @@ fn universal_transitive_disjoint_locals() -> Result<()> {
         #   -r requirements.in
         #   torchvision
         #   triton
-    torchvision==0.15.1 ; platform_machine != 'x86_64' or sys_platform == 'darwin' or sys_platform == 'win32'
+    torchvision==0.15.1 ; platform_machine != 'x86_64' or sys_platform == 'darwin'
         # via -r requirements.in
-    torchvision==0.15.1+rocm5.4.2 ; platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'win32'
+    torchvision==0.15.1+rocm5.4.2 ; platform_machine == 'x86_64' and sys_platform != 'darwin'
         # via -r requirements.in
     triton==2.0.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'
         # via torch
@@ -8010,7 +8010,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         # via sympy
     networkx==3.2.1
         # via torch
-    pytorch-triton-rocm==2.3.0 ; (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    pytorch-triton-rocm==2.3.0 ; (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux')
         # via torch
     sympy==1.12
         # via torch
@@ -8021,9 +8021,9 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         #   -r requirements.in
         #   example
         #   triton
-    torch==2.3.0 ; (implementation_name != 'cpython' and platform_machine == 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform == 'darwin') or (implementation_name != 'cpython' and sys_platform == 'win32')
+    torch==2.3.0 ; (implementation_name != 'cpython' and platform_machine == 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform == 'darwin')
         # via -r requirements.in
-    torch==2.3.0+rocm6.0 ; (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    torch==2.3.0+rocm6.0 ; (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux')
         # via -r requirements.in
     triton==2.0.0 ; implementation_name == 'cpython' and platform_machine == 'x86_64' and sys_platform == 'linux'
         # via torch
@@ -8174,7 +8174,7 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
         # via sympy
     networkx==3.2.1
         # via torch
-    pytorch-triton-rocm==2.3.0 ; (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    pytorch-triton-rocm==2.3.0 ; (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux')
         # via torch
     sympy==1.12
         # via torch
@@ -8189,9 +8189,9 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
         #   -r requirements.in
         #   example
         #   triton
-    torch==2.3.0 ; (os_name != 'Linux' and platform_machine == 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform == 'darwin') or (os_name != 'Linux' and sys_platform == 'win32')
+    torch==2.3.0 ; (os_name != 'Linux' and platform_machine == 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform == 'darwin')
         # via -r requirements.in
-    torch==2.3.0+rocm6.0 ; (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    torch==2.3.0+rocm6.0 ; (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux')
         # via -r requirements.in
     triton==2.0.0 ; implementation_name == 'cpython' and os_name == 'Linux' and platform_machine == 'x86_64' and sys_platform == 'linux'
         # via torch

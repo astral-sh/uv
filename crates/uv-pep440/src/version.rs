@@ -1616,7 +1616,7 @@ impl LocalVersionSlice<'_> {
 /// > should be considered an integer for comparison purposes and if a segment contains any ASCII
 /// > letters then that segment is compared lexicographically with case insensitivity. When
 /// > comparing a numeric and lexicographic segment, the numeric section always compares as greater
-/// > than the lexicographic segment. Additionally a local version with a great number of segments
+/// > than the lexicographic segment. Additionally, a local version with a great number of segments
 /// > will always compare as greater than a local version with fewer segments, as long as the
 /// > shorter local version’s segments match the beginning of the longer local version’s segments
 /// > exactly.
