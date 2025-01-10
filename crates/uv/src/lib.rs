@@ -1844,6 +1844,8 @@ where
         result
     };
     let result = std::thread::Builder::new()
+        .name("main2".to_owned())
+        .stack_size(4 * 1024 * 1024)
         .spawn(tokio_main)
         .expect("Tokio executor failed, was there a panic?")
         .join()
