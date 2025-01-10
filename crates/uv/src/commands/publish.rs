@@ -21,12 +21,12 @@ use uv_warnings::warn_user_once;
 
 pub(crate) async fn publish(
     paths: Vec<String>,
-    publish_url: Url,
+    mut publish_url: Url,
     trusted_publishing: TrustedPublishing,
     keyring_provider: KeyringProviderType,
     allow_insecure_host: &[TrustedHost],
-    username: Option<String>,
-    password: Option<String>,
+    mut username: Option<String>,
+    mut password: Option<String>,
     check_url: Option<IndexUrl>,
     cache: &Cache,
     connectivity: Connectivity,
@@ -42,6 +42,27 @@ pub(crate) async fn publish(
         0 => bail!("No files found to publish"),
         1 => writeln!(printer.stderr(), "Publishing 1 file to {publish_url}")?,
         n => writeln!(printer.stderr(), "Publishing {n} files {publish_url}")?,
+    }
+
+    // Support reading username and password from the URL, for symmetry with the index API.
+    if let Some(url_password) = publish_url.password() {
+        if password.is_some() {
+            bail!("The password can't be set both in the publish URL and in the CLI");
+        }
+        password = Some(url_password.to_string());
+        publish_url
+            .set_password(None)
+            .expect("Failed to clear publish URL password");
+    }
+
+    if !publish_url.username().is_empty() {
+        if username.is_some() {
+            bail!("The username can't be set both in the publish URL and in the CLI");
+        }
+        username = Some(publish_url.username().to_string());
+        publish_url
+            .set_username("")
+            .expect("Failed to clear publish URL username");
     }
 
     // * For the uploads themselves, we roll our own retries due to
