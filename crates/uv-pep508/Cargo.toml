@@ -37,7 +37,6 @@ unicode-width = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 version-ranges = { workspace = true }
 compact_str = { version = "0.8.1" }
-flexstr = "0.9.2"
 
 [dev-dependencies]
 insta = { version = "1.40.0" }

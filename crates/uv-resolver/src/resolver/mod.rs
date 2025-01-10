@@ -1,6 +1,6 @@
 //! Given a set of requirements, find a set of compatible packages.
 
-use flexstr::SharedStr;
+use compact_str::CompactString;
 use dashmap::DashMap;
 use either::Either;
 use futures::{FutureExt, StreamExt};
@@ -1425,9 +1425,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // instead of `sys_platform == 'darwin' and platform_machine == 'arm64'`, since it's much
         // simpler, and _neither_ version will succeed with Intel macOS anyway.
         for value in [
-            SharedStr::from("darwin"),
-            SharedStr::from("linux"),
-            SharedStr::from("win32"),
+            CompactString::const_new("darwin"),
+            CompactString::const_new("linux"),
+            CompactString::const_new("win32"),
         ] {
             let sys_platform = MarkerTree::expression(MarkerExpression::String {
                 key: MarkerValueString::SysPlatform,

@@ -1,4 +1,4 @@
-use flexstr::SharedStr;
+use compact_str::CompactString;
 use itertools::Itertools;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
@@ -130,7 +130,7 @@ pub enum MarkerValue {
     /// `extra`. This one is special because it's a list and not env but user given
     Extra,
     /// Not a constant, but a user given quoted string with a value inside such as '3.8' or "windows"
-    QuotedString(SharedStr),
+    QuotedString(CompactString),
 }
 
 impl FromStr for MarkerValue {
@@ -273,8 +273,8 @@ impl MarkerOperator {
 
     /// Returns the marker operator and value whose union represents the given range.
     pub fn from_bounds(
-        bounds: (&Bound<SharedStr>, &Bound<SharedStr>),
-    ) -> impl Iterator<Item = (MarkerOperator, SharedStr)> {
+        bounds: (&Bound<CompactString>, &Bound<CompactString>),
+    ) -> impl Iterator<Item = (MarkerOperator, CompactString)> {
         let (b1, b2) = match bounds {
             (Bound::Included(v1), Bound::Included(v2)) if v1 == v2 => {
                 (Some((MarkerOperator::Equal, v1.clone())), None)
@@ -293,8 +293,8 @@ impl MarkerOperator {
 
     /// Returns a value specifier representing the given lower bound.
     pub fn from_lower_bound(
-        bound: &Bound<SharedStr>,
-    ) -> Option<(MarkerOperator, SharedStr)> {
+        bound: &Bound<CompactString>,
+    ) -> Option<(MarkerOperator, CompactString)> {
         match bound {
             Bound::Included(value) => Some((MarkerOperator::GreaterEqual, value.clone())),
             Bound::Excluded(value) => Some((MarkerOperator::GreaterThan, value.clone())),
@@ -304,8 +304,8 @@ impl MarkerOperator {
 
     /// Returns a value specifier representing the given upper bound.
     pub fn from_upper_bound(
-        bound: &Bound<SharedStr>,
-    ) -> Option<(MarkerOperator, SharedStr)> {
+        bound: &Bound<CompactString>,
+    ) -> Option<(MarkerOperator, CompactString)> {
         match bound {
             Bound::Included(value) => Some((MarkerOperator::LessEqual, value.clone())),
             Bound::Excluded(value) => Some((MarkerOperator::LessThan, value.clone())),
@@ -490,7 +490,7 @@ pub enum MarkerExpression {
     String {
         key: MarkerValueString,
         operator: MarkerOperator,
-        value: SharedStr,
+        value: CompactString,
     },
     /// `extra <extra op> '...'` or `'...' <extra op> extra`.
     Extra {
@@ -1388,7 +1388,7 @@ impl Ord for VersionMarkerTree<'_> {
 pub struct StringMarkerTree<'a> {
     id: NodeId,
     key: CanonicalMarkerValueString,
-    map: &'a [(Ranges<SharedStr>, NodeId)],
+    map: &'a [(Ranges<CompactString>, NodeId)],
 }
 
 impl StringMarkerTree<'_> {
@@ -1398,7 +1398,7 @@ impl StringMarkerTree<'_> {
     }
 
     /// The edges of this node, corresponding to possible output ranges of the given variable.
-    pub fn children(&self) -> impl ExactSizeIterator<Item = (&Ranges<SharedStr>, MarkerTree)> {
+    pub fn children(&self) -> impl ExactSizeIterator<Item = (&Ranges<CompactString>, MarkerTree)> {
         self.map
             .iter()
             .map(|(range, node)| (range, MarkerTree(node.negate(self.id))))
@@ -1655,7 +1655,7 @@ impl schemars::JsonSchema for MarkerTree {
 
 #[cfg(test)]
 mod test {
-    use flexstr::SharedStr;
+    use compact_str::CompactString;
     use insta::assert_snapshot;
     use std::ops::Bound;
     use std::str::FromStr;
@@ -2047,7 +2047,7 @@ mod test {
             MarkerExpression::String {
                 key: MarkerValueString::OsName,
                 operator: MarkerOperator::Equal,
-                value: SharedStr::from("nt"),
+                value: CompactString::from("nt"),
             }
         );
     }
