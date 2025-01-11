@@ -9024,3 +9024,64 @@ fn remove_requirement() -> Result<()> {
 
     Ok(())
 }
+
+/// Remove all dependencies with remaining comments
+#[test]
+fn remove_all_with_comments() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "duct",
+            "minilog",
+            # foo
+            # bar
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().arg("duct").arg("minilog"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # foo
+            # bar
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "###
+        );
+    });
+
+    Ok(())
+}
