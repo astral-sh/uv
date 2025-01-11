@@ -54,7 +54,8 @@ pub(crate) fn pip_freeze(
         .expect("iterator must have at least one element")?;
 
     site_packagess.try_for_each(|other_site_packages: Result<SitePackages>| -> Result<()> {
-        Ok(site_packages.extend(other_site_packages?))
+        site_packages.extend(other_site_packages?);
+        Ok(())
     })?;
 
     site_packages
@@ -83,7 +84,7 @@ pub(crate) fn pip_freeze(
             }
         })
         .dedup()
-        .try_for_each(|dist| writeln!(printer.stdout(), "{}", dist))?;
+        .try_for_each(|dist| writeln!(printer.stdout(), "{dist}"))?;
 
     // Validate that the environment is consistent.
     if strict {
