@@ -35,7 +35,7 @@ debug = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-windows = { version = "0.58.0", features = [
+windows = { version = "0.59.0", features = [
   "std",
   "Win32_Foundation",
   "Win32_Security",
