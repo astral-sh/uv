@@ -1904,6 +1904,15 @@ pub struct PipFreezeArgs {
     )]
     pub python: Option<Maybe<String>>,
 
+    // TODO: (can be used multiple times)
+    /// Restrict to the specified installation path for listing packages
+    #[arg(
+        long("path"),
+        value_parser = parse_file_path
+        // TODO: check overrides with, also maybe python should overrides with system
+    )]
+    pub paths: Option<Vec<PathBuf>>,
+
     /// List packages in the system Python environment.
     ///
     /// Disables discovery of virtual environments.
