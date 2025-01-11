@@ -11,7 +11,9 @@ use std::time::Duration;
 use tracing::{debug, info};
 use url::Url;
 use uv_cache::Cache;
-use uv_client::{AuthIntegration, BaseClientBuilder, Connectivity, RegistryClientBuilder};
+use uv_client::{
+    AuthIntegration, BaseClient, BaseClientBuilder, Connectivity, RegistryClientBuilder,
+};
 use uv_configuration::{KeyringProviderType, TrustedHost, TrustedPublishing};
 use uv_distribution_types::{Index, IndexCapabilities, IndexLocations, IndexUrl};
 use uv_publish::{
@@ -68,6 +70,18 @@ pub(crate) async fn publish(
         .auth_integration(AuthIntegration::NoAuthMiddleware)
         .wrap_existing(&upload_client);
 
+    let (publish_url, username, password) = gather_credentials(
+        publish_url,
+        username,
+        password,
+        trusted_publishing,
+        keyring_provider,
+        &oidc_client,
+        check_url.as_ref(),
+        printer,
+    )
+    .await?;
+
     // Initialize the registry client.
     let check_url_client = if let Some(index_url) = &check_url {
         let index_urls = IndexLocations::new(
@@ -93,6 +107,83 @@ pub(crate) async fn publish(
         None
     };
 
+    for (file, raw_filename, filename) in files {
+        if let Some(check_url_client) = &check_url_client {
+            if uv_publish::check_url(check_url_client, &file, &filename).await? {
+                writeln!(printer.stderr(), "File {filename} already exists, skipping")?;
+                continue;
+            }
+        }
+
+        let size = fs_err::metadata(&file)?.len();
+        let (bytes, unit) = human_readable_bytes(size);
+        writeln!(
+            printer.stderr(),
+            "{} {filename} {}",
+            "Uploading".bold().green(),
+            format!("({bytes:.1}{unit})").dimmed()
+        )?;
+        let reporter = PublishReporter::single(printer);
+        let uploaded = upload(
+            &file,
+            &raw_filename,
+            &filename,
+            &publish_url,
+            &upload_client,
+            username.as_deref(),
+            password.as_deref(),
+            check_url_client.as_ref(),
+            // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
+            Arc::new(reporter),
+        )
+        .await?; // Filename and/or URL are already attached, if applicable.
+        info!("Upload succeeded");
+        if !uploaded {
+            writeln!(
+                printer.stderr(),
+                "{}",
+                "File already exists, skipping".dimmed()
+            )?;
+        }
+    }
+
+    Ok(ExitStatus::Success)
+}
+
+/// Unify the different possible source for username and password information.
+///
+/// Returns the publish URL, the username and the password.
+async fn gather_credentials(
+    mut publish_url: Url,
+    mut username: Option<String>,
+    mut password: Option<String>,
+    trusted_publishing: TrustedPublishing,
+    keyring_provider: KeyringProviderType,
+    oidc_client: &BaseClient,
+    check_url: Option<&IndexUrl>,
+    printer: Printer,
+) -> Result<(Url, Option<String>, Option<String>)> {
+    // Support reading username and password from the URL, for symmetry with the index API.
+    if let Some(url_password) = publish_url.password() {
+        if password.is_some_and(|password| password != url_password) {
+            bail!("The password can't be set both in the publish URL and in the CLI");
+        }
+        password = Some(url_password.to_string());
+        publish_url
+            .set_password(None)
+            .expect("Failed to clear publish URL password");
+    }
+
+    if !publish_url.username().is_empty() {
+        if username.is_some_and(|username| username != publish_url.username()) {
+            bail!("The username can't be set both in the publish URL and in the CLI");
+        }
+        username = Some(publish_url.username().to_string());
+        publish_url
+            .set_username("")
+            .expect("Failed to clear publish URL username");
+    }
+
     // If applicable, attempt obtaining a token for trusted publishing.
     let trusted_publishing_token = check_trusted_publishing(
         username.as_deref(),
@@ -100,7 +191,7 @@ pub(crate) async fn publish(
         keyring_provider,
         trusted_publishing,
         &publish_url,
-        &oidc_client,
+        oidc_client,
     )
     .await?;
 
@@ -179,48 +270,7 @@ pub(crate) async fn publish(
             // We may be using the keyring for the simple index.
         }
     }
-
-    for (file, raw_filename, filename) in files {
-        if let Some(check_url_client) = &check_url_client {
-            if uv_publish::check_url(check_url_client, &file, &filename).await? {
-                writeln!(printer.stderr(), "File {filename} already exists, skipping")?;
-                continue;
-            }
-        }
-
-        let size = fs_err::metadata(&file)?.len();
-        let (bytes, unit) = human_readable_bytes(size);
-        writeln!(
-            printer.stderr(),
-            "{} {filename} {}",
-            "Uploading".bold().green(),
-            format!("({bytes:.1}{unit})").dimmed()
-        )?;
-        let reporter = PublishReporter::single(printer);
-        let uploaded = upload(
-            &file,
-            &raw_filename,
-            &filename,
-            &publish_url,
-            &upload_client,
-            username.as_deref(),
-            password.as_deref(),
-            check_url_client.as_ref(),
-            // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
-            Arc::new(reporter),
-        )
-        .await?; // Filename and/or URL are already attached, if applicable.
-        info!("Upload succeeded");
-        if !uploaded {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                "File already exists, skipping".dimmed()
-            )?;
-        }
-    }
-
-    Ok(ExitStatus::Success)
+    Ok((publish_url, username, password))
 }
 
 fn prompt_username_and_password() -> Result<(Option<String>, Option<String>)> {
@@ -234,4 +284,111 @@ fn prompt_username_and_password() -> Result<(Option<String>, Option<String>)> {
     let password =
         uv_console::password(password_prompt, &term).context("Failed to read password")?;
     Ok((Some(username), Some(password)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use insta::assert_snapshot;
+    use std::str::FromStr;
+    use url::Url;
+
+    async fn credentials(
+        url: Url,
+        username: Option<String>,
+        password: Option<String>,
+    ) -> Result<(Url, Option<String>, Option<String>)> {
+        let client = BaseClientBuilder::new().build();
+        gather_credentials(
+            url,
+            username,
+            password,
+            TrustedPublishing::Never,
+            KeyringProviderType::Disabled,
+            &client,
+            None,
+            Printer::Quiet,
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn username_password_sources() {
+        let example_url = Url::from_str("https://example.com").unwrap();
+        let example_url_username = Url::from_str("https://ferris@example.com").unwrap();
+        let example_url_username_password =
+            Url::from_str("https://ferris:f3rr1s@example.com").unwrap();
+
+        let (publish_url, username, password) =
+            credentials(example_url.clone(), None, None).await.unwrap();
+        assert_eq!(publish_url, example_url);
+        assert_eq!(username, None);
+        assert_eq!(password, None);
+
+        let (publish_url, username, password) =
+            credentials(example_url_username.clone(), None, None)
+                .await
+                .unwrap();
+        assert_eq!(publish_url, example_url);
+        assert_eq!(username.as_deref(), Some("ferris"));
+        assert_eq!(password, None);
+
+        let (publish_url, username, password) =
+            credentials(example_url_username_password.clone(), None, None)
+                .await
+                .unwrap();
+        assert_eq!(publish_url, example_url);
+        assert_eq!(username.as_deref(), Some("ferris"));
+        assert_eq!(password.as_deref(), Some("f3rr1s"));
+
+        // Ok: The username is the same between CLI/env vars and URL
+        let (publish_url, username, password) = credentials(
+            example_url_username_password.clone(),
+            Some("ferris".to_string()),
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(publish_url, example_url);
+        assert_eq!(username.as_deref(), Some("ferris"));
+        assert_eq!(password.as_deref(), Some("f3rr1s"));
+
+        // Err: There are two different usernames between CLI/env vars and URL
+        let err = credentials(
+            example_url_username_password.clone(),
+            Some("packaging-platypus".to_string()),
+            None,
+        )
+        .await
+        .unwrap_err();
+        assert_snapshot!(
+            err.to_string(),
+            @"The username can't be set both in the publish URL and in the CLI"
+        );
+
+        // Ok: The username and password are the same between CLI/env vars and URL
+        let (publish_url, username, password) = credentials(
+            example_url_username_password.clone(),
+            Some("ferris".to_string()),
+            Some("f3rr1s".to_string()),
+        )
+        .await
+        .unwrap();
+        assert_eq!(publish_url, example_url);
+        assert_eq!(username.as_deref(), Some("ferris"));
+        assert_eq!(password.as_deref(), Some("f3rr1s"));
+
+        // Err: There are two different passwords between CLI/env vars and URL
+        let err = credentials(
+            example_url_username_password.clone(),
+            Some("ferris".to_string()),
+            Some("secret".to_string()),
+        )
+        .await
+        .unwrap_err();
+        assert_snapshot!(
+            err.to_string(),
+            @"The password can't be set both in the publish URL and in the CLI"
+        );
+    }
 }

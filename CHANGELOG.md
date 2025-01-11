@@ -1,5 +1,61 @@
 # Changelog
 
+## 0.5.17
+
+This release includes support for generating lockfiles from scripts based on inline metadata, as defined in PEP 723.
+
+By default, scripts remain unlocked, and must be locked explicitly with `uv lock --script /path/to/script.py`, which
+will generate a lockfile adjacent to the script (e.g., `script.py.lock`). Once generated, the lockfile will be
+respected (and updated, if necessary) across `uv run --script`, `uv add --script`, and `uv remove --script` invocations.
+
+This release also includes support for `uv export --script` and `uv tree --script`. Both commands support PEP 723
+scripts with and without accompanying lockfiles.
+
+### Enhancements
+
+- Add support for locking PEP 723 scripts ([#10135](https://github.com/astral-sh/uv/pull/10135))
+- Respect PEP 723 script lockfiles in `uv run` ([#10136](https://github.com/astral-sh/uv/pull/10136))
+- Update PEP 723 lockfile in `uv add --script` ([#10145](https://github.com/astral-sh/uv/pull/10145))
+- Update PEP 723 lockfile in `uv remove --script` ([#10162](https://github.com/astral-sh/uv/pull/10162))
+- Add `--script` support to `uv export` for PEP 723 scripts ([#10160](https://github.com/astral-sh/uv/pull/10160))
+- Add `--script` support to `uv tree` for PEP 723 scripts ([#10159](https://github.com/astral-sh/uv/pull/10159))
+- Add `ls` alias to `uv {tool, python, pip} list` ([#10240](https://github.com/astral-sh/uv/pull/10240))
+- Allow reading `--with-requirements` from stdin in `uv add` and `uv run` ([#10447](https://github.com/astral-sh/uv/pull/10447))
+- Warn-and-ignore for unsupported `requirements.txt` options ([#10420](https://github.com/astral-sh/uv/pull/10420))
+
+### Preview features
+
+- Add remaining Python type annotations to build backend ([#10434](https://github.com/astral-sh/uv/pull/10434))
+
+### Performance
+
+- Avoid allocating for names in the PEP 508 parser ([#10476](https://github.com/astral-sh/uv/pull/10476))
+- Fetch concurrently for non-first-match index strategies ([#10432](https://github.com/astral-sh/uv/pull/10432))
+- Remove unnecessary `.to_string()` call ([#10419](https://github.com/astral-sh/uv/pull/10419))
+- Respect sentinels in package prioritization ([#10443](https://github.com/astral-sh/uv/pull/10443))
+- Use `ArcStr` for marker values ([#10453](https://github.com/astral-sh/uv/pull/10453))
+- Use `ArcStr` for package, extra, and group names ([#10475](https://github.com/astral-sh/uv/pull/10475))
+- Use `matches!` rather than `contains` in `requirements.txt` parsing ([#10423](https://github.com/astral-sh/uv/pull/10423))
+- Use faster disjointness check for markers ([#10439](https://github.com/astral-sh/uv/pull/10439))
+- Pre-compute PEP 508 markers from universal markers ([#10472](https://github.com/astral-sh/uv/pull/10472))
+
+### Bug fixes
+
+- Fix `UV_FIND_LINKS` delimiter to split on commas ([#10477](https://github.com/astral-sh/uv/pull/10477))
+- Improve `uv tool list` output when tool environment is broken ([#10409](https://github.com/astral-sh/uv/pull/10409))
+- Only track markers for compatible versions ([#10457](https://github.com/astral-sh/uv/pull/10457))
+- Respect `requires-python` when installing tools ([#10401](https://github.com/astral-sh/uv/pull/10401))
+- Visit proxy packages eagerly ([#10441](https://github.com/astral-sh/uv/pull/10441))
+- Improve shell compatibility of `venv` activate scripts ([#10397](https://github.com/astral-sh/uv/pull/10397))
+- Read publish username from URL ([#10469](https://github.com/astral-sh/uv/pull/10469))
+
+### Documentation
+
+- Add Lambda layer instructions to AWS Lambda guide ([#10411](https://github.com/astral-sh/uv/pull/10411))
+- Add `uv lock --script` to the docs ([#10414](https://github.com/astral-sh/uv/pull/10414))
+- Use Windows-specific instructions in Jupyter guide ([#10446](https://github.com/astral-sh/uv/pull/10446))
+
+
 ## 0.5.16
 
 ### Enhancements

@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter};
 
+use arcstr::ArcStr;
 use tracing::debug;
 
 use uv_distribution_filename::{BuildTag, WheelFilename};
@@ -45,7 +46,7 @@ impl Default for PrioritizedDistInner {
 }
 
 /// A distribution that can be used for both resolution and installation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum CompatibleDist<'a> {
     /// The distribution is already installed and can be used.
     InstalledDist(&'a InstalledDist),
@@ -222,7 +223,7 @@ impl Display for IncompatibleDist {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum PythonRequirementKind {
     /// The installed version of Python.
     Installed,
@@ -266,7 +267,7 @@ pub enum IncompatibleSource {
     NoBuild,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum HashComparison {
     /// The hash is present, but does not match the expected value.
     Mismatched,
@@ -314,6 +315,12 @@ impl PrioritizedDist {
         hashes: impl IntoIterator<Item = HashDigest>,
         compatibility: WheelCompatibility,
     ) {
+        // Track the implied markers.
+        if compatibility.is_compatible() {
+            if !self.0.markers.is_true() {
+                self.0.markers.or(implied_markers(&dist.filename));
+            }
+        }
         // Track the highest-priority wheel.
         if let Some((.., existing_compatibility)) = self.best_wheel() {
             if compatibility.is_more_compatible(existing_compatibility) {
@@ -323,9 +330,6 @@ impl PrioritizedDist {
             self.0.best_wheel_index = Some(self.0.wheels.len());
         }
         self.0.hashes.extend(hashes);
-        if !self.0.markers.is_true() {
-            self.0.markers.or(implied_markers(&dist.filename));
-        }
         self.0.wheels.push((dist, compatibility));
     }
 
@@ -336,6 +340,10 @@ impl PrioritizedDist {
         hashes: impl IntoIterator<Item = HashDigest>,
         compatibility: SourceDistCompatibility,
     ) {
+        // Track the implied markers.
+        if compatibility.is_compatible() {
+            self.0.markers = MarkerTree::TRUE;
+        }
         // Track the highest-priority source.
         if let Some((.., existing_compatibility)) = &self.0.source {
             if compatibility.is_more_compatible(existing_compatibility) {
@@ -343,9 +351,6 @@ impl PrioritizedDist {
             }
         } else {
             self.0.source = Some((dist, compatibility));
-        }
-        if !self.0.markers.is_true() {
-            self.0.markers.or(MarkerTree::TRUE);
         }
         self.0.hashes.extend(hashes);
     }
@@ -526,6 +531,7 @@ impl<'a> CompatibleDist<'a> {
 }
 
 impl WheelCompatibility {
+    /// Return `true` if the distribution is compatible.
     pub fn is_compatible(&self) -> bool {
         matches!(self, Self::Compatible(_, _, _))
     }
@@ -552,6 +558,11 @@ impl WheelCompatibility {
 }
 
 impl SourceDistCompatibility {
+    /// Return `true` if the distribution is compatible.
+    pub fn is_compatible(&self) -> bool {
+        matches!(self, Self::Compatible(_))
+    }
+
     /// Return the higher priority compatibility.
     ///
     /// Compatible source distributions are always higher priority than incompatible source distributions.
@@ -652,12 +663,12 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
                 let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: "win32".to_string(),
+                    value: arcstr::literal!("win32"),
                 });
                 tag_marker.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformMachine,
                     operator: MarkerOperator::Equal,
-                    value: "x86".to_string(),
+                    value: arcstr::literal!("x86"),
                 }));
                 marker.or(tag_marker);
             }
@@ -665,12 +676,12 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
                 let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: "win32".to_string(),
+                    value: arcstr::literal!("win32"),
                 });
                 tag_marker.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformMachine,
                     operator: MarkerOperator::Equal,
-                    value: "x86_64".to_string(),
+                    value: arcstr::literal!("x86_64"),
                 }));
                 marker.or(tag_marker);
             }
@@ -678,12 +689,12 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
                 let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: "win32".to_string(),
+                    value: arcstr::literal!("win32"),
                 });
                 tag_marker.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformMachine,
                     operator: MarkerOperator::Equal,
-                    value: "arm64".to_string(),
+                    value: arcstr::literal!("arm64"),
                 }));
                 marker.or(tag_marker);
             }
@@ -693,7 +704,7 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
                 let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: "darwin".to_string(),
+                    value: arcstr::literal!("darwin"),
                 });
 
                 // Parse the macOS version from the tag.
@@ -777,7 +788,7 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
                     arch_marker.or(MarkerTree::expression(MarkerExpression::String {
                         key: MarkerValueString::PlatformMachine,
                         operator: MarkerOperator::Equal,
-                        value: (*arch).to_string(),
+                        value: ArcStr::from(*arch),
                     }));
                 }
                 tag_marker.and(arch_marker);
@@ -790,7 +801,7 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
                 let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: "linux".to_string(),
+                    value: arcstr::literal!("linux"),
                 });
 
                 // Parse the architecture from the tag.
@@ -856,7 +867,7 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
                 tag_marker.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformMachine,
                     operator: MarkerOperator::Equal,
-                    value: arch.to_string(),
+                    value: ArcStr::from(arch),
                 }));
 
                 marker.or(tag_marker);

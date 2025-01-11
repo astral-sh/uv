@@ -94,6 +94,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34ac096ce696dc2fcabef30516bb13c0a68a11d30131d3df6f04711467681b04"
 
 [[package]]
+name = "arcstr"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "03918c3dbd7701a85c6b9887732e2921175f26c350b4563841d0958c21d57e6d"
+
+[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4483,7 +4489,7 @@ checksum = "f8c5f0a0af699448548ad1a2fbf920fb4bee257eae39953ba95cb84891a0446a"
 
 [[package]]
 name = "uv"
-version = "0.5.16"
+version = "0.5.17"
 dependencies = [
  "anstream",
  "anyhow",
@@ -5007,6 +5013,7 @@ name = "uv-distribution-types"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "arcstr",
  "bitflags 2.6.0",
  "fs-err 3.0.0",
  "itertools 0.14.0",
@@ -5227,6 +5234,7 @@ dependencies = [
 name = "uv-normalize"
 version = "0.0.1"
 dependencies = [
+ "arcstr",
  "rkyv",
  "schemars",
  "serde",
@@ -5265,6 +5273,7 @@ dependencies = [
 name = "uv-pep508"
 version = "0.6.0"
 dependencies = [
+ "arcstr",
  "boxcar",
  "indexmap",
  "insta",
@@ -5501,6 +5510,7 @@ dependencies = [
 name = "uv-resolver"
 version = "0.0.1"
 dependencies = [
+ "arcstr",
  "clap",
  "dashmap",
  "either",
@@ -5691,7 +5701,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.5.16"
+version = "0.5.17"
 
 [[package]]
 name = "uv-virtualenv"

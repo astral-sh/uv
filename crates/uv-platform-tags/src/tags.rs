@@ -21,7 +21,7 @@ pub enum TagsError {
     GilIsACPythonProblem(String),
 }
 
-#[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Clone)]
+#[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Copy, Clone)]
 pub enum IncompatibleTag {
     /// The tag is invalid and cannot be used.
     Invalid,
@@ -35,7 +35,7 @@ pub enum IncompatibleTag {
     Platform,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub enum TagCompatibility {
     Incompatible(IncompatibleTag),
     Compatible(TagPriority),
@@ -59,6 +59,7 @@ impl PartialOrd for TagCompatibility {
 }
 
 impl TagCompatibility {
+    /// Returns `true` if the tag is compatible.
     pub fn is_compatible(&self) -> bool {
         matches!(self, Self::Compatible(_))
     }
@@ -128,7 +129,7 @@ impl Tags {
         if let Implementation::CPython { gil_disabled } = implementation {
             // For some reason 3.2 is the minimum python for the cp abi
             for minor in (2..=python_version.1).rev() {
-                // No abi3 for freethreading python
+                // No abi3 for free-threading python
                 if !gil_disabled {
                     for platform_tag in &platform_tags {
                         tags.push((
@@ -406,8 +407,6 @@ impl Implementation {
 ///
 /// We have two cases: Actual platform specific tags (including "merged" tags such as universal2)
 /// and "any".
-///
-/// Bit of a mess, needs to be cleaned up.
 fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
     let os = platform.os();
     let arch = platform.arch();
@@ -431,13 +430,13 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
                     }
                 }
             }
-            // Non-manylinux is lowest priority
+            // Non-manylinux is given lowest priority.
             // <https://github.com/pypa/packaging/blob/fd4f11139d1c884a637be8aa26bb60a31fbc9411/packaging/tags.py#L444>
             platform_tags.push(format!("linux_{arch}"));
             platform_tags
         }
         (Os::Musllinux { major, minor }, _) => {
-            let mut platform_tags = vec![format!("linux_{}", arch)];
+            let mut platform_tags = vec![format!("linux_{arch}")];
             // musl 1.1 is the lowest supported version in musllinux
             platform_tags
                 .extend((1..=*minor).map(|minor| format!("musllinux_{major}_{minor}_{arch}")));
@@ -516,12 +515,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
             _,
         ) => {
             let release = release.replace(['.', '-'], "_");
-            vec![format!(
-                "{}_{}_{}",
-                os.to_string().to_lowercase(),
-                release,
-                arch
-            )]
+            vec![format!("{os}_{release}_{arch}")]
         }
         (Os::Illumos { release, arch }, _) => {
             // See https://github.com/python/cpython/blob/46c8d915715aa2bd4d697482aa051fe974d440e1/Lib/sysconfig.py#L722-L730
@@ -533,23 +527,17 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
                 })?;
                 if major_ver >= 5 {
                     // SunOS 5 == Solaris 2
-                    let os = "solaris".to_string();
+                    let os = "solaris";
                     let release = format!("{}_{}", major_ver - 3, other);
                     let arch = format!("{arch}_64bit");
-                    return Ok(vec![format!("{}_{}_{}", os, release, arch)]);
+                    return Ok(vec![format!("{os}_{release}_{arch}")]);
                 }
             }
 
-            let os = os.to_string().to_lowercase();
-            vec![format!("{}_{}_{}", os, release, arch)]
+            vec![format!("{os}_{release}_{arch}")]
         }
         (Os::Android { api_level }, _) => {
-            vec![format!(
-                "{}_{}_{}",
-                os.to_string().to_lowercase(),
-                api_level,
-                arch
-            )]
+            vec![format!("{os}_{api_level}_{arch}")]
         }
         _ => {
             return Err(PlatformError::OsVersionDetectionError(format!(
