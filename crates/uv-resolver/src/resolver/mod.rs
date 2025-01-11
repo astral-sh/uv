@@ -3302,6 +3302,28 @@ impl Forks {
                     }
                     continue;
                 }
+            } else {
+                // If all dependencies have the same markers, we should also avoid forking.
+                if let Some(dep) = deps.first() {
+                    let marker = dep.package.marker();
+                    if deps.iter().all(|dep| marker == dep.package.marker()) {
+                        // Unless that "same marker" is a Python requirement that is stricter than
+                        // the current Python requirement. In that case, we need to fork to respect
+                        // the stricter requirement.
+                        if marker::requires_python(marker)
+                            .is_none_or(|bound| !python_requirement.raises(&bound))
+                        {
+                            for dep in deps {
+                                for fork in &mut forks {
+                                    if fork.env.included_by_marker(marker) {
+                                        fork.add_dependency(dep.clone());
+                                    }
+                                }
+                            }
+                            continue;
+                        }
+                    }
+                }
             }
             for dep in deps {
                 let mut forker = match ForkingPossibility::new(env, &dep) {

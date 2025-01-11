@@ -1320,7 +1320,7 @@ fn fork_marker_disjoint() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies for split (sys_platform == 'linux'):
+      × No solution found when resolving dependencies:
       ╰─▶ Because your project depends on package-a{sys_platform == 'linux'}>=2 and package-a{sys_platform == 'linux'}<2, we can conclude that your project's requirements are unsatisfiable.
     "###
     );
