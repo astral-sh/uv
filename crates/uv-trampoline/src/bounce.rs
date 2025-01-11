@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::vec::Vec;
 
 use windows::core::{s, PSTR};
+use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::{
     Foundation::{
         CloseHandle, SetHandleInformation, BOOL, HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE,
@@ -297,7 +298,7 @@ fn make_job_object() -> HANDLE {
     let mut retlen = 0u32;
     if unsafe {
         QueryInformationJobObject(
-            job,
+            Some(job),
             JobObjectExtendedLimitInformation,
             &mut job_info as *mut _ as *mut c_void,
             size_of_val(&job_info) as u32,
@@ -342,7 +343,7 @@ fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
             None,
             // Why does this have to be mutable? Who knows. But it's not a mistake --
             // MS explicitly documents that this buffer might be mutated by CreateProcess.
-            PSTR::from_raw(child_cmdline.as_ptr() as *mut _),
+            Some(PSTR::from_raw(child_cmdline.as_ptr() as *mut _)),
             None,
             None,
             true,
@@ -428,7 +429,7 @@ fn clear_app_starting_state(child_handle: HANDLE) {
     let mut msg = MSG::default();
     unsafe {
         // End the launcher's "app starting" cursor state.
-        PostMessageA(None, 0, None, None).unwrap_or_else(|_| {
+        PostMessageA(None, 0, WPARAM(0), LPARAM(0)).unwrap_or_else(|_| {
             eprintln!("Failed to post a message to specified window");
         });
         if GetMessageA(&mut msg, None, 0, 0) != TRUE {
@@ -450,13 +451,13 @@ fn clear_app_starting_state(child_handle: HANDLE) {
             0,
             0,
             0,
-            HWND_MESSAGE,
+            Some(HWND_MESSAGE),
             None,
             None,
             None,
         ) {
             // Process all sent messages and signal input idle.
-            let _ = PeekMessageA(&mut msg, hwnd, 0, 0, PEEK_MESSAGE_REMOVE_TYPE(0));
+            let _ = PeekMessageA(&mut msg, Some(hwnd), 0, 0, PEEK_MESSAGE_REMOVE_TYPE(0));
             DestroyWindow(hwnd).unwrap_or_else(|_| {
                 print_last_error_and_exit("Failed to destroy temporary window");
             });
@@ -492,7 +493,7 @@ pub fn bounce(is_gui: bool) -> ! {
         TRUE
     }
     // See distlib/PC/launcher.c::control_key_handler
-    unsafe { SetConsoleCtrlHandler(Some(control_key_handler), true) }.unwrap_or_else(|_| {
+    unsafe { SetConsoleCtrlHandler(Some(Some(control_key_handler)), true) }.unwrap_or_else(|_| {
         print_last_error_and_exit("Control handler setting failed");
     });
 
