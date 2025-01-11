@@ -1,14 +1,14 @@
-use arcstr::ArcStr;
-use owo_colors::OwoColorize;
 use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
-use std::str::FromStr;
+
+use arcstr::ArcStr;
+use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
-use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, TagPriority, Tags};
+use uv_platform_tags::{IncompatibleTag, TagPriority, Tags};
 use uv_pypi_types::{HashDigest, Yanked};
 
 use crate::{
@@ -270,8 +270,6 @@ pub enum WheelCompatibility {
     Incompatible(IncompatibleWheel),
     Compatible(HashComparison, Option<TagPriority>, Option<BuildTag>),
 }
-
-pub type ExampleTag = String;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum IncompatibleWheel {
@@ -538,27 +536,11 @@ impl PrioritizedDist {
             .collect()
     }
 
-    /// Returns the set of all platform tags for the distribution.
-    pub fn platform_tags(&self) -> BTreeSet<&str> {
-        self.0
-            .wheels
-            .iter()
-            .flat_map(|(wheel, _)| wheel.filename.platform_tag.iter().map(String::as_str))
-            .collect()
-    }
-
-    /// Returns the set of all ABI tags for the distribution.
-    pub fn available_platform_tags<'a>(&'a self, tags: &'a Tags) -> BTreeSet<&'a str> {
-        // We might need to... invert the order? So that it goes from platform, to ABI, to Python?
-        // I have no idea if that will fix it. Otherwise, I might have to hardcode tags or
-        // something.
-        //
-        // We could always just filter out tags that we know are always applicable (like `none`).
-        //
-        // What do we want? Like, the other two tags are compatible, but the third isn't?
+    /// Returns the set of platform tags for the distribution that are ABI-compatible with the given
+    /// tags.
+    pub fn platform_tags<'a>(&'a self, tags: &'a Tags) -> BTreeSet<&'a str> {
         let mut candidates = BTreeSet::new();
         for (wheel, _) in &self.0.wheels {
-            // For each wheel, if the Python and ABI tags are compatible, return the platform tags.
             for wheel_py in &wheel.filename.python_tag {
                 for wheel_abi in &wheel.filename.abi_tag {
                     if tags.is_compatible_abi(wheel_py.as_str(), wheel_abi.as_str()) {
@@ -568,58 +550,6 @@ impl PrioritizedDist {
             }
         }
         candidates
-    }
-
-    pub fn closest_tag(&self, tags: &Tags) -> Option<(&str, &str, &str)> {
-        let mut closest: Option<(&str, &str, &str, TagPriority)> = None;
-        for (py, abi, platform, priority) in tags.iter() {
-            for (wheel, _) in &self.0.wheels {
-                for wheel_py in &wheel.filename.python_tag {
-                    for wheel_abi in &wheel.filename.abi_tag {
-                        for wheel_platform in &wheel.filename.platform_tag {
-                            // If two of the three tags match...
-                            let compatiblity = u8::from(py == wheel_py)
-                                + u8::from(abi == wheel_abi)
-                                + u8::from(platform == wheel_platform);
-                            if compatiblity > 1 {
-                                if let Some((py, abi, .., existing_priority)) = closest {
-                                    if priority > existing_priority {
-                                        closest = Some((
-                                            wheel_py.as_str(),
-                                            wheel_abi.as_str(),
-                                            wheel_platform.as_str(),
-                                            priority,
-                                        ));
-                                    } else if priority == existing_priority {
-                                        // Break ties based on tag comparisons.
-                                        if LanguageTag::from_str(wheel_py)
-                                            >= LanguageTag::from_str(py)
-                                            && AbiTag::from_str(wheel_abi) >= AbiTag::from_str(abi)
-                                        {
-                                            closest = Some((
-                                                wheel_py.as_str(),
-                                                wheel_abi.as_str(),
-                                                wheel_platform.as_str(),
-                                                priority,
-                                            ));
-                                        }
-                                    }
-                                } else {
-                                    closest = Some((
-                                        wheel_py.as_str(),
-                                        wheel_abi.as_str(),
-                                        wheel_platform.as_str(),
-                                        priority,
-                                    ));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        closest.map(|(py, abi, platform, _)| (py, abi, platform))
     }
 }
 

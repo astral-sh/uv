@@ -532,7 +532,6 @@ impl PubGrubReportFormatter<'_> {
         fork_urls: &ForkUrls,
         fork_indexes: &ForkIndexes,
         env: &ResolverEnvironment,
-        tags: Option<&Tags>,
         workspace_members: &BTreeSet<PackageName>,
         options: &Options,
         output_hints: &mut IndexSet<PubGrubHint>,
@@ -587,114 +586,17 @@ impl PubGrubReportFormatter<'_> {
                                 });
                             }
                             IncompatibleDist::Wheel(IncompatibleWheel::Tag(tag)) => {
-                                let response = if let Some(url) = fork_indexes.get(name) {
-                                    index.explicit().get(&(name.clone(), url.clone()))
-                                } else {
-                                    index.implicit().get(name)
-                                };
-                                if let Some(response) = response {
-                                    if let VersionsResponse::Found(version_maps) = &*response {
-                                        if let Some(candidate) = selector.select_no_preference(
-                                            name,
-                                            set,
-                                            version_maps,
-                                            env,
-                                        ) {
-                                            if let Some(prioritized) = candidate.prioritized() {
-                                                // Identify the "closest" tag, i.e., any tag that's a distance of one
-                                                // away from a compatible tag.
-                                                // println!(
-                                                //     "package: {:?}, version: {:?}, closest: {:?}",
-                                                //     package,
-                                                //     candidate.version(),
-                                                //     prioritized.closest_tag(tags.unwrap())
-                                                // );
-
-                                                let hint = match tag {
-                                                    IncompatibleTag::Invalid => None,
-                                                    IncompatibleTag::Python => {
-                                                        let tags = prioritized
-                                                            .python_tags()
-                                                            .into_iter()
-                                                            .filter_map(|tag| {
-                                                                LanguageTag::from_str(tag).ok()
-                                                            })
-                                                            .collect::<BTreeSet<_>>();
-                                                        if tags.is_empty() {
-                                                            None
-                                                        } else {
-                                                            Some(PubGrubHint::LanguageTags {
-                                                                package: package.clone(),
-                                                                version: candidate
-                                                                    .version()
-                                                                    .clone(),
-                                                                tags,
-                                                            })
-                                                        }
-                                                    }
-                                                    IncompatibleTag::Abi
-                                                    | IncompatibleTag::AbiPythonVersion => {
-                                                        let tags = prioritized
-                                                            .abi_tags()
-                                                            .into_iter()
-                                                            .filter_map(|tag| {
-                                                                AbiTag::from_str(tag).ok()
-                                                            })
-                                                            // Ignore `none`, which is universally compatible. `none` can
-                                                            // appear here, e.g., if we're solving for Python 3.13, and the
-                                                            // distribution includes a wheel for `cp312-none-macosx_11_0_arm64`.
-                                                            // This tag isn't compatible, but when solving for Python 3.13, the
-                                                            // `cp312` Python tag _can_ be compatible (e.g., for `cp312-abi3-macosx_11_0_arm64.whl`),
-                                                            // so this is considered an ABI incompatibility rather than Python
-                                                            // incompatibility.
-                                                            .filter(|tag| *tag != AbiTag::None)
-                                                            .collect::<BTreeSet<_>>();
-                                                        if tags.is_empty() {
-                                                            None
-                                                        } else {
-                                                            Some(PubGrubHint::AbiTags {
-                                                                package: package.clone(),
-                                                                version: candidate
-                                                                    .version()
-                                                                    .clone(),
-                                                                tags,
-                                                            })
-                                                        }
-                                                    }
-                                                    IncompatibleTag::Platform => {
-                                                        // The logic here is a bit more complicated. We don't want to report all available platforms,
-                                                        // since it's plausible that there are wheels for the current platform, but at a different
-                                                        // ABI. For example, when solving for Python 3.13 on macOS, `cp312-cp312-macosx_11_0_arm64`
-                                                        // could be available along with `cp313-cp313-manylinux2014`. In this case, we'd consider
-                                                        // the distribution to be platform-incompatible, since `cp313-cp313` matches the compatible
-                                                        // wheel tags. But showing `macosx_11_0_arm64` here would be misleading. So, instead, we
-                                                        // only show the platforms that are linked to otherwise-compatible wheels (e.g., `manylinux2014`
-                                                        // in `cp313-cp313-manylinux2014`).
-                                                        let tags = prioritized
-                                                            .available_platform_tags(tags.unwrap())
-                                                            .into_iter()
-                                                            .map(ToString::to_string)
-                                                            .collect::<Vec<_>>();
-                                                        if tags.is_empty() {
-                                                            None
-                                                        } else {
-                                                            Some(PubGrubHint::PlatformTags {
-                                                                package: package.clone(),
-                                                                version: candidate
-                                                                    .version()
-                                                                    .clone(),
-                                                                tags,
-                                                            })
-                                                        }
-                                                    }
-                                                };
-
-                                                if let Some(hint) = hint {
-                                                    output_hints.insert(hint);
-                                                }
-                                            }
-                                        }
-                                    }
+                                if let Some(hint) = self.tag_hint(
+                                    package,
+                                    name,
+                                    set,
+                                    *tag,
+                                    index,
+                                    selector,
+                                    fork_indexes,
+                                    env,
+                                ) {
+                                    output_hints.insert(hint);
                                 }
                             }
                             _ => {}
@@ -794,7 +696,6 @@ impl PubGrubReportFormatter<'_> {
                     fork_urls,
                     fork_indexes,
                     env,
-                    tags,
                     workspace_members,
                     options,
                     output_hints,
@@ -811,13 +712,112 @@ impl PubGrubReportFormatter<'_> {
                     fork_urls,
                     fork_indexes,
                     env,
-                    tags,
                     workspace_members,
                     options,
                     output_hints,
                 );
             }
         };
+    }
+
+    /// Generate a [`PubGrubHint`] for a package that doesn't have any wheels matching the current
+    /// Python version, ABI, or platform.
+    fn tag_hint(
+        &self,
+        package: &PubGrubPackage,
+        name: &PackageName,
+        set: &Range<Version>,
+        tag: IncompatibleTag,
+        index: &InMemoryIndex,
+        selector: &CandidateSelector,
+        fork_indexes: &ForkIndexes,
+        env: &ResolverEnvironment,
+    ) -> Option<PubGrubHint> {
+        let response = if let Some(url) = fork_indexes.get(name) {
+            index.explicit().get(&(name.clone(), url.clone()))
+        } else {
+            index.implicit().get(name)
+        }?;
+
+        let VersionsResponse::Found(version_maps) = &*response else {
+            return None;
+        };
+
+        let candidate = selector.select_no_preference(name, set, version_maps, env)?;
+
+        let prioritized = candidate.prioritized()?;
+
+        match tag {
+            IncompatibleTag::Invalid => None,
+            IncompatibleTag::Python => {
+                // Return all available language tags.
+                let tags = prioritized
+                    .python_tags()
+                    .into_iter()
+                    .filter_map(|tag| LanguageTag::from_str(tag).ok())
+                    .collect::<BTreeSet<_>>();
+                if tags.is_empty() {
+                    None
+                } else {
+                    Some(PubGrubHint::LanguageTags {
+                        package: package.clone(),
+                        version: candidate.version().clone(),
+                        tags,
+                    })
+                }
+            }
+            IncompatibleTag::Abi | IncompatibleTag::AbiPythonVersion => {
+                let tags = prioritized
+                    .abi_tags()
+                    .into_iter()
+                    .filter_map(|tag| AbiTag::from_str(tag).ok())
+                    // Ignore `none`, which is universally compatible.
+                    //
+                    // As an example, `none` can appear here if we're solving for Python 3.13, and
+                    // the distribution includes a wheel for `cp312-none-macosx_11_0_arm64`.
+                    //
+                    // In that case, the wheel isn't compatible, but when solving for Python 3.13,
+                    // the `cp312` Python tag _can_ be compatible (e.g., for `cp312-abi3-macosx_11_0_arm64.whl`),
+                    // so this is considered an ABI incompatibility rather than Python incompatibility.
+                    .filter(|tag| *tag != AbiTag::None)
+                    .collect::<BTreeSet<_>>();
+                if tags.is_empty() {
+                    None
+                } else {
+                    Some(PubGrubHint::AbiTags {
+                        package: package.clone(),
+                        version: candidate.version().clone(),
+                        tags,
+                    })
+                }
+            }
+            IncompatibleTag::Platform => {
+                // We don't want to report all available platforms, since it's plausible that there
+                // are wheels for the current platform, but at a different ABI. For example, when
+                // solving for Python 3.13 on macOS, `cp312-cp312-macosx_11_0_arm64` could be
+                // available along with `cp313-cp313-manylinux2014`. In this case, we'd consider
+                // the distribution to be platform-incompatible, since `cp313-cp313` matches the
+                // compatible wheel tags. But showing `macosx_11_0_arm64` here would be misleading.
+                //
+                // So, instead, we only show the platforms that are linked to otherwise-compatible
+                // wheels (e.g., `manylinux2014` in `cp313-cp313-manylinux2014`). In other words,
+                // we only show platforms for ABI-compatible wheels.
+                let tags = prioritized
+                    .platform_tags(self.tags?)
+                    .into_iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>();
+                if tags.is_empty() {
+                    None
+                } else {
+                    Some(PubGrubHint::PlatformTags {
+                        package: package.clone(),
+                        version: candidate.version().clone(),
+                        tags,
+                    })
+                }
+            }
+        }
     }
 
     fn index_hints(
@@ -1585,14 +1585,17 @@ impl std::fmt::Display for PubGrubHint {
                 version,
                 tags,
             } => {
+                let s = if tags.len() == 1 { "" } else { "s" };
                 write!(
                     f,
-                    "{}{} Wheels are available for `{}` ({}) with the following Python tags: {}",
+                    "{}{} Wheels are available for `{}` ({}) with the following Python tag{s}: {}",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.cyan(),
                     format!("v{version}").cyan(),
-                    tags.iter().map(|tag| tag.cyan()).join(", "),
+                    tags.iter()
+                        .map(|tag| format!("`{}`", tag.cyan()))
+                        .join(", "),
                 )
             }
             Self::AbiTags {
@@ -1600,14 +1603,17 @@ impl std::fmt::Display for PubGrubHint {
                 version,
                 tags,
             } => {
+                let s = if tags.len() == 1 { "" } else { "s" };
                 write!(
                     f,
-                    "{}{} Wheels are available for `{}` ({}) with the following ABI tags: {}",
+                    "{}{} Wheels are available for `{}` ({}) with the following ABI tag{s}: {}",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.cyan(),
                     format!("v{version}").cyan(),
-                    tags.iter().map(|tag| tag.cyan()).join(", "),
+                    tags.iter()
+                        .map(|tag| format!("`{}`", tag.cyan()))
+                        .join(", "),
                 )
             }
             Self::PlatformTags {
@@ -1615,14 +1621,17 @@ impl std::fmt::Display for PubGrubHint {
                 version,
                 tags,
             } => {
+                let s = if tags.len() == 1 { "" } else { "s" };
                 write!(
                     f,
-                    "{}{} Wheels are available for `{}` ({}) on the following platforms: {}",
+                    "{}{} Wheels are available for `{}` ({}) on the following platform{s}: {}",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.cyan(),
                     format!("v{version}").cyan(),
-                    tags.iter().map(|tag| tag.cyan()).join(", "),
+                    tags.iter()
+                        .map(|tag| format!("`{}`", tag.cyan()))
+                        .join(", "),
                 )
             }
         }

@@ -1,6 +1,5 @@
 use std::collections::BTreeSet;
 use std::fmt::Formatter;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::{cmp, num::NonZeroU32};
 
@@ -302,60 +301,28 @@ impl Tags {
         max_compatibility
     }
 
-    /// Return the highest-priority Python tag.
+    /// Return the highest-priority Python tag for the [`Tags`].
     pub fn python_tag(&self) -> Option<&str> {
         self.best.as_ref().map(|(py, _, _)| py.as_str())
     }
 
-    /// Return the highest-priority ABI tag.
+    /// Return the highest-priority ABI tag for the [`Tags`].
     pub fn abi_tag(&self) -> Option<&str> {
         self.best.as_ref().map(|(_, abi, _)| abi.as_str())
     }
 
-    /// Return the highest-priority platform tag.
+    /// Return the highest-priority platform tag for the [`Tags`].
     pub fn platform_tag(&self) -> Option<&str> {
         self.best.as_ref().map(|(_, _, platform)| platform.as_str())
     }
 
-    pub fn abi_tags(&self, python_tag: &str) -> impl Iterator<Item = &str> + '_ {
-        self.map
-            .get(python_tag)
-            .into_iter()
-            .flat_map(|abis| abis.keys().map(String::as_str))
-    }
-
+    /// Returns `true` if the given language and ABI tags are compatible with the current
+    /// environment.
     pub fn is_compatible_abi<'a>(&'a self, python_tag: &'a str, abi_tag: &'a str) -> bool {
         self.map
             .get(python_tag)
             .map(|abis| abis.contains_key(abi_tag))
             .unwrap_or(false)
-    }
-
-    // pub fn python_tags(&self) -> impl Iterator<Item = &str> + '_ {
-    //     self.map.keys().map(String::as_str)
-    // }
-    //
-    // pub fn abi_tags(&self) -> impl Iterator<Item = &str> + '_ {
-    //     self.map.values().flat_map(|abis| abis.keys().map(String::as_str))
-    // }
-    //
-    // pub fn platform_tags(&self) -> impl Iterator<Item = &str> + '_ {
-    //     self.map.values().flat_map(|abis| abis.values().flat_map(|platforms| platforms.keys().map(String::as_str)))
-    // }
-
-    pub fn iter(&self) -> impl Iterator<Item = (&str, &str, &str, TagPriority)> + '_ {
-        self.map.iter().flat_map(|(python_tag, abi_tags)| {
-            abi_tags.iter().flat_map(move |(abi_tag, platform_tags)| {
-                platform_tags.iter().map(move |(platform_tag, priority)| {
-                    (
-                        python_tag.as_str(),
-                        abi_tag.as_str(),
-                        platform_tag.as_str(),
-                        *priority,
-                    )
-                })
-            })
-        })
     }
 }
 

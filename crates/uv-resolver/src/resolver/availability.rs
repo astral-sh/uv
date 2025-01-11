@@ -1,8 +1,10 @@
-use crate::resolver::{MetadataUnavailable, VersionFork};
 use std::fmt::{Display, Formatter};
+
 use uv_distribution_types::IncompatibleDist;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::Tags;
+
+use crate::resolver::{MetadataUnavailable, VersionFork};
 
 /// The reason why a package or a version cannot be used.
 #[derive(Debug, Clone, Eq, PartialEq)]
