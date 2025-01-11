@@ -524,7 +524,7 @@ impl VersionMapLazy {
         let priority = if let Some(tags) = &self.tags {
             match filename.compatibility(tags) {
                 TagCompatibility::Incompatible(tag) => {
-                    return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag))
+                    return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag));
                 }
                 TagCompatibility::Compatible(priority) => Some(priority),
             }
@@ -565,7 +565,7 @@ impl VersionMapLazy {
 /// a single version of a package.
 #[derive(Debug)]
 enum LazyPrioritizedDist {
-    /// Represents a eagerly constructed distribution from a
+    /// Represents an eagerly constructed distribution from a
     /// `FlatDistributions`.
     OnlyFlat(PrioritizedDist),
     /// Represents a lazily constructed distribution from an index into a
