@@ -340,22 +340,41 @@ impl NoSolutionError {
 
 impl std::fmt::Debug for NoSolutionError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // Include every field except `index`, which doesn't implement `Debug`.
+        let Self {
+            error,
+            index: _,
+            available_versions,
+            available_indexes,
+            selector,
+            python_requirement,
+            index_locations,
+            index_capabilities,
+            unavailable_packages,
+            incomplete_packages,
+            fork_urls,
+            fork_indexes,
+            env,
+            tags,
+            workspace_members,
+            options,
+        } = self;
         f.debug_struct("NoSolutionError")
-            .field("error", &self.error)
-            .field("available_versions", &self.available_versions)
-            .field("available_indexes", &self.available_indexes)
-            .field("selector", &self.selector)
-            .field("python_requirement", &self.python_requirement)
-            .field("index_locations", &self.index_locations)
-            .field("index_capabilities", &self.index_capabilities)
-            .field("unavailable_packages", &self.unavailable_packages)
-            .field("incomplete_packages", &self.incomplete_packages)
-            .field("fork_urls", &self.fork_urls)
-            .field("fork_indexes", &self.fork_indexes)
-            .field("env", &self.env)
-            .field("tags", &self.tags)
-            .field("workspace_members", &self.workspace_members)
-            .field("options", &self.options)
+            .field("error", error)
+            .field("available_versions", available_versions)
+            .field("available_indexes", available_indexes)
+            .field("selector", selector)
+            .field("python_requirement", python_requirement)
+            .field("index_locations", index_locations)
+            .field("index_capabilities", index_capabilities)
+            .field("unavailable_packages", unavailable_packages)
+            .field("incomplete_packages", incomplete_packages)
+            .field("fork_urls", fork_urls)
+            .field("fork_indexes", fork_indexes)
+            .field("env", env)
+            .field("tags", tags)
+            .field("workspace_members", workspace_members)
+            .field("options", options)
             .finish()
     }
 }
@@ -428,7 +447,6 @@ impl std::fmt::Display for NoSolutionError {
             &self.fork_urls,
             &self.fork_indexes,
             &self.env,
-            self.tags.as_ref(),
             &self.workspace_members,
             &self.options,
             &mut additional_hints,

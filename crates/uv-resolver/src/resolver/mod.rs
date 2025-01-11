@@ -831,9 +831,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             forks.len(),
             if forks.len() == 1 { "" } else { "s" }
         );
-        for fork in &forks {
-            debug!("{:?}", fork.env);
-        }
         assert!(forks.len() >= 2);
         // This is a somewhat tortured technique to ensure
         // that our resolver state is only cloned as much
@@ -1222,11 +1219,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             CandidateDist::Compatible(dist) => dist,
             CandidateDist::Incompatible(incompatibility) => {
                 // If the version is incompatible because no distributions are compatible, exit early.
-                //
-                // In this case, we _do_ want to know the set of available tags.
                 return Ok(Some(ResolverVersion::Unavailable(
                     candidate.version().clone(),
-                    // TODO(charlie): This clone should be avoidable.
+                    // TODO(charlie): We can avoid this clone; the candidate is dropped here and
+                    // owns the incompatibility.
                     UnavailableVersion::IncompatibleDist(incompatibility.clone()),
                 )));
             }
