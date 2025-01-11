@@ -45,7 +45,7 @@ impl SitePackages {
         Self::from_interpreter(environment.interpreter())
     }
 
-    /// Returns `Err(())` if the two site packages are not compatible.
+    /// Extend the distributions in `self` with the distributions in `other`.
     pub fn extend(&mut self, other: SitePackages) {
         self.distributions.extend(other.distributions);
         self.by_name.extend(other.by_name);

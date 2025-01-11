@@ -37,12 +37,10 @@ pub(crate) fn pip_freeze(
         Some(paths) => {
             assert_ne!(paths.len(), 0);
             Either::Left(paths.into_iter().filter_map(|path| {
-                {
-                    environment
-                        .clone()
-                        .with_target(uv_python::Target::from(path))
-                }
-                .ok() // Drop error values as per `pip` behavior
+                environment
+                    .clone()
+                    .with_target(uv_python::Target::from(path))
+                    .ok() // Drop invalid paths as per `pip freeze`'s behavior
             }))
         }
         None => Either::Right(std::iter::once(environment.clone())),
@@ -50,7 +48,7 @@ pub(crate) fn pip_freeze(
     .map(|env| SitePackages::from_environment(&env));
 
     // Build the installed index.
-    // TODO: use try_reduce
+    // TODO: use [`try_reduce`](https://github.com/rust-lang/rust/issues/87053) when stabilized
     let mut site_packages = site_packagess
         .next()
         .expect("iterator must have at least one element")?;
