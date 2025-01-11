@@ -41,6 +41,10 @@ impl std::ops::Deref for VersionSpecifiers {
 }
 
 impl VersionSpecifiers {
+    pub fn extend(&mut self, other: VersionSpecifiers) {
+        self.0.extend(other.0);
+    }
+
     /// Matches all versions.
     pub fn empty() -> Self {
         Self(Vec::new())
