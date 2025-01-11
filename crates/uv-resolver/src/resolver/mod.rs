@@ -831,9 +831,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             forks.len(),
             if forks.len() == 1 { "" } else { "s" }
         );
-        for fork in &forks {
-            debug!("{:?}", fork.env);
-        }
         assert!(forks.len() >= 2);
         // This is a somewhat tortured technique to ensure
         // that our resolver state is only cloned as much
@@ -2116,7 +2113,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             };
         }
 
-        Either::Right(iter::once(Cow::Owned(requirement)).chain(extensions.into_iter()))
+        Either::Right(iter::once(Cow::Owned(requirement)).chain(extensions))
     }
 
     /// Fetch the metadata for a stream of packages and versions.
@@ -3273,12 +3270,8 @@ impl Forks {
     ) -> Forks {
         let python_marker = python_requirement.to_marker_tree();
 
-        // If the markers are the same, we should merge them?
-        // Or, can we avoid adding a constraint that provokes a fork? It really shouldn't.
-
         let mut forks = vec![Fork::new(env.clone())];
         let mut diverging_packages = BTreeSet::new();
-        println!("name_to_deps: {:#?}", name_to_deps);
         for (name, mut deps) in name_to_deps {
             assert!(!deps.is_empty(), "every name has at least one dependency");
             // We never fork if there's only one dependency

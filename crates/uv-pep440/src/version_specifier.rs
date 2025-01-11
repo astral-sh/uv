@@ -41,10 +41,6 @@ impl std::ops::Deref for VersionSpecifiers {
 }
 
 impl VersionSpecifiers {
-    pub fn extend(&mut self, other: VersionSpecifiers) {
-        self.0.extend(other.0);
-    }
-
     /// Matches all versions.
     pub fn empty() -> Self {
         Self(Vec::new())
@@ -58,6 +54,11 @@ impl VersionSpecifiers {
     /// Returns `true` if there are no specifiers.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    /// Extend the list of specifiers.
+    pub fn extend(&mut self, other: VersionSpecifiers) {
+        self.0.extend(other.0);
     }
 
     /// Sort the specifiers.
