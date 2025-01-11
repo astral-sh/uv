@@ -102,12 +102,6 @@ impl WheelFilename {
         // The wheel filename should contain either five or six entries. If six, then the third
         // entry is the build tag. If five, then the third entry is the Python tag.
         // https://www.python.org/dev/peps/pep-0427/#file-name-convention
-        //
-        // 2023-11-08(burntsushi): It looks like the code below actually drops
-        // the build tag if one is found. According to PEP 0427, the build tag
-        // is used to break ties. This might mean that we generate identical
-        // `WheelName` values for multiple distinct wheels, but it's not clear
-        // if this is a problem in practice.
         let mut parts = stem.split('-');
 
         let name = parts
