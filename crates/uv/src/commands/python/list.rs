@@ -2,6 +2,7 @@ use serde::Serialize;
 use std::collections::BTreeSet;
 use std::fmt::Write;
 use uv_cli::PythonListFormat;
+use uv_pep440::Version;
 
 use anyhow::Result;
 use itertools::Either;
@@ -26,10 +27,18 @@ enum Kind {
     System,
 }
 
-#[derive(Default, Debug, Serialize)]
+#[derive(Debug, Serialize)]
+struct NamedVersionParts {
+    major: u64,
+    minor: u64,
+    patch: u64,
+}
+
+#[derive(Debug, Serialize)]
 struct PrintData {
     key: String,
-    version: String,
+    version: Version,
+    version_parts: NamedVersionParts,
     path: Option<String>,
     symlink: Option<String>,
     url: Option<String>,
@@ -188,46 +197,45 @@ pub(crate) async fn list(
         PythonListFormat::Json => {
             let data: Vec<PrintData> = include
                 .iter()
-                .map(|(key, uri)| match uri {
-                    Either::Left(path) => {
-                        let is_symlink = fs_err::symlink_metadata(path).unwrap().is_symlink();
-                        if is_symlink {
-                            return PrintData {
-                                key: key.to_string(),
-                                version: key.version().to_string(),
-                                path: Some(path.user_display().to_string()),
-                                symlink: Some(path.read_link().unwrap().user_display().to_string()),
-                                arch: key.arch().to_string(),
-                                implementation: key.implementation().to_string(),
-                                os: key.os().to_string(),
-                                variant: key.variant().to_string(),
-                                libc: key.libc().to_string(),
-                                ..Default::default()
-                            };
+                .map(|(key, uri)| {
+                    let mut path_or_none: Option<String> = None;
+                    let mut symlink_or_none: Option<String> = None;
+                    let mut url_or_none: Option<String> = None;
+                    match uri {
+                        Either::Left(path) => {
+                            path_or_none = Some(path.user_display().to_string());
+
+                            let is_symlink = fs_err::symlink_metadata(path).unwrap().is_symlink();
+                            if is_symlink {
+                                symlink_or_none =
+                                    Some(path.read_link().unwrap().user_display().to_string());
+                            }
                         }
-                        return PrintData {
-                            key: key.to_string(),
-                            version: key.version().to_string(),
-                            path: Some(path.user_display().to_string()),
-                            arch: key.arch().to_string(),
-                            implementation: key.implementation().to_string(),
-                            os: key.os().to_string(),
-                            variant: key.variant().to_string(),
-                            libc: key.libc().to_string(),
-                            ..Default::default()
-                        };
-                    }
-                    Either::Right(url) => PrintData {
+                        Either::Right(url) => {
+                            url_or_none = Some((*url).to_string());
+                        }
+                    };
+                    let version = key.version();
+                    let release = version.release();
+
+                    PrintData {
                         key: key.to_string(),
-                        version: key.version().to_string(),
-                        url: Some((*url).to_string()),
+                        version: version.version().clone(),
+                        #[allow(clippy::get_first)]
+                        version_parts: NamedVersionParts {
+                            major: *(release.get(0).unwrap_or(&0)),
+                            minor: *(release.get(1).unwrap_or(&0)),
+                            patch: *(release.get(2).unwrap_or(&0)),
+                        },
+                        path: path_or_none,
+                        symlink: symlink_or_none,
+                        url: url_or_none,
                         arch: key.arch().to_string(),
                         implementation: key.implementation().to_string(),
                         os: key.os().to_string(),
                         variant: key.variant().to_string(),
                         libc: key.libc().to_string(),
-                        ..Default::default()
-                    },
+                    }
                 })
                 .collect();
             writeln!(printer.stdout(), "{}", serde_json::to_string(&data)?)?;
