@@ -5,7 +5,8 @@ use std::{cmp, num::NonZeroU32};
 
 use rustc_hash::FxHashMap;
 
-use crate::{Arch, Os, Platform, PlatformError};
+use crate::abi_tag::AbiTag;
+use crate::{Arch, LanguageTag, Os, Platform, PlatformError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum TagsError {
@@ -82,6 +83,7 @@ impl Tags {
     /// Tags are prioritized based on their position in the given vector. Specifically, tags that
     /// appear earlier in the vector are given higher priority than tags that appear later.
     pub fn new(tags: Vec<(String, String, String)>) -> Self {
+        // Index the tags by Python version, ABI, and platform.
         let mut map = FxHashMap::default();
         for (index, (py, abi, platform)) in tags.into_iter().rev().enumerate() {
             map.entry(py)
@@ -120,8 +122,10 @@ impl Tags {
         // 1. This exact c api version
         for platform_tag in &platform_tags {
             tags.push((
-                implementation.language_tag(python_version),
-                implementation.abi_tag(python_version, implementation_version),
+                implementation.language_tag(python_version).to_string(),
+                implementation
+                    .abi_tag(python_version, implementation_version)
+                    .to_string(),
                 platform_tag.clone(),
             ));
         }
@@ -133,8 +137,10 @@ impl Tags {
                 if !gil_disabled {
                     for platform_tag in &platform_tags {
                         tags.push((
-                            implementation.language_tag((python_version.0, minor)),
-                            "abi3".to_string(),
+                            implementation
+                                .language_tag((python_version.0, minor))
+                                .to_string(),
+                            AbiTag::Abi3.to_string(),
                             platform_tag.clone(),
                         ));
                     }
@@ -143,8 +149,10 @@ impl Tags {
                 if minor == python_version.1 {
                     for platform_tag in &platform_tags {
                         tags.push((
-                            implementation.language_tag((python_version.0, minor)),
-                            "none".to_string(),
+                            implementation
+                                .language_tag((python_version.0, minor))
+                                .to_string(),
+                            AbiTag::None.to_string(),
                             platform_tag.clone(),
                         ));
                     }
@@ -155,8 +163,12 @@ impl Tags {
         for minor in (0..=python_version.1).rev() {
             for platform_tag in &platform_tags {
                 tags.push((
-                    format!("py{}{}", python_version.0, minor),
-                    "none".to_string(),
+                    LanguageTag::Python {
+                        major: python_version.0,
+                        minor: Some(minor),
+                    }
+                    .to_string(),
+                    AbiTag::None.to_string(),
                     platform_tag.clone(),
                 ));
             }
@@ -165,7 +177,7 @@ impl Tags {
                 for platform_tag in &platform_tags {
                     tags.push((
                         format!("py{}", python_version.0),
-                        "none".to_string(),
+                        AbiTag::None.to_string(),
                         platform_tag.clone(),
                     ));
                 }
@@ -174,22 +186,30 @@ impl Tags {
         // 4. no binary
         if matches!(implementation, Implementation::CPython { .. }) {
             tags.push((
-                implementation.language_tag(python_version),
-                "none".to_string(),
+                implementation.language_tag(python_version).to_string(),
+                AbiTag::None.to_string(),
                 "any".to_string(),
             ));
         }
         for minor in (0..=python_version.1).rev() {
             tags.push((
-                format!("py{}{}", python_version.0, minor),
-                "none".to_string(),
+                LanguageTag::Python {
+                    major: python_version.0,
+                    minor: Some(minor),
+                }
+                .to_string(),
+                AbiTag::None.to_string(),
                 "any".to_string(),
             ));
             // After the matching version emit `none` tags for the major version i.e. `py3`
             if minor == python_version.1 {
                 tags.push((
-                    format!("py{}", python_version.0),
-                    "none".to_string(),
+                    LanguageTag::Python {
+                        major: python_version.0,
+                        minor: None,
+                    }
+                    .to_string(),
+                    AbiTag::None.to_string(),
                     "any".to_string(),
                 ));
             }
@@ -321,64 +341,41 @@ enum Implementation {
 impl Implementation {
     /// Returns the "language implementation and version tag" for the current implementation and
     /// Python version (e.g., `cp39` or `pp37`).
-    fn language_tag(self, python_version: (u8, u8)) -> String {
+    fn language_tag(self, python_version: (u8, u8)) -> LanguageTag {
         match self {
             // Ex) `cp39`
-            Self::CPython { .. } => format!("cp{}{}", python_version.0, python_version.1),
+            Self::CPython { .. } => LanguageTag::CPython { python_version },
             // Ex) `pp39`
-            Self::PyPy => format!("pp{}{}", python_version.0, python_version.1),
+            Self::PyPy => LanguageTag::PyPy { python_version },
             // Ex) `graalpy310`
-            Self::GraalPy => format!("graalpy{}{}", python_version.0, python_version.1),
+            Self::GraalPy => LanguageTag::GraalPy { python_version },
             // Ex) `pt38``
-            Self::Pyston => format!("pt{}{}", python_version.0, python_version.1),
+            Self::Pyston => LanguageTag::Pyston { python_version },
         }
     }
 
-    fn abi_tag(self, python_version: (u8, u8), implementation_version: (u8, u8)) -> String {
+    fn abi_tag(self, python_version: (u8, u8), implementation_version: (u8, u8)) -> AbiTag {
         match self {
             // Ex) `cp39`
-            Self::CPython { gil_disabled } => {
-                if python_version.1 <= 7 {
-                    format!("cp{}{}m", python_version.0, python_version.1)
-                } else if gil_disabled {
-                    // https://peps.python.org/pep-0703/#build-configuration-changes
-                    // Python 3.13+ only, but it makes more sense to just rely on the sysconfig var.
-                    format!("cp{}{}t", python_version.0, python_version.1)
-                } else {
-                    format!(
-                        "cp{}{}{}",
-                        python_version.0,
-                        python_version.1,
-                        if gil_disabled { "t" } else { "" }
-                    )
-                }
-            }
+            Self::CPython { gil_disabled } => AbiTag::CPython {
+                gil_disabled,
+                python_version,
+            },
             // Ex) `pypy39_pp73`
-            Self::PyPy => format!(
-                "pypy{}{}_pp{}{}",
-                python_version.0,
-                python_version.1,
-                implementation_version.0,
-                implementation_version.1
-            ),
+            Self::PyPy => AbiTag::PyPy {
+                python_version,
+                implementation_version,
+            },
             // Ex) `graalpy310_graalpy240_310_native
-            Self::GraalPy => format!(
-                "graalpy{}{}_graalpy{}{}_{}{}_native",
-                python_version.0,
-                python_version.1,
-                implementation_version.0,
-                implementation_version.1,
-                python_version.0,
-                python_version.1
-            ),
+            Self::GraalPy => AbiTag::GraalPy {
+                python_version,
+                implementation_version,
+            },
             // Ex) `pyston38-pyston_23`
-            Self::Pyston => format!(
-                "pyston{}{}-pyston_{}{}",
-                python_version.0,
-                python_version.1,
-                implementation_version.0,
-                implementation_version.1
-            ),
+            Self::Pyston => AbiTag::Pyston {
+                python_version,
+                implementation_version,
+            },
         }
     }
 
