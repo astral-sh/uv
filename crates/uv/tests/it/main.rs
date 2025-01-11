@@ -32,6 +32,9 @@ mod help;
 mod init;
 
 #[cfg(all(feature = "python", feature = "pypi"))]
+mod license;
+
+#[cfg(all(feature = "python", feature = "pypi"))]
 mod lock;
 
 #[cfg(all(feature = "python", feature = "pypi"))]
