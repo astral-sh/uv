@@ -1933,7 +1933,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 )
             })
             .flat_map(move |requirement| {
-                iter::once(requirement.clone()).chain(self.constraints_for_requirement(
+                iter::once(requirement.clone()).chain(self.apply_constraints(
                     requirement,
                     extra,
                     env,
@@ -1998,7 +1998,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
     /// The constraints applicable to the requirement, filtered by Python version, the markers of
     /// this fork and the requested extra.
-    fn constraints_for_requirement<'data, 'parameters>(
+    fn apply_constraints<'data, 'parameters>(
         &'data self,
         requirement: Cow<'data, Requirement>,
         extra: Option<&'parameters ExtraName>,
@@ -2014,39 +2014,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             .into_iter()
             .flatten()
             .filter_map(move |constraint| {
-                // If the requirement would not be selected with any Python version
-                // supported by the root, skip it.
                 let constraint = if constraint.marker.is_true() {
-                    // Additionally, if the requirement is `requests ; sys_platform == 'darwin'`
-                    // and the constraint is `requests ; python_version == '3.6'`, the
-                    // constraint should only apply when _both_ markers are true.
-                    if requirement.marker.is_true() {
-                        Cow::Borrowed(constraint)
-                    } else {
-                        let mut marker = constraint.marker;
-                        marker.and(requirement.marker);
-
-                        if marker.is_false() {
-                            trace!(
-                                "skipping {constraint} because of disjoint markers: `{}` vs. `{}`",
-                                constraint.marker.try_to_string().unwrap(),
-                                requirement.marker.try_to_string().unwrap(),
-                            );
-                            return None;
-                        }
-
-                        Cow::Owned(Requirement {
-                            name: constraint.name.clone(),
-                            extras: constraint.extras.clone(),
-                            groups: constraint.groups.clone(),
-                            source: constraint.source.clone(),
-                            origin: constraint.origin.clone(),
-                            marker,
-                        })
-                    }
+                    // If the constraint doesn't have a marker, pass it through.
+                    Cow::Borrowed(constraint)
                 } else {
-                    let requires_python = python_requirement.target();
-
+                    // If the requirement is `requests ; sys_platform == 'darwin'` and the
+                    // constraint is `requests ; python_version == '3.6'`, the constraint should
+                    // only apply when _both_ markers are true.
                     let mut marker = constraint.marker;
                     marker.and(requirement.marker);
 
@@ -2059,10 +2033,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         return None;
                     }
 
-                    // Additionally, if the requirement is `requests ; sys_platform == 'darwin'`
-                    // and the constraint is `requests ; python_version == '3.6'`, the
-                    // constraint should only apply when _both_ markers are true.
                     if python_marker.is_disjoint(marker) {
+                        let requires_python = python_requirement.target();
                         trace!(
                             "skipping constraint {requirement} because of Requires-Python: {requires_python}"
                         );
