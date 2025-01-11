@@ -78,6 +78,7 @@ pub(crate) async fn publish(
         keyring_provider,
         &oidc_client,
         check_url.as_ref(),
+        Prompt::Enabled,
         printer,
     )
     .await?;
@@ -150,6 +151,14 @@ pub(crate) async fn publish(
     Ok(ExitStatus::Success)
 }
 
+/// Whether to allow prompting for username and password.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Prompt {
+    Enabled,
+    #[allow(dead_code)]
+    Disabled,
+}
+
 /// Unify the different possible source for username and password information.
 ///
 /// Returns the publish URL, the username and the password.
@@ -161,6 +170,7 @@ async fn gather_credentials(
     keyring_provider: KeyringProviderType,
     oidc_client: &BaseClient,
     check_url: Option<&IndexUrl>,
+    prompt: Prompt,
     printer: Printer,
 ) -> Result<(Url, Option<String>, Option<String>)> {
     // Support reading username and password from the URL, for symmetry with the index API.
@@ -200,7 +210,10 @@ async fn gather_credentials(
             (Some("__token__".to_string()), Some(password.to_string()))
         } else {
             if username.is_none() && password.is_none() {
-                prompt_username_and_password()?
+                match prompt {
+                    Prompt::Enabled => prompt_username_and_password()?,
+                    Prompt::Disabled => (None, None),
+                }
             } else {
                 (username, password)
             }
@@ -289,8 +302,10 @@ fn prompt_username_and_password() -> Result<(Option<String>, Option<String>)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use insta::assert_snapshot;
+
     use std::str::FromStr;
+
+    use insta::assert_snapshot;
     use url::Url;
 
     async fn credentials(
@@ -307,6 +322,7 @@ mod tests {
             KeyringProviderType::Disabled,
             &client,
             None,
+            Prompt::Disabled,
             Printer::Quiet,
         )
         .await
