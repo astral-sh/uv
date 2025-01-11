@@ -1908,7 +1908,6 @@ pub struct PipFreezeArgs {
     #[arg(
         long("path"),
         value_parser = parse_file_path
-        // TODO: check overrides with, also maybe python should overrides with system
     )]
     pub paths: Option<Vec<PathBuf>>,
 
