@@ -4739,6 +4739,7 @@ dependencies = [
  "thiserror 2.0.9",
  "toml",
  "tracing",
+ "walkdir",
 ]
 
 [[package]]
