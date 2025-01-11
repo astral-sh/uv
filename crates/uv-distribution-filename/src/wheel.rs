@@ -177,6 +177,8 @@ impl WheelFilename {
             name,
             version,
             build_tag,
+            // TODO(charlie): Consider storing structured tags here. We need to benchmark to
+            // understand whether it's impactful.
             python_tag: python_tag.split('.').map(String::from).collect(),
             abi_tag: abi_tag.split('.').map(String::from).collect(),
             platform_tag: platform_tag.split('.').map(String::from).collect(),
