@@ -451,5 +451,5 @@ fn freeze_nonexistent_path() {
     ----- stdout -----
 
     ----- stderr -----
-    ")
+    ");
 }
