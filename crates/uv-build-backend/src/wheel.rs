@@ -11,7 +11,7 @@ use tracing::{debug, trace};
 use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
 use uv_globfilter::{parse_portable_glob, GlobDirFilter};
-use uv_platform_tags::{AbiTag, LanguageTag};
+use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
 use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
 use zip::{CompressionMethod, ZipWriter};
@@ -39,7 +39,7 @@ pub fn build_wheel(
             minor: None,
         }],
         abi_tag: vec![AbiTag::None],
-        platform_tag: vec!["any".to_string()],
+        platform_tag: vec![PlatformTag::Any],
     };
 
     let wheel_path = wheel_dir.join(filename.to_string());
@@ -77,7 +77,7 @@ pub fn list_wheel(
             minor: None,
         }],
         abi_tag: vec![AbiTag::None],
-        platform_tag: vec!["any".to_string()],
+        platform_tag: vec![PlatformTag::Any],
     };
 
     let mut files = FileList::new();
@@ -259,7 +259,7 @@ pub fn build_editable(
             minor: None,
         }],
         abi_tag: vec![AbiTag::None],
-        platform_tag: vec!["any".to_string()],
+        platform_tag: vec![PlatformTag::Any],
     };
 
     let wheel_path = wheel_dir.join(filename.to_string());
@@ -314,7 +314,7 @@ pub fn metadata(
             minor: None,
         }],
         abi_tag: vec![AbiTag::None],
-        platform_tag: vec!["any".to_string()],
+        platform_tag: vec![PlatformTag::Any],
     };
 
     debug!(
@@ -757,7 +757,7 @@ mod test {
     use uv_fs::Simplified;
     use uv_normalize::PackageName;
     use uv_pep440::Version;
-    use uv_platform_tags::AbiTag;
+    use uv_platform_tags::{AbiTag, PlatformTag};
     use walkdir::WalkDir;
 
     #[test]
@@ -777,7 +777,7 @@ mod test {
                 },
             ],
             abi_tag: vec![AbiTag::None],
-            platform_tag: vec!["any".to_string()],
+            platform_tag: vec![PlatformTag::Any],
         };
 
         assert_snapshot!(wheel_info(&filename, "1.0.0+test"), @r"

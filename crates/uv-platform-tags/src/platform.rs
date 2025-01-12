@@ -1,7 +1,7 @@
 //! Abstractions for understanding the current platform (operating system and architecture).
 
 use std::{fmt, io};
-
+use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -123,6 +123,27 @@ impl fmt::Display for Arch {
             Self::S390X => write!(f, "s390x"),
             Self::LoongArch64 => write!(f, "loongarch64"),
             Self::Riscv64 => write!(f, "riscv64"),
+        }
+    }
+}
+
+impl FromStr for Arch {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "aarch64" => Ok(Self::Aarch64),
+            "armv5tel" => Ok(Self::Armv5TEL),
+            "armv6l" => Ok(Self::Armv6L),
+            "armv7l" => Ok(Self::Armv7L),
+            "ppc64le" => Ok(Self::Powerpc64Le),
+            "ppc64" => Ok(Self::Powerpc64),
+            "i686" => Ok(Self::X86),
+            "x86_64" => Ok(Self::X86_64),
+            "s390x" => Ok(Self::S390X),
+            "loongarch64" => Ok(Self::LoongArch64),
+            "riscv64" => Ok(Self::Riscv64),
+            _ => Err(format!("Unknown architecture: {}", s)),
         }
     }
 }

@@ -277,34 +277,34 @@ impl Lock {
         ];
         let windows_tags = ["win32", "win_arm64", "win_amd64", "win_ia64"];
 
-        locked_dist.wheels.retain(|wheel| {
-            // Naively, we'd check whether `platform_system == 'Linux'` is disjoint, or
-            // `os_name == 'posix'` is disjoint, or `sys_platform == 'linux'` is disjoint (each on its
-            // own sufficient to exclude linux wheels), but due to
-            // `(A ∩ (B ∩ C) = ∅) => ((A ∩ B = ∅) or (A ∩ C = ∅))`
-            // a single disjointness check with the intersection is sufficient, so we have one
-            // constant per platform.
-            let platform_tags = &wheel.filename.platform_tag;
-            if platform_tags.iter().all(|tag| {
-                linux_tags.into_iter().any(|linux_tag| {
-                    // These two linux tags are allowed by warehouse.
-                    tag.starts_with(linux_tag) || tag == "linux_armv6l" || tag == "linux_armv7l"
-                })
-            }) {
-                !graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS)
-            } else if platform_tags
-                .iter()
-                .all(|tag| windows_tags.contains(&&**tag))
-            {
-                !graph.graph[node_index]
-                    .marker()
-                    .is_disjoint(*WINDOWS_MARKERS)
-            } else if platform_tags.iter().all(|tag| tag.starts_with("macosx_")) {
-                !graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS)
-            } else {
-                true
-            }
-        });
+        // locked_dist.wheels.retain(|wheel| {
+        //     // Naively, we'd check whether `platform_system == 'Linux'` is disjoint, or
+        //     // `os_name == 'posix'` is disjoint, or `sys_platform == 'linux'` is disjoint (each on its
+        //     // own sufficient to exclude linux wheels), but due to
+        //     // `(A ∩ (B ∩ C) = ∅) => ((A ∩ B = ∅) or (A ∩ C = ∅))`
+        //     // a single disjointness check with the intersection is sufficient, so we have one
+        //     // constant per platform.
+        //     let platform_tags = &wheel.filename.platform_tag;
+        //     if platform_tags.iter().all(|tag| {
+        //         linux_tags.into_iter().any(|linux_tag| {
+        //             // These two linux tags are allowed by warehouse.
+        //             tag.starts_with(linux_tag) || tag == "linux_armv6l" || tag == "linux_armv7l"
+        //         })
+        //     }) {
+        //         !graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS)
+        //     } else if platform_tags
+        //         .iter()
+        //         .all(|tag| windows_tags.contains(&&**tag))
+        //     {
+        //         !graph.graph[node_index]
+        //             .marker()
+        //             .is_disjoint(*WINDOWS_MARKERS)
+        //     } else if platform_tags.iter().all(|tag| tag.starts_with("macosx_")) {
+        //         !graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS)
+        //     } else {
+        //         true
+        //     }
+        // });
     }
 
     /// Initialize a [`Lock`] from a list of [`Package`] entries.

@@ -1,8 +1,10 @@
 use std::collections::BTreeSet;
 use std::fmt::Formatter;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::{cmp, num::NonZeroU32};
 
+use thiserror::Error;
 use rustc_hash::FxHashMap;
 
 use crate::{AbiTag, Arch, LanguageTag, Os, Platform, PlatformError};
@@ -523,6 +525,301 @@ impl std::fmt::Display for PlatformTag {
     }
 }
 
+impl FromStr for PlatformTag {
+    type Err = ParsePlatformTagError;
+
+    /// Parse a [`PlatformTag`] from a string.
+    #[allow(clippy::cast_possible_truncation)]
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s == "any" {
+            return Ok(Self::Any);
+        }
+
+        if s == "win32" {
+            return Ok(Self::Win32);
+        }
+
+        if s == "win_amd64" {
+            return Ok(Self::WinAmd64);
+        }
+
+        if s == "win_arm64" {
+            return Ok(Self::WinArm64);
+        }
+
+        if let Some(rest) = s.strip_prefix("manylinux_") {
+            // Ex) manylinux_2_17_x86_64
+            let parts: Vec<&str> = rest.split('_').collect();
+            if parts.len() != 3 {
+                return Err(ParsePlatformTagError::InvalidFormat {
+                    platform: "manylinux",
+                    tag: s.to_string(),
+                });
+            }
+            let major = parts[0].parse().map_err(|_| ParsePlatformTagError::InvalidMajorVersion {
+                platform: "manylinux",
+                tag: s.to_string(),
+            })?;
+            let minor = parts[1].parse().map_err(|_| ParsePlatformTagError::InvalidMinorVersion {
+                platform: "manylinux",
+                tag: s.to_string(),
+            })?;
+            let arch = parts[2].parse().map_err(|_| ParsePlatformTagError::InvalidArch {
+                platform: "manylinux",
+                tag: s.to_string(),
+            })?;
+            return Ok(Self::Manylinux { major, minor, arch });
+        }
+
+        if let Some(rest) = s.strip_prefix("manylinux1_") {
+            // Ex) manylinux1_x86_64
+            let arch = rest.parse().map_err(|_| ParsePlatformTagError::InvalidArch {
+                platform: "manylinux1",
+                tag: s.to_string(),
+            })?;
+            return Ok(Self::Manylinux1 { arch });
+        }
+
+        if let Some(rest) = s.strip_prefix("manylinux2010_") {
+            // Ex) manylinux2010_x86_64
+            let arch = rest.parse().map_err(|_| ParsePlatformTagError::InvalidArch {
+                platform: "manylinux2010",
+                tag: s.to_string(),
+            })?;
+            return Ok(Self::Manylinux2010 { arch });
+        }
+
+        if let Some(rest) = s.strip_prefix("manylinux2014_") {
+            // Ex) manylinux2014_x86_64
+            let arch = rest.parse().map_err(|_| ParsePlatformTagError::InvalidArch {
+                platform: "manylinux2014",
+                tag: s.to_string(),
+            })?;
+            return Ok(Self::Manylinux2014 { arch });
+        }
+
+        if let Some(rest) = s.strip_prefix("linux_") {
+            // Ex) linux_x86_64
+            let arch = rest.parse().map_err(|_| ParsePlatformTagError::InvalidArch {
+                platform: "linux",
+                tag: s.to_string(),
+            })?;
+            return Ok(Self::Linux { arch });
+        }
+
+        if let Some(rest) = s.strip_prefix("musllinux_") {
+            // Ex) musllinux_1_1_x86_64
+            let parts: Vec<&str> = rest.split('_').collect();
+            if parts.len() != 3 {
+                return Err(ParsePlatformTagError::InvalidFormat {
+                    platform: "musllinux",
+                    tag: s.to_string(),
+                });
+            }
+            let major = parts[0].parse().map_err(|_| ParsePlatformTagError::InvalidMajorVersion {
+                platform: "musllinux",
+                tag: s.to_string(),
+            })?;
+            let minor = parts[1].parse().map_err(|_| ParsePlatformTagError::InvalidMinorVersion {
+                platform: "musllinux",
+                tag: s.to_string(),
+            })?;
+            let arch = parts[2].parse().map_err(|_| ParsePlatformTagError::InvalidArch {
+                platform: "musllinux",
+                tag: s.to_string(),
+            })?;
+            return Ok(Self::Musllinux { major, minor, arch });
+        }
+
+        if let Some(rest) = s.strip_prefix("macosx_") {
+            // Ex) macosx_11_0_arm64
+            let parts: Vec<&str> = rest.split('_').collect();
+            if parts.len() != 3 {
+                return Err(ParsePlatformTagError::InvalidFormat {
+                    platform: "macosx",
+                    tag: s.to_string(),
+                });
+            }
+            let major = parts[0].parse().map_err(|_| ParsePlatformTagError::InvalidMajorVersion {
+                platform: "macosx",
+                tag: s.to_string(),
+            })?;
+            let minor = parts[1].parse().map_err(|_| ParsePlatformTagError::InvalidMinorVersion {
+                platform: "macosx",
+                tag: s.to_string(),
+            })?;
+            let binary_format = parts[2].parse().map_err(|_| ParsePlatformTagError::InvalidArch {
+                platform: "macosx",
+                tag: s.to_string(),
+            })?;
+            return Ok(Self::Macos {
+                major,
+                minor,
+                binary_format,
+            });
+        }
+
+        if let Some(rest) = s.strip_prefix("android_") {
+            // Ex) android_21_arm64
+            let parts: Vec<&str> = rest.split('_').collect();
+            if parts.len() != 2 {
+                return Err(ParsePlatformTagError::InvalidFormat {
+                    platform: "android",
+                    tag: s.to_string(),
+                });
+            }
+            let api_level = parts[0].parse().map_err(|_| ParsePlatformTagError::InvalidApiLevel {
+                platform: "android",
+                tag: s.to_string(),
+            })?;
+            let arch = parts[1].parse().map_err(|_| ParsePlatformTagError::InvalidArch {
+                platform: "android",
+                tag: s.to_string(),
+            })?;
+            return Ok(Self::Android { api_level, arch });
+        }
+
+        if let Some(rest) = s.strip_prefix("freebsd_") {
+            // Ex) freebsd_13_x86_64
+            let parts: Vec<&str> = rest.split('_').collect();
+            if parts.len() != 2 {
+                return Err(ParsePlatformTagError::InvalidFormat {
+                    platform: "freebsd",
+                    tag: s.to_string(),
+                });
+            }
+            return Ok(Self::FreeBsd {
+                release: parts[0].to_string(),
+                arch: parts[1].parse().map_err(|_| ParsePlatformTagError::InvalidArch {
+                    platform: "freebsd",
+                    tag: s.to_string(),
+                })?,
+            });
+        }
+
+        if let Some(rest) = s.strip_prefix("netbsd_") {
+            // Ex) netbsd_9_x86_64
+            let parts: Vec<&str> = rest.split('_').collect();
+            if parts.len() != 2 {
+                return Err(ParsePlatformTagError::InvalidFormat {
+                    platform: "netbsd",
+                    tag: s.to_string(),
+                });
+            }
+            return Ok(Self::NetBsd {
+                release: parts[0].to_string(),
+                arch: parts[1].parse().map_err(|_| ParsePlatformTagError::InvalidArch {
+                    platform: "netbsd",
+                    tag: s.to_string(),
+                })?,
+            });
+        }
+
+        if let Some(rest) = s.strip_prefix("openbsd_") {
+            // Ex) openbsd_7_x86_64
+            let parts: Vec<&str> = rest.split('_').collect();
+            if parts.len() != 2 {
+                return Err(ParsePlatformTagError::InvalidFormat {
+                    platform: "openbsd",
+                    tag: s.to_string(),
+                });
+            }
+            return Ok(Self::OpenBsd {
+                release: parts[0].to_string(),
+                arch: parts[1].parse().map_err(|_| ParsePlatformTagError::InvalidArch {
+                    platform: "openbsd",
+                    tag: s.to_string(),
+                })?,
+            });
+        }
+
+        if let Some(rest) = s.strip_prefix("dragonfly_") {
+            // Ex) dragonfly_6_x86_64
+            let parts: Vec<&str> = rest.split('_').collect();
+            if parts.len() != 2 {
+                return Err(ParsePlatformTagError::InvalidFormat {
+                    platform: "dragonfly",
+                    tag: s.to_string(),
+                });
+            }
+            return Ok(Self::Dragonfly {
+                release: parts[0].to_string(),
+                arch: parts[1].parse().map_err(|_| ParsePlatformTagError::InvalidArch {
+                    platform: "dragonfly",
+                    tag: s.to_string(),
+                })?,
+            });
+        }
+
+        if let Some(rest) = s.strip_prefix("haiku_") {
+            // Ex) haiku_1_x86_64
+            let parts: Vec<&str> = rest.split('_').collect();
+            if parts.len() != 2 {
+                return Err(ParsePlatformTagError::InvalidFormat {
+                    platform: "haiku",
+                    tag: s.to_string(),
+                });
+            }
+            return Ok(Self::Haiku {
+                release: parts[0].to_string(),
+                arch: parts[1].parse().map_err(|_| ParsePlatformTagError::InvalidArch {
+                    platform: "haiku",
+                    tag: s.to_string(),
+                })?,
+            });
+        }
+
+        if let Some(rest) = s.strip_prefix("illumos_") {
+            // Ex) illumos_5_11_x86_64
+            let parts: Vec<&str> = rest.split('_').collect();
+            if parts.len() != 3 {
+                return Err(ParsePlatformTagError::InvalidFormat {
+                    platform: "illumos",
+                    tag: s.to_string(),
+                });
+            }
+            return Ok(Self::Illumos {
+                release: format!("{}_{}", parts[0], parts[1]),
+                arch: parts[2].to_string(),
+            });
+        }
+
+        if let Some(rest) = s.strip_prefix("solaris_") {
+            // Ex) solaris_11_4_x86_64_64bit
+            let parts: Vec<&str> = rest.split('_').collect();
+            if parts.len() != 4 || parts[3] != "64bit" {
+                return Err(ParsePlatformTagError::InvalidFormat {
+                    platform: "solaris",
+                    tag: s.to_string(),
+                });
+            }
+            return Ok(Self::Solaris {
+                release: format!("{}_{}", parts[0], parts[1]),
+                arch: parts[2].to_string(),
+            });
+        }
+
+        Err(ParsePlatformTagError::UnknownFormat(s.to_string()))
+    }
+}
+
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum ParsePlatformTagError {
+    #[error("Unknown platform tag format: {0}")]
+    UnknownFormat(String),
+    #[error("Invalid format for {platform} platform tag: {tag}")]
+    InvalidFormat { platform: &'static str, tag: String },
+    #[error("Invalid major version in {platform} platform tag: {tag}")]
+    InvalidMajorVersion { platform: &'static str, tag: String },
+    #[error("Invalid minor version in {platform} platform tag: {tag}")]
+    InvalidMinorVersion { platform: &'static str, tag: String },
+    #[error("Invalid architecture in {platform} platform tag: {tag}")]
+    InvalidArch { platform: &'static str, tag: String },
+    #[error("Invalid API level in {platform} platform tag: {tag}")]
+    InvalidApiLevel { platform: &'static str, tag: String },
+}
+
+
 /// Returns the compatible tags for the current [`Platform`] (e.g., `manylinux_2_17`,
 /// `macosx_11_0_arm64`, or `win_amd64`).
 ///
@@ -762,6 +1059,23 @@ impl std::fmt::Display for BinaryFormat {
             Self::Universal2 => write!(f, "universal2"),
             Self::Universal => write!(f, "universal"),
             Self::X86_64 => write!(f, "x86_64"),
+        }
+    }
+}
+
+impl FromStr for BinaryFormat {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "intel" => Ok(Self::Intel),
+            "arm64" => Ok(Self::Arm64),
+            "fat64" => Ok(Self::Fat64),
+            "fat32" => Ok(Self::Fat32),
+            "universal2" => Ok(Self::Universal2),
+            "universal" => Ok(Self::Universal),
+            "x86_64" => Ok(Self::X86_64),
+            _ => Err(format!("Invalid binary format: {s}")),
         }
     }
 }

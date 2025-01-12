@@ -7,7 +7,7 @@ use url::Url;
 
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::{Version, VersionParseError};
-use uv_platform_tags::{AbiTag, LanguageTag, ParseAbiTagError, ParseLanguageTagError, PlatformTag, TagCompatibility, Tags};
+use uv_platform_tags::{AbiTag, LanguageTag, ParseAbiTagError, ParseLanguageTagError, ParsePlatformTagError, PlatformTag, TagCompatibility, Tags};
 
 use crate::{BuildTag, BuildTagError};
 
@@ -91,7 +91,7 @@ impl WheelFilename {
             "{}-{}-{}",
             self.python_tag[0],
             self.abi_tag[0],
-            self.platform_tag.join(".")
+            self.platform_tag[0],
         )
     }
 
@@ -189,7 +189,7 @@ impl WheelFilename {
                 .map(AbiTag::from_str)
                 .collect::<Result<_, _>>()
                 .map_err(|err| WheelFilenameError::InvalidAbiTag(filename.to_string(), err))?,
-            platform_tag: platform_tag.split('.').map(String::from).collect(),
+            platform_tag: platform_tag.split('.').map(PlatformTag::from_str).collect::<Result<_, _>>().map_err(|err| WheelFilenameError::InvalidPlatformTag(filename.to_string(), err))?,
         })
     }
 }
@@ -250,6 +250,8 @@ pub enum WheelFilenameError {
     InvalidLanguageTag(String, ParseLanguageTagError),
     #[error("The wheel filename \"{0}\" has an invalid ABI tag: {1}")]
     InvalidAbiTag(String, ParseAbiTagError),
+    #[error("The wheel filename \"{0}\" has an invalid platform tag: {1}")]
+    InvalidPlatformTag(String, ParsePlatformTagError),
 }
 
 #[cfg(test)]
