@@ -8,7 +8,7 @@ use tracing::debug;
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
-use uv_platform_tags::{IncompatibleTag, TagPriority, Tags};
+use uv_platform_tags::{AbiTag, IncompatibleTag, TagPriority, Tags};
 use uv_pypi_types::{HashDigest, Yanked};
 
 use crate::{
@@ -167,7 +167,11 @@ impl IncompatibleDist {
         }
     }
 
-    pub fn context_message(&self, tags: Option<&Tags>) -> Option<String> {
+    pub fn context_message(
+        &self,
+        tags: Option<&Tags>,
+        requires_python: Option<AbiTag>,
+    ) -> Option<String> {
         match self {
             Self::Wheel(incompatibility) => match incompatibility {
                 IncompatibleWheel::Tag(IncompatibleTag::Python) => {
@@ -179,8 +183,8 @@ impl IncompatibleDist {
                     Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
                 }
                 IncompatibleWheel::Tag(IncompatibleTag::AbiPythonVersion) => {
-                    let tag = tags?.abi_tag().map(ToString::to_string)?;
-                    Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
+                    let tag = requires_python?;
+                    Some(format!("(e.g., `{tag}`)"))
                 }
                 IncompatibleWheel::Tag(IncompatibleTag::Platform) => {
                     let tag = tags?.platform_tag().map(ToString::to_string)?;

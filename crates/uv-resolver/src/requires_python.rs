@@ -7,6 +7,7 @@ use pubgrub::Range;
 use uv_distribution_filename::WheelFilename;
 use uv_pep440::{release_specifiers_to_ranges, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerExpression, MarkerTree, MarkerValueVersion};
+use uv_platform_tags::AbiTag;
 
 /// The `Requires-Python` requirement specifier.
 ///
@@ -301,6 +302,23 @@ impl RequiresPython {
     /// Returns the [`Range`] bounding the `Requires-Python` specifier.
     pub fn range(&self) -> &RequiresPythonRange {
         &self.range
+    }
+
+    /// Returns a wheel tag that's compatible with the `Requires-Python` specifier.
+    pub fn abi_tag(&self) -> Option<AbiTag> {
+        match self.range.lower().as_ref() {
+            Bound::Included(version) | Bound::Excluded(version) => {
+                let major = version.release().first().copied()?;
+                let major = u8::try_from(major).ok()?;
+                let minor = version.release().get(1).copied()?;
+                let minor = u8::try_from(minor).ok()?;
+                Some(AbiTag::CPython {
+                    gil_disabled: false,
+                    python_version: (major, minor),
+                })
+            }
+            Bound::Unbounded => None,
+        }
     }
 
     /// Simplifies the given markers in such a way as to assume that

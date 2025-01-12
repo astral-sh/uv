@@ -128,7 +128,10 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                             } else {
                                 reason.singular_message()
                             };
-                            let context = reason.context_message(self.tags);
+                            let context = reason.context_message(
+                                self.tags,
+                                self.python_requirement.target().abi_tag(),
+                            );
                             if let Some(context) = context {
                                 format!("{}{}{}", range, Padded::new(" ", &message, " "), context)
                             } else {
