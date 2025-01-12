@@ -30,7 +30,7 @@ pub enum LanguageTag {
     PyPy { python_version: (u8, u8) },
     /// Ex) `graalpy310`
     GraalPy { python_version: (u8, u8) },
-    /// Ex) `pt38`
+    /// Ex) `pyston38`
     Pyston { python_version: (u8, u8) },
 }
 
@@ -64,7 +64,7 @@ impl std::fmt::Display for LanguageTag {
             Self::Pyston {
                 python_version: (major, minor),
             } => {
-                write!(f, "pt{major}{minor}")
+                write!(f, "pyston{major}{minor}")
             }
         }
     }
@@ -111,28 +111,48 @@ impl FromStr for LanguageTag {
         if s == "none" {
             Ok(Self::None)
         } else if let Some(py) = s.strip_prefix("py") {
-            if py.len() == 1 {
-                // Ex) `py3`
-                let major = py
-                    .chars()
-                    .next()
-                    .ok_or_else(|| ParseLanguageTagError::MissingMajorVersion {
+            match py.len() {
+                0 => {
+                    return Err(ParseLanguageTagError::MissingMajorVersion {
                         implementation: "Python",
                         tag: s.to_string(),
-                    })?
-                    .to_digit(10)
-                    .ok_or_else(|| ParseLanguageTagError::InvalidMajorVersion {
-                        implementation: "Python",
-                        tag: s.to_string(),
-                    })? as u8;
-                Ok(Self::Python { major, minor: None })
-            } else {
-                // Ex) `py39`
-                let (major, minor) = parse_python_version(py, "Python", s)?;
-                Ok(Self::Python {
-                    major,
-                    minor: Some(minor),
-                })
+                    });
+                }
+                1 => {
+                    // Ex) `py3`
+                    let major = py
+                        .chars()
+                        .next()
+                        .ok_or_else(|| ParseLanguageTagError::MissingMajorVersion {
+                            implementation: "Python",
+                            tag: s.to_string(),
+                        })?
+                        .to_digit(10)
+                        .ok_or_else(|| ParseLanguageTagError::InvalidMajorVersion {
+                            implementation: "Python",
+                            tag: s.to_string(),
+                        })? as u8;
+                    Ok(Self::Python { major, minor: None })
+                }
+                2 | 3 => {
+                    // Ex) `py39`, `py310`
+                    let (major, minor) = parse_python_version(py, "Python", s)?;
+                    Ok(Self::Python {
+                        major,
+                        minor: Some(minor),
+                    })
+                }
+                _ => {
+                    if let Some(pyston) = py.strip_prefix("ston") {
+                        // Ex) `pyston38`
+                        let (major, minor) = parse_python_version(pyston, "Pyston", s)?;
+                        Ok(Self::Pyston {
+                            python_version: (major, minor),
+                        })
+                    } else {
+                        Err(ParseLanguageTagError::UnknownFormat(s.to_string()))
+                    }
+                }
             }
         } else if let Some(cp) = s.strip_prefix("cp") {
             // Ex) `cp39`
@@ -150,12 +170,6 @@ impl FromStr for LanguageTag {
             // Ex) `graalpy310`
             let (major, minor) = parse_python_version(graalpy, "GraalPy", s)?;
             Ok(Self::GraalPy {
-                python_version: (major, minor),
-            })
-        } else if let Some(pt) = s.strip_prefix("pt") {
-            // Ex) `pt38`
-            let (major, minor) = parse_python_version(pt, "Pyston", s)?;
-            Ok(Self::Pyston {
                 python_version: (major, minor),
             })
         } else {
@@ -340,28 +354,28 @@ mod tests {
         let tag = LanguageTag::Pyston {
             python_version: (3, 8),
         };
-        assert_eq!(LanguageTag::from_str("pt38"), Ok(tag));
-        assert_eq!(tag.to_string(), "pt38");
+        assert_eq!(LanguageTag::from_str("pyston38"), Ok(tag));
+        assert_eq!(tag.to_string(), "pyston38");
 
         assert_eq!(
-            LanguageTag::from_str("pt"),
+            LanguageTag::from_str("pyston"),
             Err(ParseLanguageTagError::MissingMajorVersion {
                 implementation: "Pyston",
-                tag: "pt".to_string()
+                tag: "pyston".to_string()
             })
         );
         assert_eq!(
-            LanguageTag::from_str("ptX"),
+            LanguageTag::from_str("pystonX"),
             Err(ParseLanguageTagError::InvalidMajorVersion {
                 implementation: "Pyston",
-                tag: "ptX".to_string()
+                tag: "pystonX".to_string()
             })
         );
         assert_eq!(
-            LanguageTag::from_str("pt3X"),
+            LanguageTag::from_str("pyston3X"),
             Err(ParseLanguageTagError::InvalidMinorVersion {
                 implementation: "Pyston",
-                tag: "pt3X".to_string()
+                tag: "pyston3X".to_string()
             })
         );
     }

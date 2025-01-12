@@ -39,11 +39,8 @@ pub enum AbiTag {
         python_version: (u8, u8),
         implementation_version: (u8, u8),
     },
-    /// Ex) `pyston38-pyston_23`
-    Pyston {
-        python_version: (u8, u8),
-        implementation_version: (u8, u8),
-    },
+    /// Ex) `pyston_23_x86_64_linux_gnu`
+    Pyston { implementation_version: (u8, u8) },
 }
 
 impl std::fmt::Display for AbiTag {
@@ -82,13 +79,9 @@ impl std::fmt::Display for AbiTag {
                 )
             }
             Self::Pyston {
-                python_version: (py_major, py_minor),
                 implementation_version: (impl_major, impl_minor),
             } => {
-                write!(
-                    f,
-                    "pyston{py_major}{py_minor}-pyston_{impl_major}{impl_minor}"
-                )
+                write!(f, "pyston_{impl_major}{impl_minor}_x86_64_linux_gnu")
             }
         }
     }
@@ -229,24 +222,21 @@ impl FromStr for AbiTag {
                 implementation_version: (impl_major, impl_minor),
             })
         } else if let Some(rest) = s.strip_prefix("pyston") {
-            // Ex) `pyston38-pyston_23`
-            let version_end = rest
-                .find('-')
+            // Ex) `pyston_23_x86_64_linux_gnu`
+            let rest = rest
+                .strip_prefix("_")
                 .ok_or_else(|| ParseAbiTagError::InvalidFormat {
                     implementation: "Pyston",
                     tag: s.to_string(),
                 })?;
-            let version_str = &rest[..version_end];
-            let (major, minor) = parse_python_version(version_str, "Pyston", s)?;
-            let rest = rest[version_end + 1..]
-                .strip_prefix("pyston_")
-                .ok_or_else(|| ParseAbiTagError::InvalidFormat {
+            let rest = rest.strip_suffix("_x86_64_linux_gnu").ok_or_else(|| {
+                ParseAbiTagError::InvalidFormat {
                     implementation: "Pyston",
                     tag: s.to_string(),
-                })?;
+                }
+            })?;
             let (impl_major, impl_minor) = parse_impl_version(rest, "Pyston", s)?;
             Ok(Self::Pyston {
-                python_version: (major, minor),
                 implementation_version: (impl_major, impl_minor),
             })
         } else {
@@ -426,31 +416,23 @@ mod tests {
     #[test]
     fn pyston_abi() {
         let tag = AbiTag::Pyston {
-            python_version: (3, 8),
             implementation_version: (2, 3),
         };
-        assert_eq!(AbiTag::from_str("pyston38-pyston_23"), Ok(tag));
-        assert_eq!(tag.to_string(), "pyston38-pyston_23");
+        assert_eq!(AbiTag::from_str("pyston_23_x86_64_linux_gnu"), Ok(tag));
+        assert_eq!(tag.to_string(), "pyston_23_x86_64_linux_gnu");
 
         assert_eq!(
-            AbiTag::from_str("pyston38"),
+            AbiTag::from_str("pyston23_x86_64_linux_gnu"),
             Err(ParseAbiTagError::InvalidFormat {
                 implementation: "Pyston",
-                tag: "pyston38".to_string()
+                tag: "pyston23_x86_64_linux_gnu".to_string()
             })
         );
         assert_eq!(
-            AbiTag::from_str("pyston38_23"),
-            Err(ParseAbiTagError::InvalidFormat {
-                implementation: "Pyston",
-                tag: "pyston38_23".to_string()
-            })
-        );
-        assert_eq!(
-            AbiTag::from_str("pyston38-pyston_XY"),
+            AbiTag::from_str("pyston_XY_x86_64_linux_gnu"),
             Err(ParseAbiTagError::InvalidImplMajorVersion {
                 implementation: "Pyston",
-                tag: "pyston38-pyston_XY".to_string()
+                tag: "pyston_XY_x86_64_linux_gnu".to_string()
             })
         );
     }
