@@ -31,6 +31,7 @@ uv-dirs = { workspace = true }
 toml.workspace = true
 serde.workspace = true
 thiserror.workspace = true
+fs-err.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

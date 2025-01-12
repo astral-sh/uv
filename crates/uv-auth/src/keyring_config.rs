@@ -1,10 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io;
+use std::io::{self, Write};
 use std::path::PathBuf;
 use thiserror::Error;
-use tokio;
-use tokio::io::AsyncWriteExt;
+use fs_err as fs;
 
 #[derive(Error, Debug)]
 pub enum ConfigError {
@@ -27,11 +26,11 @@ static CONFIG_PATH: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(No
 pub trait ConfigFile {
     fn path() -> Result<PathBuf, ConfigError>;
 
-    async fn load() -> Result<Self, ConfigError>
+    fn load() -> Result<Self, ConfigError>
     where
         Self: Sized;
 
-    async fn store(&self) -> Result<(), ConfigError>;
+    fn store(&self) -> Result<(), ConfigError>;
 }
 
 impl ConfigFile for AuthConfig {
@@ -49,14 +48,14 @@ impl ConfigFile for AuthConfig {
         Ok(cache_dir.join("auth.toml"))
     }
 
-    async fn load() -> Result<Self, ConfigError> {
+    fn load() -> Result<Self, ConfigError> {
         let path = AuthConfig::path()?;
-        AuthConfig::load_from_path(&path).await
+        AuthConfig::load_from_path(&path)
     }
 
-    async fn store(&self) -> Result<(), ConfigError> {
+    fn store(&self) -> Result<(), ConfigError> {
         let path = AuthConfig::path()?;
-        self.store_to_path(&path).await
+        self.store_to_path(&path)
     }
 }
 
@@ -83,22 +82,22 @@ impl AuthConfig {
         self.indexes.remove(index_name);
     }
 
-    pub async fn load_from_path(path: &PathBuf) -> Result<Self, ConfigError> {
+    pub fn load_from_path(path: &PathBuf) -> Result<Self, ConfigError> {
         if !path.exists() {
             return Ok(AuthConfig {
                 indexes: HashMap::new(),
             });
         }
 
-        let contents = tokio::fs::read_to_string(path).await?;
+        let contents = fs::read_to_string(path)?;
         let config: AuthConfig = toml::de::from_str(&contents)?;
         Ok(config)
     }
 
-    pub async fn store_to_path(&self, path: &PathBuf) -> Result<(), ConfigError> {
+    pub fn store_to_path(&self, path: &PathBuf) -> Result<(), ConfigError> {
         let contents = toml::to_string_pretty(self)?;
-        let mut file = tokio::fs::File::create(path).await?;
-        file.write_all(contents.as_bytes()).await?;
+        let mut file = fs::File::create(path)?;
+        file.write_all(contents.as_bytes())?;
         Ok(())
     }
 }
@@ -121,53 +120,52 @@ mod tests {
     use std::path::Path;
 
     // Helper function to clean up a temporary file
-    async fn remove_temp_file(path: &Path) -> io::Result<()> {
+    fn remove_temp_file(path: &Path) -> io::Result<()> {
         if path.exists() {
-            tokio::fs::remove_file(path).await?;
+            fs::remove_file(path)?;
         }
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_load_no_config_file() {
+    #[test]
+    fn test_load_no_config_file() {
         // Step 1: Create a temporary file using tempfile
         // let temp_file = NamedTempFile::new().expect("Failed to create a temp file");
 
         let path = Path::new("test_auth.toml");
-        remove_temp_file(path).await.ok();
+        remove_temp_file(path).ok();
 
-        let config = AuthConfig::load_from_path(&path.to_path_buf()).await;
+        let config = AuthConfig::load_from_path(&path.to_path_buf());
         assert!(config.is_ok());
         let config = config.unwrap();
         assert_eq!(config.indexes.len(), 0);
     }
 
-    #[tokio::test]
-    async fn test_store_no_config_file() {
+    #[test]
+    fn test_store_no_config_file() {
         // Prepare a fake file path for the test
         let path = Path::new("test_auth.toml");
-        remove_temp_file(path).await.ok();
+        remove_temp_file(path).ok();
 
-        let config = AuthConfig::load_from_path(&path.to_path_buf()).await;
+        let config = AuthConfig::load_from_path(&path.to_path_buf());
         assert!(config.is_ok());
         let mut config = config.unwrap();
 
         config.add_entry("index1".to_string(), "user1".to_string());
 
-        let result = config.store_to_path(&path.to_path_buf()).await;
+        let result = config.store_to_path(&path.to_path_buf());
         assert!(result.is_ok());
 
         // Check if the file exists and contains the correct content
         assert!(path.exists());
 
-        let contents = tokio::fs::read_to_string(path)
-            .await
+        let contents = fs::read_to_string(path)
             .expect("Failed to read config file");
         assert!(contents.contains("index1"));
         assert!(contents.contains("user1"));
 
         // Clean up
-        remove_temp_file(path).await.ok();
+        remove_temp_file(path).ok();
     }
 
     #[test]

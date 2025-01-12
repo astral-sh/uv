@@ -4527,6 +4527,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "base64 0.22.1",
+ "fs-err 3.0.0",
  "futures",
  "http",
  "insta",
