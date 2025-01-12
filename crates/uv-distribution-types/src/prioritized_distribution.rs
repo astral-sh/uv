@@ -8,7 +8,7 @@ use tracing::debug;
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
-use uv_platform_tags::{AbiTag, IncompatibleTag, TagPriority, Tags};
+use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags};
 use uv_pypi_types::{HashDigest, Yanked};
 
 use crate::{
@@ -175,11 +175,11 @@ impl IncompatibleDist {
         match self {
             Self::Wheel(incompatibility) => match incompatibility {
                 IncompatibleWheel::Tag(IncompatibleTag::Python) => {
-                    let tag = tags?.python_tag().map(ToString::to_string)?;
+                    let tag = tags?.python_tag().as_ref().map(ToString::to_string)?;
                     Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
                 }
                 IncompatibleWheel::Tag(IncompatibleTag::Abi) => {
-                    let tag = tags?.abi_tag().map(ToString::to_string)?;
+                    let tag = tags?.abi_tag().as_ref().map(ToString::to_string)?;
                     Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
                 }
                 IncompatibleWheel::Tag(IncompatibleTag::AbiPythonVersion) => {
@@ -523,32 +523,32 @@ impl PrioritizedDist {
     }
 
     /// Returns the set of all Python tags for the distribution.
-    pub fn python_tags(&self) -> BTreeSet<&str> {
+    pub fn python_tags(&self) -> BTreeSet<LanguageTag> {
         self.0
             .wheels
             .iter()
-            .flat_map(|(wheel, _)| wheel.filename.python_tag.iter().map(String::as_str))
+            .flat_map(|(wheel, _)| wheel.filename.python_tag.iter().copied())
             .collect()
     }
 
     /// Returns the set of all ABI tags for the distribution.
-    pub fn abi_tags(&self) -> BTreeSet<&str> {
+    pub fn abi_tags(&self) -> BTreeSet<AbiTag> {
         self.0
             .wheels
             .iter()
-            .flat_map(|(wheel, _)| wheel.filename.abi_tag.iter().map(String::as_str))
+            .flat_map(|(wheel, _)| wheel.filename.abi_tag.iter().copied())
             .collect()
     }
 
     /// Returns the set of platform tags for the distribution that are ABI-compatible with the given
     /// tags.
-    pub fn platform_tags<'a>(&'a self, tags: &'a Tags) -> BTreeSet<&'a str> {
+    pub fn platform_tags<'a>(&'a self, tags: &'a Tags) -> BTreeSet<&'a PlatformTag> {
         let mut candidates = BTreeSet::new();
         for (wheel, _) in &self.0.wheels {
             for wheel_py in &wheel.filename.python_tag {
                 for wheel_abi in &wheel.filename.abi_tag {
                     if tags.is_compatible_abi(*wheel_py, *wheel_abi) {
-                        candidates.extend(wheel.filename.platform_tag.iter().map(String::as_str));
+                        candidates.extend(wheel.filename.platform_tag.iter());
                     }
                 }
             }
@@ -723,231 +723,102 @@ impl IncompatibleWheel {
 /// This is roughly the inverse of platform tag generation: given a tag, we want to infer the
 /// supported platforms (rather than generating the supported tags from a given platform).
 pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
-    return MarkerTree::TRUE;
-    // let mut marker = MarkerTree::FALSE;
-    // for platform_tag in &filename.platform_tag {
-    //     match platform_tag.as_str() {
-    //         "any" => {
-    //             return MarkerTree::TRUE;
-    //         }
-    //
-    //         // Windows
-    //         "win32" => {
-    //             let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
-    //                 key: MarkerValueString::SysPlatform,
-    //                 operator: MarkerOperator::Equal,
-    //                 value: arcstr::literal!("win32"),
-    //             });
-    //             tag_marker.and(MarkerTree::expression(MarkerExpression::String {
-    //                 key: MarkerValueString::PlatformMachine,
-    //                 operator: MarkerOperator::Equal,
-    //                 value: arcstr::literal!("x86"),
-    //             }));
-    //             marker.or(tag_marker);
-    //         }
-    //         "win_amd64" => {
-    //             let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
-    //                 key: MarkerValueString::SysPlatform,
-    //                 operator: MarkerOperator::Equal,
-    //                 value: arcstr::literal!("win32"),
-    //             });
-    //             tag_marker.and(MarkerTree::expression(MarkerExpression::String {
-    //                 key: MarkerValueString::PlatformMachine,
-    //                 operator: MarkerOperator::Equal,
-    //                 value: arcstr::literal!("x86_64"),
-    //             }));
-    //             marker.or(tag_marker);
-    //         }
-    //         "win_arm64" => {
-    //             let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
-    //                 key: MarkerValueString::SysPlatform,
-    //                 operator: MarkerOperator::Equal,
-    //                 value: arcstr::literal!("win32"),
-    //             });
-    //             tag_marker.and(MarkerTree::expression(MarkerExpression::String {
-    //                 key: MarkerValueString::PlatformMachine,
-    //                 operator: MarkerOperator::Equal,
-    //                 value: arcstr::literal!("arm64"),
-    //             }));
-    //             marker.or(tag_marker);
-    //         }
-    //
-    //         // macOS
-    //         tag if tag.starts_with("macosx_") => {
-    //             let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
-    //                 key: MarkerValueString::SysPlatform,
-    //                 operator: MarkerOperator::Equal,
-    //                 value: arcstr::literal!("darwin"),
-    //             });
-    //
-    //             // Parse the macOS version from the tag.
-    //             //
-    //             // For example, given `macosx_10_9_x86_64`, infer `10.9`, followed by `x86_64`.
-    //             //
-    //             // If at any point we fail to parse, we assume the tag is invalid and skip it.
-    //             let mut parts = tag.splitn(4, '_');
-    //
-    //             // Skip the "macosx_" prefix.
-    //             if parts.next().is_none_or(|part| part != "macosx") {
-    //                 debug!("Failed to parse macOS prefix from tag: {tag}");
-    //                 continue;
-    //             }
-    //
-    //             // Skip the major and minor version numbers.
-    //             if parts
-    //                 .next()
-    //                 .and_then(|part| part.parse::<u16>().ok())
-    //                 .is_none()
-    //             {
-    //                 debug!("Failed to parse macOS major version from tag: {tag}");
-    //                 continue;
-    //             };
-    //             if parts
-    //                 .next()
-    //                 .and_then(|part| part.parse::<u16>().ok())
-    //                 .is_none()
-    //             {
-    //                 debug!("Failed to parse macOS minor version from tag: {tag}");
-    //                 continue;
-    //             };
-    //
-    //             // Extract the architecture from the end of the tag.
-    //             let Some(arch) = parts.next() else {
-    //                 debug!("Failed to parse macOS architecture from tag: {tag}");
-    //                 continue;
-    //             };
-    //
-    //             // Extract the architecture from the end of the tag.
-    //             let mut arch_marker = MarkerTree::FALSE;
-    //             let supported_architectures = match arch {
-    //                 "universal" => {
-    //                     // Allow any of: "x86_64", "i386", "ppc64", "ppc", "intel"
-    //                     ["x86_64", "i386", "ppc64", "ppc", "intel"].iter()
-    //                 }
-    //                 "universal2" => {
-    //                     // Allow any of: "x86_64", "arm64"
-    //                     ["x86_64", "arm64"].iter()
-    //                 }
-    //                 "intel" => {
-    //                     // Allow any of: "x86_64", "i386"
-    //                     ["x86_64", "i386"].iter()
-    //                 }
-    //                 "x86_64" => {
-    //                     // Allow only "x86_64"
-    //                     ["x86_64"].iter()
-    //                 }
-    //                 "arm64" => {
-    //                     // Allow only "arm64"
-    //                     ["arm64"].iter()
-    //                 }
-    //                 "ppc64" => {
-    //                     // Allow only "ppc64"
-    //                     ["ppc64"].iter()
-    //                 }
-    //                 "ppc" => {
-    //                     // Allow only "ppc"
-    //                     ["ppc"].iter()
-    //                 }
-    //                 "i386" => {
-    //                     // Allow only "i386"
-    //                     ["i386"].iter()
-    //                 }
-    //                 _ => {
-    //                     debug!("Unknown macOS architecture in wheel tag: {tag}");
-    //                     continue;
-    //                 }
-    //             };
-    //             for arch in supported_architectures {
-    //                 arch_marker.or(MarkerTree::expression(MarkerExpression::String {
-    //                     key: MarkerValueString::PlatformMachine,
-    //                     operator: MarkerOperator::Equal,
-    //                     value: ArcStr::from(*arch),
-    //                 }));
-    //             }
-    //             tag_marker.and(arch_marker);
-    //
-    //             marker.or(tag_marker);
-    //         }
-    //
-    //         // Linux
-    //         tag => {
-    //             let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
-    //                 key: MarkerValueString::SysPlatform,
-    //                 operator: MarkerOperator::Equal,
-    //                 value: arcstr::literal!("linux"),
-    //             });
-    //
-    //             // Parse the architecture from the tag.
-    //             let arch = if let Some(arch) = tag.strip_prefix("linux_") {
-    //                 arch
-    //             } else if let Some(arch) = tag.strip_prefix("manylinux1_") {
-    //                 arch
-    //             } else if let Some(arch) = tag.strip_prefix("manylinux2010_") {
-    //                 arch
-    //             } else if let Some(arch) = tag.strip_prefix("manylinux2014_") {
-    //                 arch
-    //             } else if let Some(arch) = tag.strip_prefix("musllinux_") {
-    //                 // Skip over the version tags (e.g., given `musllinux_1_2`, skip over `1` and `2`).
-    //                 let mut parts = arch.splitn(3, '_');
-    //                 if parts
-    //                     .next()
-    //                     .and_then(|part| part.parse::<u16>().ok())
-    //                     .is_none()
-    //                 {
-    //                     debug!("Failed to parse musllinux major version from tag: {tag}");
-    //                     continue;
-    //                 };
-    //                 if parts
-    //                     .next()
-    //                     .and_then(|part| part.parse::<u16>().ok())
-    //                     .is_none()
-    //                 {
-    //                     debug!("Failed to parse musllinux minor version from tag: {tag}");
-    //                     continue;
-    //                 };
-    //                 let Some(arch) = parts.next() else {
-    //                     debug!("Failed to parse musllinux architecture from tag: {tag}");
-    //                     continue;
-    //                 };
-    //                 arch
-    //             } else if let Some(arch) = tag.strip_prefix("manylinux_") {
-    //                 // Skip over the version tags (e.g., given `manylinux_2_17`, skip over `2` and `17`).
-    //                 let mut parts = arch.splitn(3, '_');
-    //                 if parts
-    //                     .next()
-    //                     .and_then(|part| part.parse::<u16>().ok())
-    //                     .is_none()
-    //                 {
-    //                     debug!("Failed to parse manylinux major version from tag: {tag}");
-    //                     continue;
-    //                 };
-    //                 if parts
-    //                     .next()
-    //                     .and_then(|part| part.parse::<u16>().ok())
-    //                     .is_none()
-    //                 {
-    //                     debug!("Failed to parse manylinux minor version from tag: {tag}");
-    //                     continue;
-    //                 };
-    //                 let Some(arch) = parts.next() else {
-    //                     debug!("Failed to parse manylinux architecture from tag: {tag}");
-    //                     continue;
-    //                 };
-    //                 arch
-    //             } else {
-    //                 continue;
-    //             };
-    //             tag_marker.and(MarkerTree::expression(MarkerExpression::String {
-    //                 key: MarkerValueString::PlatformMachine,
-    //                 operator: MarkerOperator::Equal,
-    //                 value: ArcStr::from(arch),
-    //             }));
-    //
-    //             marker.or(tag_marker);
-    //         }
-    //     }
-    // }
-    // marker
+    let mut marker = MarkerTree::FALSE;
+    for platform_tag in &filename.platform_tag {
+        match platform_tag {
+            PlatformTag::Any => {
+                return MarkerTree::TRUE;
+            }
+
+            // Windows
+            PlatformTag::Win32 => {
+                let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("win32"),
+                });
+                tag_marker.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::PlatformMachine,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("x86"),
+                }));
+                marker.or(tag_marker);
+            }
+            PlatformTag::WinAmd64 => {
+                let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("win32"),
+                });
+                tag_marker.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::PlatformMachine,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("x86_64"),
+                }));
+                marker.or(tag_marker);
+            }
+            PlatformTag::WinArm64 => {
+                let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("win32"),
+                });
+                tag_marker.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::PlatformMachine,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("arm64"),
+                }));
+                marker.or(tag_marker);
+            }
+
+            // macOS
+            PlatformTag::Macos { binary_format, .. } => {
+                let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("darwin"),
+                });
+
+                // Extract the architecture from the end of the tag.
+                let mut arch_marker = MarkerTree::FALSE;
+                for arch in binary_format.platform_machine() {
+                    arch_marker.or(MarkerTree::expression(MarkerExpression::String {
+                        key: MarkerValueString::PlatformMachine,
+                        operator: MarkerOperator::Equal,
+                        value: ArcStr::from(arch.name()),
+                    }));
+                }
+                tag_marker.and(arch_marker);
+
+                marker.or(tag_marker);
+            }
+
+            // Linux
+            PlatformTag::Manylinux { arch, .. }
+            | PlatformTag::Manylinux1 { arch, .. }
+            | PlatformTag::Manylinux2010 { arch, .. }
+            | PlatformTag::Manylinux2014 { arch, .. }
+            | PlatformTag::Musllinux { arch, .. }
+            | PlatformTag::Linux { arch } => {
+                let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("linux"),
+                });
+                tag_marker.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::PlatformMachine,
+                    operator: MarkerOperator::Equal,
+                    value: ArcStr::from(arch.name()),
+                }));
+                marker.or(tag_marker);
+            }
+
+            tag => {
+                debug!("Unknown platform tag in wheel tag: {tag}");
+            }
+        }
+    }
+    marker
 }
 
 #[cfg(test)]

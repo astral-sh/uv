@@ -68,13 +68,16 @@ Ok(
                             version: "4.3.0",
                             build_tag: None,
                             python_tag: [
-                                "py3",
+                                Python {
+                                    major: 3,
+                                    minor: None,
+                                },
                             ],
                             abi_tag: [
-                                "none",
+                                None,
                             ],
                             platform_tag: [
-                                "any",
+                                Any,
                             ],
                         },
                     },

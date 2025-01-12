@@ -78,7 +78,7 @@ impl std::fmt::Display for AbiTag {
             } => {
                 write!(
                     f,
-                    "graalpy{py_major}{py_minor}_graalpy{impl_major}{impl_minor}_{py_major}{py_minor}native"
+                    "graalpy{py_major}{py_minor}_graalpy{impl_major}{impl_minor}_{py_major}{py_minor}_native"
                 )
             }
             Self::Pyston {
@@ -216,6 +216,13 @@ impl FromStr for AbiTag {
                     implementation: "GraalPy",
                     tag: s.to_string(),
                 })?;
+            let version_end = rest
+                .find('_')
+                .ok_or_else(|| ParseAbiTagError::InvalidFormat {
+                    implementation: "GraalPy",
+                    tag: s.to_string(),
+                })?;
+            let rest = &rest[..version_end];
             let (impl_major, impl_minor) = parse_impl_version(rest, "GraalPy", s)?;
             Ok(Self::GraalPy {
                 python_version: (major, minor),
@@ -387,8 +394,11 @@ mod tests {
             python_version: (3, 10),
             implementation_version: (2, 40),
         };
-        assert_eq!(AbiTag::from_str("graalpy310_graalpy240"), Ok(tag));
-        assert_eq!(tag.to_string(), "graalpy310_graalpy240_310native");
+        assert_eq!(
+            AbiTag::from_str("graalpy310_graalpy240_310_native"),
+            Ok(tag)
+        );
+        assert_eq!(tag.to_string(), "graalpy310_graalpy240_310_native");
 
         assert_eq!(
             AbiTag::from_str("graalpy310"),
@@ -406,7 +416,7 @@ mod tests {
         );
         assert_eq!(
             AbiTag::from_str("graalpy310_graalpyXY"),
-            Err(ParseAbiTagError::InvalidImplMajorVersion {
+            Err(ParseAbiTagError::InvalidFormat {
                 implementation: "GraalPy",
                 tag: "graalpy310_graalpyXY".to_string()
             })

@@ -1,8 +1,8 @@
 //! Abstractions for understanding the current platform (operating system and architecture).
 
-use std::{fmt, io};
 use std::str::FromStr;
-use serde::{Deserialize, Serialize};
+use std::{fmt, io};
+
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -13,7 +13,7 @@ pub enum PlatformError {
     OsVersionDetectionError(String),
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct Platform {
     os: Os,
     arch: Arch,
@@ -37,7 +37,7 @@ impl Platform {
 }
 
 /// All supported operating systems.
-#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(tag = "name", rename_all = "lowercase")]
 pub enum Os {
     Manylinux { major: u16, minor: u16 },
@@ -100,6 +100,8 @@ pub enum Arch {
     Powerpc64Le,
     #[serde(alias = "ppc64")]
     Powerpc64,
+    #[serde(alias = "ppc")]
+    Powerpc,
     #[serde(alias = "i386", alias = "i686")]
     X86,
     #[serde(alias = "amd64")]
@@ -118,6 +120,7 @@ impl fmt::Display for Arch {
             Self::Armv7L => write!(f, "armv7l"),
             Self::Powerpc64Le => write!(f, "ppc64le"),
             Self::Powerpc64 => write!(f, "ppc64"),
+            Self::Powerpc => write!(f, "ppc"),
             Self::X86 => write!(f, "i686"),
             Self::X86_64 => write!(f, "x86_64"),
             Self::S390X => write!(f, "s390x"),
@@ -138,12 +141,13 @@ impl FromStr for Arch {
             "armv7l" => Ok(Self::Armv7L),
             "ppc64le" => Ok(Self::Powerpc64Le),
             "ppc64" => Ok(Self::Powerpc64),
+            "ppc" => Ok(Self::Powerpc),
             "i686" => Ok(Self::X86),
             "x86_64" => Ok(Self::X86_64),
             "s390x" => Ok(Self::S390X),
             "loongarch64" => Ok(Self::LoongArch64),
             "riscv64" => Ok(Self::Riscv64),
-            _ => Err(format!("Unknown architecture: {}", s)),
+            _ => Err(format!("Unknown architecture: {s}")),
         }
     }
 }
@@ -162,7 +166,45 @@ impl Arch {
             // manylinux_2_31
             Self::Riscv64 => Some(31),
             // unsupported
-            Self::Armv5TEL | Self::Armv6L | Self::LoongArch64 => None,
+            Self::Powerpc | Self::Armv5TEL | Self::Armv6L | Self::LoongArch64 => None,
         }
+    }
+
+    /// Returns the canonical name of the architecture.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Aarch64 => "aarch64",
+            Self::Armv5TEL => "armv5tel",
+            Self::Armv6L => "armv6l",
+            Self::Armv7L => "armv7l",
+            Self::Powerpc64Le => "ppc64le",
+            Self::Powerpc64 => "ppc64",
+            Self::Powerpc => "ppc",
+            Self::X86 => "i686",
+            Self::X86_64 => "x86_64",
+            Self::S390X => "s390x",
+            Self::LoongArch64 => "loongarch64",
+            Self::Riscv64 => "riscv64",
+        }
+    }
+
+    /// Returns an iterator over all supported architectures.
+    pub fn iter() -> impl Iterator<Item = Self> {
+        [
+            Self::Aarch64,
+            Self::Armv5TEL,
+            Self::Armv6L,
+            Self::Armv7L,
+            Self::Powerpc64Le,
+            Self::Powerpc64,
+            Self::Powerpc,
+            Self::X86,
+            Self::X86_64,
+            Self::S390X,
+            Self::LoongArch64,
+            Self::Riscv64,
+        ]
+        .iter()
+        .copied()
     }
 }

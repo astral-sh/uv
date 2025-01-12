@@ -1343,8 +1343,8 @@ mod test {
     /// Ensure that we don't accidentally grow the `Dist` sizes.
     #[test]
     fn dist_size() {
-        assert!(size_of::<Dist>() <= 288, "{}", size_of::<Dist>());
-        assert!(size_of::<BuiltDist>() <= 288, "{}", size_of::<BuiltDist>());
+        assert!(size_of::<Dist>() <= 312, "{}", size_of::<Dist>());
+        assert!(size_of::<BuiltDist>() <= 312, "{}", size_of::<BuiltDist>());
         assert!(
             size_of::<SourceDist>() <= 264,
             "{}",
