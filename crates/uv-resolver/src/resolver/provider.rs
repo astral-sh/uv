@@ -145,7 +145,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
     }
 }
 
-impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a, Context> {
+impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Context> {
     /// Make a "Simple API" request for the package and convert the result to a [`VersionMap`].
     async fn get_package_versions<'io>(
         &'io self,

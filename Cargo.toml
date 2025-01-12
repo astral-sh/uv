@@ -225,6 +225,9 @@ rc_mutex = "warn"
 rest_pat_in_fully_bound_structs = "warn"
 if_not_else = "allow"
 
+# Diagnostics are not actionable: Enable once https://github.com/rust-lang/rust-clippy/issues/13774 is resolved.
+large_stack_arrays = "allow"
+
 [profile.release]
 strip = true
 lto = "fat"

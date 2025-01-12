@@ -268,7 +268,7 @@ pub fn windows_script_launcher(
     launcher.extend_from_slice(&payload);
     launcher.extend_from_slice(python_path.as_bytes());
     launcher.extend_from_slice(
-        &u32::try_from(python_path.as_bytes().len())
+        &u32::try_from(python_path.len())
             .expect("file path should be smaller than 4GB")
             .to_le_bytes(),
     );
@@ -300,7 +300,7 @@ pub fn windows_python_launcher(
     launcher.extend_from_slice(launcher_bin);
     launcher.extend_from_slice(python_path.as_bytes());
     launcher.extend_from_slice(
-        &u32::try_from(python_path.as_bytes().len())
+        &u32::try_from(python_path.len())
             .expect("file path should be smaller than 4GB")
             .to_le_bytes(),
     );
@@ -377,7 +377,7 @@ mod test {
     fn get_script_launcher(shebang: &str, is_gui: bool) -> String {
         if is_gui {
             format!(
-                r##"{shebang}
+                r#"{shebang}
 # -*- coding: utf-8 -*-
 import re
 import sys
@@ -394,11 +394,11 @@ def make_gui() -> None:
 if __name__ == "__main__":
     sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
     sys.exit(make_gui())
-"##
+"#
             )
         } else {
             format!(
-                r##"{shebang}
+                r#"{shebang}
 # -*- coding: utf-8 -*-
 import re
 import sys
@@ -412,7 +412,7 @@ def main_console() -> None:
 if __name__ == "__main__":
     sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
     sys.exit(main_console())
-"##
+"#
             )
         }
     }
