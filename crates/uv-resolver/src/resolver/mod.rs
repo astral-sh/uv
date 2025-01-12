@@ -1425,9 +1425,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // instead of `sys_platform == 'darwin' and platform_machine == 'arm64'`, since it's much
         // simpler, and _neither_ version will succeed with Intel macOS anyway.
         for value in [
-            arcstr::literal!("darwin"),
-            arcstr::literal!("linux"),
-            arcstr::literal!("win32"),
+            uv_small_str::literal!("darwin"),
+            uv_small_str::literal!("linux"),
+            uv_small_str::literal!("win32"),
         ] {
             let sys_platform = MarkerTree::expression(MarkerExpression::String {
                 key: MarkerValueString::SysPlatform,

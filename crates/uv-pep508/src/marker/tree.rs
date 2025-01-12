@@ -3,16 +3,17 @@ use std::fmt::{self, Display, Formatter};
 use std::ops::{Bound, Deref};
 use std::str::FromStr;
 
-use arcstr::ArcStr;
 use itertools::Itertools;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use version_ranges::Ranges;
 
 use uv_normalize::ExtraName;
 use uv_pep440::{Version, VersionParseError, VersionSpecifier};
+use uv_small_str::SmallString;
 
 use super::algebra::{Edges, NodeId, Variable, INTERNER};
 use super::simplify;
+
 use crate::cursor::Cursor;
 use crate::marker::lowering::{
     CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
@@ -130,7 +131,7 @@ pub enum MarkerValue {
     /// `extra`. This one is special because it's a list and not env but user given
     Extra,
     /// Not a constant, but a user given quoted string with a value inside such as '3.8' or "windows"
-    QuotedString(ArcStr),
+    QuotedString(SmallString),
 }
 
 impl FromStr for MarkerValue {
@@ -273,8 +274,8 @@ impl MarkerOperator {
 
     /// Returns the marker operator and value whose union represents the given range.
     pub fn from_bounds(
-        bounds: (&Bound<ArcStr>, &Bound<ArcStr>),
-    ) -> impl Iterator<Item = (MarkerOperator, ArcStr)> {
+        bounds: (&Bound<SmallString>, &Bound<SmallString>),
+    ) -> impl Iterator<Item = (MarkerOperator, SmallString)> {
         let (b1, b2) = match bounds {
             (Bound::Included(v1), Bound::Included(v2)) if v1 == v2 => {
                 (Some((MarkerOperator::Equal, v1.clone())), None)
@@ -292,7 +293,7 @@ impl MarkerOperator {
     }
 
     /// Returns a value specifier representing the given lower bound.
-    pub fn from_lower_bound(bound: &Bound<ArcStr>) -> Option<(MarkerOperator, ArcStr)> {
+    pub fn from_lower_bound(bound: &Bound<SmallString>) -> Option<(MarkerOperator, SmallString)> {
         match bound {
             Bound::Included(value) => Some((MarkerOperator::GreaterEqual, value.clone())),
             Bound::Excluded(value) => Some((MarkerOperator::GreaterThan, value.clone())),
@@ -301,7 +302,7 @@ impl MarkerOperator {
     }
 
     /// Returns a value specifier representing the given upper bound.
-    pub fn from_upper_bound(bound: &Bound<ArcStr>) -> Option<(MarkerOperator, ArcStr)> {
+    pub fn from_upper_bound(bound: &Bound<SmallString>) -> Option<(MarkerOperator, SmallString)> {
         match bound {
             Bound::Included(value) => Some((MarkerOperator::LessEqual, value.clone())),
             Bound::Excluded(value) => Some((MarkerOperator::LessThan, value.clone())),
@@ -486,7 +487,7 @@ pub enum MarkerExpression {
     String {
         key: MarkerValueString,
         operator: MarkerOperator,
-        value: ArcStr,
+        value: SmallString,
     },
     /// `extra <extra op> '...'` or `'...' <extra op> extra`.
     Extra {
@@ -1384,7 +1385,7 @@ impl Ord for VersionMarkerTree<'_> {
 pub struct StringMarkerTree<'a> {
     id: NodeId,
     key: CanonicalMarkerValueString,
-    map: &'a [(Ranges<ArcStr>, NodeId)],
+    map: &'a [(Ranges<SmallString>, NodeId)],
 }
 
 impl StringMarkerTree<'_> {
@@ -1394,7 +1395,7 @@ impl StringMarkerTree<'_> {
     }
 
     /// The edges of this node, corresponding to possible output ranges of the given variable.
-    pub fn children(&self) -> impl ExactSizeIterator<Item = (&Ranges<ArcStr>, MarkerTree)> {
+    pub fn children(&self) -> impl ExactSizeIterator<Item = (&Ranges<SmallString>, MarkerTree)> {
         self.map
             .iter()
             .map(|(range, node)| (range, MarkerTree(node.negate(self.id))))
@@ -1419,7 +1420,7 @@ impl Ord for StringMarkerTree<'_> {
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct InMarkerTree<'a> {
     key: CanonicalMarkerValueString,
-    value: &'a ArcStr,
+    value: &'a SmallString,
     high: NodeId,
     low: NodeId,
 }
@@ -1431,7 +1432,7 @@ impl InMarkerTree<'_> {
     }
 
     /// The value (RHS) for this expression.
-    pub fn value(&self) -> &ArcStr {
+    pub fn value(&self) -> &SmallString {
         self.value
     }
 
@@ -2043,7 +2044,7 @@ mod test {
             MarkerExpression::String {
                 key: MarkerValueString::OsName,
                 operator: MarkerOperator::Equal,
-                value: arcstr::literal!("nt")
+                value: uv_small_str::literal!("nt")
             }
         );
     }

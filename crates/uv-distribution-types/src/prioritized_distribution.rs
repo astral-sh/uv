@@ -1,6 +1,5 @@
 use std::fmt::{Display, Formatter};
 
-use arcstr::ArcStr;
 use tracing::debug;
 
 use uv_distribution_filename::{BuildTag, WheelFilename};
@@ -8,6 +7,7 @@ use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
 use uv_platform_tags::{IncompatibleTag, TagPriority};
 use uv_pypi_types::{HashDigest, Yanked};
+use uv_small_str::SmallString;
 
 use crate::{
     InstalledDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, ResolvedDistRef,
@@ -663,12 +663,12 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
                 let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("win32"),
+                    value: uv_small_str::literal!("win32"),
                 });
                 tag_marker.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformMachine,
                     operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("x86"),
+                    value: uv_small_str::literal!("x86"),
                 }));
                 marker.or(tag_marker);
             }
@@ -676,12 +676,12 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
                 let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("win32"),
+                    value: uv_small_str::literal!("win32"),
                 });
                 tag_marker.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformMachine,
                     operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("x86_64"),
+                    value: uv_small_str::literal!("x86_64"),
                 }));
                 marker.or(tag_marker);
             }
@@ -689,12 +689,12 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
                 let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("win32"),
+                    value: uv_small_str::literal!("win32"),
                 });
                 tag_marker.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformMachine,
                     operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("arm64"),
+                    value: uv_small_str::literal!("arm64"),
                 }));
                 marker.or(tag_marker);
             }
@@ -704,7 +704,7 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
                 let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("darwin"),
+                    value: uv_small_str::literal!("darwin"),
                 });
 
                 // Parse the macOS version from the tag.
@@ -788,7 +788,7 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
                     arch_marker.or(MarkerTree::expression(MarkerExpression::String {
                         key: MarkerValueString::PlatformMachine,
                         operator: MarkerOperator::Equal,
-                        value: ArcStr::from(*arch),
+                        value: SmallString::from(*arch),
                     }));
                 }
                 tag_marker.and(arch_marker);
@@ -801,7 +801,7 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
                 let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("linux"),
+                    value: uv_small_str::literal!("linux"),
                 });
 
                 // Parse the architecture from the tag.
@@ -867,7 +867,7 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
                 tag_marker.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformMachine,
                     operator: MarkerOperator::Equal,
-                    value: ArcStr::from(arch),
+                    value: SmallString::from(arch),
                 }));
 
                 marker.or(tag_marker);

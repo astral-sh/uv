@@ -5,13 +5,13 @@ pub use dist_info_name::DistInfoName;
 pub use extra_name::ExtraName;
 pub use group_name::{GroupName, DEV_DEPENDENCIES};
 pub use package_name::PackageName;
-use small_string::SmallString;
+use uv_small_str::SmallString;
 
 mod dist_info_name;
 mod extra_name;
 mod group_name;
 mod package_name;
-mod small_string;
+
 
 /// Validate and normalize an owned package or extra name.
 pub(crate) fn validate_and_normalize_owned(name: String) -> Result<SmallString, InvalidNameError> {
