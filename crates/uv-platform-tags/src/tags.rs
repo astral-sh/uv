@@ -6,7 +6,10 @@ use std::{cmp, num::NonZeroU32};
 
 use rustc_hash::FxHashMap;
 
+use uv_small_str::SmallString;
+
 use crate::{AbiTag, Arch, LanguageTag, Os, Platform, PlatformError, PlatformTag};
+
 
 #[derive(Debug, thiserror::Error)]
 pub enum TagsError {
@@ -551,25 +554,40 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             vec![PlatformTag::WinAmd64]
         }
         (Os::Windows, Arch::Aarch64) => vec![PlatformTag::WinArm64],
-        (Os::FreeBsd { release }, _) => {
+        (Os::FreeBsd { release }, arch) => {
             let release = release.replace(['.', '-'], "_");
-            vec![PlatformTag::FreeBsd { release, arch }]
+            let release_arch = format!("{release}_{arch}");
+            vec![PlatformTag::FreeBsd {
+                release_arch: SmallString::from(release_arch),
+            }]
         }
-        (Os::NetBsd { release }, _) => {
+        (Os::NetBsd { release }, arch) => {
             let release = release.replace(['.', '-'], "_");
-            vec![PlatformTag::NetBsd { release, arch }]
+            let release_arch = format!("{release}_{arch}");
+            vec![PlatformTag::NetBsd {
+                release_arch: SmallString::from(release_arch),
+            }]
         }
-        (Os::OpenBsd { release }, _) => {
+        (Os::OpenBsd { release }, arch) => {
             let release = release.replace(['.', '-'], "_");
-            vec![PlatformTag::OpenBsd { release, arch }]
+            let release_arch = format!("{release}_{arch}");
+            vec![PlatformTag::OpenBsd {
+                release_arch: SmallString::from(release_arch),
+            }]
         }
-        (Os::Dragonfly { release }, _) => {
+        (Os::Dragonfly { release }, arch) => {
             let release = release.replace(['.', '-'], "_");
-            vec![PlatformTag::Dragonfly { release, arch }]
+            let release_arch = format!("{release}_{arch}");
+            vec![PlatformTag::Dragonfly {
+                release_arch: SmallString::from(release_arch),
+            }]
         }
-        (Os::Haiku { release }, _) => {
+        (Os::Haiku { release }, arch) => {
             let release = release.replace(['.', '-'], "_");
-            vec![PlatformTag::Haiku { release, arch }]
+            let release_arch = format!("{release}_{arch}");
+            vec![PlatformTag::Haiku {
+                release_arch: SmallString::from(release_arch),
+            }]
         }
         (Os::Illumos { release, arch }, _) => {
             // See https://github.com/python/cpython/blob/46c8d915715aa2bd4d697482aa051fe974d440e1/Lib/sysconfig.py#L722-L730
@@ -583,13 +601,16 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
                     // SunOS 5 == Solaris 2
                     let release = format!("{}_{}", major_ver - 3, other);
                     let arch = format!("{arch}_64bit");
-                    return Ok(vec![PlatformTag::Solaris { release, arch }]);
+                    let release_arch = format!("{release}_{arch}");
+                    return Ok(vec![PlatformTag::Solaris {
+                        release_arch: SmallString::from(release_arch),
+                    }]);
                 }
             }
 
+            let release_arch = format!("{release}_{arch}");
             vec![PlatformTag::Illumos {
-                release: release.to_string(),
-                arch: arch.to_string(),
+                release_arch: SmallString::from(release_arch),
             }]
         }
         (Os::Android { api_level }, _) => {
