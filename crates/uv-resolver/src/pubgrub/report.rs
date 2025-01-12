@@ -128,7 +128,10 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                             } else {
                                 reason.singular_message()
                             };
-                            let context = reason.context_message(self.tags);
+                            let context = reason.context_message(
+                                self.tags,
+                                self.python_requirement.target().abi_tag(),
+                            );
                             if let Some(context) = context {
                                 format!("{}{}{}", range, Padded::new(" ", &message, " "), context)
                             } else {
@@ -567,12 +570,12 @@ impl PubGrubReportFormatter<'_> {
                         output_hints,
                     );
 
-                    // Check for unavailable versions due to `--no-build` or `--no-binary`.
                     if let UnavailableReason::Version(UnavailableVersion::IncompatibleDist(
                         incompatibility,
                     )) = reason
                     {
                         match incompatibility {
+                            // Check for unavailable versions due to `--no-build` or `--no-binary`.
                             IncompatibleDist::Wheel(IncompatibleWheel::NoBinary) => {
                                 output_hints.insert(PubGrubHint::NoBinary {
                                     package: package.clone(),
@@ -585,6 +588,7 @@ impl PubGrubReportFormatter<'_> {
                                     option: options.build_options.no_build().clone(),
                                 });
                             }
+                            // Check for unavailable versions due to incompatible tags.
                             IncompatibleDist::Wheel(IncompatibleWheel::Tag(tag)) => {
                                 if let Some(hint) = self.tag_hint(
                                     package,

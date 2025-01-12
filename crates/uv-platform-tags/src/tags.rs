@@ -7,7 +7,6 @@ use rustc_hash::FxHashMap;
 
 use crate::{AbiTag, Arch, LanguageTag, Os, Platform, PlatformError};
 
-
 #[derive(Debug, thiserror::Error)]
 pub enum TagsError {
     #[error(transparent)]
