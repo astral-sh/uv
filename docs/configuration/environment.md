@@ -92,6 +92,10 @@ resolution.
 Equivalent to the `--frozen` command-line argument. If set, uv will run without
 updating the `uv.lock` file.
 
+### `UV_GIT_LFS`
+
+Enables fetching files stored in Git LFS when installing a package from a Git repository.
+
 ### `UV_GITHUB_TOKEN`
 
 Equivalent to the `--token` argument for self update. A GitHub token for authentication.

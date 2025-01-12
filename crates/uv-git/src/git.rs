@@ -1,6 +1,7 @@
 //! Git support is derived from Cargo's implementation.
 //! Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
 //! Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/sources/git/utils.rs>
+use std::env;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::str::{self, FromStr};
@@ -251,6 +252,8 @@ impl GitRemote {
     ) -> Result<(GitDatabase, GitOid)> {
         let locked_ref = locked_rev.map(|oid| GitReference::FullCommit(oid.to_string()));
         let reference = locked_ref.as_ref().unwrap_or(reference);
+        let enable_lfs_fetch = env::var(EnvVars::UV_GIT_LFS).is_ok();
+
         if let Some(mut db) = db {
             fetch(&mut db.repo, self.url.as_str(), reference, client)
                 .with_context(|| format!("failed to fetch into: {}", into.user_display()))?;
@@ -261,8 +264,10 @@ impl GitRemote {
             };
 
             if let Some(rev) = resolved_commit_hash {
-                fetch_lfs(&mut db.repo, self.url.as_str(), &rev)
-                    .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
+                if enable_lfs_fetch {
+                    fetch_lfs(&mut db.repo, self.url.as_str(), &rev)
+                        .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
+                }
                 return Ok((db, rev));
             }
         }
@@ -282,8 +287,10 @@ impl GitRemote {
             Some(rev) => rev,
             None => reference.resolve(&repo)?,
         };
-        fetch_lfs(&mut repo, self.url.as_str(), &rev)
-            .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
+        if enable_lfs_fetch {
+            fetch_lfs(&mut repo, self.url.as_str(), &rev)
+                .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
+        }
 
         Ok((GitDatabase { repo }, rev))
     }
