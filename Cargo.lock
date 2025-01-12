@@ -5235,10 +5235,10 @@ dependencies = [
 name = "uv-normalize"
 version = "0.0.1"
 dependencies = [
- "arcstr",
  "rkyv",
  "schemars",
  "serde",
+ "uv-small-str",
 ]
 
 [[package]]
@@ -5620,6 +5620,16 @@ dependencies = [
  "uv-fs",
  "uv-static",
  "winreg",
+]
+
+[[package]]
+name = "uv-small-str"
+version = "0.0.1"
+dependencies = [
+ "arcstr",
+ "rkyv",
+ "schemars",
+ "serde",
 ]
 
 [[package]]

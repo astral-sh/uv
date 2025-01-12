@@ -1,11 +1,16 @@
 use std::cmp::PartialEq;
 use std::ops::Deref;
 
-/// An optimized small string type for short identifiers, like package names.
-///
-/// Represented as an [`arcstr::ArcStr`] internally.
-#[derive(Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct SmallString(arcstr::ArcStr);
+/// An optimized type for immutable identifiers. Represented as an [`arcstr::ArcStr`] internally.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SmallString(arcstr::ArcStr);
+
+impl From<arcstr::ArcStr> for SmallString {
+    #[inline]
+    fn from(s: arcstr::ArcStr) -> Self {
+        Self(s)
+    }
+}
 
 impl From<&str> for SmallString {
     #[inline]
@@ -25,6 +30,13 @@ impl AsRef<str> for SmallString {
     #[inline]
     fn as_ref(&self) -> &str {
         &self.0
+    }
+}
+
+impl core::borrow::Borrow<str> for SmallString {
+    #[inline]
+    fn borrow(&self) -> &str {
+        self
     }
 }
 
