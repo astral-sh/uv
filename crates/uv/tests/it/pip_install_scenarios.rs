@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.42/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.43/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi", unix))]
 
@@ -4079,6 +4079,7 @@ fn no_sdist_no_wheels_with_matching_abi() {
     filters.push((r"no-sdist-no-wheels-with-matching-abi-", "package-"));
 
     uv_snapshot!(filters, command(&context)
+        .arg("--python-platform=x86_64-manylinux2014")
         .arg("no-sdist-no-wheels-with-matching-abi-a")
         , @r###"
     success: false
@@ -4119,6 +4120,7 @@ fn no_sdist_no_wheels_with_matching_platform() {
     filters.push((r"no-sdist-no-wheels-with-matching-platform-", "package-"));
 
     uv_snapshot!(filters, command(&context)
+        .arg("--python-platform=x86_64-manylinux2014")
         .arg("no-sdist-no-wheels-with-matching-platform-a")
         , @r###"
     success: false
@@ -4159,6 +4161,7 @@ fn no_sdist_no_wheels_with_matching_python() {
     filters.push((r"no-sdist-no-wheels-with-matching-python-", "package-"));
 
     uv_snapshot!(filters, command(&context)
+        .arg("--python-platform=x86_64-manylinux2014")
         .arg("no-sdist-no-wheels-with-matching-python-a")
         , @r###"
     success: false
