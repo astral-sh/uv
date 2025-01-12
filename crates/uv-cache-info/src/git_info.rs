@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+
 use tracing::warn;
 use walkdir::WalkDir;
 
@@ -93,16 +94,12 @@ impl Tags {
             let entry = match entry {
                 Ok(entry) => entry,
                 Err(err) => {
-                    warn!("Failed to read git tags: {err}");
+                    warn!("Failed to read Git tags: {err}");
                     continue;
                 }
             };
             let path = entry.path();
-            let is_file = entry
-                .metadata()
-                .map_or(false, |metadata| metadata.is_file());
-
-            if !is_file {
+            if !entry.file_type().is_file() {
                 continue;
             }
             if let Ok(Some(tag)) = path.strip_prefix(&git_tags_path).map(|name| name.to_str()) {
