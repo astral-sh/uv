@@ -532,7 +532,7 @@ jobs:
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
       labels: windows-latest-large
-    name: "build binary | windows"
+    name: "build binary | windows x86_64"
     steps:
       - uses: actions/checkout@v4
 
@@ -561,69 +561,29 @@ jobs:
 
   build-binary-windows-aarch64:
     needs: determine_changes
-    timeout-minutes: 30
+    timeout-minutes: 25
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
-      labels: github-windows-11-aarch64-4
+      labels: windows-latest-large
     name: "build binary | windows aarch64"
     steps:
-      - name: Download LLVM (aarch64)
-        uses: robinraju/release-downloader@v1
-        with:
-          repository: "llvm/llvm-project"
-          tag: "llvmorg-19.1.5"
-          filename: "LLVM-19.1.5-woa64.exe"
-
-      - name: Install LLVM (aarch64)
-        run: |
-          Start-Process -FilePath "LLVM-19.1.5-woa64.exe" -ArgumentList '/S' -NoNewWindow -Wait
-
-      - name: Install Build Tools (aarch64)
-        run: |
-          Set-ExecutionPolicy Bypass -Scope Process -Force
-          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-          iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
-          Add-Content -Path $env:GITHUB_PATH -Value "C:\ProgramData\chocolatey\bin" -Encoding utf8
-          choco install visualstudio2022buildtools -y --no-progress --package-parameters "--add Microsoft.VisualStudio.Component.VC.Tools.ARM64 --add Microsoft.VisualStudio.Component.Windows11SDK.22621 --add Microsoft.VisualStudio.ComponentGroup.NativeDesktop.Llvm.Clang --add Microsoft.VisualStudio.Component.VC.CMake.Project"
-          choco cache list -v
-
-      - name: Add clang to PATH and check if clang exists
-        run: |
-          $env:Path += ";C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\bin"
-          Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\bin" -Encoding utf8
-          clang --version
-
-      - name: Add cmake to PATH and check if cmake exists
-        run: |
-          $env:Path += ";C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\"
-          Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin" -Encoding utf8
-          cmake --version
-
-      - name: Install Nightly Rust (aarch64)
-        run: |
-          Add-Content -Path $env:GITHUB_PATH -Value "$env:USERPROFILE\.cargo\bin" -Encoding utf8
-          Invoke-WebRequest -Uri "https://win.rustup.rs/aarch64" -OutFile "$env:RUNNER_TEMP\rustup-init.exe"
-          & "$env:RUNNER_TEMP\rustup-init.exe" --default-host aarch64-pc-windows-msvc --default-toolchain nightly -y
-
-      - name: Download Git for Windows (aarch64)
-        uses: robinraju/release-downloader@v1
-        with:
-          repository: "git-for-windows/git"
-          tag: "v2.48.0-rc1.windows.1"
-          filename: "Git-2.48.0-rc1-arm64.exe"
-
-      - name: Install Git for Windows (aarch64)
-        run: |
-          Start-Process -FilePath "Git-2.48.0-rc1-arm64.exe" -ArgumentList "/VERYSILENT" -NoNewWindow -Wait
-          Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files\Git\cmd" -Encoding utf8
-          Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files\Git\bin" -Encoding utf8
-
       - uses: actions/checkout@v4
 
+      - name: Create Dev Drive using ReFS
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
+
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ env.UV_WORKSPACE }}
 
       - name: "Build"
-        run: $env:Path += ";C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\bin"; $env:Path += ";C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\"; cargo build --target aarch64-pc-windows-msvc
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: cargo build --target aarch64-pc-windows-msvc
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
