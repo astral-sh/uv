@@ -1,5 +1,5 @@
 ---
-title: Install and Manage Python
+title: Installing and Managing Python
 description:
   Guide to install specific Python versions, manage existing installations, and automate downloads
   with uv.
