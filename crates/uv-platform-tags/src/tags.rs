@@ -73,9 +73,9 @@ impl TagCompatibility {
 pub struct Tags {
     /// `python_tag` |--> `abi_tag` |--> `platform_tag` |--> priority
     #[allow(clippy::type_complexity)]
-    map: Arc<FxHashMap<String, FxHashMap<String, FxHashMap<String, TagPriority>>>>,
+    map: Arc<FxHashMap<LanguageTag, FxHashMap<AbiTag, FxHashMap<PlatformTag, TagPriority>>>>,
     /// The highest-priority tag for the Python version and platform.
-    best: Option<(String, String, String)>,
+    best: Option<(LanguageTag, AbiTag, PlatformTag)>,
 }
 
 impl Tags {
@@ -83,7 +83,7 @@ impl Tags {
     ///
     /// Tags are prioritized based on their position in the given vector. Specifically, tags that
     /// appear earlier in the vector are given higher priority than tags that appear later.
-    pub fn new(tags: Vec<(String, String, String)>) -> Self {
+    pub fn new(tags: Vec<(LanguageTag, AbiTag, PlatformTag)>) -> Self {
         // Store the highest-priority tag for each component.
         let best = tags.first().cloned();
 
@@ -120,7 +120,7 @@ impl Tags {
         let platform_tags = {
             let mut platform_tags = compatible_tags(platform)?;
             if matches!(platform.os(), Os::Manylinux { .. }) && !manylinux_compatible {
-                platform_tags.retain(|tag| !tag.starts_with("manylinux"));
+                platform_tags.retain(|tag| !tag.is_manylinux());
             }
             platform_tags
         };
@@ -130,10 +130,8 @@ impl Tags {
         // 1. This exact c api version
         for platform_tag in &platform_tags {
             tags.push((
-                implementation.language_tag(python_version).to_string(),
-                implementation
-                    .abi_tag(python_version, implementation_version)
-                    .to_string(),
+                implementation.language_tag(python_version),
+                implementation.abi_tag(python_version, implementation_version),
                 platform_tag.clone(),
             ));
         }
@@ -145,10 +143,8 @@ impl Tags {
                 if !gil_disabled {
                     for platform_tag in &platform_tags {
                         tags.push((
-                            implementation
-                                .language_tag((python_version.0, minor))
-                                .to_string(),
-                            AbiTag::Abi3.to_string(),
+                            implementation.language_tag((python_version.0, minor)),
+                            AbiTag::Abi3,
                             platform_tag.clone(),
                         ));
                     }
@@ -157,10 +153,8 @@ impl Tags {
                 if minor == python_version.1 {
                     for platform_tag in &platform_tags {
                         tags.push((
-                            implementation
-                                .language_tag((python_version.0, minor))
-                                .to_string(),
-                            AbiTag::None.to_string(),
+                            implementation.language_tag((python_version.0, minor)),
+                            AbiTag::None,
                             platform_tag.clone(),
                         ));
                     }
@@ -174,9 +168,8 @@ impl Tags {
                     LanguageTag::Python {
                         major: python_version.0,
                         minor: Some(minor),
-                    }
-                    .to_string(),
-                    AbiTag::None.to_string(),
+                    },
+                    AbiTag::None,
                     platform_tag.clone(),
                 ));
             }
@@ -184,8 +177,11 @@ impl Tags {
             if minor == python_version.1 {
                 for platform_tag in &platform_tags {
                     tags.push((
-                        format!("py{}", python_version.0),
-                        AbiTag::None.to_string(),
+                        LanguageTag::Python {
+                            major: python_version.0,
+                            minor: None,
+                        },
+                        AbiTag::None,
                         platform_tag.clone(),
                     ));
                 }
@@ -194,9 +190,9 @@ impl Tags {
         // 4. no binary
         if matches!(implementation, Implementation::CPython { .. }) {
             tags.push((
-                implementation.language_tag(python_version).to_string(),
-                AbiTag::None.to_string(),
-                "any".to_string(),
+                implementation.language_tag(python_version),
+                AbiTag::None,
+                PlatformTag::Any,
             ));
         }
         for minor in (0..=python_version.1).rev() {
@@ -204,10 +200,9 @@ impl Tags {
                 LanguageTag::Python {
                     major: python_version.0,
                     minor: Some(minor),
-                }
-                .to_string(),
-                AbiTag::None.to_string(),
-                "any".to_string(),
+                },
+                AbiTag::None,
+                PlatformTag::Any,
             ));
             // After the matching version emit `none` tags for the major version i.e. `py3`
             if minor == python_version.1 {
@@ -215,10 +210,9 @@ impl Tags {
                     LanguageTag::Python {
                         major: python_version.0,
                         minor: None,
-                    }
-                    .to_string(),
-                    AbiTag::None.to_string(),
-                    "any".to_string(),
+                    },
+                    AbiTag::None,
+                    PlatformTag::Any,
                 ));
             }
         }
@@ -232,9 +226,9 @@ impl Tags {
     /// tag is found.
     pub fn is_compatible(
         &self,
-        wheel_python_tags: &[String],
-        wheel_abi_tags: &[String],
-        wheel_platform_tags: &[String],
+        wheel_python_tags: &[LanguageTag],
+        wheel_abi_tags: &[AbiTag],
+        wheel_platform_tags: &[PlatformTag],
     ) -> bool {
         // NOTE: A typical work-load is a context in which the platform tags
         // are quite large, but the tags of a wheel are quite small. It is
@@ -267,9 +261,9 @@ impl Tags {
     /// If incompatible, includes the tag part which was a closest match.
     pub fn compatibility(
         &self,
-        wheel_python_tags: &[String],
-        wheel_abi_tags: &[String],
-        wheel_platform_tags: &[String],
+        wheel_python_tags: &[LanguageTag],
+        wheel_abi_tags: &[AbiTag],
+        wheel_platform_tags: &[PlatformTag],
     ) -> TagCompatibility {
         let mut max_compatibility = TagCompatibility::Incompatible(IncompatibleTag::Invalid);
 
@@ -301,26 +295,26 @@ impl Tags {
     }
 
     /// Return the highest-priority Python tag for the [`Tags`].
-    pub fn python_tag(&self) -> Option<&str> {
-        self.best.as_ref().map(|(py, _, _)| py.as_str())
+    pub fn python_tag(&self) -> Option<LanguageTag> {
+        self.best.as_ref().map(|(python, _, _)| *python)
     }
 
     /// Return the highest-priority ABI tag for the [`Tags`].
-    pub fn abi_tag(&self) -> Option<&str> {
-        self.best.as_ref().map(|(_, abi, _)| abi.as_str())
+    pub fn abi_tag(&self) -> Option<AbiTag> {
+        self.best.as_ref().map(|(_, abi, _)| *abi)
     }
 
     /// Return the highest-priority platform tag for the [`Tags`].
-    pub fn platform_tag(&self) -> Option<&str> {
-        self.best.as_ref().map(|(_, _, platform)| platform.as_str())
+    pub fn platform_tag(&self) -> Option<&PlatformTag> {
+        self.best.as_ref().map(|(_, _, platform)| platform)
     }
 
     /// Returns `true` if the given language and ABI tags are compatible with the current
     /// environment.
-    pub fn is_compatible_abi<'a>(&'a self, python_tag: &'a str, abi_tag: &'a str) -> bool {
+    pub fn is_compatible_abi(&self, python_tag: LanguageTag, abi_tag: AbiTag) -> bool {
         self.map
-            .get(python_tag)
-            .map(|abis| abis.contains_key(abi_tag))
+            .get(&python_tag)
+            .map(|abis| abis.contains_key(&abi_tag))
             .unwrap_or(false)
     }
 }
@@ -431,12 +425,110 @@ impl Implementation {
     }
 }
 
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
+pub enum PlatformTag {
+    /// Ex) `any`
+    Any,
+    /// Ex) `manylinux_2_24_x86_64`
+    Manylinux { major: u16, minor: u16, arch: Arch },
+    /// Ex) `manylinux1_x86_64`
+    Manylinux1 { arch: Arch },
+    /// Ex) `manylinux2010_x86_64`
+    Manylinux2010 { arch: Arch },
+    /// Ex) `manylinux2014_x86_64`
+    Manylinux2014 { arch: Arch },
+    /// Ex) `linux_x86_64`
+    Linux { arch: Arch },
+    /// Ex) `musllinux_1_2_x86_64`
+    Musllinux { major: u16, minor: u16, arch: Arch },
+    /// Ex) `macosx_11_0_x86_64`
+    Macos {
+        major: u16,
+        minor: u16,
+        binary_format: BinaryFormat,
+    },
+    /// Ex) `win32`
+    Win32,
+    /// Ex) `win_amd64`
+    WinAmd64,
+    /// Ex) `win_arm64`
+    WinArm64,
+    /// Ex) `android_21_x86_64`
+    Android { api_level: u16, arch: Arch },
+    /// Ex) `freebsd_12_x86_64`
+    FreeBsd { release: String, arch: Arch },
+    /// Ex) `netbsd_9_x86_64`
+    NetBsd { release: String, arch: Arch },
+    /// Ex) `openbsd_6_x86_64`
+    OpenBsd { release: String, arch: Arch },
+    /// Ex) `dragonfly_6_x86_64`
+    Dragonfly { release: String, arch: Arch },
+    /// Ex) `haiku_1_x86_64`
+    Haiku { release: String, arch: Arch },
+    /// Ex) `illumos_5_11_x86_64`
+    Illumos { release: String, arch: String },
+    /// Ex) `solaris_11_4_x86_64`
+    Solaris { release: String, arch: String },
+}
+
+impl PlatformTag {
+    pub fn is_manylinux(&self) -> bool {
+        matches!(self, Self::Manylinux { .. } | Self::Manylinux1 { .. } | Self::Manylinux2010 { .. } | Self::Manylinux2014 { .. })
+    }
+}
+
+impl std::fmt::Display for PlatformTag {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Any => write!(f, "any"),
+            Self::Manylinux { major, minor, arch } => {
+                write!(f, "manylinux_{major}_{minor}_{arch}")
+            }
+            Self::Manylinux1 { arch } => write!(f, "manylinux1_{arch}"),
+            Self::Manylinux2010 { arch } => write!(f, "manylinux2010_{arch}"),
+            Self::Manylinux2014 { arch } => write!(f, "manylinux2014_{arch}"),
+            Self::Linux { arch } => write!(f, "linux_{arch}"),
+            Self::Musllinux { major, minor, arch } => {
+                write!(f, "musllinux_{major}_{minor}_{arch}")
+            }
+            Self::Macos {
+                major,
+                minor,
+                binary_format: format,
+            } => write!(f, "macosx_{major}_{minor}_{format}"),
+            Self::Win32 => write!(f, "win32"),
+            Self::WinAmd64 => write!(f, "win_amd64"),
+            Self::WinArm64 => write!(f, "win_arm64"),
+            Self::Android { api_level, arch } => write!(f, "android_{api_level}_{arch}"),
+            Self::FreeBsd { release, arch } => write!(f, "freebsd_{release}_{arch}"),
+            Self::NetBsd { release, arch } => write!(f, "netbsd_{release}_{arch}"),
+            Self::OpenBsd { release, arch } => write!(f, "openbsd_{release}_{arch}"),
+            Self::Dragonfly { release, arch } => write!(f, "dragonfly_{release}_{arch}"),
+            Self::Haiku { release, arch } => write!(f, "haiku_{release}_{arch}"),
+            Self::Illumos { release, arch } => write!(f, "illumos_{release}_{arch}"),
+            Self::Solaris { release, arch } => write!(f, "solaris_{release}_{arch}_64bit"),
+        }
+    }
+}
+
 /// Returns the compatible tags for the current [`Platform`] (e.g., `manylinux_2_17`,
 /// `macosx_11_0_arm64`, or `win_amd64`).
 ///
 /// We have two cases: Actual platform specific tags (including "merged" tags such as universal2)
 /// and "any".
-fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
+fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformError> {
     let os = platform.os();
     let arch = platform.arch();
 
@@ -445,30 +537,38 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
             let mut platform_tags = Vec::new();
             if let Some(min_minor) = arch.get_minimum_manylinux_minor() {
                 for minor in (min_minor..=*minor).rev() {
-                    platform_tags.push(format!("manylinux_{major}_{minor}_{arch}"));
+                    platform_tags.push(PlatformTag::Manylinux {
+                        major: *major,
+                        minor,
+                        arch,
+                    });
                     // Support legacy manylinux tags with lower priority
                     // <https://peps.python.org/pep-0600/#legacy-manylinux-tags>
                     if minor == 12 {
-                        platform_tags.push(format!("manylinux2010_{arch}"));
+                        platform_tags.push(PlatformTag::Manylinux2010 { arch });
                     }
                     if minor == 17 {
-                        platform_tags.push(format!("manylinux2014_{arch}"));
+                        platform_tags.push(PlatformTag::Manylinux2014 { arch });
                     }
                     if minor == 5 {
-                        platform_tags.push(format!("manylinux1_{arch}"));
+                        platform_tags.push(PlatformTag::Manylinux1 { arch });
                     }
                 }
             }
             // Non-manylinux is given lowest priority.
             // <https://github.com/pypa/packaging/blob/fd4f11139d1c884a637be8aa26bb60a31fbc9411/packaging/tags.py#L444>
-            platform_tags.push(format!("linux_{arch}"));
+            platform_tags.push(PlatformTag::Linux { arch });
             platform_tags
         }
         (Os::Musllinux { major, minor }, _) => {
-            let mut platform_tags = vec![format!("linux_{arch}")];
+            let mut platform_tags = vec![PlatformTag::Linux { arch }];
             // musl 1.1 is the lowest supported version in musllinux
             platform_tags
-                .extend((1..=*minor).map(|minor| format!("musllinux_{major}_{minor}_{arch}")));
+                .extend((1..=*minor).map(|minor| PlatformTag::Musllinux {
+                    major: *major,
+                    minor,
+                    arch,
+                }));
             platform_tags
         }
         (Os::Macos { major, minor }, Arch::X86_64) => {
@@ -479,8 +579,12 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
                     // Prior to Mac OS 11, each yearly release of Mac OS bumped the "minor" version
                     // number. The major version was always 10.
                     for minor in (4..=*minor).rev() {
-                        for binary_format in get_mac_binary_formats(arch) {
-                            platform_tags.push(format!("macosx_{major}_{minor}_{binary_format}"));
+                        for binary_format in BinaryFormat::from_arch(arch) {
+                            platform_tags.push(PlatformTag::Macos {
+                                major: 10,
+                                minor,
+                                binary_format,
+                            });
                         }
                     }
                 }
@@ -488,16 +592,23 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
                     // Starting with Mac OS 11, each yearly release bumps the major version number.
                     // The minor versions are now the midyear updates.
                     for major in (11..=*major).rev() {
-                        for binary_format in get_mac_binary_formats(arch) {
-                            platform_tags.push(format!("macosx_{}_{}_{}", major, 0, binary_format));
+                        for binary_format in BinaryFormat::from_arch(arch) {
+                            platform_tags.push(PlatformTag::Macos {
+                                major,
+                                minor: 0,
+                                binary_format,
+                            });
                         }
                     }
                     // The "universal2" binary format can have a macOS version earlier than 11.0
                     // when the x86_64 part of the binary supports that version of macOS.
                     for minor in (4..=16).rev() {
-                        for binary_format in get_mac_binary_formats(arch) {
-                            platform_tags
-                                .push(format!("macosx_{}_{}_{}", 10, minor, binary_format));
+                        for binary_format in BinaryFormat::from_arch(arch) {
+                            platform_tags.push(PlatformTag::Macos {
+                                major: 10,
+                                minor,
+                                binary_format,
+                            });
                         }
                     }
                 }
@@ -515,8 +626,12 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
             // Starting with Mac OS 11, each yearly release bumps the major version number.
             // The minor versions are now the midyear updates.
             for major in (11..=*major).rev() {
-                for binary_format in get_mac_binary_formats(arch) {
-                    platform_tags.push(format!("macosx_{}_{}_{}", major, 0, binary_format));
+                for binary_format in BinaryFormat::from_arch(arch) {
+                    platform_tags.push(PlatformTag::Macos {
+                        major,
+                        minor: 0,
+                        binary_format,
+                    });
                 }
             }
             // The "universal2" binary format can have a macOS version earlier than 11.0
@@ -524,27 +639,55 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
             platform_tags.extend(
                 (4..=16)
                     .rev()
-                    .map(|minor| format!("macosx_{}_{}_universal2", 10, minor)),
+                    .map(|minor| PlatformTag::Macos {
+                        major: 10,
+                        minor,
+                        binary_format: BinaryFormat::Universal2,
+                    }),
             );
             platform_tags
         }
         (Os::Windows, Arch::X86) => {
-            vec!["win32".to_string()]
+            vec![PlatformTag::Win32]
         }
         (Os::Windows, Arch::X86_64) => {
-            vec!["win_amd64".to_string()]
+            vec![PlatformTag::WinAmd64]
         }
-        (Os::Windows, Arch::Aarch64) => vec!["win_arm64".to_string()],
-        (
-            Os::FreeBsd { release }
-            | Os::NetBsd { release }
-            | Os::OpenBsd { release }
-            | Os::Dragonfly { release }
-            | Os::Haiku { release },
-            _,
-        ) => {
+        (Os::Windows, Arch::Aarch64) => vec![PlatformTag::WinArm64],
+        (Os::FreeBsd { release }, _) => {
             let release = release.replace(['.', '-'], "_");
-            vec![format!("{os}_{release}_{arch}")]
+            vec![PlatformTag::FreeBsd {
+                release,
+                arch,
+            }]
+        }
+        (Os::NetBsd { release }, _) => {
+            let release = release.replace(['.', '-'], "_");
+            vec![PlatformTag::NetBsd {
+                release,
+                arch,
+            }]
+        }
+        (Os::OpenBsd { release }, _) => {
+            let release = release.replace(['.', '-'], "_");
+            vec![PlatformTag::OpenBsd {
+                release,
+                arch,
+            }]
+        }
+        (Os::Dragonfly { release }, _) => {
+            let release = release.replace(['.', '-'], "_");
+            vec![PlatformTag::Dragonfly {
+                release,
+                arch,
+            }]
+        }
+        (Os::Haiku { release }, _) => {
+            let release = release.replace(['.', '-'], "_");
+            vec![PlatformTag::Haiku {
+                release,
+                arch,
+            }]
         }
         (Os::Illumos { release, arch }, _) => {
             // See https://github.com/python/cpython/blob/46c8d915715aa2bd4d697482aa051fe974d440e1/Lib/sysconfig.py#L722-L730
@@ -556,17 +699,25 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
                 })?;
                 if major_ver >= 5 {
                     // SunOS 5 == Solaris 2
-                    let os = "solaris";
                     let release = format!("{}_{}", major_ver - 3, other);
                     let arch = format!("{arch}_64bit");
-                    return Ok(vec![format!("{os}_{release}_{arch}")]);
+                    return Ok(vec![PlatformTag::Solaris {
+                        release,
+                        arch,
+                    }]);
                 }
             }
 
-            vec![format!("{os}_{release}_{arch}")]
+            vec![PlatformTag::Illumos {
+                release: release.to_string(),
+                arch: arch.to_string(),
+            }]
         }
         (Os::Android { api_level }, _) => {
-            vec![format!("{os}_{api_level}_{arch}")]
+            vec![PlatformTag::Android {
+                api_level: *api_level,
+                arch,
+            }]
         }
         _ => {
             return Err(PlatformError::OsVersionDetectionError(format!(
@@ -577,31 +728,73 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
     Ok(platform_tags)
 }
 
-/// Determine the appropriate binary formats for a macOS version.
-/// Source: <https://github.com/pypa/packaging/blob/fd4f11139d1c884a637be8aa26bb60a31fbc9411/packaging/tags.py#L314>
-fn get_mac_binary_formats(arch: Arch) -> Vec<String> {
-    let mut formats = vec![match arch {
-        Arch::Aarch64 => "arm64".to_string(),
-        _ => arch.to_string(),
-    }];
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
+enum BinaryFormat {
+    Intel,
+    Arm64,
+    Fat64,
+    Fat32,
+    Universal2,
+    Universal,
+    X86_64,
+}
 
-    if matches!(arch, Arch::X86_64) {
-        formats.extend([
-            "intel".to_string(),
-            "fat64".to_string(),
-            "fat32".to_string(),
-        ]);
+impl std::fmt::Display for BinaryFormat {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Intel => write!(f, "intel"),
+            Self::Arm64 => write!(f, "arm64"),
+            Self::Fat64 => write!(f, "fat64"),
+            Self::Fat32 => write!(f, "fat32"),
+            Self::Universal2 => write!(f, "universal2"),
+            Self::Universal => write!(f, "universal"),
+            Self::X86_64 => write!(f, "x86_64"),
+        }
     }
+}
 
-    if matches!(arch, Arch::X86_64 | Arch::Aarch64) {
-        formats.push("universal2".to_string());
+impl BinaryFormat {
+    /// Determine the appropriate binary formats for a macOS version.
+    ///
+    /// See: <https://github.com/pypa/packaging/blob/fd4f11139d1c884a637be8aa26bb60a31fbc9411/packaging/tags.py#L314>
+    pub fn from_arch(arch: Arch) -> Vec<Self> {
+        let mut formats = vec![match arch {
+            Arch::Aarch64 => Self::Arm64,
+            Arch::X86_64 => Self::X86_64,
+            _ => unreachable!(),
+        }];
+
+        if matches!(arch, Arch::X86_64) {
+            formats.extend([
+                Self::Intel,
+                Self::Fat64,
+                Self::Fat32,
+            ]);
+        }
+
+        if matches!(arch, Arch::X86_64 | Arch::Aarch64) {
+            formats.push(Self::Universal2);
+        }
+
+        if matches!(arch, Arch::X86_64) {
+            formats.push(Self::Universal);
+        }
+
+        formats
     }
-
-    if matches!(arch, Arch::X86_64) {
-        formats.push("universal".to_string());
-    }
-
-    formats
 }
 
 #[cfg(test)]

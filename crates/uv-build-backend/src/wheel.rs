@@ -11,6 +11,7 @@ use tracing::{debug, trace};
 use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
 use uv_globfilter::{parse_portable_glob, GlobDirFilter};
+use uv_platform_tags::{AbiTag, LanguageTag};
 use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
 use zip::{CompressionMethod, ZipWriter};
@@ -33,8 +34,11 @@ pub fn build_wheel(
         name: pyproject_toml.name().clone(),
         version: pyproject_toml.version().clone(),
         build_tag: None,
-        python_tag: vec!["py3".to_string()],
-        abi_tag: vec!["none".to_string()],
+        python_tag: vec![LanguageTag::Python {
+            major: 3,
+            minor: None,
+        }],
+        abi_tag: vec![AbiTag::None],
         platform_tag: vec!["any".to_string()],
     };
 
@@ -68,8 +72,11 @@ pub fn list_wheel(
         name: pyproject_toml.name().clone(),
         version: pyproject_toml.version().clone(),
         build_tag: None,
-        python_tag: vec!["py3".to_string()],
-        abi_tag: vec!["none".to_string()],
+        python_tag: vec![LanguageTag::Python {
+            major: 3,
+            minor: None,
+        }],
+        abi_tag: vec![AbiTag::None],
         platform_tag: vec!["any".to_string()],
     };
 
@@ -247,8 +254,11 @@ pub fn build_editable(
         name: pyproject_toml.name().clone(),
         version: pyproject_toml.version().clone(),
         build_tag: None,
-        python_tag: vec!["py3".to_string()],
-        abi_tag: vec!["none".to_string()],
+        python_tag: vec![LanguageTag::Python {
+            major: 3,
+            minor: None,
+        }],
+        abi_tag: vec![AbiTag::None],
         platform_tag: vec!["any".to_string()],
     };
 
@@ -299,8 +309,11 @@ pub fn metadata(
         name: pyproject_toml.name().clone(),
         version: pyproject_toml.version().clone(),
         build_tag: None,
-        python_tag: vec!["py3".to_string()],
-        abi_tag: vec!["none".to_string()],
+        python_tag: vec![LanguageTag::Python {
+            major: 3,
+            minor: None,
+        }],
+        abi_tag: vec![AbiTag::None],
         platform_tag: vec!["any".to_string()],
     };
 
@@ -744,6 +757,7 @@ mod test {
     use uv_fs::Simplified;
     use uv_normalize::PackageName;
     use uv_pep440::Version;
+    use uv_platform_tags::AbiTag;
     use walkdir::WalkDir;
 
     #[test]
@@ -752,8 +766,17 @@ mod test {
             name: PackageName::from_str("foo").unwrap(),
             version: Version::from_str("1.2.3").unwrap(),
             build_tag: None,
-            python_tag: vec!["py2".to_string(), "py3".to_string()],
-            abi_tag: vec!["none".to_string()],
+            python_tag: vec![
+                LanguageTag::Python {
+                    major: 2,
+                    minor: None,
+                },
+                LanguageTag::Python {
+                    major: 3,
+                    minor: None,
+                },
+            ],
+            abi_tag: vec![AbiTag::None],
             platform_tag: vec!["any".to_string()],
         };
 

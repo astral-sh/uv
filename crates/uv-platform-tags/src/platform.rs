@@ -72,7 +72,22 @@ impl fmt::Display for Os {
 }
 
 /// All supported CPU architectures
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+    serde::Deserialize,
+    serde::Serialize,
+)]
+#[rkyv(derive(Debug))]
 #[serde(rename_all = "lowercase")]
 pub enum Arch {
     #[serde(alias = "arm64")]

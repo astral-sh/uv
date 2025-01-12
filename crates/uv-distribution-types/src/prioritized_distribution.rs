@@ -547,7 +547,7 @@ impl PrioritizedDist {
         for (wheel, _) in &self.0.wheels {
             for wheel_py in &wheel.filename.python_tag {
                 for wheel_abi in &wheel.filename.abi_tag {
-                    if tags.is_compatible_abi(wheel_py.as_str(), wheel_abi.as_str()) {
+                    if tags.is_compatible_abi(*wheel_py, *wheel_abi) {
                         candidates.extend(wheel.filename.platform_tag.iter().map(String::as_str));
                     }
                 }

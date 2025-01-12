@@ -7,7 +7,7 @@ use url::Url;
 
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::{Version, VersionParseError};
-use uv_platform_tags::{TagCompatibility, Tags};
+use uv_platform_tags::{AbiTag, LanguageTag, ParseAbiTagError, ParseLanguageTagError, PlatformTag, TagCompatibility, Tags};
 
 use crate::{BuildTag, BuildTagError};
 
@@ -28,9 +28,9 @@ pub struct WheelFilename {
     pub name: PackageName,
     pub version: Version,
     pub build_tag: Option<BuildTag>,
-    pub python_tag: Vec<String>,
-    pub abi_tag: Vec<String>,
-    pub platform_tag: Vec<String>,
+    pub python_tag: Vec<LanguageTag>,
+    pub abi_tag: Vec<AbiTag>,
+    pub platform_tag: Vec<PlatformTag>,
 }
 
 impl FromStr for WheelFilename {
@@ -89,8 +89,8 @@ impl WheelFilename {
     fn get_tag(&self) -> String {
         format!(
             "{}-{}-{}",
-            self.python_tag.join("."),
-            self.abi_tag.join("."),
+            self.python_tag[0],
+            self.abi_tag[0],
             self.platform_tag.join(".")
         )
     }
@@ -179,8 +179,16 @@ impl WheelFilename {
             build_tag,
             // TODO(charlie): Consider storing structured tags here. We need to benchmark to
             // understand whether it's impactful.
-            python_tag: python_tag.split('.').map(String::from).collect(),
-            abi_tag: abi_tag.split('.').map(String::from).collect(),
+            python_tag: python_tag
+                .split('.')
+                .map(LanguageTag::from_str)
+                .collect::<Result<_, _>>()
+                .map_err(|err| WheelFilenameError::InvalidLanguageTag(filename.to_string(), err))?,
+            abi_tag: abi_tag
+                .split('.')
+                .map(AbiTag::from_str)
+                .collect::<Result<_, _>>()
+                .map_err(|err| WheelFilenameError::InvalidAbiTag(filename.to_string(), err))?,
             platform_tag: platform_tag.split('.').map(String::from).collect(),
         })
     }
@@ -238,6 +246,10 @@ pub enum WheelFilenameError {
     InvalidPackageName(String, InvalidNameError),
     #[error("The wheel filename \"{0}\" has an invalid build tag: {1}")]
     InvalidBuildTag(String, BuildTagError),
+    #[error("The wheel filename \"{0}\" has an invalid language tag: {1}")]
+    InvalidLanguageTag(String, ParseLanguageTagError),
+    #[error("The wheel filename \"{0}\" has an invalid ABI tag: {1}")]
+    InvalidAbiTag(String, ParseAbiTagError),
 }
 
 #[cfg(test)]

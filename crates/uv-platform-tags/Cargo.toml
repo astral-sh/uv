@@ -16,6 +16,7 @@ doctest = false
 workspace = true
 
 [dependencies]
+rkyv = { workspace = true}
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }

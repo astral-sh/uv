@@ -674,7 +674,7 @@ async fn form_metadata(
     ];
 
     if let DistFilename::WheelFilename(wheel) = filename {
-        form_metadata.push(("pyversion", wheel.python_tag.join(".")));
+        form_metadata.push(("pyversion", wheel.python_tag[0].to_string()));
     } else {
         form_metadata.push(("pyversion", "source".to_string()));
     }

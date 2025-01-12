@@ -4664,6 +4664,7 @@ dependencies = [
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
+ "uv-platform-tags",
  "uv-pypi-types",
  "uv-version",
  "uv-warnings",
@@ -5318,6 +5319,7 @@ name = "uv-platform-tags"
 version = "0.0.1"
 dependencies = [
  "insta",
+ "rkyv",
  "rustc-hash",
  "serde",
  "thiserror 2.0.11",

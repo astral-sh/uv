@@ -5,7 +5,20 @@ use std::str::FromStr;
 ///
 /// This is the second segment in the wheel filename, following the language tag. For example,
 /// in `cp39-none-manylinux_2_24_x86_64.whl`, the ABI tag is `none`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
 pub enum AbiTag {
     /// Ex) `none`
     None,
