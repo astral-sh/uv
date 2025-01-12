@@ -433,7 +433,7 @@ fn freeze_multiple_paths() -> Result<()> {
 
 // We follow pip in just ignoring nonexistant paths
 #[test]
-fn freeze_nonexistant_path() -> Result<()> {
+fn freeze_nonexistant_path() {
     let context = TestContext::new("3.12");
 
     let nonexistant_dir = {
@@ -451,7 +451,5 @@ fn freeze_nonexistant_path() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    ");
-
-    Ok(())
+    ")
 }
