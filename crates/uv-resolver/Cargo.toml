@@ -38,6 +38,7 @@ uv-types = { workspace = true }
 uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
+arcstr = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
 dashmap = { workspace = true }
 either = { workspace = true }

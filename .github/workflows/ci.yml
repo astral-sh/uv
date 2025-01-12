@@ -95,7 +95,6 @@ jobs:
           version: ${{ env.SHELLCHECK_VERSION }}
           severity: style
           check_together: "yes"
-          additional_files: activate
 
   cargo-clippy:
     timeout-minutes: 10

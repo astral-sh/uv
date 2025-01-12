@@ -34,7 +34,7 @@ fn get_script_launcher(entry_point: &Script, shebang: &str) -> String {
     let import_name = entry_point.import_name();
 
     format!(
-        r##"{shebang}
+        r#"{shebang}
 # -*- coding: utf-8 -*-
 import re
 import sys
@@ -42,7 +42,7 @@ from {module} import {import_name}
 if __name__ == "__main__":
     sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
     sys.exit({function}())
-"##
+"#
     )
 }
 

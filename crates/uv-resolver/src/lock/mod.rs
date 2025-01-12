@@ -953,7 +953,7 @@ impl Lock {
                     .ok()
                     .flatten()
                     .map(|package| matches!(package.id.source, Source::Virtual(_)));
-                if actual.map_or(true, |actual| actual != expected) {
+                if actual != Some(expected) {
                     return Ok(SatisfiesResult::MismatchedSources(name.clone(), expected));
                 }
             }
@@ -973,7 +973,7 @@ impl Lock {
                     .ok()
                     .flatten()
                     .map(|package| &package.id.version);
-                if actual.map_or(true, |actual| actual != expected) {
+                if actual != Some(expected) {
                     return Ok(SatisfiesResult::MismatchedVersion(
                         name.clone(),
                         expected.clone(),

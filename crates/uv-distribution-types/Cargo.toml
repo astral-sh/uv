@@ -29,6 +29,7 @@ uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 
 anyhow = { workspace = true }
+arcstr = { workspace = true }
 bitflags = { workspace = true }
 fs-err = { workspace = true }
 itertools = { workspace = true }

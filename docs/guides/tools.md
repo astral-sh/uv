@@ -235,4 +235,4 @@ $ uv tool upgrade --all
 To learn more about managing tools with uv, see the [Tools concept](../concepts/tools.md) page and
 the [command reference](../reference/cli.md#uv-tool).
 
-Or, read on to learn how to to [work on projects](./projects.md).
+Or, read on to learn how to [work on projects](./projects.md).

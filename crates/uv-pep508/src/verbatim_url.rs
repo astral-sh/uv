@@ -406,7 +406,7 @@ pub fn looks_like_git_repository(url: &Url) -> bool {
         .map_or(true, |ext| ext.eq_ignore_ascii_case("git"))
         && url
             .path_segments()
-            .map_or(false, |segments| segments.count() == 2)
+            .is_some_and(|segments| segments.count() == 2)
 }
 
 /// Split the fragment from a URL.

@@ -1424,11 +1424,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // macOS. But if _neither_ version supports Intel macOS, we'd rather use `sys_platform == 'darwin'`
         // instead of `sys_platform == 'darwin' and platform_machine == 'arm64'`, since it's much
         // simpler, and _neither_ version will succeed with Intel macOS anyway.
-        for sys_platform in &["darwin", "linux", "win32"] {
+        for value in [
+            arcstr::literal!("darwin"),
+            arcstr::literal!("linux"),
+            arcstr::literal!("win32"),
+        ] {
             let sys_platform = MarkerTree::expression(MarkerExpression::String {
                 key: MarkerValueString::SysPlatform,
                 operator: MarkerOperator::Equal,
-                value: (*sys_platform).to_string(),
+                value,
             });
             if dist.implied_markers().is_disjoint(sys_platform)
                 && !remainder.is_disjoint(sys_platform)
@@ -3297,6 +3301,28 @@ impl Forks {
                         }
                     }
                     continue;
+                }
+            } else {
+                // If all dependencies have the same markers, we should also avoid forking.
+                if let Some(dep) = deps.first() {
+                    let marker = dep.package.marker();
+                    if deps.iter().all(|dep| marker == dep.package.marker()) {
+                        // Unless that "same marker" is a Python requirement that is stricter than
+                        // the current Python requirement. In that case, we need to fork to respect
+                        // the stricter requirement.
+                        if marker::requires_python(marker)
+                            .is_none_or(|bound| !python_requirement.raises(&bound))
+                        {
+                            for dep in deps {
+                                for fork in &mut forks {
+                                    if fork.env.included_by_marker(marker) {
+                                        fork.add_dependency(dep.clone());
+                                    }
+                                }
+                            }
+                            continue;
+                        }
+                    }
                 }
             }
             for dep in deps {

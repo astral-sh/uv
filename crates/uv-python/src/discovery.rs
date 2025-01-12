@@ -1154,7 +1154,7 @@ pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
             component.starts_with("python")
                 && std::path::Path::new(component)
                     .extension()
-                    .map_or(false, |ext| ext.eq_ignore_ascii_case("exe"))
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
         })
     {
         return false;

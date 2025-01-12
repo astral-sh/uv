@@ -7077,10 +7077,10 @@ fn local_index_requirements_txt_absolute() -> Result<()> {
     "#, Url::from_directory_path(context.workspace_root.join("scripts/links/")).unwrap().as_str()})?;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str(&indoc::formatdoc! {r#"
+    requirements_txt.write_str(&indoc::formatdoc! {r"
         --index-url {}
         tqdm
-    "#, Url::from_directory_path(root).unwrap().as_str()})?;
+    ", Url::from_directory_path(root).unwrap().as_str()})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)

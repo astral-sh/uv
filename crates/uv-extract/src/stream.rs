@@ -139,8 +139,8 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
 /// Unpack the given tar archive into the destination directory.
 ///
 /// This is equivalent to `archive.unpack_in(dst)`, but it also preserves the executable bit.
-async fn untar_in<'a>(
-    mut archive: tokio_tar::Archive<&'a mut (dyn tokio::io::AsyncRead + Unpin)>,
+async fn untar_in(
+    mut archive: tokio_tar::Archive<&'_ mut (dyn tokio::io::AsyncRead + Unpin)>,
     dst: &Path,
 ) -> std::io::Result<()> {
     let mut entries = archive.entries()?;

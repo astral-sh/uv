@@ -1117,7 +1117,7 @@ impl<'lock> EnvironmentSpecification<'lock> {
 }
 
 /// Run dependency resolution for an interpreter, returning the [`ResolverOutput`].
-pub(crate) async fn resolve_environment<'a>(
+pub(crate) async fn resolve_environment(
     spec: EnvironmentSpecification<'_>,
     interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,

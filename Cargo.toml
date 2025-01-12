@@ -71,6 +71,7 @@ uv-workspace = { path = "crates/uv-workspace" }
 
 anstream = { version = "0.6.15" }
 anyhow = { version = "1.0.89" }
+arcstr = { version = "1.2.0" }
 async-channel = { version = "2.3.1" }
 async-compression = { version = "0.4.12", features = ["bzip2", "gzip", "xz", "zstd"] }
 async-trait = { version = "0.1.82" }
@@ -181,7 +182,7 @@ which = { version = "7.0.0", features = ["regex"] }
 windows-registry = { version = "0.3.0" }
 windows-result = { version = "0.2.0" }
 windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Ioctl", "Win32_System_IO"] }
-winreg = { version = "0.52.0" }
+winreg = { version = "0.53.0" }
 winsafe = { version = "0.0.22", features = ["kernel"] }
 wiremock = { version = "0.6.2" }
 xz2 = { version = "0.1.7" }
@@ -223,6 +224,9 @@ rc_buffer = "warn"
 rc_mutex = "warn"
 rest_pat_in_fully_bound_structs = "warn"
 if_not_else = "allow"
+
+# Diagnostics are not actionable: Enable once https://github.com/rust-lang/rust-clippy/issues/13774 is resolved.
+large_stack_arrays = "allow"
 
 [profile.release]
 strip = true
