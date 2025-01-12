@@ -894,10 +894,10 @@ mod tests {
 
         fs::write(
             &mocked_interpreter,
-            formatdoc! {r##"
+            formatdoc! {r"
         #!/bin/bash
         echo '{json}'
-        "##},
+        "},
         )
         .unwrap();
 
@@ -913,10 +913,10 @@ mod tests {
         );
         fs::write(
             &mocked_interpreter,
-            formatdoc! {r##"
+            formatdoc! {r"
         #!/bin/bash
         echo '{}'
-        "##, json.replace("3.12", "3.13")},
+        ", json.replace("3.12", "3.13")},
         )
         .unwrap();
         let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();

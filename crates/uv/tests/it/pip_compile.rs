@@ -6859,10 +6859,10 @@ dependencies = [
 
     // Write to a requirements file.
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str(&indoc::formatdoc! {r#"
+    requirements_in.write_str(&indoc::formatdoc! {r"
         -e {}
         -e {}
-    "#,
+    ",
         editable_dir1.path().display(),
         editable_dir2.path().display()
     })?;
