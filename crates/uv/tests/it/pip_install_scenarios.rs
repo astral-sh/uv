@@ -4132,7 +4132,7 @@ fn no_sdist_no_wheels_with_matching_platform() {
       ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`), we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
 
-          hint: Wheels are available for `package-a` (v1.0.0) on the following platform: `macosx_10_0_ppc64`
+          hint: Wheels are available for `package-a` (v1.0.0) on the following platform: `macosx_10_0_ppc64`. The closest match is `py3-none-macosx_10_0_ppc64`.
     "###);
 
     assert_not_installed(
@@ -4175,7 +4175,7 @@ fn no_sdist_no_wheels_with_matching_python() {
       ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching Python implementation tag (e.g., `cp38`), we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
 
-          hint: Wheels are available for `package-a` (v1.0.0) with the following Python tag: `graalpy310`
+          hint: Wheels are available for `package-a` (v1.0.0) with the following Python tag: `graalpy310`. The closest match is `graalpy310-none-any`.
     "###);
 
     assert_not_installed(

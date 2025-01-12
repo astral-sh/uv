@@ -766,6 +766,7 @@ impl PubGrubReportFormatter<'_> {
                         package: package.clone(),
                         version: candidate.version().clone(),
                         tags,
+                        closest: self.tags.and_then(|tags| prioritized.closest_tag(tags)),
                     })
                 }
             }
@@ -791,6 +792,7 @@ impl PubGrubReportFormatter<'_> {
                         package: package.clone(),
                         version: candidate.version().clone(),
                         tags,
+                        closest: self.tags.and_then(|tags| prioritized.closest_tag(tags)),
                     })
                 }
             }
@@ -817,6 +819,7 @@ impl PubGrubReportFormatter<'_> {
                         package: package.clone(),
                         version: candidate.version().clone(),
                         tags,
+                        closest: self.tags.and_then(|tags| prioritized.closest_tag(tags)),
                     })
                 }
             }
@@ -1130,6 +1133,8 @@ pub(crate) enum PubGrubHint {
         version: Version,
         // excluded from `PartialEq` and `Hash`
         tags: BTreeSet<LanguageTag>,
+        // excluded from `PartialEq` and `Hash`
+        closest: Option<(LanguageTag, AbiTag, String)>,
     },
     /// No wheels are available for a package, and using source distributions was disabled.
     AbiTags {
@@ -1138,6 +1143,8 @@ pub(crate) enum PubGrubHint {
         version: Version,
         // excluded from `PartialEq` and `Hash`
         tags: BTreeSet<AbiTag>,
+        // excluded from `PartialEq` and `Hash`
+        closest: Option<(LanguageTag, AbiTag, String)>,
     },
     /// No wheels are available for a package, and using source distributions was disabled.
     PlatformTags {
@@ -1146,6 +1153,8 @@ pub(crate) enum PubGrubHint {
         version: Version,
         // excluded from `PartialEq` and `Hash`
         tags: Vec<String>,
+        // excluded from `PartialEq` and `Hash`
+        closest: Option<(LanguageTag, AbiTag, String)>,
     },
 }
 
@@ -1587,55 +1596,103 @@ impl std::fmt::Display for PubGrubHint {
                 package,
                 version,
                 tags,
+                closest,
             } => {
                 let s = if tags.len() == 1 { "" } else { "s" };
-                write!(
-                    f,
-                    "{}{} Wheels are available for `{}` ({}) with the following Python tag{s}: {}",
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    package.cyan(),
-                    format!("v{version}").cyan(),
-                    tags.iter()
-                        .map(|tag| format!("`{}`", tag.cyan()))
-                        .join(", "),
-                )
+                if let Some((py, abi, platform)) = closest {
+                    write!(
+                        f,
+                        "{}{} Wheels are available for `{}` ({}) with the following Python tag{s}: {}. The closest match is `{}`.",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        package.cyan(),
+                        format!("v{version}").cyan(),
+                        tags.iter()
+                            .map(|tag| format!("`{}`", tag.cyan()))
+                            .join(", "),
+                        format!("{py}-{abi}-{platform}").cyan(),
+                    )
+                } else {
+                    write!(
+                        f,
+                        "{}{} Wheels are available for `{}` ({}) with the following Python tag{s}: {}",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        package.cyan(),
+                        format!("v{version}").cyan(),
+                        tags.iter()
+                            .map(|tag| format!("`{}`", tag.cyan()))
+                            .join(", "),
+                    )
+                }
             }
             Self::AbiTags {
                 package,
                 version,
                 tags,
+                closest,
             } => {
                 let s = if tags.len() == 1 { "" } else { "s" };
-                write!(
-                    f,
-                    "{}{} Wheels are available for `{}` ({}) with the following ABI tag{s}: {}",
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    package.cyan(),
-                    format!("v{version}").cyan(),
-                    tags.iter()
-                        .map(|tag| format!("`{}`", tag.cyan()))
-                        .join(", "),
-                )
+                if let Some((py, abi, platform)) = closest {
+                    write!(
+                        f,
+                        "{}{} Wheels are available for `{}` ({}) with the following ABI tag{s}: {}. The closest match is `{}`.",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        package.cyan(),
+                        format!("v{version}").cyan(),
+                        tags.iter()
+                            .map(|tag| format!("`{}`", tag.cyan()))
+                            .join(", "),
+                        format!("{py}-{abi}-{platform}").cyan(),
+                    )
+                } else {
+                    write!(
+                        f,
+                        "{}{} Wheels are available for `{}` ({}) with the following ABI tag{s}: {}",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        package.cyan(),
+                        format!("v{version}").cyan(),
+                        tags.iter()
+                            .map(|tag| format!("`{}`", tag.cyan()))
+                            .join(", "),
+                    )
+                }
             }
             Self::PlatformTags {
                 package,
                 version,
                 tags,
+                closest,
             } => {
                 let s = if tags.len() == 1 { "" } else { "s" };
-                write!(
-                    f,
-                    "{}{} Wheels are available for `{}` ({}) on the following platform{s}: {}",
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    package.cyan(),
-                    format!("v{version}").cyan(),
-                    tags.iter()
-                        .map(|tag| format!("`{}`", tag.cyan()))
-                        .join(", "),
-                )
+                if let Some((py, abi, platform)) = closest {
+                    write!(
+                        f,
+                        "{}{} Wheels are available for `{}` ({}) on the following platform{s}: {}. The closest match is `{}`.",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        package.cyan(),
+                        format!("v{version}").cyan(),
+                        tags.iter()
+                            .map(|tag| format!("`{}`", tag.cyan()))
+                            .join(", "),
+                        format!("{py}-{abi}-{platform}").cyan(),
+                    )
+                } else {
+                    write!(
+                        f,
+                        "{}{} Wheels are available for `{}` ({}) on the following platform{s}: {}",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        package.cyan(),
+                        format!("v{version}").cyan(),
+                        tags.iter()
+                            .map(|tag| format!("`{}`", tag.cyan()))
+                            .join(", "),
+                    )
+                }
             }
         }
     }

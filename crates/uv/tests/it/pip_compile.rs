@@ -13949,7 +13949,7 @@ fn invalid_platform() -> Result<()> {
 
           hint: Wheels are available for `open3d` (v0.15.2) with the following ABI tags: `cp36m`, `cp37m`, `cp38`, `cp39`
 
-          hint: Wheels are available for `open3d` (v0.18.0) on the following platforms: `macosx_11_0_x86_64`, `macosx_13_0_arm64`, `manylinux_2_27_aarch64`, `manylinux_2_27_x86_64`, `win_amd64`
+          hint: Wheels are available for `open3d` (v0.18.0) on the following platforms: `macosx_11_0_x86_64`, `macosx_13_0_arm64`, `manylinux_2_27_aarch64`, `manylinux_2_27_x86_64`, `win_amd64`. The closest match is `cp310-cp310-win_amd64`.
     "###);
 
     Ok(())

@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 
 use arcstr::ArcStr;
 use owo_colors::OwoColorize;
@@ -8,7 +9,7 @@ use tracing::debug;
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
-use uv_platform_tags::{AbiTag, IncompatibleTag, TagPriority, Tags};
+use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, TagPriority, Tags};
 use uv_pypi_types::{HashDigest, Yanked};
 
 use crate::{
@@ -554,6 +555,60 @@ impl PrioritizedDist {
             }
         }
         candidates
+    }
+
+    /// Return the "closest" tag for the distribution that is compatible with the given tags.
+    ///
+    /// The tag must match at least two of the three components (Python, ABI, platform) in order to
+    /// be considered compatible. If multiple tags are compatible, the tag with the highest priority
+    /// is returned. If multiple tags have the same priority, the tag with the highest version is
+    /// returned.
+    ///
+    /// For example, if `cp313-cp313-macosx_10_9_x86_64` is compatible (but not available), then
+    /// `cp313-cp313-manylinux2010_x86_64` could be returned.
+    pub fn closest_tag(&self, tags: &Tags) -> Option<(LanguageTag, AbiTag, String)> {
+        let mut closest: Option<(TagPriority, LanguageTag, AbiTag, &str)> = None;
+        for (py, abi, platform, priority) in tags.iter() {
+            // If this tag is lower-priority than the current closest tag, skip it.
+            if let Some((existing_priority, ..)) = closest {
+                if priority < existing_priority {
+                    continue;
+                }
+            }
+            let Ok(py) = LanguageTag::from_str(py) else {
+                continue;
+            };
+            let Ok(abi) = AbiTag::from_str(abi) else {
+                continue;
+            };
+            for (wheel, _) in &self.0.wheels {
+                for wheel_py in &wheel.filename.python_tag {
+                    let Ok(wheel_py) = LanguageTag::from_str(wheel_py) else {
+                        continue;
+                    };
+                    for wheel_abi in &wheel.filename.abi_tag {
+                        let Ok(wheel_abi) = AbiTag::from_str(wheel_abi) else {
+                            continue;
+                        };
+                        for wheel_platform in &wheel.filename.platform_tag {
+                            // Exactly two of the three components must match.
+                            let compatibility = u8::from(py == wheel_py)
+                                + u8::from(abi == wheel_abi)
+                                + u8::from(platform == wheel_platform);
+                            if compatibility == 2 {
+                                let candidate =
+                                    (priority, wheel_py, wheel_abi, wheel_platform.as_str());
+                                if Some(candidate) > closest {
+                                    closest = Some(candidate);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        closest.map(|(.., py, abi, platform)| (py, abi, platform.to_string()))
     }
 }
 

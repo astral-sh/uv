@@ -323,6 +323,22 @@ impl Tags {
             .map(|abis| abis.contains_key(abi_tag))
             .unwrap_or(false)
     }
+
+    /// Returns an iterator over all (Python, ABI, platform, priority) tuples.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str, &str, TagPriority)> + '_ {
+        self.map.iter().flat_map(|(python_tag, abi_tags)| {
+            abi_tags.iter().flat_map(move |(abi_tag, platform_tags)| {
+                platform_tags.iter().map(move |(platform_tag, priority)| {
+                    (
+                        python_tag.as_str(),
+                        abi_tag.as_str(),
+                        platform_tag.as_str(),
+                        *priority,
+                    )
+                })
+            })
+        })
+    }
 }
 
 /// The priority of a platform tag.
