@@ -5014,6 +5014,7 @@ name = "uv-distribution-types"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "arcstr",
  "bitflags 2.7.0",
  "fs-err 3.0.0",
  "itertools 0.14.0",
@@ -5039,7 +5040,6 @@ dependencies = [
  "uv-pep508",
  "uv-platform-tags",
  "uv-pypi-types",
- "uv-small-str",
  "version-ranges",
 ]
 
@@ -5293,7 +5293,6 @@ dependencies = [
  "uv-fs",
  "uv-normalize",
  "uv-pep440",
- "uv-small-str",
  "version-ranges",
 ]
 
@@ -5555,7 +5554,6 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-requirements-txt",
- "uv-small-str",
  "uv-static",
  "uv-types",
  "uv-warnings",
@@ -5626,7 +5624,7 @@ dependencies = [
 
 [[package]]
 name = "uv-small-str"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "arcstr",
  "rkyv",

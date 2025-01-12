@@ -1,9 +1,7 @@
 use std::cmp::PartialEq;
 use std::ops::Deref;
 
-/// An optimized small string type for short identifiers, like package names.
-///
-/// Represented as an [`arcstr::ArcStr`] internally.
+/// An optimized type for immutable identifiers. Represented as an [`arcstr::ArcStr`] internally.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SmallString(arcstr::ArcStr);
 
@@ -35,20 +33,12 @@ impl AsRef<str> for SmallString {
     }
 }
 
-impl AsRef<[u8]> for SmallString {
-    #[inline]
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_bytes()
-    }
-}
-
 impl core::borrow::Borrow<str> for SmallString {
     #[inline]
     fn borrow(&self) -> &str {
         self
     }
 }
-
 
 impl Deref for SmallString {
     type Target = str;
@@ -105,7 +95,7 @@ where
 }
 
 impl<D: rkyv::rancor::Fallible + ?Sized> rkyv::Deserialize<SmallString, D>
-for rkyv::string::ArchivedString
+    for rkyv::string::ArchivedString
 {
     fn deserialize(&self, _deserializer: &mut D) -> Result<SmallString, D::Error> {
         Ok(SmallString::from(self.as_str()))
@@ -138,15 +128,4 @@ impl schemars::JsonSchema for SmallString {
     fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
         String::json_schema(_gen)
     }
-}
-
-pub mod internal {
-    pub use arcstr::{literal as _literal};
-}
-
-#[macro_export]
-macro_rules! literal {
-    ($text:expr $(,)?) => {{
-        $crate::SmallString::from($crate::internal::_literal!($text))
-    }};
 }

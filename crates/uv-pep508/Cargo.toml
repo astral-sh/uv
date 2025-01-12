@@ -22,7 +22,6 @@ workspace = true
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
-uv-small-str = { workspace = true }
 
 arcstr = { workspace = true}
 boxcar = { workspace = true }
