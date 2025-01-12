@@ -1,3 +1,8 @@
+---
+title: Using tools
+description: Guide to run, install, and upgrade Python tools using uv.
+---
+
 # Using tools
 
 Many Python packages provide applications that can be used as tools. uv has specialized support for

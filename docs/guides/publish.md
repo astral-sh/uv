@@ -1,3 +1,8 @@
+---
+title: Publishing a package
+description: Guide to build and publish Python packages using uv
+---
+
 # Publishing a package
 
 uv supports building Python packages into source and binary distributions via `uv build` and
