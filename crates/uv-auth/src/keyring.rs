@@ -201,6 +201,68 @@ impl KeyringProvider {
         None
     }
 
+    /// Set credentials for the given [`Url`] from the keyring.
+    #[instrument(skip_all, fields(url = % url.to_string(), username))]
+    pub async fn unset(&mut self, url: &Url, username: &str) {
+        debug_assert!(
+            url.host_str().is_some(),
+            "Should only use keyring for urls with host"
+        );
+        debug_assert!(
+            url.password().is_none(),
+            "Should only use keyring for urls without a password"
+        );
+        debug_assert!(
+            !username.is_empty(),
+            "Should only use keyring with a username"
+        );
+
+        let host = url.host().expect("Url should contain a host!");
+        trace!(
+            "Deleting entry in keyring for host {host} (from url {url}) and username {username}"
+        );
+
+        match &mut self.backend {
+            KeyringProviderBackend::Subprocess => {
+                self.unset_subprocess(&host.to_string(), username).await
+            }
+            #[cfg(test)]
+            KeyringProviderBackend::Dummy(ref mut store) => {
+                let username_static: &'static str = Box::leak(username.to_owned().into_boxed_str());
+
+                Self::unset_dummy(store, &host.to_string(), username_static)
+            }
+        };
+    }
+
+    #[instrument(skip(self))]
+    async fn unset_subprocess(&self, service_name: &str, username: &str) -> Option<()> {
+        let child = Command::new("keyring")
+            .arg("del")
+            .arg(service_name)
+            .arg(username)
+            .stdin(Stdio::piped()) // Allow writing to stdin
+            .stdout(Stdio::piped()) // Optionally capture stdout for debugging
+            .stderr(Stdio::piped()) // Capture stderr for debugging
+            .spawn()
+            .inspect_err(|err| warn!("Failure running `keyring` command: {err}"))
+            .ok()?;
+
+        let output = child
+            .wait_with_output()
+            .await
+            .inspect_err(|err| warn!("Failed to wait for `keyring` output: {err}"))
+            .ok()?;
+
+        if output.status.success() {
+            debug!("Keyring entry successfully removed");
+        } else {
+            debug!("Could not remove entry in keyring");
+        };
+
+        None
+    }
+
     #[cfg(test)]
     fn fetch_dummy(
         store: &std::collections::HashMap<(String, &'static str), &'static str>,
@@ -220,6 +282,16 @@ impl KeyringProvider {
         password: &'static str,
     ) -> Option<()> {
         store.insert((service_name.to_string(), username), password);
+        None
+    }
+
+    #[cfg(test)]
+    fn unset_dummy(
+        store: &mut std::collections::HashMap<(String, &'static str), &'static str>,
+        service_name: &str,
+        username: &'static str,
+    ) -> Option<()> {
+        store.remove(&(service_name.to_string(), username));
         None
     }
 

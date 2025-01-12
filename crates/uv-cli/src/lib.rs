@@ -5414,7 +5414,19 @@ pub enum IndexCredentialsCommand {
         after_help = "Use `uv help index credentials add` for more details.",
         after_long_help = ""
     )]
-    Add(IndexCredentialsArgs),
+    Add(IndexAddCredentialsArgs),
+
+    #[command(
+        after_help = "Use `uv help index credentials list` for more details.",
+        after_long_help = ""
+    )]
+    List(IndexListCredentialsArgs),
+
+    #[command(
+        after_help = "Use `uv help index credentials unset` for more details.",
+        after_long_help = ""
+    )]
+    Unset(IndexUnsetCredentialsArgs),
 }
 
 #[derive(Args)]
@@ -5425,7 +5437,7 @@ pub struct IndexSourceArgs {
 }
 
 #[derive(Args)]
-pub struct IndexCredentialsArgs {
+pub struct IndexAddCredentialsArgs {
     /// The name of the index
     #[arg(long)]
     pub name: String,
@@ -5437,6 +5449,38 @@ pub struct IndexCredentialsArgs {
     /// The password that should be user for the index
     #[arg(long, required(false))]
     pub password: Option<String>,
+
+    /// Attempt to use `keyring` for authentication for remote requirements files.
+    ///
+    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to
+    /// use the `keyring` CLI to handle authentication.
+    ///
+    /// Defaults to `disabled`.
+    #[arg(long, value_enum, env = EnvVars::UV_KEYRING_PROVIDER)]
+    pub keyring_provider: Option<KeyringProviderType>,
+}
+
+#[derive(Args)]
+pub struct IndexListCredentialsArgs {
+    /// Attempt to use `keyring` for authentication for remote requirements files.
+    ///
+    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to
+    /// use the `keyring` CLI to handle authentication.
+    ///
+    /// Defaults to `disabled`.
+    #[arg(long, value_enum, env = EnvVars::UV_KEYRING_PROVIDER)]
+    pub keyring_provider: Option<KeyringProviderType>,
+}
+
+#[derive(Args)]
+pub struct IndexUnsetCredentialsArgs {
+    /// The name of the index
+    #[arg(long)]
+    pub name: String,
+
+    /// The username that should be used for the index
+    #[arg(long, required(false))]
+    pub username: Option<String>,
 
     /// Attempt to use `keyring` for authentication for remote requirements files.
     ///

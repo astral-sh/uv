@@ -178,7 +178,9 @@ impl Credentials {
             return None;
         }
 
-        let auth_config = match AuthConfig::load() {
+        let auth_config = executor::block_on(AuthConfig::load());
+
+        let auth_config = match auth_config {
             Ok(auth_config) => auth_config,
             Err(e) => {
                 error!("Error loading auth config: {e}");
@@ -186,9 +188,7 @@ impl Credentials {
             }
         };
 
-        let index = if let Some(i) = auth_config.find_entry(name) {
-            i
-        } else {
+        let Some(index) = auth_config.find_entry(name) else {
             warn!("Could not find entry for {name}");
             return None;
         };
@@ -399,8 +399,8 @@ mod tests {
         assert_eq!(Credentials::from_header_value(&header), Some(credentials));
     }
 
-    #[test]
-    fn from_keyring() {
+    #[tokio::test]
+    async fn from_keyring() {
         let username = "user";
         let password = "password";
         let index = "test_index";
@@ -412,9 +412,9 @@ mod tests {
 
         set_test_config_path(auth_config_path);
 
-        let mut auth_config = AuthConfig::load().unwrap();
+        let mut auth_config = AuthConfig::load().await.unwrap();
         auth_config.add_entry(index.to_string(), username.to_string());
-        auth_config.store().unwrap();
+        auth_config.store().await.unwrap();
 
         // Act
         let credentials = Credentials::from_keyring(index, &url, Some(keyring));

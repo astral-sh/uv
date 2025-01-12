@@ -10,9 +10,12 @@ use anstream::eprintln;
 use anyhow::{bail, Context, Result};
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
-use commands::add_credentials;
+use commands::{add_credentials, list_credentials, unset_credentials};
 use owo_colors::OwoColorize;
-use settings::{IndexSettings, PipTreeSettings};
+use settings::{
+    IndexAddCredentialsSettings, IndexListCredentialsSettings, IndexUnsetCredentialsSettings,
+    PipTreeSettings,
+};
 use tokio::task::spawn_blocking;
 use tracing::{debug, instrument};
 use uv_cache::{Cache, Refresh};
@@ -1338,15 +1341,39 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Commands::Index(IndexNamespace {
             command: IndexCommand::Credentials(IndexCredentialsCommand::Add(args)),
         }) => {
-            let IndexSettings {
+            let IndexAddCredentialsSettings {
                 name,
                 username,
                 password,
                 keyring_provider,
                 index,
-            } = IndexSettings::resolve(args, filesystem);
+            } = IndexAddCredentialsSettings::resolve(args, filesystem);
 
             let _ = add_credentials(name, username, password, keyring_provider, index).await;
+            return Ok(ExitStatus::Success);
+        }
+        Commands::Index(IndexNamespace {
+            command: IndexCommand::Credentials(IndexCredentialsCommand::List(args)),
+        }) => {
+            let IndexListCredentialsSettings {
+                keyring_provider,
+                index,
+            } = IndexListCredentialsSettings::resolve(args, filesystem);
+
+            let _ = list_credentials(keyring_provider, index).await;
+            return Ok(ExitStatus::Success);
+        }
+        Commands::Index(IndexNamespace {
+            command: IndexCommand::Credentials(IndexCredentialsCommand::Unset(args)),
+        }) => {
+            let IndexUnsetCredentialsSettings {
+                name,
+                username,
+                keyring_provider,
+                index,
+            } = IndexUnsetCredentialsSettings::resolve(args, filesystem);
+
+            let _ = unset_credentials(name, username, keyring_provider, index).await;
             return Ok(ExitStatus::Success);
         }
     };
