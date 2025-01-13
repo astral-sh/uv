@@ -4595,7 +4595,7 @@ dependencies = [
  "serde",
  "tempfile",
  "test-log",
- "thiserror 2.0.9",
+ "thiserror 2.0.11",
  "tokio",
  "toml",
  "tracing",

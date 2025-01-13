@@ -177,7 +177,7 @@ impl Credentials {
             trace!("No keyring provider available");
             return None;
         }
-        
+
         let auth_config = match AuthConfig::load() {
             Ok(auth_config) => auth_config,
             Err(e) => {

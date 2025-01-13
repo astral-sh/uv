@@ -1,9 +1,9 @@
+use fs_err as fs;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{self, Write};
 use std::path::PathBuf;
 use thiserror::Error;
-use fs_err as fs;
 
 #[derive(Error, Debug)]
 pub enum ConfigError {
@@ -159,8 +159,7 @@ mod tests {
         // Check if the file exists and contains the correct content
         assert!(path.exists());
 
-        let contents = fs::read_to_string(path)
-            .expect("Failed to read config file");
+        let contents = fs::read_to_string(path).expect("Failed to read config file");
         assert!(contents.contains("index1"));
         assert!(contents.contains("user1"));
 

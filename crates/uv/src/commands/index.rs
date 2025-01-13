@@ -54,8 +54,8 @@ pub(crate) async fn add_credentials(
         "Will add index {name} and user {username} to index auth config in {:?}",
         AuthConfig::path()?
     );
-    let mut auth_config = AuthConfig::load()
-        .inspect_err(|err| warn!("Could not load auth config due to: {err}"))?;
+    let mut auth_config =
+        AuthConfig::load().inspect_err(|err| warn!("Could not load auth config due to: {err}"))?;
     auth_config.add_entry(name, username);
     auth_config.store()?;
 
@@ -66,8 +66,8 @@ pub(crate) async fn list_credentials(
     keyring_provider_type: KeyringProviderType,
     indexes: Vec<Index>,
 ) -> Result<()> {
-    let auth_config = AuthConfig::load()
-        .inspect_err(|err| warn!("Could not load auth config due to: {err}"))?;
+    let auth_config =
+        AuthConfig::load().inspect_err(|err| warn!("Could not load auth config due to: {err}"))?;
 
     let keyring_provider = keyring_provider_type
         .to_provider()
@@ -125,8 +125,8 @@ pub(crate) async fn unset_credentials(
         .unset(&index.url, &username)
         .await;
 
-    let mut auth_config = AuthConfig::load()
-        .inspect_err(|err| warn!("Could not load auth config due to: {err}"))?;
+    let mut auth_config =
+        AuthConfig::load().inspect_err(|err| warn!("Could not load auth config due to: {err}"))?;
 
     auth_config.delete_entry(&name);
     auth_config.store()?;
