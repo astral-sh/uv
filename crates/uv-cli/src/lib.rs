@@ -5418,43 +5418,47 @@ pub struct IndexNamespace {
 
 #[derive(Subcommand)]
 pub enum IndexCommand {
-    /// Compile a `requirements.in` file to a `requirements.txt` file.
+    /// Set a new index. This will be added to your pyproject.toml
     #[command(
         after_help = "Use `uv help index add` for more details.",
         after_long_help = ""
     )]
     Set(IndexSourceArgs),
-    /// Sync an environment with a `requirements.txt` file.
+    /// List all indexes set in your pyproject.toml
     #[command(
         after_help = "Use `uv help index list` for more details.",
         after_long_help = ""
     )]
     List(IndexSourceArgs),
-    /// Install packages into an environment.
+    /// Unset an existing index. This will be removed from your pyproject.toml
     #[command(
         after_help = "Use `uv help index delete` for more details.",
         after_long_help = ""
     )]
     Unset(IndexSourceArgs),
 
+    /// Manage credentials for the indexes configured in your pyproject.toml
     #[command(subcommand)]
     Credentials(IndexCredentialsCommand),
 }
 
 #[derive(Subcommand)]
 pub enum IndexCredentialsCommand {
+    /// Set credentials for an index
     #[command(
         after_help = "Use `uv help index credentials set` for more details.",
         after_long_help = ""
     )]
     Set(IndexSetCredentialsArgs),
 
+    /// List credentials for each index (Only username is shown).
     #[command(
         after_help = "Use `uv help index credentials list` for more details.",
         after_long_help = ""
     )]
     List(IndexListCredentialsArgs),
 
+    /// Unset the credentials for an index
     #[command(
         after_help = "Use `uv help index credentials unset` for more details.",
         after_long_help = ""
