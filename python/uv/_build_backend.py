@@ -18,7 +18,7 @@ them while IDEs and type checker can see through the quotes.
 
 TYPE_CHECKING = False
 if TYPE_CHECKING:
-    from typing import Any, Mapping  # noqa:I001
+    from typing import Any, Mapping, Sequence  # noqa:I001
 
 
 def warn_config_settings(config_settings: "Mapping[Any, Any] | None" = None) -> None:
@@ -28,7 +28,9 @@ def warn_config_settings(config_settings: "Mapping[Any, Any] | None" = None) -> 
         print("Warning: Config settings are not supported", file=sys.stderr)
 
 
-def call(args: "list[str]", config_settings: "Mapping[Any, Any] | None" = None) -> str:
+def call(
+    args: "Sequence[str]", config_settings: "Mapping[Any, Any] | None" = None
+) -> str:
     """Invoke a uv subprocess and return the filename from stdout."""
     import shutil
     import subprocess
@@ -40,7 +42,7 @@ def call(args: "list[str]", config_settings: "Mapping[Any, Any] | None" = None) 
     if uv_bin is None:
         raise RuntimeError("uv was not properly installed")
     # Forward stderr, capture stdout for the filename
-    result = subprocess.run([uv_bin] + args, stdout=subprocess.PIPE)
+    result = subprocess.run([uv_bin, *args], stdout=subprocess.PIPE)
     if result.returncode != 0:
         sys.exit(result.returncode)
     # If there was extra stdout, forward it (there should not be extra stdout)
@@ -75,7 +77,7 @@ def build_wheel(
 
 def get_requires_for_build_sdist(
     config_settings: "Mapping[Any, Any] | None" = None,
-) -> "list[str]":
+) -> "Sequence[str]":
     """PEP 517 hook `get_requires_for_build_sdist`."""
     warn_config_settings(config_settings)
     return []
@@ -83,7 +85,7 @@ def get_requires_for_build_sdist(
 
 def get_requires_for_build_wheel(
     config_settings: "Mapping[Any, Any] | None" = None,
-) -> "list[str]":
+) -> "Sequence[str]":
     """PEP 517 hook `get_requires_for_build_wheel`."""
     warn_config_settings(config_settings)
     return []
@@ -111,7 +113,7 @@ def build_editable(
 
 def get_requires_for_build_editable(
     config_settings: "Mapping[Any, Any] | None" = None,
-) -> "list[str]":
+) -> "Sequence[str]":
     """PEP 660 hook `get_requires_for_build_editable`."""
     warn_config_settings(config_settings)
     return []
