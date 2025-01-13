@@ -627,6 +627,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.strict,
                 args.settings.python.as_deref(),
                 args.settings.system,
+                args.paths,
                 &cache,
                 printer,
             )

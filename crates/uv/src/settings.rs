@@ -1883,6 +1883,7 @@ impl PipUninstallSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PipFreezeSettings {
     pub(crate) exclude_editable: bool,
+    pub(crate) paths: Option<Vec<PathBuf>>,
     pub(crate) settings: PipSettings,
 }
 
@@ -1894,6 +1895,7 @@ impl PipFreezeSettings {
             strict,
             no_strict,
             python,
+            paths,
             system,
             no_system,
             compat_args: _,
@@ -1901,6 +1903,7 @@ impl PipFreezeSettings {
 
         Self {
             exclude_editable,
+            paths,
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
