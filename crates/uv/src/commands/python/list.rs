@@ -195,9 +195,9 @@ pub(crate) async fn list(
 
     match format {
         PythonListFormat::Json => {
-            let data: Vec<PrintData> = include
+            let data = include
                 .iter()
-                .map(|(key, uri)| {
+                .map(|(key, uri)| -> Result<_> {
                     let mut path_or_none: Option<String> = None;
                     let mut symlink_or_none: Option<String> = None;
                     let mut url_or_none: Option<String> = None;
@@ -205,10 +205,10 @@ pub(crate) async fn list(
                         Either::Left(path) => {
                             path_or_none = Some(path.user_display().to_string());
 
-                            let is_symlink = fs_err::symlink_metadata(path).unwrap().is_symlink();
+                            let is_symlink = fs_err::symlink_metadata(path)?.is_symlink();
                             if is_symlink {
                                 symlink_or_none =
-                                    Some(path.read_link().unwrap().user_display().to_string());
+                                    Some(path.read_link()?.user_display().to_string());
                             }
                         }
                         Either::Right(url) => {
@@ -218,14 +218,14 @@ pub(crate) async fn list(
                     let version = key.version();
                     let release = version.release();
 
-                    PrintData {
+                    Ok(PrintData {
                         key: key.to_string(),
                         version: version.version().clone(),
                         #[allow(clippy::get_first)]
                         version_parts: NamedVersionParts {
-                            major: *(release.get(0).unwrap_or(&0)),
-                            minor: *(release.get(1).unwrap_or(&0)),
-                            patch: *(release.get(2).unwrap_or(&0)),
+                            major: release.get(0).copied().unwrap_or(0),
+                            minor: release.get(1).copied().unwrap_or(0),
+                            patch: release.get(2).copied().unwrap_or(0),
                         },
                         path: path_or_none,
                         symlink: symlink_or_none,
@@ -235,9 +235,9 @@ pub(crate) async fn list(
                         os: key.os().to_string(),
                         variant: key.variant().to_string(),
                         libc: key.libc().to_string(),
-                    }
+                    })
                 })
-                .collect();
+                .collect::<Result<Vec<_>>>()?;
             writeln!(printer.stdout(), "{}", serde_json::to_string(&data)?)?;
         }
         PythonListFormat::Text => {
