@@ -92,3 +92,28 @@ impl Display for DistFilename {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use uv_normalize::PackageName;
+    use uv_pep440::Version;
+    use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
+    use crate::{TagSet, WheelFilename};
+
+    #[test]
+    fn wheel_filename_size() {
+        // The type
+        assert_eq!(size_of::<WheelFilename>(), 128);
+        // The fields
+        assert_eq!(size_of::<PackageName>(), 8);
+        assert_eq!(size_of::<Version>(), 16);
+        assert_eq!(size_of::<TagSet<LanguageTag>>(), 24);
+        assert_eq!(size_of::<TagSet<AbiTag>>(), 24);
+        assert_eq!(size_of::<TagSet<PlatformTag>>(), 24);
+        assert_eq!(size_of::<LanguageTag>(), 3);
+        assert_eq!(size_of::<AbiTag>(), 5);
+        assert_eq!(size_of::<PlatformTag>(), 16);
+assert_eq!(size_of::<Box<Vec<PlatformTag>>>(), 8);
+assert_eq!(size_of::<Box<[PlatformTag]>>(), 16);
+    }
+}
