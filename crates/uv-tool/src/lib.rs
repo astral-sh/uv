@@ -251,6 +251,7 @@ impl InstalledTools {
         &self,
         name: &PackageName,
         interpreter: Interpreter,
+        cache: &Cache,
     ) -> Result<PythonEnvironment, Error> {
         let environment_path = self.tool_dir(name);
 
@@ -276,6 +277,7 @@ impl InstalledTools {
             &environment_path,
             interpreter,
             uv_virtualenv::Prompt::None,
+            cache,
             false,
             false,
             false,

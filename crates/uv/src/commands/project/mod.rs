@@ -956,6 +956,7 @@ pub(crate) async fn get_or_init_environment(
                 &venv,
                 interpreter,
                 prompt,
+                cache,
                 false,
                 false,
                 false,
