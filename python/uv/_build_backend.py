@@ -18,7 +18,8 @@ them while IDEs and type checker can see through the quotes.
 
 TYPE_CHECKING = False
 if TYPE_CHECKING:
-    from typing import Any, Mapping, Sequence  # noqa:I001
+    from collections.abc import Mapping  # noqa:I001
+    from typing import Any, Sequence  # noqa:I001
 
 
 def warn_config_settings(config_settings: "Mapping[Any, Any] | None" = None) -> None:
