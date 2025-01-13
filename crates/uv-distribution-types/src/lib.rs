@@ -67,6 +67,7 @@ pub use crate::installed::*;
 pub use crate::origin::*;
 pub use crate::pip_index::*;
 pub use crate::prioritized_distribution::*;
+pub use crate::requested::*;
 pub use crate::resolution::*;
 pub use crate::resolved::*;
 pub use crate::specified_requirement::*;
@@ -90,6 +91,7 @@ mod installed;
 mod origin;
 mod pip_index;
 mod prioritized_distribution;
+mod requested;
 mod resolution;
 mod resolved;
 mod specified_requirement;
@@ -248,7 +250,7 @@ pub struct DirectUrlBuiltDist {
     /// `https://example.org/packages/flask-3.0.0-py3-none-any.whl`
     pub filename: WheelFilename,
     /// The URL without the subdirectory fragment.
-    pub location: Url,
+    pub location: Box<Url>,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
@@ -361,7 +363,7 @@ impl Dist {
 
                 Ok(Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
                     filename,
-                    location,
+                    location: Box::new(location),
                     url,
                 })))
             }
@@ -1341,8 +1343,8 @@ mod test {
     /// Ensure that we don't accidentally grow the `Dist` sizes.
     #[test]
     fn dist_size() {
-        assert!(size_of::<Dist>() <= 336, "{}", size_of::<Dist>());
-        assert!(size_of::<BuiltDist>() <= 336, "{}", size_of::<BuiltDist>());
+        assert!(size_of::<Dist>() <= 288, "{}", size_of::<Dist>());
+        assert!(size_of::<BuiltDist>() <= 288, "{}", size_of::<BuiltDist>());
         assert!(
             size_of::<SourceDist>() <= 264,
             "{}",

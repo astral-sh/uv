@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.42/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.44/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi", unix))]
 
@@ -531,17 +531,17 @@ fn excluded_only_compatible_version() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of package-a are available:
+      ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
               package-a==1.0.0
               package-a==2.0.0
               package-a==3.0.0
-          and package-a==1.0.0 depends on package-b==1.0.0, we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
+          we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
           And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that all of:
               package-a<2.0.0
               package-a>2.0.0
           depend on one of:
-              package-b==1.0.0
-              package-b==3.0.0
+              package-b<=1.0.0
+              package-b>=3.0.0
 
           And because you require one of:
               package-a<2.0.0
@@ -836,8 +836,8 @@ fn extra_incompatible_with_extra() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a[extra-c]==1.0.0 is available and package-a[extra-c]==1.0.0 depends on package-b==2.0.0, we can conclude that all versions of package-a[extra-c] depend on package-b==2.0.0.
-          And because package-a[extra-b]==1.0.0 depends on package-b==1.0.0 and only package-a[extra-b]==1.0.0 is available, we can conclude that all versions of package-a[extra-b] and all versions of package-a[extra-c] are incompatible.
+      ╰─▶ Because package-a[extra-b]==1.0.0 depends on package-b==1.0.0 and package-a[extra-c]==1.0.0 depends on package-b==2.0.0, we can conclude that package-a[extra-b]==1.0.0 and package-a[extra-c]==1.0.0 are incompatible.
+          And because only package-a[extra-c]==1.0.0 is available and only package-a[extra-b]==1.0.0 is available, we can conclude that all versions of package-a[extra-b] and all versions of package-a[extra-c] are incompatible.
           And because you require package-a[extra-b] and package-a[extra-c], we can conclude that your requirements are unsatisfiable.
     "###);
 
@@ -4079,6 +4079,7 @@ fn no_sdist_no_wheels_with_matching_abi() {
     filters.push((r"no-sdist-no-wheels-with-matching-abi-", "package-"));
 
     uv_snapshot!(filters, command(&context)
+        .arg("--python-platform=x86_64-manylinux2014")
         .arg("no-sdist-no-wheels-with-matching-abi-a")
         , @r###"
     success: false
@@ -4119,6 +4120,7 @@ fn no_sdist_no_wheels_with_matching_platform() {
     filters.push((r"no-sdist-no-wheels-with-matching-platform-", "package-"));
 
     uv_snapshot!(filters, command(&context)
+        .arg("--python-platform=x86_64-manylinux2014")
         .arg("no-sdist-no-wheels-with-matching-platform-a")
         , @r###"
     success: false
@@ -4159,6 +4161,7 @@ fn no_sdist_no_wheels_with_matching_python() {
     filters.push((r"no-sdist-no-wheels-with-matching-python-", "package-"));
 
     uv_snapshot!(filters, command(&context)
+        .arg("--python-platform=x86_64-manylinux2014")
         .arg("no-sdist-no-wheels-with-matching-python-a")
         , @r###"
     success: false

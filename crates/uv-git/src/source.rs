@@ -4,6 +4,7 @@
 
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::Result;
 use reqwest_middleware::ClientWithMiddleware;
@@ -24,11 +25,11 @@ pub struct GitSource {
     /// The path to the Git source database.
     cache: PathBuf,
     /// The reporter to use for this source.
-    reporter: Option<Box<dyn Reporter>>,
+    reporter: Option<Arc<dyn Reporter>>,
 }
 
 impl GitSource {
-    /// Initialize a new Git source.
+    /// Initialize a [`GitSource`] with the given Git URL, HTTP client, and cache path.
     pub fn new(
         git: GitUrl,
         client: impl Into<ClientWithMiddleware>,
@@ -42,11 +43,11 @@ impl GitSource {
         }
     }
 
-    /// Set the [`Reporter`] to use for this `GIt` source.
+    /// Set the [`Reporter`] to use for the [`GitSource`].
     #[must_use]
-    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
+    pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
-            reporter: Some(Box::new(reporter)),
+            reporter: Some(reporter),
             ..self
         }
     }

@@ -303,7 +303,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                 Source::Git(url, git) => {
                     // Remove the fragment and query from the URL; they're already present in the
                     // `GitSource`.
-                    let mut url = url.to_url();
+                    let mut url = url.to_url().map_err(|_| std::fmt::Error)?;
                     url.set_fragment(None);
                     url.set_query(None);
 
@@ -325,7 +325,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                 Source::Direct(url, direct) => {
                     let subdirectory = direct.subdirectory.as_ref().map(PathBuf::from);
                     let url = Url::from(ParsedArchiveUrl {
-                        url: url.to_url(),
+                        url: url.to_url().map_err(|_| std::fmt::Error)?,
                         subdirectory: subdirectory.clone(),
                         ext: DistExtension::Source(SourceDistExtension::TarGz),
                     });
@@ -333,7 +333,11 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                 }
                 Source::Path(path) | Source::Directory(path) => {
                     if path.is_absolute() {
-                        write!(f, "{}", Url::from_file_path(path).unwrap())?;
+                        write!(
+                            f,
+                            "{}",
+                            Url::from_file_path(path).map_err(|()| std::fmt::Error)?
+                        )?;
                     } else {
                         write!(f, "{}", anchor(path).portable_display())?;
                     }
@@ -344,7 +348,11 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                     }
                     EditableMode::NonEditable => {
                         if path.is_absolute() {
-                            write!(f, "{}", Url::from_file_path(path).unwrap())?;
+                            write!(
+                                f,
+                                "{}",
+                                Url::from_file_path(path).map_err(|()| std::fmt::Error)?
+                            )?;
                         } else {
                             write!(f, "{}", anchor(path).portable_display())?;
                         }

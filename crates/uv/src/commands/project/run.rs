@@ -17,8 +17,8 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{
-    Concurrency, DevGroupsSpecification, EditableMode, ExtrasSpecification, GroupsSpecification,
-    InstallOptions, LowerBound, PreviewMode, SourceStrategy, TrustedHost,
+    Concurrency, DevGroupsManifest, DevGroupsSpecification, EditableMode, ExtrasSpecification,
+    GroupsSpecification, InstallOptions, LowerBound, PreviewMode, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::SharedState;
 use uv_distribution::LoweredRequirement;
@@ -93,6 +93,7 @@ pub(crate) async fn run(
 ) -> anyhow::Result<ExitStatus> {
     // These cases seem quite complex because (in theory) they should change the "current package".
     // Let's ban them entirely for now.
+    let mut requirements_from_stdin: bool = false;
     for source in &requirements {
         match source {
             RequirementsSource::PyprojectToml(_) => {
@@ -106,11 +107,20 @@ pub(crate) async fn run(
             }
             RequirementsSource::RequirementsTxt(path) => {
                 if path == Path::new("-") {
-                    bail!("Reading requirements from stdin is not supported in `uv run`");
+                    requirements_from_stdin = true;
                 }
             }
             _ => {}
         }
+    }
+
+    // Fail early if stdin is used for multiple purposes.
+    if matches!(
+        command,
+        Some(RunCommand::PythonStdin(..) | RunCommand::PythonGuiStdin(..))
+    ) && requirements_from_stdin
+    {
+        bail!("Cannot read both requirements file and script from stdin");
     }
 
     // Initialize any shared state.
@@ -169,6 +179,9 @@ pub(crate) async fn run(
                 )?;
             }
             Pep723Item::Stdin(_) => {
+                if requirements_from_stdin {
+                    bail!("Cannot read both requirements file and script from stdin");
+                }
                 writeln!(
                     printer.stderr(),
                     "Reading inline script metadata from `{}`",
@@ -201,109 +214,57 @@ pub(crate) async fn run(
         .await?
         .into_interpreter();
 
-        // Determine the working directory for the script.
-        let script_dir = match &script {
-            Pep723Item::Script(script) => std::path::absolute(&script.path)?
-                .parent()
-                .expect("script path has no parent")
-                .to_owned(),
-            Pep723Item::Stdin(..) | Pep723Item::Remote(..) => std::env::current_dir()?,
-        };
-        let script = script.into_metadata();
+        // If a lockfile already exists, lock the script.
+        if let Some(target) = script
+            .as_script()
+            .map(LockTarget::from)
+            .filter(|target| target.lock_path().is_file())
+        {
+            debug!("Found existing lockfile for script");
 
-        // Install the script requirements, if necessary. Otherwise, use an isolated environment.
-        if let Some(dependencies) = script.dependencies {
-            // Collect any `tool.uv.index` from the script.
-            let empty = Vec::default();
-            let script_indexes = match settings.sources {
-                SourceStrategy::Enabled => script
-                    .tool
-                    .as_ref()
-                    .and_then(|tool| tool.uv.as_ref())
-                    .and_then(|uv| uv.top_level.index.as_deref())
-                    .unwrap_or(&empty),
-                SourceStrategy::Disabled => &empty,
+            // Determine the lock mode.
+            let mode = if frozen {
+                LockMode::Frozen
+            } else if locked {
+                LockMode::Locked(&interpreter)
+            } else {
+                LockMode::Write(&interpreter)
             };
 
-            // Collect any `tool.uv.sources` from the script.
-            let empty = BTreeMap::default();
-            let script_sources = match settings.sources {
-                SourceStrategy::Enabled => script
-                    .tool
-                    .as_ref()
-                    .and_then(|tool| tool.uv.as_ref())
-                    .and_then(|uv| uv.sources.as_ref())
-                    .unwrap_or(&empty),
-                SourceStrategy::Disabled => &empty,
-            };
-
-            let requirements = dependencies
-                .into_iter()
-                .flat_map(|requirement| {
-                    LoweredRequirement::from_non_workspace_requirement(
-                        requirement,
-                        script_dir.as_ref(),
-                        script_sources,
-                        script_indexes,
-                        &settings.index_locations,
-                        LowerBound::Allow,
-                    )
-                    .map_ok(LoweredRequirement::into_inner)
-                })
-                .collect::<Result<_, _>>()?;
-            let constraints = script
-                .tool
-                .as_ref()
-                .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.constraint_dependencies.as_ref())
-                .into_iter()
-                .flatten()
-                .cloned()
-                .flat_map(|requirement| {
-                    LoweredRequirement::from_non_workspace_requirement(
-                        requirement,
-                        script_dir.as_ref(),
-                        script_sources,
-                        script_indexes,
-                        &settings.index_locations,
-                        LowerBound::Allow,
-                    )
-                    .map_ok(LoweredRequirement::into_inner)
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            let overrides = script
-                .tool
-                .as_ref()
-                .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.override_dependencies.as_ref())
-                .into_iter()
-                .flatten()
-                .cloned()
-                .flat_map(|requirement| {
-                    LoweredRequirement::from_non_workspace_requirement(
-                        requirement,
-                        script_dir.as_ref(),
-                        script_sources,
-                        script_indexes,
-                        &settings.index_locations,
-                        LowerBound::Allow,
-                    )
-                    .map_ok(LoweredRequirement::into_inner)
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-
-            let spec =
-                RequirementsSpecification::from_overrides(requirements, constraints, overrides);
-            let result = CachedEnvironment::get_or_create(
-                EnvironmentSpecification::from(spec),
-                interpreter,
-                &settings,
+            // Generate a lockfile.
+            let lock = project::lock::do_safe_lock(
+                mode,
+                target,
+                settings.as_ref().into(),
+                LowerBound::Allow,
                 &state,
                 if show_resolution {
                     Box::new(DefaultResolveLogger)
                 } else {
                     Box::new(SummaryResolveLogger)
                 },
+                connectivity,
+                concurrency,
+                native_tls,
+                allow_insecure_host,
+                cache,
+                printer,
+                preview,
+            )
+            .await?
+            .into_lock();
+
+            let result = CachedEnvironment::from_lock(
+                InstallTarget::Script {
+                    script: script.as_script().unwrap(),
+                    lock: &lock,
+                },
+                &ExtrasSpecification::default(),
+                &DevGroupsManifest::default(),
+                InstallOptions::default(),
+                &settings,
+                &interpreter,
+                &state,
                 if show_resolution {
                     Box::new(DefaultInstallLogger)
                 } else {
@@ -332,19 +293,151 @@ pub(crate) async fn run(
 
             Some(environment.into_interpreter())
         } else {
-            // Create a virtual environment.
-            temp_dir = cache.venv_dir()?;
-            let environment = uv_virtualenv::create_venv(
-                temp_dir.path(),
-                interpreter,
-                uv_virtualenv::Prompt::None,
-                false,
-                false,
-                false,
-                false,
-            )?;
+            // Determine the working directory for the script.
+            let script_dir = match &script {
+                Pep723Item::Script(script) => std::path::absolute(&script.path)?
+                    .parent()
+                    .expect("script path has no parent")
+                    .to_owned(),
+                Pep723Item::Stdin(..) | Pep723Item::Remote(..) => std::env::current_dir()?,
+            };
+            let script = script.into_metadata();
 
-            Some(environment.into_interpreter())
+            // Install the script requirements, if necessary. Otherwise, use an isolated environment.
+            if let Some(dependencies) = script.dependencies {
+                // Collect any `tool.uv.index` from the script.
+                let empty = Vec::default();
+                let script_indexes = match settings.sources {
+                    SourceStrategy::Enabled => script
+                        .tool
+                        .as_ref()
+                        .and_then(|tool| tool.uv.as_ref())
+                        .and_then(|uv| uv.top_level.index.as_deref())
+                        .unwrap_or(&empty),
+                    SourceStrategy::Disabled => &empty,
+                };
+
+                // Collect any `tool.uv.sources` from the script.
+                let empty = BTreeMap::default();
+                let script_sources = match settings.sources {
+                    SourceStrategy::Enabled => script
+                        .tool
+                        .as_ref()
+                        .and_then(|tool| tool.uv.as_ref())
+                        .and_then(|uv| uv.sources.as_ref())
+                        .unwrap_or(&empty),
+                    SourceStrategy::Disabled => &empty,
+                };
+
+                let requirements = dependencies
+                    .into_iter()
+                    .flat_map(|requirement| {
+                        LoweredRequirement::from_non_workspace_requirement(
+                            requirement,
+                            script_dir.as_ref(),
+                            script_sources,
+                            script_indexes,
+                            &settings.index_locations,
+                            LowerBound::Allow,
+                        )
+                        .map_ok(LoweredRequirement::into_inner)
+                    })
+                    .collect::<Result<_, _>>()?;
+                let constraints = script
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.constraint_dependencies.as_ref())
+                    .into_iter()
+                    .flatten()
+                    .cloned()
+                    .flat_map(|requirement| {
+                        LoweredRequirement::from_non_workspace_requirement(
+                            requirement,
+                            script_dir.as_ref(),
+                            script_sources,
+                            script_indexes,
+                            &settings.index_locations,
+                            LowerBound::Allow,
+                        )
+                        .map_ok(LoweredRequirement::into_inner)
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let overrides = script
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.override_dependencies.as_ref())
+                    .into_iter()
+                    .flatten()
+                    .cloned()
+                    .flat_map(|requirement| {
+                        LoweredRequirement::from_non_workspace_requirement(
+                            requirement,
+                            script_dir.as_ref(),
+                            script_sources,
+                            script_indexes,
+                            &settings.index_locations,
+                            LowerBound::Allow,
+                        )
+                        .map_ok(LoweredRequirement::into_inner)
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                let spec =
+                    RequirementsSpecification::from_overrides(requirements, constraints, overrides);
+                let result = CachedEnvironment::from_spec(
+                    EnvironmentSpecification::from(spec),
+                    &interpreter,
+                    &settings,
+                    &state,
+                    if show_resolution {
+                        Box::new(DefaultResolveLogger)
+                    } else {
+                        Box::new(SummaryResolveLogger)
+                    },
+                    if show_resolution {
+                        Box::new(DefaultInstallLogger)
+                    } else {
+                        Box::new(SummaryInstallLogger)
+                    },
+                    installer_metadata,
+                    connectivity,
+                    concurrency,
+                    native_tls,
+                    allow_insecure_host,
+                    cache,
+                    printer,
+                    preview,
+                )
+                .await;
+
+                let environment = match result {
+                    Ok(resolution) => resolution,
+                    Err(ProjectError::Operation(err)) => {
+                        return diagnostics::OperationDiagnostic::with_context("script")
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    }
+                    Err(err) => return Err(err.into()),
+                };
+
+                Some(environment.into_interpreter())
+            } else {
+                // Create a virtual environment.
+                temp_dir = cache.venv_dir()?;
+                let environment = uv_virtualenv::create_venv(
+                    temp_dir.path(),
+                    interpreter,
+                    uv_virtualenv::Prompt::None,
+                    false,
+                    false,
+                    false,
+                    false,
+                )?;
+
+                Some(environment.into_interpreter())
+            }
         }
     } else {
         None
@@ -847,12 +940,12 @@ pub(crate) async fn run(
             Some(spec) => {
                 debug!("Syncing ephemeral requirements");
 
-                let result = CachedEnvironment::get_or_create(
+                let result = CachedEnvironment::from_spec(
                     EnvironmentSpecification::from(spec).with_lock(
                         lock.as_ref()
                             .map(|(lock, install_path)| (lock, install_path.as_ref())),
                     ),
-                    base_interpreter.clone(),
+                    &base_interpreter,
                     &settings,
                     &state,
                     if show_resolution {
@@ -1442,8 +1535,8 @@ impl RunCommand {
         }
 
         let metadata = target_path.metadata();
-        let is_file = metadata.as_ref().map_or(false, std::fs::Metadata::is_file);
-        let is_dir = metadata.as_ref().map_or(false, std::fs::Metadata::is_dir);
+        let is_file = metadata.as_ref().is_ok_and(std::fs::Metadata::is_file);
+        let is_dir = metadata.as_ref().is_ok_and(std::fs::Metadata::is_dir);
 
         if target.eq_ignore_ascii_case("python") {
             Ok(Self::Python(args.to_vec()))
@@ -1476,9 +1569,7 @@ impl RunCommand {
 fn is_python_zipapp(target: &Path) -> bool {
     if let Ok(file) = fs_err::File::open(target) {
         if let Ok(mut archive) = zip::ZipArchive::new(file) {
-            return archive
-                .by_name("__main__.py")
-                .map_or(false, |f| f.is_file());
+            return archive.by_name("__main__.py").is_ok_and(|f| f.is_file());
         }
     }
     false

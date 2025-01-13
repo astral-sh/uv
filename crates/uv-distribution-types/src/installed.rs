@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -309,7 +310,8 @@ impl InstalledDist {
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(err) => return Err(err.into()),
         };
-        let direct_url = serde_json::from_reader::<fs_err::File, DirectUrl>(file)?;
+        let direct_url =
+            serde_json::from_reader::<BufReader<fs_err::File>, DirectUrl>(BufReader::new(file))?;
         Ok(Some(direct_url))
     }
 
@@ -321,7 +323,8 @@ impl InstalledDist {
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(err) => return Err(err.into()),
         };
-        let cache_info = serde_json::from_reader::<fs_err::File, CacheInfo>(file)?;
+        let cache_info =
+            serde_json::from_reader::<BufReader<fs_err::File>, CacheInfo>(BufReader::new(file))?;
         Ok(Some(cache_info))
     }
 

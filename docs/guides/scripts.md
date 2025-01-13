@@ -74,7 +74,7 @@ install the current project before running the script. If your script does not d
 project, use the `--no-project` flag to skip this:
 
 ```console
-$ # Note, it is important that the flag comes _before_ the script
+$ # Note: the `--no-project` flag must be provided _before_ the script name.
 $ uv run --no-project example.py
 ```
 
@@ -210,11 +210,30 @@ print(Point)
 is not installed — see the documentation on [Python versions](../concepts/python-versions.md) for
 more details.
 
+## Locking dependencies
+
+uv supports locking dependencies for PEP 723 scripts using the `uv.lock` file format. Unlike with
+projects, scripts must be explicitly locked using `uv lock`:
+
+```console
+$ uv lock --script example.py
+```
+
+Running `uv lock --script` will create a `.lock` file adjacent to the script (e.g.,
+`example.py.lock`).
+
+Once locked, subsequent operations like `uv run --script`, `uv add --script`, `uv export --script`,
+and `uv tree --script` will reuse the locked dependencies, updating the lockfile if necessary.
+
+If no such lockfile is present, commands like `uv export --script` will still function as expected,
+but will not create a lockfile.
+
 ## Improving reproducibility
 
-uv supports an `exclude-newer` field in the `tool.uv` section of inline script metadata to limit uv
-to only considering distributions released before a specific date. This is useful for improving the
-reproducibility of your script when run at a later point in time.
+In addition to locking dependencies, uv supports an `exclude-newer` field in the `tool.uv` section
+of inline script metadata to limit uv to only considering distributions released before a specific
+date. This is useful for improving the reproducibility of your script when run at a later point in
+time.
 
 The date must be specified as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamp
 (e.g., `2006-12-02T02:07:43Z`).

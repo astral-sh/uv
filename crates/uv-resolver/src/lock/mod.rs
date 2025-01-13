@@ -953,7 +953,7 @@ impl Lock {
                     .ok()
                     .flatten()
                     .map(|package| matches!(package.id.source, Source::Virtual(_)));
-                if actual.map_or(true, |actual| actual != expected) {
+                if actual != Some(expected) {
                     return Ok(SatisfiesResult::MismatchedSources(name.clone(), expected));
                 }
             }
@@ -973,7 +973,7 @@ impl Lock {
                     .ok()
                     .flatten()
                     .map(|package| &package.id.version);
-                if actual.map_or(true, |actual| actual != expected) {
+                if actual != Some(expected) {
                     return Ok(SatisfiesResult::MismatchedVersion(
                         name.clone(),
                         expected.clone(),
@@ -1098,7 +1098,7 @@ impl Lock {
                 .into_iter()
                 .filter_map(|index| match index.url() {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                        Some(UrlString::from(index.url().redacted()))
+                        Some(UrlString::from(index.url().redacted().as_ref()))
                     }
                     IndexUrl::Path(_) => None,
                 })
@@ -1814,13 +1814,13 @@ impl Package {
                         let filename: WheelFilename =
                             self.wheels[best_wheel_index].filename.clone();
                         let url = Url::from(ParsedArchiveUrl {
-                            url: url.to_url(),
+                            url: url.to_url().map_err(LockErrorKind::InvalidUrl)?,
                             subdirectory: direct.subdirectory.clone(),
                             ext: DistExtension::Wheel,
                         });
                         let direct_dist = DirectUrlBuiltDist {
                             filename,
-                            location: url.clone(),
+                            location: Box::new(url.clone()),
                             url: VerbatimUrl::from_url(url),
                         };
                         let built_dist = BuiltDist::DirectUrl(direct_dist);
@@ -1946,7 +1946,7 @@ impl Package {
             Source::Git(url, git) => {
                 // Remove the fragment and query from the URL; they're already present in the
                 // `GitSource`.
-                let mut url = url.to_url();
+                let mut url = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
                 url.set_fragment(None);
                 url.set_query(None);
 
@@ -1976,7 +1976,7 @@ impl Package {
                 let DistExtension::Source(ext) = DistExtension::from_path(url.as_ref())? else {
                     return Ok(None);
                 };
-                let location = url.to_url();
+                let location = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
                 let subdirectory = direct.subdirectory.as_ref().map(PathBuf::from);
                 let url = Url::from(ParsedArchiveUrl {
                     url: location.clone(),
@@ -2020,7 +2020,10 @@ impl Package {
                     url: FileLocation::AbsoluteUrl(file_url.clone()),
                     yanked: None,
                 });
-                let index = IndexUrl::from(VerbatimUrl::from_url(url.to_url()));
+
+                let index = IndexUrl::from(VerbatimUrl::from_url(
+                    url.to_url().map_err(LockErrorKind::InvalidUrl)?,
+                ));
 
                 let reg_dist = RegistrySourceDist {
                     name: self.id.name.clone(),
@@ -2262,7 +2265,9 @@ impl Package {
     pub fn index(&self, root: &Path) -> Result<Option<IndexUrl>, LockError> {
         match &self.id.source {
             Source::Registry(RegistrySource::Url(url)) => {
-                let index = IndexUrl::from(VerbatimUrl::from_url(url.to_url()));
+                let index = IndexUrl::from(VerbatimUrl::from_url(
+                    url.to_url().map_err(LockErrorKind::InvalidUrl)?,
+                ));
                 Ok(Some(index))
             }
             Source::Registry(RegistrySource::Path(path)) => {
@@ -2291,16 +2296,16 @@ impl Package {
     }
 
     /// Returns the [`ResolvedRepositoryReference`] for the package, if it is a Git source.
-    pub fn as_git_ref(&self) -> Option<ResolvedRepositoryReference> {
+    pub fn as_git_ref(&self) -> Result<Option<ResolvedRepositoryReference>, LockError> {
         match &self.id.source {
-            Source::Git(url, git) => Some(ResolvedRepositoryReference {
+            Source::Git(url, git) => Ok(Some(ResolvedRepositoryReference {
                 reference: RepositoryReference {
-                    url: RepositoryUrl::new(&url.to_url()),
+                    url: RepositoryUrl::new(&url.to_url().map_err(LockErrorKind::InvalidUrl)?),
                     reference: GitReference::from(git.kind.clone()),
                 },
                 sha: git.precise,
-            }),
-            _ => None,
+            })),
+            _ => Ok(None),
         }
     }
 }
@@ -3138,7 +3143,7 @@ impl SourceDist {
         match &reg_dist.index {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                 let url = normalize_file_location(&reg_dist.file.url)
-                    .map_err(LockErrorKind::InvalidFileUrl)
+                    .map_err(LockErrorKind::InvalidUrl)
                     .map_err(LockError::from)?;
                 let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
                 let size = reg_dist.file.size;
@@ -3153,7 +3158,7 @@ impl SourceDist {
                     .file
                     .url
                     .to_url()
-                    .map_err(LockErrorKind::InvalidFileUrl)?
+                    .map_err(LockErrorKind::InvalidUrl)?
                     .to_file_path()
                     .map_err(|()| LockErrorKind::UrlToPath)?;
                 let path = relative_to(&reg_dist_path, index_path)
@@ -3444,7 +3449,7 @@ impl Wheel {
         match &wheel.index {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                 let url = normalize_file_location(&wheel.file.url)
-                    .map_err(LockErrorKind::InvalidFileUrl)
+                    .map_err(LockErrorKind::InvalidUrl)
                     .map_err(LockError::from)?;
                 let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
                 let size = wheel.file.size;
@@ -3461,7 +3466,7 @@ impl Wheel {
                     .file
                     .url
                     .to_url()
-                    .map_err(LockErrorKind::InvalidFileUrl)?
+                    .map_err(LockErrorKind::InvalidUrl)?
                     .to_file_path()
                     .map_err(|()| LockErrorKind::UrlToPath)?;
                 let path = relative_to(&wheel_path, index_path)
@@ -3507,7 +3512,7 @@ impl Wheel {
         let filename: WheelFilename = self.filename.clone();
 
         match source {
-            RegistrySource::Url(index_url) => {
+            RegistrySource::Url(url) => {
                 let file_url = match &self.url {
                     WheelWireSource::Url { url } => url,
                     WheelWireSource::Path { .. } | WheelWireSource::Filename { .. } => {
@@ -3528,7 +3533,9 @@ impl Wheel {
                     url: FileLocation::AbsoluteUrl(file_url.clone()),
                     yanked: None,
                 });
-                let index = IndexUrl::from(VerbatimUrl::from_url(index_url.to_url()));
+                let index = IndexUrl::from(VerbatimUrl::from_url(
+                    url.to_url().map_err(LockErrorKind::InvalidUrl)?,
+                ));
                 Ok(RegistryBuiltWheel {
                     filename,
                     file,
@@ -3862,15 +3869,14 @@ impl<'de> serde::Deserialize<'de> for Hash {
 /// Convert a [`FileLocation`] into a normalized [`UrlString`].
 fn normalize_file_location(location: &FileLocation) -> Result<UrlString, ToUrlError> {
     match location {
-        FileLocation::AbsoluteUrl(ref absolute) => Ok(absolute.as_base_url()),
+        FileLocation::AbsoluteUrl(ref absolute) => Ok(absolute.without_fragment()),
         FileLocation::RelativeUrl(_, _) => Ok(normalize_url(location.to_url()?)),
     }
 }
 
-/// Convert a [`Url`] into a normalized [`UrlString`].
+/// Convert a [`Url`] into a normalized [`UrlString`] by removing the fragment.
 fn normalize_url(mut url: Url) -> UrlString {
     url.set_fragment(None);
-    url.set_query(None);
     UrlString::from(url)
 }
 
@@ -3995,9 +4001,8 @@ fn normalize_requirement(requirement: Requirement, root: &Path) -> Result<Requir
             // Redact the credentials.
             redact_credentials(&mut location);
 
-            // Remove the fragment and query from the URL; they're already present in the source.
+            // Remove the fragment from the URL; it's already present in the source.
             location.set_fragment(None);
-            location.set_query(None);
 
             // Reconstruct the PEP 508 URL from the underlying data.
             let url = Url::from(ParsedArchiveUrl {
@@ -4096,11 +4101,11 @@ enum LockErrorKind {
     },
     /// An error that occurs when the URL to a file for a wheel or
     /// source dist could not be converted to a structured `url::Url`.
-    #[error("Failed to parse wheel or source distribution URL")]
-    InvalidFileUrl(
+    #[error(transparent)]
+    InvalidUrl(
         /// The underlying error that occurred. This includes the
         /// errant URL in its error message.
-        #[source]
+        #[from]
         ToUrlError,
     ),
     /// An error that occurs when the extension can't be determined

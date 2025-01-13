@@ -1,5 +1,160 @@
 # Changelog
 
+## 0.5.18
+
+### Bug fixes
+
+- Avoid forking for identical markers ([#10490](https://github.com/astral-sh/uv/pull/10490))
+- Avoid panic in `uv remove` when only comments exist ([#10484](https://github.com/astral-sh/uv/pull/10484))
+- Revert "improve shell compatibility of venv activate scripts (#10397)" ([#10497](https://github.com/astral-sh/uv/pull/10497))
+
+## 0.5.17
+
+This release includes support for generating lockfiles from scripts based on inline metadata, as defined in PEP 723.
+
+By default, scripts remain unlocked, and must be locked explicitly with `uv lock --script /path/to/script.py`, which
+will generate a lockfile adjacent to the script (e.g., `script.py.lock`). Once generated, the lockfile will be
+respected (and updated, if necessary) across `uv run --script`, `uv add --script`, and `uv remove --script` invocations.
+
+This release also includes support for `uv export --script` and `uv tree --script`. Both commands support PEP 723
+scripts with and without accompanying lockfiles.
+
+### Enhancements
+
+- Add support for locking PEP 723 scripts ([#10135](https://github.com/astral-sh/uv/pull/10135))
+- Respect PEP 723 script lockfiles in `uv run` ([#10136](https://github.com/astral-sh/uv/pull/10136))
+- Update PEP 723 lockfile in `uv add --script` ([#10145](https://github.com/astral-sh/uv/pull/10145))
+- Update PEP 723 lockfile in `uv remove --script` ([#10162](https://github.com/astral-sh/uv/pull/10162))
+- Add `--script` support to `uv export` for PEP 723 scripts ([#10160](https://github.com/astral-sh/uv/pull/10160))
+- Add `--script` support to `uv tree` for PEP 723 scripts ([#10159](https://github.com/astral-sh/uv/pull/10159))
+- Add `ls` alias to `uv {tool, python, pip} list` ([#10240](https://github.com/astral-sh/uv/pull/10240))
+- Allow reading `--with-requirements` from stdin in `uv add` and `uv run` ([#10447](https://github.com/astral-sh/uv/pull/10447))
+- Warn-and-ignore for unsupported `requirements.txt` options ([#10420](https://github.com/astral-sh/uv/pull/10420))
+
+### Preview features
+
+- Add remaining Python type annotations to build backend ([#10434](https://github.com/astral-sh/uv/pull/10434))
+
+### Performance
+
+- Avoid allocating for names in the PEP 508 parser ([#10476](https://github.com/astral-sh/uv/pull/10476))
+- Fetch concurrently for non-first-match index strategies ([#10432](https://github.com/astral-sh/uv/pull/10432))
+- Remove unnecessary `.to_string()` call ([#10419](https://github.com/astral-sh/uv/pull/10419))
+- Respect sentinels in package prioritization ([#10443](https://github.com/astral-sh/uv/pull/10443))
+- Use `ArcStr` for marker values ([#10453](https://github.com/astral-sh/uv/pull/10453))
+- Use `ArcStr` for package, extra, and group names ([#10475](https://github.com/astral-sh/uv/pull/10475))
+- Use `matches!` rather than `contains` in `requirements.txt` parsing ([#10423](https://github.com/astral-sh/uv/pull/10423))
+- Use faster disjointness check for markers ([#10439](https://github.com/astral-sh/uv/pull/10439))
+- Pre-compute PEP 508 markers from universal markers ([#10472](https://github.com/astral-sh/uv/pull/10472))
+
+### Bug fixes
+
+- Fix `UV_FIND_LINKS` delimiter to split on commas ([#10477](https://github.com/astral-sh/uv/pull/10477))
+- Improve `uv tool list` output when tool environment is broken ([#10409](https://github.com/astral-sh/uv/pull/10409))
+- Only track markers for compatible versions ([#10457](https://github.com/astral-sh/uv/pull/10457))
+- Respect `requires-python` when installing tools ([#10401](https://github.com/astral-sh/uv/pull/10401))
+- Visit proxy packages eagerly ([#10441](https://github.com/astral-sh/uv/pull/10441))
+- Improve shell compatibility of `venv` activate scripts ([#10397](https://github.com/astral-sh/uv/pull/10397))
+- Read publish username from URL ([#10469](https://github.com/astral-sh/uv/pull/10469))
+
+### Documentation
+
+- Add Lambda layer instructions to AWS Lambda guide ([#10411](https://github.com/astral-sh/uv/pull/10411))
+- Add `uv lock --script` to the docs ([#10414](https://github.com/astral-sh/uv/pull/10414))
+- Use Windows-specific instructions in Jupyter guide ([#10446](https://github.com/astral-sh/uv/pull/10446))
+
+## 0.5.16
+
+### Enhancements
+
+- Accept full requirements in `uv remove` ([#10338](https://github.com/astral-sh/uv/pull/10338))
+
+### Performance
+
+- Avoid over-counting versions in batch prefetcher ([#10350](https://github.com/astral-sh/uv/pull/10350))
+- Deactivate tracing for version-choosing ([#10351](https://github.com/astral-sh/uv/pull/10351))
+- Force a niche into `VersionSmall` ([#10385](https://github.com/astral-sh/uv/pull/10385))
+- Optimize `requirements_for_extra` ([#10348](https://github.com/astral-sh/uv/pull/10348))
+- Re-enable `zlib-ng` on x86 platforms ([#10365](https://github.com/astral-sh/uv/pull/10365))
+- Re-enable zlib-ng on all platforms (except s390x, PowerPC, and FreeBSD) ([#10370](https://github.com/astral-sh/uv/pull/10370))
+- Remove `[u64; 4]` from small version to move `Arc` to full version ([#10345](https://github.com/astral-sh/uv/pull/10345))
+- Shrink `Dist` from 352 to 288 bytes ([#10389](https://github.com/astral-sh/uv/pull/10389))
+- Speed up file pins by removing nested hash map ([#10346](https://github.com/astral-sh/uv/pull/10346))
+- Buffer file reads in `serde_json::from_reader` ([#10341](https://github.com/astral-sh/uv/pull/10341))
+
+### Bug fixes
+
+- Avoid enforcing project-level required version for `uv self` ([#10374](https://github.com/astral-sh/uv/pull/10374))
+- Fix Ruff linting warnings from generated template files for extension modules ([#10371](https://github.com/astral-sh/uv/pull/10371))
+
+### Documentation
+
+- Add AWS Lambda integration guide ([#10278](https://github.com/astral-sh/uv/pull/10278))
+
+## 0.5.15
+
+### Python
+
+The managed Python distributions have been updated, including:
+
+- Python 3.14.0a3 support on macOS and Linux
+- Performance improvements
+- Fixes to SQLite feature detection
+
+See the [`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250106) for more details.
+
+### Enhancements
+
+- Respect `FORCE_COLOR` environment variable ([#10315](https://github.com/astral-sh/uv/pull/10315))
+
+### Performance
+
+- Avoid generating unused hashes during `uv lock` ([#10307](https://github.com/astral-sh/uv/pull/10307))
+- Visit source distributions before wheels ([#10291](https://github.com/astral-sh/uv/pull/10291))
+
+### Bug fixes
+
+- Avoid downgrading packages when `--upgrade` is provided ([#10097](https://github.com/astral-sh/uv/pull/10097))
+- Extract supported architectures from wheel tags ([#10179](https://github.com/astral-sh/uv/pull/10179))
+- Redact new index credentials in `uv add` ([#10329](https://github.com/astral-sh/uv/pull/10329))
+
+### Documentation
+
+- Clarify `exclude-newer` only allows full timestamps in settings documentation ([#9135](https://github.com/astral-sh/uv/pull/9135))
+- Tweak script `--no-project` comment ([#10331](https://github.com/astral-sh/uv/pull/10331))
+- Update copyright year ([#10297](https://github.com/astral-sh/uv/pull/10297))
+- Add instructinos for installing with Scoop ([#10332](https://github.com/astral-sh/uv/pull/10332))
+
+## 0.5.14
+
+### Enhancements
+
+- Add `--exact` flag to `uv run` ([#10198](https://github.com/astral-sh/uv/pull/10198))
+- Add `--outdated` support to `uv pip tree` ([#10199](https://github.com/astral-sh/uv/pull/10199))
+- Add a required version setting to uv ([#10248](https://github.com/astral-sh/uv/pull/10248))
+- Add loongarch64 to supported Python platform tags ([#10223](https://github.com/astral-sh/uv/pull/10223))
+- Add manylinux2014 aliases for `--python-platform` ([#10217](https://github.com/astral-sh/uv/pull/10217))
+- Add support for Python interpreters on ARMv5TE platforms ([#10234](https://github.com/astral-sh/uv/pull/10234))
+- Add support for optional `--description` in `uv init` ([#10209](https://github.com/astral-sh/uv/pull/10209))
+- Ignore empty or missing hrefs in Simple HTML ([#10276](https://github.com/astral-sh/uv/pull/10276))
+- Patch pkgconfig files after Python install ([#10189](https://github.com/astral-sh/uv/pull/10189))
+
+### Performance
+
+- Actually use jemalloc as alternative allocator ([#10269](https://github.com/astral-sh/uv/pull/10269))
+- Parse URLs lazily in resolver ([#10259](https://github.com/astral-sh/uv/pull/10259))
+- Use `BTreeMap::range` to avoid iterating over unnecessary versions ([#10266](https://github.com/astral-sh/uv/pull/10266))
+
+### Bug fixes
+
+- Accept directories with space names in `uv init` ([#10246](https://github.com/astral-sh/uv/pull/10246))
+- Avoid forking on version in non-universal resolutions ([#10274](https://github.com/astral-sh/uv/pull/10274))
+- Avoid stripping query parameters from URLs ([#10253](https://github.com/astral-sh/uv/pull/10253))
+- Consider workspace dependencies to be 'direct' ([#10197](https://github.com/astral-sh/uv/pull/10197))
+- Detect cyclic dependencies during builds ([#10258](https://github.com/astral-sh/uv/pull/10258))
+- Guard against self-deletion in `uv venv` and `uv tool` ([#10206](https://github.com/astral-sh/uv/pull/10206))
+- Respect static metadata for already-installed distributions ([#10242](https://github.com/astral-sh/uv/pull/10242))
+
 ## 0.5.13
 
 ### Bug fixes

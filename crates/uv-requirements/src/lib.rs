@@ -35,11 +35,7 @@ pub enum Error {
 impl Error {
     /// Create an [`Error`] from a distribution error.
     pub(crate) fn from_dist(dist: Dist, err: uv_distribution::Error) -> Self {
-        Self::Dist(
-            DistErrorKind::from_dist_and_err(&dist, &err),
-            Box::new(dist),
-            err,
-        )
+        Self::Dist(DistErrorKind::from_dist(&dist, &err), Box::new(dist), err)
     }
 }
 

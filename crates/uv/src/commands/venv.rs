@@ -26,7 +26,7 @@ use uv_python::{
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_shell::{shlex_posix, shlex_windows, Shell};
-use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, HashStrategy};
+use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
 
@@ -353,16 +353,18 @@ async fn venv_impl(
             )]
         };
 
+        let build_stack = BuildStack::default();
+
         // Resolve and install the requirements.
         //
         // Since the virtual environment is empty, and the set of requirements is trivial (no
         // constraints, no editables, etc.), we can use the build dispatch APIs directly.
         let resolution = build_dispatch
-            .resolve(&requirements)
+            .resolve(&requirements, &build_stack)
             .await
             .map_err(|err| VenvError::Seed(err.into()))?;
         let installed = build_dispatch
-            .install(&resolution, &venv)
+            .install(&resolution, &venv, &build_stack)
             .await
             .map_err(|err| VenvError::Seed(err.into()))?;
 

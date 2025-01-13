@@ -104,9 +104,10 @@ uv run [OPTIONS] [COMMAND]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -572,9 +573,10 @@ uv init [OPTIONS] [PATH]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -766,9 +768,10 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -1132,9 +1135,10 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -1484,9 +1488,10 @@ uv sync [OPTIONS]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -1873,9 +1878,10 @@ uv lock [OPTIONS]
 <p>Equivalent to <code>--frozen</code>.</p>
 
 <p>May also be set with the <code>UV_FROZEN</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -2129,6 +2135,10 @@ uv lock [OPTIONS]
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
+</dd><dt><code>--script</code> <i>script</i></dt><dd><p>Lock the specified Python script, rather than the current project.</p>
+
+<p>If provided, uv will lock the script (based on its inline metadata table, in adherence with PEP 723) to a <code>.lock</code> file adjacent to the script itself.</p>
+
 </dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
 </dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
@@ -2189,9 +2199,10 @@ uv export [OPTIONS]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -2521,6 +2532,10 @@ uv export [OPTIONS]
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
+</dd><dt><code>--script</code> <i>script</i></dt><dd><p>Export the dependencies for the specified PEP 723 Python script, rather than the current project.</p>
+
+<p>If provided, uv will resolve the dependencies based on its inline metadata table, in adherence with PEP 723.</p>
+
 </dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
 </dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
@@ -2565,9 +2580,10 @@ uv tree [OPTIONS]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -2947,6 +2963,10 @@ uv tree [OPTIONS]
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
+</dd><dt><code>--script</code> <i>script</i></dt><dd><p>Show the dependency tree the specified PEP 723 Python script, rather than the current project.</p>
+
+<p>If provided, uv will resolve the dependencies based on its inline metadata table, in adherence with PEP 723.</p>
+
 </dd><dt><code>--universal</code></dt><dd><p>Show a platform-independent dependency tree.</p>
 
 <p>Shows resolved package versions for all Python versions and platforms, rather than filtering to those that are relevant for the current environment.</p>
@@ -3033,9 +3053,10 @@ uv tool run [OPTIONS] [COMMAND]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -3354,9 +3375,10 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -3687,9 +3709,10 @@ uv tool upgrade [OPTIONS] <NAME>...
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -3976,9 +3999,10 @@ uv tool list [OPTIONS]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -4086,9 +4110,10 @@ uv tool uninstall [OPTIONS] <NAME>...
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -4208,9 +4233,10 @@ uv tool update-shell [OPTIONS]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -4348,9 +4374,10 @@ uv tool dir [OPTIONS]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -4548,9 +4575,10 @@ uv python list [OPTIONS]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -4696,9 +4724,10 @@ uv python install [OPTIONS] [TARGETS]...
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -4863,9 +4892,10 @@ uv python find [OPTIONS] [REQUEST]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -5008,9 +5038,10 @@ uv python pin [OPTIONS] [REQUEST]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -5156,9 +5187,10 @@ uv python dir [OPTIONS]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -5282,9 +5314,10 @@ uv python uninstall [OPTIONS] <TARGETS>...
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -5465,9 +5498,10 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -5934,9 +5968,10 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -6331,9 +6366,10 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -6801,9 +6837,10 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>>
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -6953,9 +6990,10 @@ uv pip freeze [OPTIONS]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -7087,9 +7125,10 @@ uv pip list [OPTIONS]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -7317,9 +7356,10 @@ uv pip show [OPTIONS] [PACKAGE]...
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -7451,9 +7491,10 @@ uv pip tree [OPTIONS]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -7668,9 +7709,10 @@ uv pip check [OPTIONS]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -7822,9 +7864,10 @@ uv venv [OPTIONS] [PATH]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -8086,9 +8129,10 @@ uv build [OPTIONS] [SRC]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -8433,9 +8477,10 @@ uv publish [OPTIONS] [FILES]...
 <p>The index must provide one of the supported hashes (SHA-256, SHA-384, or SHA-512).</p>
 
 <p>May also be set with the <code>UV_PUBLISH_CHECK_URL</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -8629,9 +8674,10 @@ uv cache clean [OPTIONS] [PACKAGE]...
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -8751,9 +8797,10 @@ uv cache prune [OPTIONS]
 
 <p>In <code>--ci</code> mode, uv will prune any pre-built wheels from the cache, but retain any wheels that were built from source.</p>
 
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -8875,9 +8922,10 @@ uv cache dir [OPTIONS]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -9013,9 +9061,10 @@ uv self update [OPTIONS] [TARGET_VERSION]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -9132,9 +9181,10 @@ uv version [OPTIONS]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -9297,9 +9347,10 @@ uv help [OPTIONS] [COMMAND]...
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>

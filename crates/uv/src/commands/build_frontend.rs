@@ -42,7 +42,7 @@ use uv_python::{
 use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
 use uv_settings::PythonInstallMirrors;
-use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, HashStrategy};
+use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceError};
 
 #[derive(Debug, Error)]
@@ -921,6 +921,7 @@ async fn build_sdist(
                     sources,
                     BuildKind::Sdist,
                     build_output,
+                    BuildStack::default(),
                 )
                 .await
                 .map_err(|err| Error::BuildDispatch(err.into()))?;
@@ -1018,6 +1019,7 @@ async fn build_wheel(
                     sources,
                     BuildKind::Wheel,
                     build_output,
+                    BuildStack::default(),
                 )
                 .await
                 .map_err(|err| Error::BuildDispatch(err.into()))?;

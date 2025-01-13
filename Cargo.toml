@@ -59,10 +59,11 @@ uv-resolver = { path = "crates/uv-resolver" }
 uv-scripts = { path = "crates/uv-scripts" }
 uv-settings = { path = "crates/uv-settings" }
 uv-shell = { path = "crates/uv-shell" }
+uv-small-str = { path = "crates/uv-small-str" }
 uv-state = { path = "crates/uv-state" }
 uv-static = { path = "crates/uv-static" }
-uv-trampoline-builder = { path = "crates/uv-trampoline-builder" }
 uv-tool = { path = "crates/uv-tool" }
+uv-trampoline-builder = { path = "crates/uv-trampoline-builder" }
 uv-types = { path = "crates/uv-types" }
 uv-version = { path = "crates/uv-version" }
 uv-virtualenv = { path = "crates/uv-virtualenv" }
@@ -71,13 +72,14 @@ uv-workspace = { path = "crates/uv-workspace" }
 
 anstream = { version = "0.6.15" }
 anyhow = { version = "1.0.89" }
+arcstr = { version = "1.2.0" }
 async-channel = { version = "2.3.1" }
 async-compression = { version = "0.4.12", features = ["bzip2", "gzip", "xz", "zstd"] }
 async-trait = { version = "0.1.82" }
 async_http_range_reader = { version = "0.9.1" }
 async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "c909fda63fcafe4af496a07bfda28a5aae97e58d", features = ["deflate", "tokio"] }
 axoupdater = { version = "0.9.0", default-features = false }
-backoff = { version = "0.4.0" }
+backon = { version = "1.3.0" }
 base64 = { version = "0.22.1" }
 bitflags = { version = "2.6.0" }
 boxcar = { version = "0.2.5" }
@@ -113,7 +115,7 @@ http = { version = "1.1.0" }
 indexmap = { version = "2.5.0" }
 indicatif = { version = "0.17.8" }
 indoc = { version = "2.0.5" }
-itertools = { version = "0.13.0" }
+itertools = { version = "0.14.0" }
 jiff = { version = "0.1.14", features = ["serde"] }
 junction = { version = "1.2.0" }
 krata-tokio-tar = { version = "0.4.2" }
@@ -126,7 +128,7 @@ nix = { version = "0.29.0" }
 owo-colors = { version = "4.1.0" }
 path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
-petgraph = { version = "0.6.5" }
+petgraph = { version = "0.7.1" }
 platform-info = { version = "2.0.3" }
 proc-macro2 = { version = "1.0.86" }
 procfs = { version = "0.17.0", default-features = false, features = ["flate2"] }
@@ -181,7 +183,7 @@ which = { version = "7.0.0", features = ["regex"] }
 windows-registry = { version = "0.3.0" }
 windows-result = { version = "0.2.0" }
 windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Ioctl", "Win32_System_IO"] }
-winreg = { version = "0.52.0" }
+winreg = { version = "0.53.0" }
 winsafe = { version = "0.0.22", features = ["kernel"] }
 wiremock = { version = "0.6.2" }
 xz2 = { version = "0.1.7" }
@@ -223,6 +225,9 @@ rc_buffer = "warn"
 rc_mutex = "warn"
 rest_pat_in_fully_bound_structs = "warn"
 if_not_else = "allow"
+
+# Diagnostics are not actionable: Enable once https://github.com/rust-lang/rust-clippy/issues/13774 is resolved.
+large_stack_arrays = "allow"
 
 [profile.release]
 strip = true

@@ -1522,6 +1522,35 @@ Reinstall a specific package, regardless of whether it's already installed. Impl
 
 ---
 
+### [`required-version`](#required-version) {: #required-version }
+
+Enforce a requirement on the version of uv.
+
+If the version of uv does not meet the requirement at runtime, uv will exit
+with an error.
+
+Accepts a [PEP 440](https://peps.python.org/pep-0440/) specifier, like `==0.5.0` or `>=0.5.0`.
+
+**Default value**: `null`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    required-version = ">=0.5.0"
+    ```
+=== "uv.toml"
+
+    ```toml
+    required-version = ">=0.5.0"
+    ```
+
+---
+
 ### [`resolution`](#resolution) {: #resolution }
 
 The strategy to use when selecting between the different compatible versions for a given
@@ -2026,11 +2055,11 @@ be correct.
 #### [`exclude-newer`](#pip_exclude-newer) {: #pip_exclude-newer }
 <span id="exclude-newer"></span>
 
-Limit candidate packages to those that were uploaded prior to the given date.
+Limit candidate packages to those that were uploaded prior to a given point in time.
 
-Accepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g.,
-`2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`) in your
-system's configured time zone.
+Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
+`2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will
+behave consistently across timezones.
 
 **Default value**: `None`
 
@@ -2042,13 +2071,13 @@ system's configured time zone.
 
     ```toml
     [tool.uv.pip]
-    exclude-newer = "2006-12-02"
+    exclude-newer = "2006-12-02T02:07:43Z"
     ```
 === "uv.toml"
 
     ```toml
     [pip]
-    exclude-newer = "2006-12-02"
+    exclude-newer = "2006-12-02T02:07:43Z"
     ```
 
 ---

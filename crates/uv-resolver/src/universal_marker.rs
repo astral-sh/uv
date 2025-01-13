@@ -69,17 +69,24 @@ pub struct UniversalMarker {
     /// stand-point, evaluating it requires uv's custom encoding of extras (and
     /// groups).
     marker: MarkerTree,
+    /// The strictly PEP 508 version of `marker`. Basically, `marker`, but
+    /// without any extras in it. This could be computed on demand (and
+    /// that's what we used to do), but we do it enough that it was causing a
+    /// regression in some cases.
+    pep508: MarkerTree,
 }
 
 impl UniversalMarker {
     /// A constant universal marker that always evaluates to `true`.
     pub(crate) const TRUE: UniversalMarker = UniversalMarker {
         marker: MarkerTree::TRUE,
+        pep508: MarkerTree::TRUE,
     };
 
     /// A constant universal marker that always evaluates to `false`.
     pub(crate) const FALSE: UniversalMarker = UniversalMarker {
         marker: MarkerTree::FALSE,
+        pep508: MarkerTree::FALSE,
     };
 
     /// Creates a new universal marker from its constituent pieces.
@@ -94,7 +101,10 @@ impl UniversalMarker {
     /// Creates a new universal marker from a marker that has already been
     /// combined from a PEP 508 and conflict marker.
     pub(crate) fn from_combined(marker: MarkerTree) -> UniversalMarker {
-        UniversalMarker { marker }
+        UniversalMarker {
+            marker,
+            pep508: marker.without_extras(),
+        }
     }
 
     /// Combine this universal marker with the one given in a way that unions
@@ -102,6 +112,7 @@ impl UniversalMarker {
     /// `other` evaluate to `true`.
     pub(crate) fn or(&mut self, other: UniversalMarker) {
         self.marker.or(other.marker);
+        self.pep508.or(other.pep508);
     }
 
     /// Combine this universal marker with the one given in a way that
@@ -109,6 +120,7 @@ impl UniversalMarker {
     /// `self` and `other` evaluate to `true`.
     pub(crate) fn and(&mut self, other: UniversalMarker) {
         self.marker.and(other.marker);
+        self.pep508.and(other.pep508);
     }
 
     /// Imbibes the world knowledge expressed by `conflicts` into this marker.
@@ -121,6 +133,7 @@ impl UniversalMarker {
         let self_marker = self.marker;
         self.marker = conflicts.marker;
         self.marker.implies(self_marker);
+        self.pep508 = self.marker.without_extras();
     }
 
     /// Assumes that a given extra/group for the given package is activated.
@@ -132,6 +145,7 @@ impl UniversalMarker {
             ConflictPackage::Extra(ref extra) => self.assume_extra(item.package(), extra),
             ConflictPackage::Group(ref group) => self.assume_group(item.package(), group),
         }
+        self.pep508 = self.marker.without_extras();
     }
 
     /// Assumes that a given extra/group for the given package is not
@@ -144,6 +158,7 @@ impl UniversalMarker {
             ConflictPackage::Extra(ref extra) => self.assume_not_extra(item.package(), extra),
             ConflictPackage::Group(ref group) => self.assume_not_group(item.package(), group),
         }
+        self.pep508 = self.marker.without_extras();
     }
 
     /// Assumes that a given extra for the given package is activated.
@@ -155,6 +170,7 @@ impl UniversalMarker {
         self.marker = self
             .marker
             .simplify_extras_with(|candidate| *candidate == extra);
+        self.pep508 = self.marker.without_extras();
     }
 
     /// Assumes that a given extra for the given package is not activated.
@@ -166,6 +182,7 @@ impl UniversalMarker {
         self.marker = self
             .marker
             .simplify_not_extras_with(|candidate| *candidate == extra);
+        self.pep508 = self.marker.without_extras();
     }
 
     /// Assumes that a given group for the given package is activated.
@@ -177,6 +194,7 @@ impl UniversalMarker {
         self.marker = self
             .marker
             .simplify_extras_with(|candidate| *candidate == extra);
+        self.pep508 = self.marker.without_extras();
     }
 
     /// Assumes that a given group for the given package is not activated.
@@ -188,6 +206,7 @@ impl UniversalMarker {
         self.marker = self
             .marker
             .simplify_not_extras_with(|candidate| *candidate == extra);
+        self.pep508 = self.marker.without_extras();
     }
 
     /// Returns true if this universal marker will always evaluate to `true`.
@@ -259,7 +278,7 @@ impl UniversalMarker {
     /// always use a universal marker since it accounts for all possible ways
     /// for a package to be installed.
     pub fn pep508(self) -> MarkerTree {
-        self.marker.without_extras()
+        self.pep508
     }
 
     /// Returns the non-PEP 508 marker expression that represents conflicting
@@ -469,6 +488,7 @@ fn encode_package_group(package: &PackageName, group: &GroupName) -> ExtraName {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
 
     use uv_pypi_types::ConflictSet;
 
@@ -497,7 +517,7 @@ mod tests {
 
     /// Shortcut for creating a package name.
     fn create_package(name: &str) -> PackageName {
-        PackageName::new(name.to_string()).unwrap()
+        PackageName::from_str(name).unwrap()
     }
 
     /// Shortcut for creating an extra name.

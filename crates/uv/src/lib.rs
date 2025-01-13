@@ -4,6 +4,7 @@ use std::fmt::Write;
 use std::io::stdout;
 use std::path::Path;
 use std::process::ExitCode;
+use std::str::FromStr;
 use std::sync::atomic::Ordering;
 
 use anstream::eprintln;
@@ -11,6 +12,7 @@ use anyhow::{bail, Context, Result};
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
 use commands::{add_credentials, list_credentials, unset_credentials};
+use futures::FutureExt;
 use owo_colors::OwoColorize;
 use settings::{
     IndexAddCredentialsSettings, IndexListCredentialsSettings, IndexUnsetCredentialsSettings,
@@ -124,7 +126,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Some(FilesystemOptions::from_file(config_file)?)
     } else if deprecated_isolated || cli.top_level.no_config {
         None
-    } else if matches!(&*cli.command, Commands::Tool(_)) {
+    } else if matches!(&*cli.command, Commands::Tool(_) | Commands::Self_(_)) {
         // For commands that operate at the user-level, ignore local configuration.
         FilesystemOptions::user()?.combine(FilesystemOptions::system()?)
     } else if let Ok(workspace) =
@@ -192,6 +194,24 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }) = &**command
         {
             Pep723Script::read(&script).await?.map(Pep723Item::Script)
+        } else if let ProjectCommand::Lock(uv_cli::LockArgs {
+            script: Some(script),
+            ..
+        }) = &**command
+        {
+            Pep723Script::read(&script).await?.map(Pep723Item::Script)
+        } else if let ProjectCommand::Tree(uv_cli::TreeArgs {
+            script: Some(script),
+            ..
+        }) = &**command
+        {
+            Pep723Script::read(&script).await?.map(Pep723Item::Script)
+        } else if let ProjectCommand::Export(uv_cli::ExportArgs {
+            script: Some(script),
+            ..
+        }) = &**command
+        {
+            Pep723Script::read(&script).await?.map(Pep723Item::Script)
         } else {
             None
         }
@@ -214,6 +234,16 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     // Resolve the cache settings.
     let cache_settings = CacheSettings::resolve(*cli.top_level.cache_args, filesystem.as_ref());
+
+    // Enforce the required version.
+    if let Some(required_version) = globals.required_version.as_ref() {
+        let package_version = uv_pep440::Version::from_str(uv_version::version())?;
+        if !required_version.contains(&package_version) {
+            return Err(anyhow::anyhow!(
+                "Required version `{required_version}` does not match the running version `{package_version}`",
+            ));
+        }
+    }
 
     // Configure the `tracing` crate, which controls internal logging.
     #[cfg(feature = "tracing-durations-export")]
@@ -934,7 +964,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 )
                 .collect::<Vec<_>>();
 
-            commands::tool_run(
+            Box::pin(commands::tool_run(
                 args.command,
                 args.from,
                 &requirements,
@@ -954,7 +984,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 cache,
                 printer,
                 globals.preview,
-            )
+            ))
             .await
         }
         Commands::Tool(ToolNamespace {
@@ -1559,7 +1589,14 @@ async fn run_project(
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
-            commands::lock(
+            // Unwrap the script.
+            let script = script.map(|script| match script {
+                Pep723Item::Script(script) => script,
+                Pep723Item::Stdin(_) => unreachable!("`uv lock` does not support stdin"),
+                Pep723Item::Remote(_) => unreachable!("`uv lock` does not support remote files"),
+            });
+
+            Box::pin(commands::lock(
                 project_dir,
                 args.locked,
                 args.frozen,
@@ -1567,6 +1604,7 @@ async fn run_project(
                 args.python,
                 args.install_mirrors,
                 args.settings,
+                script,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.connectivity,
@@ -1577,7 +1615,7 @@ async fn run_project(
                 &cache,
                 printer,
                 globals.preview,
-            )
+            ))
             .await
         }
         ProjectCommand::Add(args) => {
@@ -1689,7 +1727,14 @@ async fn run_project(
             // Initialize the cache.
             let cache = cache.init()?;
 
-            commands::tree(
+            // Unwrap the script.
+            let script = script.map(|script| match script {
+                Pep723Item::Script(script) => script,
+                Pep723Item::Stdin(_) => unreachable!("`uv tree` does not support stdin"),
+                Pep723Item::Remote(_) => unreachable!("`uv tree` does not support remote files"),
+            });
+
+            Box::pin(commands::tree(
                 project_dir,
                 args.dev,
                 args.locked,
@@ -1706,6 +1751,7 @@ async fn run_project(
                 args.python,
                 args.install_mirrors,
                 args.resolver,
+                script,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.connectivity,
@@ -1716,7 +1762,7 @@ async fn run_project(
                 &cache,
                 printer,
                 globals.preview,
-            )
+            ))
             .await
         }
         ProjectCommand::Export(args) => {
@@ -1726,6 +1772,13 @@ async fn run_project(
 
             // Initialize the cache.
             let cache = cache.init()?;
+
+            // Unwrap the script.
+            let script = script.map(|script| match script {
+                Pep723Item::Script(script) => script,
+                Pep723Item::Stdin(_) => unreachable!("`uv export` does not support stdin"),
+                Pep723Item::Remote(_) => unreachable!("`uv export` does not support remote files"),
+            });
 
             commands::export(
                 project_dir,
@@ -1742,6 +1795,7 @@ async fn run_project(
                 args.locked,
                 args.frozen,
                 args.include_header,
+                script,
                 args.python,
                 args.install_mirrors,
                 args.settings,
@@ -1757,6 +1811,7 @@ async fn run_project(
                 printer,
                 globals.preview,
             )
+            .boxed_local()
             .await
         }
     }

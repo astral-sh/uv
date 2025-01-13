@@ -1,11 +1,13 @@
 use std::fmt;
 use std::ops::Bound;
 
+use arcstr::ArcStr;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use rustc_hash::FxBuildHasher;
-use uv_pep440::{Version, VersionSpecifier};
 use version_ranges::Ranges;
+
+use uv_pep440::{Version, VersionSpecifier};
 
 use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeKind};
 
@@ -131,7 +133,7 @@ fn collect_dnf(
 
                 let expr = MarkerExpression::String {
                     key: marker.key().into(),
-                    value: marker.value().to_owned(),
+                    value: ArcStr::from(marker.value()),
                     operator,
                 };
 
@@ -150,7 +152,7 @@ fn collect_dnf(
 
                 let expr = MarkerExpression::String {
                     key: marker.key().into(),
-                    value: marker.value().to_owned(),
+                    value: ArcStr::from(marker.value()),
                     operator,
                 };
 
@@ -352,7 +354,7 @@ fn star_range_inequality(range: &Ranges<Version>) -> Option<VersionSpecifier> {
     match (b1, b2) {
         ((Bound::Unbounded, Bound::Excluded(v1)), (Bound::Included(v2), Bound::Unbounded))
             if v1.release().len() == 2
-                && v2.release() == [v1.release()[0], v1.release()[1] + 1] =>
+                && *v2.release() == [v1.release()[0], v1.release()[1] + 1] =>
         {
             Some(VersionSpecifier::not_equals_star_version(v1.clone()))
         }

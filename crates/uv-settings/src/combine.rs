@@ -4,7 +4,8 @@ use std::path::PathBuf;
 use url::Url;
 
 use uv_configuration::{
-    ConfigSettings, IndexStrategy, KeyringProviderType, TargetTriple, TrustedPublishing,
+    ConfigSettings, IndexStrategy, KeyringProviderType, RequiredVersion, TargetTriple,
+    TrustedPublishing,
 };
 use uv_distribution_types::{Index, IndexUrl, PipExtraIndex, PipFindLinks, PipIndex};
 use uv_install_wheel::linker::LinkMode;
@@ -73,12 +74,12 @@ macro_rules! impl_combine_or {
 
 impl_combine_or!(AnnotationStyle);
 impl_combine_or!(ExcludeNewer);
+impl_combine_or!(ForkStrategy);
 impl_combine_or!(Index);
 impl_combine_or!(IndexStrategy);
 impl_combine_or!(IndexUrl);
 impl_combine_or!(KeyringProviderType);
 impl_combine_or!(LinkMode);
-impl_combine_or!(ForkStrategy);
 impl_combine_or!(NonZeroUsize);
 impl_combine_or!(PathBuf);
 impl_combine_or!(PipExtraIndex);
@@ -88,10 +89,11 @@ impl_combine_or!(PrereleaseMode);
 impl_combine_or!(PythonDownloads);
 impl_combine_or!(PythonPreference);
 impl_combine_or!(PythonVersion);
+impl_combine_or!(RequiredVersion);
 impl_combine_or!(ResolutionMode);
+impl_combine_or!(SchemaConflicts);
 impl_combine_or!(String);
 impl_combine_or!(SupportedEnvironments);
-impl_combine_or!(SchemaConflicts);
 impl_combine_or!(TargetTriple);
 impl_combine_or!(TrustedPublishing);
 impl_combine_or!(Url);

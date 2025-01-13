@@ -5,6 +5,7 @@ use std::process;
 use std::str::FromStr;
 
 use url::Url;
+
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
@@ -24,8 +25,8 @@ use uv_client::Connectivity;
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, DevGroupsSpecification, EditableMode, ExportFormat,
     ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType,
-    NoBinary, NoBuild, PreviewMode, ProjectBuildBackend, Reinstall, SourceStrategy, TargetTriple,
-    TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
+    NoBinary, NoBuild, PreviewMode, ProjectBuildBackend, Reinstall, RequiredVersion,
+    SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl};
 use uv_install_wheel::linker::LinkMode;
@@ -54,6 +55,7 @@ const PYPI_PUBLISH_URL: &str = "https://upload.pypi.org/legacy/";
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct GlobalSettings {
+    pub(crate) required_version: Option<RequiredVersion>,
     pub(crate) quiet: bool,
     pub(crate) verbose: u8,
     pub(crate) color: ColorChoice,
@@ -73,6 +75,8 @@ impl GlobalSettings {
     /// Resolve the [`GlobalSettings`] from the CLI and filesystem configuration.
     pub(crate) fn resolve(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
         Self {
+            required_version: workspace
+                .and_then(|workspace| workspace.globals.required_version.clone()),
             quiet: args.quiet,
             verbose: args.verbose,
             color: if let Some(color_choice) = args.color {
@@ -1020,6 +1024,7 @@ pub(crate) struct LockSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) dry_run: bool,
+    pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
@@ -1034,6 +1039,7 @@ impl LockSettings {
             check,
             check_exists,
             dry_run,
+            script,
             resolver,
             build,
             refresh,
@@ -1049,6 +1055,7 @@ impl LockSettings {
             locked: check,
             frozen: check_exists,
             dry_run,
+            script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
@@ -1249,6 +1256,11 @@ impl RemoveSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
+        let packages = packages
+            .into_iter()
+            .map(|requirement| requirement.name)
+            .collect();
+
         Self {
             locked,
             frozen,
@@ -1282,6 +1294,8 @@ pub(crate) struct TreeSettings {
     pub(crate) no_dedupe: bool,
     pub(crate) invert: bool,
     pub(crate) outdated: bool,
+    #[allow(dead_code)]
+    pub(crate) script: Option<PathBuf>,
     pub(crate) python_version: Option<PythonVersion>,
     pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) python: Option<String>,
@@ -1306,6 +1320,7 @@ impl TreeSettings {
             frozen,
             build,
             resolver,
+            script,
             python_version,
             python_platform,
             python,
@@ -1328,6 +1343,7 @@ impl TreeSettings {
             no_dedupe: tree.no_dedupe,
             invert: tree.invert,
             outdated: tree.outdated,
+            script,
             python_version,
             python_platform,
             python: python.and_then(Maybe::into_option),
@@ -1354,6 +1370,7 @@ pub(crate) struct ExportSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) include_header: bool,
+    pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
@@ -1394,6 +1411,7 @@ impl ExportSettings {
             resolver,
             build,
             refresh,
+            script,
             python,
         } = args;
         let install_mirrors = filesystem
@@ -1425,6 +1443,7 @@ impl ExportSettings {
             locked,
             frozen,
             include_header: flag(header, no_header).unwrap_or(true),
+            script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
