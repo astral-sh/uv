@@ -4,7 +4,8 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::small_string::SmallString;
+use uv_small_str::SmallString;
+
 use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNameError};
 
 /// The normalized name of an extra dependency.

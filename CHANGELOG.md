@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.18
+
+### Bug fixes
+
+- Avoid forking for identical markers ([#10490](https://github.com/astral-sh/uv/pull/10490))
+- Avoid panic in `uv remove` when only comments exist ([#10484](https://github.com/astral-sh/uv/pull/10484))
+- Revert "improve shell compatibility of venv activate scripts (#10397)" ([#10497](https://github.com/astral-sh/uv/pull/10497))
+
 ## 0.5.17
 
 This release includes support for generating lockfiles from scripts based on inline metadata, as defined in PEP 723.
@@ -54,7 +62,6 @@ scripts with and without accompanying lockfiles.
 - Add Lambda layer instructions to AWS Lambda guide ([#10411](https://github.com/astral-sh/uv/pull/10411))
 - Add `uv lock --script` to the docs ([#10414](https://github.com/astral-sh/uv/pull/10414))
 - Use Windows-specific instructions in Jupyter guide ([#10446](https://github.com/astral-sh/uv/pull/10446))
-
 
 ## 0.5.16
 

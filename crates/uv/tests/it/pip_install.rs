@@ -3251,7 +3251,89 @@ fn launcher_with_symlink() -> Result<()> {
 }
 
 #[test]
-fn config_settings() {
+fn config_settings_registry() {
+    let context = TestContext::new("3.12");
+
+    // Install with a `-C` flag. In this case, the flag has no impact on the build, but uv should
+    // respect it anyway.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("iniconfig")
+        .arg("--no-binary")
+        .arg("iniconfig")
+        .arg("-C=global-option=build_ext"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###
+    );
+
+    // Uninstall the package.
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - iniconfig==2.0.0
+    "###);
+
+    // Re-install the package, with the same flag. We should read from the cache.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("iniconfig")
+        .arg("--no-binary")
+        .arg("iniconfig")
+        .arg("-C=global-option=build_ext"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###
+    );
+
+    // Uninstall the package.
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - iniconfig==2.0.0
+    "###);
+
+    // Re-install the package, without the flag. We should build it from source.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("iniconfig")
+        .arg("--no-binary")
+        .arg("iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###
+    );
+}
+
+#[test]
+fn config_settings_path() {
     let context = TestContext::new("3.12");
 
     // Install the editable package.
@@ -7077,10 +7159,10 @@ fn local_index_requirements_txt_absolute() -> Result<()> {
     "#, Url::from_directory_path(context.workspace_root.join("scripts/links/")).unwrap().as_str()})?;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str(&indoc::formatdoc! {r#"
+    requirements_txt.write_str(&indoc::formatdoc! {r"
         --index-url {}
         tqdm
-    "#, Url::from_directory_path(root).unwrap().as_str()})?;
+    ", Url::from_directory_path(root).unwrap().as_str()})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)

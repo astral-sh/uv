@@ -96,6 +96,10 @@ updating the `uv.lock` file.
 
 Equivalent to the `--token` argument for self update. A GitHub token for authentication.
 
+### `UV_GIT_LFS`
+
+Enables fetching files stored in Git LFS when installing a package from a Git repository.
+
 ### `UV_HTTP_TIMEOUT`
 
 Timeout (in seconds) for HTTP requests. (default: 30 s)

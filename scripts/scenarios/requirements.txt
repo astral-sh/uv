@@ -10,7 +10,7 @@ msgspec==0.18.6
     # via packse
 packaging==24.2
     # via hatchling
-packse==0.3.42
+packse==0.3.44
     # via -r scripts/scenarios/requirements.in
 pathspec==0.12.1
     # via hatchling

@@ -1006,7 +1006,7 @@ fn pyproject_build_backend_prerequisites(
             if !build_file.try_exists()? {
                 fs_err::write(
                     build_file,
-                    indoc::formatdoc! {r#"
+                    indoc::formatdoc! {r"
                     cmake_minimum_required(VERSION 3.15)
                     project(${{SKBUILD_PROJECT_NAME}} LANGUAGES CXX)
 
@@ -1015,7 +1015,7 @@ fn pyproject_build_backend_prerequisites(
 
                     pybind11_add_module(_core MODULE src/main.cpp)
                     install(TARGETS _core DESTINATION ${{SKBUILD_PROJECT_NAME}})
-                "#},
+                "},
                 )?;
             }
         }
@@ -1052,21 +1052,21 @@ fn generate_package_scripts(
 
     // Python script for binary-based packaged apps or libs
     let binary_call_script = if is_lib {
-        indoc::formatdoc! {r#"
+        indoc::formatdoc! {r"
         from {module_name}._core import hello_from_bin
 
 
         def hello() -> str:
             return hello_from_bin()
-        "#}
+        "}
     } else {
-        indoc::formatdoc! {r#"
+        indoc::formatdoc! {r"
         from {module_name}._core import hello_from_bin
 
 
         def main() -> None:
             print(hello_from_bin())
-        "#}
+        "}
     };
 
     // .pyi file for binary script

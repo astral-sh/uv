@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.42/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.44/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 #![allow(clippy::needless_raw_string_hashes)]
@@ -1320,7 +1320,7 @@ fn fork_marker_disjoint() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies for split (sys_platform == 'linux'):
+      × No solution found when resolving dependencies:
       ╰─▶ Because your project depends on package-a{sys_platform == 'linux'}>=2 and package-a{sys_platform == 'linux'}<2, we can conclude that your project's requirements are unsatisfiable.
     "###
     );

@@ -163,7 +163,7 @@ impl<'a> BuildDispatch<'a> {
 }
 
 #[allow(refining_impl_trait)]
-impl<'a> BuildContext for BuildDispatch<'a> {
+impl BuildContext for BuildDispatch<'_> {
     type SourceDistBuilder = SourceBuild;
 
     fn interpreter(&self) -> &Interpreter {

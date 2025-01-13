@@ -1272,15 +1272,11 @@ fn reformat_array_multiline(deps: &mut Array) {
                 .map(|(s, _)| s)
                 .unwrap_or(decor_prefix);
 
-            // If there is no indentation, use four-space.
-            indentation_prefix = Some(if decor_prefix.is_empty() {
-                "    ".to_string()
-            } else {
-                decor_prefix.to_string()
-            });
+            indentation_prefix = (!decor_prefix.is_empty()).then_some(decor_prefix.to_string());
         }
 
-        let indentation_prefix_str = format!("\n{}", indentation_prefix.as_ref().unwrap());
+        let indentation_prefix_str =
+            format!("\n{}", indentation_prefix.as_deref().unwrap_or("    "));
 
         for comment in find_comments(decor.prefix()).chain(find_comments(decor.suffix())) {
             match comment.comment_type {
@@ -1306,7 +1302,7 @@ fn reformat_array_multiline(deps: &mut Array) {
                 match comment.comment_type {
                     CommentType::OwnLine => {
                         let indentation_prefix_str =
-                            format!("\n{}", indentation_prefix.as_ref().unwrap());
+                            format!("\n{}", indentation_prefix.as_deref().unwrap_or("    "));
                         rv.push_str(&indentation_prefix_str);
                     }
                     CommentType::EndOfLine => {

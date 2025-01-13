@@ -27,7 +27,7 @@ use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_shell::{shlex_posix, shlex_windows, Shell};
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
@@ -162,8 +162,16 @@ async fn venv_impl(
             Err(WorkspaceError::MissingProject(_)) => None,
             Err(WorkspaceError::MissingPyprojectToml) => None,
             Err(WorkspaceError::NonWorkspace(_)) => None,
+            Err(WorkspaceError::Toml(path, err)) => {
+                warn_user!(
+                    "Failed to parse `{}` during environment creation:\n{}",
+                    path.user_display().cyan(),
+                    textwrap::indent(&err.to_string(), "  ")
+                );
+                None
+            }
             Err(err) => {
-                warn_user_once!("{err}");
+                warn_user!("{err}");
                 None
             }
         }
@@ -340,17 +348,17 @@ async fn venv_impl(
         );
 
         // Resolve the seed packages.
-        let requirements = if interpreter.python_tuple() < (3, 12) {
-            // Only include `setuptools` and `wheel` on Python <3.12
+        let requirements = if interpreter.python_tuple() >= (3, 12) {
+            vec![Requirement::from(
+                uv_pep508::Requirement::from_str("pip").unwrap(),
+            )]
+        } else {
+            // Include `setuptools` and `wheel` on Python <3.12.
             vec![
                 Requirement::from(uv_pep508::Requirement::from_str("pip").unwrap()),
                 Requirement::from(uv_pep508::Requirement::from_str("setuptools").unwrap()),
                 Requirement::from(uv_pep508::Requirement::from_str("wheel").unwrap()),
             ]
-        } else {
-            vec![Requirement::from(
-                uv_pep508::Requirement::from_str("pip").unwrap(),
-            )]
         };
 
         let build_stack = BuildStack::default();

@@ -6859,10 +6859,10 @@ dependencies = [
 
     // Write to a requirements file.
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str(&indoc::formatdoc! {r#"
+    requirements_in.write_str(&indoc::formatdoc! {r"
         -e {}
         -e {}
-    "#,
+    ",
         editable_dir1.path().display(),
         editable_dir2.path().display()
     })?;
@@ -13270,7 +13270,9 @@ exceptiongroup==1.0.0rc8
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in -c constraints.txt --universal -p 3.10
     alembic==1.8.1
         # via -r requirements.in
-    astroid==2.13.5
+    astroid==2.13.5 ; python_full_version >= '3.11'
+        # via pylint
+    astroid==3.1.0 ; python_full_version < '3.11'
         # via pylint
     asttokens==2.4.1
         # via stack-data
@@ -13298,7 +13300,7 @@ exceptiongroup==1.0.0rc8
         # via pylint
     jedi==0.19.1
         # via ipython
-    lazy-object-proxy==1.10.0
+    lazy-object-proxy==1.10.0 ; python_full_version >= '3.11'
         # via astroid
     mako==1.3.2
         # via alembic
@@ -13322,7 +13324,9 @@ exceptiongroup==1.0.0rc8
         # via stack-data
     pygments==2.17.2
         # via ipython
-    pylint==2.15.8
+    pylint==2.15.8 ; python_full_version >= '3.11'
+        # via -r requirements.in
+    pylint==3.1.0 ; python_full_version < '3.11'
         # via -r requirements.in
     six==1.16.0
         # via asttokens
@@ -13344,11 +13348,11 @@ exceptiongroup==1.0.0rc8
         #   sqlalchemy
     wcwidth==0.2.13
         # via prompt-toolkit
-    wrapt==1.16.0
+    wrapt==1.16.0 ; python_full_version >= '3.11'
         # via astroid
 
     ----- stderr -----
-    Resolved 34 packages in [TIME]
+    Resolved 36 packages in [TIME]
     "###);
 
     Ok(())
