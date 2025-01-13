@@ -45,13 +45,6 @@ impl SitePackages {
         Self::from_interpreter(environment.interpreter())
     }
 
-    /// Extend the distributions in `self` with the distributions in `other`.
-    pub fn extend(&mut self, other: SitePackages) {
-        self.distributions.extend(other.distributions);
-        self.by_name.extend(other.by_name);
-        self.by_url.extend(other.by_url);
-    }
-
     /// Build an index of installed packages from the given Python executable.
     pub fn from_interpreter(interpreter: &Interpreter) -> Result<Self> {
         let mut distributions: Vec<Option<InstalledDist>> = Vec::new();

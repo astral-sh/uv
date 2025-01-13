@@ -2,7 +2,7 @@ use std::fmt::Write;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use itertools::{Either, Itertools};
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
@@ -33,33 +33,27 @@ pub(crate) fn pip_freeze(
 
     report_target_environment(&environment, cache, printer)?;
 
-    let mut site_packagess = match paths {
+    // Collect all the `site-packages` directories.
+    let site_packages = match paths {
         Some(paths) => {
-            assert_ne!(paths.len(), 0);
-            Either::Left(paths.into_iter().filter_map(|path| {
-                environment
-                    .clone()
-                    .with_target(uv_python::Target::from(path))
-                    .ok() // Drop invalid paths as per `pip freeze`'s behavior
-            }))
+            paths
+                .into_iter()
+                .filter_map(|path| {
+                    environment
+                        .clone()
+                        .with_target(uv_python::Target::from(path))
+                        // Drop invalid paths as per `pip freeze`.
+                        .ok()
+                })
+                .map(|environment| SitePackages::from_environment(&environment))
+                .collect::<Result<Vec<_>>>()?
         }
-        None => Either::Right(std::iter::once(environment.clone())),
-    }
-    .map(|env| SitePackages::from_environment(&env));
-
-    // Build the installed index.
-    // TODO: use [`try_reduce`](https://github.com/rust-lang/rust/issues/87053) when stabilized
-    let mut site_packages = site_packagess
-        .next()
-        .expect("iterator must have at least one element")?;
-
-    site_packagess.try_for_each(|other_site_packages: Result<SitePackages>| -> Result<()> {
-        site_packages.extend(other_site_packages?);
-        Ok(())
-    })?;
+        None => vec![SitePackages::from_environment(&environment)?],
+    };
 
     site_packages
         .iter()
+        .flat_map(uv_installer::SitePackages::iter)
         .filter(|dist| !(exclude_editable && dist.is_editable()))
         .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
         .map(|dist| match dist {
@@ -91,14 +85,16 @@ pub(crate) fn pip_freeze(
         // Determine the markers to use for resolution.
         let markers = environment.interpreter().resolver_marker_environment();
 
-        for diagnostic in site_packages.diagnostics(&markers)? {
-            writeln!(
-                printer.stderr(),
-                "{}{} {}",
-                "warning".yellow().bold(),
-                ":".bold(),
-                diagnostic.message().bold()
-            )?;
+        for entry in site_packages {
+            for diagnostic in entry.diagnostics(&markers)? {
+                writeln!(
+                    printer.stderr(),
+                    "{}{} {}",
+                    "warning".yellow().bold(),
+                    ":".bold(),
+                    diagnostic.message().bold()
+                )?;
+            }
         }
     }
 
