@@ -59,10 +59,11 @@ uv-resolver = { path = "crates/uv-resolver" }
 uv-scripts = { path = "crates/uv-scripts" }
 uv-settings = { path = "crates/uv-settings" }
 uv-shell = { path = "crates/uv-shell" }
+uv-small-str = { path = "crates/uv-small-str" }
 uv-state = { path = "crates/uv-state" }
 uv-static = { path = "crates/uv-static" }
-uv-trampoline-builder = { path = "crates/uv-trampoline-builder" }
 uv-tool = { path = "crates/uv-tool" }
+uv-trampoline-builder = { path = "crates/uv-trampoline-builder" }
 uv-types = { path = "crates/uv-types" }
 uv-version = { path = "crates/uv-version" }
 uv-virtualenv = { path = "crates/uv-virtualenv" }

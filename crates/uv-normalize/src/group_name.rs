@@ -5,7 +5,8 @@ use std::sync::LazyLock;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::small_string::SmallString;
+use uv_small_str::SmallString;
+
 use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNameError};
 
 /// The normalized name of a dependency group.
