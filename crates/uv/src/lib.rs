@@ -11,7 +11,7 @@ use anstream::eprintln;
 use anyhow::{bail, Context, Result};
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
-use commands::{add_credentials, list_credentials, unset_credentials};
+use commands::{list_credentials, set_credentials, unset_credentials};
 use futures::FutureExt;
 use owo_colors::OwoColorize;
 use settings::{
@@ -1351,25 +1351,28 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         .await
         .expect("tokio threadpool exited unexpectedly"),
         Commands::Index(IndexNamespace {
-            command: IndexCommand::Add(args),
+            command: IndexCommand::Set(args),
         }) => {
-            println!("Add an index with name {}", args.name);
+            println!("This is not implemented yet!");
+            println!("Set an index with name {}", args.name);
             return Ok(ExitStatus::Success);
         }
         Commands::Index(IndexNamespace {
             command: IndexCommand::List(_),
         }) => {
+            println!("This is not implemented yet!");
             println!("List all indexes");
             return Ok(ExitStatus::Success);
         }
         Commands::Index(IndexNamespace {
-            command: IndexCommand::Delete(args),
+            command: IndexCommand::Unset(args),
         }) => {
-            println!("Delete index {}", args.name);
+            println!("This is not implemented yet!");
+            println!("Unset index {}", args.name);
             return Ok(ExitStatus::Success);
         }
         Commands::Index(IndexNamespace {
-            command: IndexCommand::Credentials(IndexCredentialsCommand::Add(args)),
+            command: IndexCommand::Credentials(IndexCredentialsCommand::Set(args)),
         }) => {
             let IndexAddCredentialsSettings {
                 name,
@@ -1379,7 +1382,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 index,
             } = IndexAddCredentialsSettings::resolve(args, filesystem);
 
-            let _ = add_credentials(name, username, password, keyring_provider, index).await;
+            let _ = set_credentials(name, username, password, keyring_provider, index).await;
             return Ok(ExitStatus::Success);
         }
         Commands::Index(IndexNamespace {

@@ -5423,7 +5423,7 @@ pub enum IndexCommand {
         after_help = "Use `uv help index add` for more details.",
         after_long_help = ""
     )]
-    Add(IndexSourceArgs),
+    Set(IndexSourceArgs),
     /// Sync an environment with a `requirements.txt` file.
     #[command(
         after_help = "Use `uv help index list` for more details.",
@@ -5435,7 +5435,7 @@ pub enum IndexCommand {
         after_help = "Use `uv help index delete` for more details.",
         after_long_help = ""
     )]
-    Delete(IndexSourceArgs),
+    Unset(IndexSourceArgs),
 
     #[command(subcommand)]
     Credentials(IndexCredentialsCommand),
@@ -5444,10 +5444,10 @@ pub enum IndexCommand {
 #[derive(Subcommand)]
 pub enum IndexCredentialsCommand {
     #[command(
-        after_help = "Use `uv help index credentials add` for more details.",
+        after_help = "Use `uv help index credentials set` for more details.",
         after_long_help = ""
     )]
-    Add(IndexAddCredentialsArgs),
+    Set(IndexSetCredentialsArgs),
 
     #[command(
         after_help = "Use `uv help index credentials list` for more details.",
@@ -5470,7 +5470,7 @@ pub struct IndexSourceArgs {
 }
 
 #[derive(Args)]
-pub struct IndexAddCredentialsArgs {
+pub struct IndexSetCredentialsArgs {
     /// The name of the index
     #[arg(long)]
     pub name: String,

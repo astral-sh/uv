@@ -7,7 +7,7 @@ use uv_distribution_types::Index;
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
-pub(crate) async fn add_credentials(
+pub(crate) async fn set_credentials(
     name: String,
     username: Option<String>,
     password: Option<String>,

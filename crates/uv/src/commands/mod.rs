@@ -12,7 +12,7 @@ pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_dir::cache_dir;
 pub(crate) use cache_prune::cache_prune;
 pub(crate) use help::help;
-pub(crate) use index::{add_credentials, list_credentials, unset_credentials};
+pub(crate) use index::{list_credentials, set_credentials, unset_credentials};
 pub(crate) use pip::check::pip_check;
 pub(crate) use pip::compile::pip_compile;
 pub(crate) use pip::freeze::pip_freeze;

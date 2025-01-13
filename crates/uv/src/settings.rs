@@ -14,8 +14,8 @@ use uv_cli::{
     ToolUpgradeArgs,
 };
 use uv_cli::{
-    AddArgs, ColorChoice, ExternalCommand, GlobalArgs, IndexAddCredentialsArgs,
-    IndexListCredentialsArgs, IndexUnsetCredentialsArgs, InitArgs, ListFormat, LockArgs, Maybe,
+    AddArgs, ColorChoice, ExternalCommand, GlobalArgs, IndexListCredentialsArgs,
+    IndexSetCredentialsArgs, IndexUnsetCredentialsArgs, InitArgs, ListFormat, LockArgs, Maybe,
     PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
     PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs, ToolDirArgs,
@@ -2995,7 +2995,7 @@ pub(crate) struct IndexAddCredentialsSettings {
 impl IndexAddCredentialsSettings {
     /// Resolve the [`IndexSettings`] from the CLI and filesystem configuration.
     pub(crate) fn resolve(
-        args: IndexAddCredentialsArgs,
+        args: IndexSetCredentialsArgs,
         filesystem: Option<FilesystemOptions>,
     ) -> Self {
         let Options { top_level, .. } = filesystem
