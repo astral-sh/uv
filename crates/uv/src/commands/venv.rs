@@ -340,17 +340,17 @@ async fn venv_impl(
         );
 
         // Resolve the seed packages.
-        let requirements = if interpreter.python_tuple() < (3, 12) {
-            // Only include `setuptools` and `wheel` on Python <3.12
+        let requirements = if interpreter.python_tuple() >= (3, 12) {
+            vec![Requirement::from(
+                uv_pep508::Requirement::from_str("pip").unwrap(),
+            )]
+        } else {
+            // Include `setuptools` and `wheel` on Python <3.12.
             vec![
                 Requirement::from(uv_pep508::Requirement::from_str("pip").unwrap()),
                 Requirement::from(uv_pep508::Requirement::from_str("setuptools").unwrap()),
                 Requirement::from(uv_pep508::Requirement::from_str("wheel").unwrap()),
             ]
-        } else {
-            vec![Requirement::from(
-                uv_pep508::Requirement::from_str("pip").unwrap(),
-            )]
         };
 
         let build_stack = BuildStack::default();
