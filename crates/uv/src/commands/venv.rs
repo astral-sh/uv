@@ -27,7 +27,7 @@ use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_shell::{shlex_posix, shlex_windows, Shell};
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
@@ -162,8 +162,16 @@ async fn venv_impl(
             Err(WorkspaceError::MissingProject(_)) => None,
             Err(WorkspaceError::MissingPyprojectToml) => None,
             Err(WorkspaceError::NonWorkspace(_)) => None,
+            Err(WorkspaceError::Toml(path, err)) => {
+                warn_user!(
+                    "Failed to parse `{}` during environment creation:\n{}",
+                    path.user_display().cyan(),
+                    textwrap::indent(&err.to_string(), "  ")
+                );
+                None
+            }
             Err(err) => {
-                warn_user_once!("{err}");
+                warn_user!("{err}");
                 None
             }
         }
