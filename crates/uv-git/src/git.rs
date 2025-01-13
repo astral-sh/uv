@@ -14,7 +14,7 @@ use cargo_util::{paths, ProcessBuilder};
 use reqwest::StatusCode;
 use reqwest_middleware::ClientWithMiddleware;
 
-use tracing::debug;
+use tracing::{debug, warn};
 use url::Url;
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -669,7 +669,8 @@ fn fetch_lfs(repo: &mut GitRepository, url: &str, revision: &GitOid) -> Result<(
         debug!("Fetching Git LFS objects");
         lfs.clone()
     } else {
-        debug!("Git lfs is not available, skipping lfs fetch");
+        // Since this feature is opt-in, warn if not available
+        warn!("Git LFS is not available, skipping LFS fetch");
         return Ok(());
     };
 
