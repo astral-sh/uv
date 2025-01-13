@@ -270,6 +270,7 @@ async fn venv_impl(
         &path,
         interpreter,
         prompt,
+        cache,
         system_site_packages,
         allow_existing,
         relocatable,
