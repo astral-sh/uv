@@ -579,7 +579,6 @@ def main() -> None:
         "sys_prefix": sys.prefix,
         "sys_base_executable": getattr(sys, "_base_executable", None),
         "sys_executable": sys.executable,
-        "sys_path": sys.path,
         "stdlib": sysconfig.get_path("stdlib"),
         # Prior to the introduction of `sysconfig` patching, python-build-standalone installations would always use
         # "/install" as the prefix. With `sysconfig` patching, we rewrite the prefix to match the actual installation
@@ -596,6 +595,14 @@ def main() -> None:
         # https://github.com/python/cpython/blob/b228655c227b2ca298a8ffac44d14ce3d22f6faa/Lib/venv/__init__.py#L136
         "pointer_size": "64" if sys.maxsize > 2**32 else "32",
     }
+
+    sys_path_before_site = [os.path.abspath(p) for p in sys.path]
+    import site
+    site.main()
+
+    interpreter_info["sys_path"] = sys.path
+    interpreter_info["sys_path_before_site"] = sys_path_before_site
+
     print(json.dumps(interpreter_info))
 
 

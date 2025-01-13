@@ -44,6 +44,7 @@ pub struct Interpreter {
     sys_base_prefix: PathBuf,
     sys_base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
+    sys_path_before_site: Vec<PathBuf>,
     sys_path: Vec<PathBuf>,
     stdlib: PathBuf,
     standalone: bool,
@@ -78,6 +79,7 @@ impl Interpreter {
             sys_base_prefix: info.sys_base_prefix,
             sys_base_executable: info.sys_base_executable,
             sys_executable: info.sys_executable,
+            sys_path_before_site: info.sys_path_before_site,
             sys_path: info.sys_path,
             stdlib: info.stdlib,
             standalone: info.standalone,
@@ -90,14 +92,21 @@ impl Interpreter {
     /// Return a new [`Interpreter`] with the given virtual environment root.
     #[must_use]
     pub fn with_virtualenv(self, virtualenv: VirtualEnvironment) -> Self {
-        Self {
+        let mut interpreter = Self {
             scheme: virtualenv.scheme,
             sys_executable: virtualenv.executable,
             sys_prefix: virtualenv.root,
             target: None,
             prefix: None,
             ..self
-        }
+        };
+
+        interpreter.sys_path = {
+            let mut sys_path = interpreter.sys_path_before_site.clone();
+            sys_path.extend(interpreter.site_packages().map(Cow::into_owned));
+            sys_path
+        };
+        interpreter
     }
 
     /// Return a new [`Interpreter`] to install into the given `--target` directory.
@@ -618,6 +627,7 @@ struct InterpreterInfo {
     sys_base_prefix: PathBuf,
     sys_base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
+    sys_path_before_site: Vec<PathBuf>,
     sys_path: Vec<PathBuf>,
     stdlib: PathBuf,
     standalone: bool,
@@ -640,6 +650,7 @@ impl InterpreterInfo {
         );
         let output = Command::new(interpreter)
             .arg("-I") // Isolated mode.
+            .arg("-S") // Don't import site for initialization.
             .arg("-B") // Don't write bytecode.
             .arg("-c")
             .arg(script)
