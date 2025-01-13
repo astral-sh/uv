@@ -351,12 +351,7 @@ impl<'a> Planner<'a> {
             // (2) the `--seed` argument was not passed to `uv venv`.
             let seed_packages = !venv.cfg().is_ok_and(|cfg| cfg.is_uv() && !cfg.is_seed());
             for dist_info in site_packages {
-                if seed_packages
-                    && matches!(
-                        dist_info.name().as_ref(),
-                        "pip" | "setuptools" | "wheel" | "uv"
-                    )
-                {
+                if seed_packages && is_seed_package(&dist_info, venv) {
                     debug!("Preserving seed package: {dist_info}");
                     continue;
                 }
@@ -372,6 +367,19 @@ impl<'a> Planner<'a> {
             reinstalls,
             extraneous,
         })
+    }
+}
+
+/// Returns `true` if the given distribution is a seed package.
+fn is_seed_package(dist_info: &InstalledDist, venv: &PythonEnvironment) -> bool {
+    if venv.interpreter().python_tuple() >= (3, 12) {
+        matches!(dist_info.name().as_ref(), "uv" | "pip")
+    } else {
+        // Include `setuptools` and `wheel` on Python <3.12.
+        matches!(
+            dist_info.name().as_ref(),
+            "pip" | "setuptools" | "wheel" | "uv"
+        )
     }
 }
 
