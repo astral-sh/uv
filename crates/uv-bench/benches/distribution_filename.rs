@@ -114,6 +114,20 @@ fn benchmark_wheelname_parsing(c: &mut Criterion<WallTime>) {
     group.finish();
 }
 
+fn benchmark_wheelname_parsing_fast(c: &mut Criterion<WallTime>) {
+    let mut group = c.benchmark_group("wheelname_parsing_fast");
+    for (name, filename, _) in WHEEL_NAMES.iter().copied() {
+        let len = u64::try_from(filename.len()).expect("length fits in u64");
+        group.throughput(Throughput::Bytes(len));
+        group.bench_function(BenchmarkId::from_parameter(name), |b| {
+            b.iter(|| {
+                WheelFilename::fast_from_str(filename).expect("valid wheel filename");
+            });
+        });
+    }
+    group.finish();
+}
+
 /// Benchmarks `WheelFilename::from_str` when it fails. This routine is called
 /// on every filename in a package's metadata. A non-trivial portion of which
 /// are not wheel filenames. Ensuring that the error path is fast is thus
@@ -168,9 +182,10 @@ fn benchmark_wheelname_tag_compatibility(c: &mut Criterion<WallTime>) {
 
 criterion_group!(
     uv_distribution_filename,
-    benchmark_build_platform_tags,
+    // benchmark_build_platform_tags,
     benchmark_wheelname_parsing,
-    benchmark_wheelname_parsing_failure,
-    benchmark_wheelname_tag_compatibility,
+    benchmark_wheelname_parsing_fast,
+    // benchmark_wheelname_parsing_failure,
+    // benchmark_wheelname_tag_compatibility,
 );
 criterion_main!(uv_distribution_filename);

@@ -14,6 +14,7 @@ mod egg;
 mod extension;
 mod source_dist;
 mod wheel;
+mod split;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DistFilename {

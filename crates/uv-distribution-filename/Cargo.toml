@@ -26,6 +26,7 @@ serde = { workspace = true }
 smallvec = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
+memchr = "2.7.4"
 
 [dev-dependencies]
 insta = { version = "1.40.0" }

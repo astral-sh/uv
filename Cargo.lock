@@ -5002,6 +5002,7 @@ name = "uv-distribution-filename"
 version = "0.0.1"
 dependencies = [
  "insta",
+ "memchr",
  "rkyv",
  "serde",
  "smallvec",
