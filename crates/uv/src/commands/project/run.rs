@@ -284,7 +284,8 @@ pub(crate) async fn run(
             let environment = match result {
                 Ok(resolution) => resolution,
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::with_context("script")
+                    return diagnostics::OperationDiagnostic::native_tls(native_tls)
+                        .with_context("script")
                         .report(err)
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                 }
@@ -415,7 +416,8 @@ pub(crate) async fn run(
                 let environment = match result {
                     Ok(resolution) => resolution,
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::with_context("script")
+                        return diagnostics::OperationDiagnostic::native_tls(native_tls)
+                            .with_context("script")
                             .report(err)
                             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                     }
@@ -738,7 +740,7 @@ pub(crate) async fn run(
                 {
                     Ok(result) => result,
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::default()
+                        return diagnostics::OperationDiagnostic::native_tls(native_tls)
                             .report(err)
                             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                     }
@@ -819,7 +821,7 @@ pub(crate) async fn run(
                 {
                     Ok(()) => {}
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::default()
+                        return diagnostics::OperationDiagnostic::native_tls(native_tls)
                             .report(err)
                             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                     }
@@ -972,7 +974,8 @@ pub(crate) async fn run(
                 let environment = match result {
                     Ok(resolution) => resolution,
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::with_context("`--with`")
+                        return diagnostics::OperationDiagnostic::native_tls(native_tls)
+                            .with_context("`--with`")
                             .report(err)
                             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                     }

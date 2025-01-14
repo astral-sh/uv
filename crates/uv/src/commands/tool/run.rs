@@ -135,7 +135,8 @@ pub(crate) async fn run(
     let (from, environment) = match result {
         Ok(resolution) => resolution,
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::with_context("tool")
+            return diagnostics::OperationDiagnostic::native_tls(native_tls)
+                .with_context("tool")
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
