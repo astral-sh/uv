@@ -1,12 +1,14 @@
+use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
 
 use arcstr::ArcStr;
+use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
-use uv_platform_tags::{IncompatibleTag, TagPriority};
+use uv_platform_tags::{AbiTag, IncompatibleTag, TagPriority, Tags};
 use uv_pypi_types::{HashDigest, Yanked};
 
 use crate::{
@@ -164,6 +166,40 @@ impl IncompatibleDist {
             Self::Unavailable => format!("have {self}"),
         }
     }
+
+    pub fn context_message(
+        &self,
+        tags: Option<&Tags>,
+        requires_python: Option<AbiTag>,
+    ) -> Option<String> {
+        match self {
+            Self::Wheel(incompatibility) => match incompatibility {
+                IncompatibleWheel::Tag(IncompatibleTag::Python) => {
+                    let tag = tags?.python_tag().map(ToString::to_string)?;
+                    Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
+                }
+                IncompatibleWheel::Tag(IncompatibleTag::Abi) => {
+                    let tag = tags?.abi_tag().map(ToString::to_string)?;
+                    Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
+                }
+                IncompatibleWheel::Tag(IncompatibleTag::AbiPythonVersion) => {
+                    let tag = requires_python?;
+                    Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
+                }
+                IncompatibleWheel::Tag(IncompatibleTag::Platform) => {
+                    let tag = tags?.platform_tag().map(ToString::to_string)?;
+                    Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
+                }
+                IncompatibleWheel::Tag(IncompatibleTag::Invalid) => None,
+                IncompatibleWheel::NoBinary => None,
+                IncompatibleWheel::Yanked(..) => None,
+                IncompatibleWheel::ExcludeNewer(..) => None,
+                IncompatibleWheel::RequiresPython(..) => None,
+            },
+            Self::Source(..) => None,
+            Self::Unavailable => None,
+        }
+    }
 }
 
 impl Display for IncompatibleDist {
@@ -246,6 +282,8 @@ pub enum IncompatibleWheel {
     /// The wheel tags do not match those of the target Python platform.
     Tag(IncompatibleTag),
     /// The required Python version is not a superset of the target Python version range.
+    ///
+    /// TODO(charlie): Consider making this two variants to reduce enum size.
     RequiresPython(VersionSpecifiers, PythonRequirementKind),
     /// The wheel was yanked.
     Yanked(Yanked),
@@ -482,6 +520,40 @@ impl PrioritizedDist {
     /// exists.
     pub fn best_wheel(&self) -> Option<&(RegistryBuiltWheel, WheelCompatibility)> {
         self.0.best_wheel_index.map(|i| &self.0.wheels[i])
+    }
+
+    /// Returns the set of all Python tags for the distribution.
+    pub fn python_tags(&self) -> BTreeSet<&str> {
+        self.0
+            .wheels
+            .iter()
+            .flat_map(|(wheel, _)| wheel.filename.python_tag.iter().map(String::as_str))
+            .collect()
+    }
+
+    /// Returns the set of all ABI tags for the distribution.
+    pub fn abi_tags(&self) -> BTreeSet<&str> {
+        self.0
+            .wheels
+            .iter()
+            .flat_map(|(wheel, _)| wheel.filename.abi_tag.iter().map(String::as_str))
+            .collect()
+    }
+
+    /// Returns the set of platform tags for the distribution that are ABI-compatible with the given
+    /// tags.
+    pub fn platform_tags<'a>(&'a self, tags: &'a Tags) -> BTreeSet<&'a str> {
+        let mut candidates = BTreeSet::new();
+        for (wheel, _) in &self.0.wheels {
+            for wheel_py in &wheel.filename.python_tag {
+                for wheel_abi in &wheel.filename.abi_tag {
+                    if tags.is_compatible_abi(wheel_py.as_str(), wheel_abi.as_str()) {
+                        candidates.extend(wheel.filename.platform_tag.iter().map(String::as_str));
+                    }
+                }
+            }
+        }
+        candidates
     }
 }
 

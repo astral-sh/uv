@@ -1,12 +1,26 @@
-use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet};
-use std::ops::Bound;
-
 use indexmap::IndexSet;
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Term};
 use rustc_hash::FxHashMap;
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, BTreeSet};
+use std::ops::Bound;
+use std::str::FromStr;
 
+use super::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
+use crate::candidate_selector::CandidateSelector;
+use crate::error::ErrorTree;
+use crate::fork_indexes::ForkIndexes;
+use crate::fork_urls::ForkUrls;
+use crate::prerelease::AllowPrerelease;
+use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
+use crate::resolver::{
+    MetadataUnavailable, UnavailablePackage, UnavailableReason, UnavailableVersion,
+};
+use crate::{
+    Flexibility, InMemoryIndex, Options, RequiresPython, ResolverEnvironment, VersionsResponse,
+};
 use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
 use uv_distribution_types::{
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, Index, IndexCapabilities,
@@ -14,28 +28,21 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
-
-use crate::candidate_selector::CandidateSelector;
-use crate::error::ErrorTree;
-use crate::fork_urls::ForkUrls;
-use crate::prerelease::AllowPrerelease;
-use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
-use crate::resolver::{
-    MetadataUnavailable, UnavailablePackage, UnavailableReason, UnavailableVersion,
-};
-use crate::{Flexibility, Options, RequiresPython, ResolverEnvironment};
-
-use super::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
+use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, Tags};
 
 #[derive(Debug)]
 pub(crate) struct PubGrubReportFormatter<'a> {
-    /// The versions that were available for each package
+    /// The versions that were available for each package.
     pub(crate) available_versions: &'a FxHashMap<PackageName, BTreeSet<Version>>,
 
-    /// The versions that were available for each package
+    /// The versions that were available for each package.
     pub(crate) python_requirement: &'a PythonRequirement,
 
+    /// The members of the workspace.
     pub(crate) workspace_members: &'a BTreeSet<PackageName>,
+
+    /// The compatible tags for the resolution.
+    pub(crate) tags: Option<&'a Tags>,
 }
 
 impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
@@ -111,20 +118,25 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 } else {
                     match reason {
                         UnavailableReason::Package(reason) => {
-                            format!(
-                                "{}{}",
-                                Padded::new("", &package, " "),
-                                reason.singular_message()
-                            )
+                            let message = reason.singular_message();
+                            format!("{}{}", package, Padded::new(" ", &message, ""),)
                         }
                         UnavailableReason::Version(reason) => {
                             let range = self.compatible_range(package, set);
-                            let reason = if range.plural() {
+                            let message = if range.plural() {
                                 reason.plural_message()
                             } else {
                                 reason.singular_message()
                             };
-                            format!("{}{reason}", Padded::new("", &range, " "))
+                            let context = reason.context_message(
+                                self.tags,
+                                self.python_requirement.target().abi_tag(),
+                            );
+                            if let Some(context) = context {
+                                format!("{}{}{}", range, Padded::new(" ", &message, " "), context)
+                            } else {
+                                format!("{}{}", range, Padded::new(" ", &message, ""))
+                            }
                         }
                     }
                 }
@@ -513,6 +525,7 @@ impl PubGrubReportFormatter<'_> {
     pub(crate) fn generate_hints(
         &self,
         derivation_tree: &ErrorTree,
+        index: &InMemoryIndex,
         selector: &CandidateSelector,
         index_locations: &IndexLocations,
         index_capabilities: &IndexCapabilities,
@@ -520,6 +533,7 @@ impl PubGrubReportFormatter<'_> {
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, MetadataUnavailable>>,
         fork_urls: &ForkUrls,
+        fork_indexes: &ForkIndexes,
         env: &ResolverEnvironment,
         workspace_members: &BTreeSet<PackageName>,
         options: &Options,
@@ -555,27 +569,42 @@ impl PubGrubReportFormatter<'_> {
                         incomplete_packages,
                         output_hints,
                     );
-                }
 
-                // Check for unavailable versions due to `--no-build` or `--no-binary`.
-                if let UnavailableReason::Version(UnavailableVersion::IncompatibleDist(
-                    incompatibility,
-                )) = reason
-                {
-                    match incompatibility {
-                        IncompatibleDist::Wheel(IncompatibleWheel::NoBinary) => {
-                            output_hints.insert(PubGrubHint::NoBinary {
-                                package: package.clone(),
-                                option: options.build_options.no_binary().clone(),
-                            });
+                    if let UnavailableReason::Version(UnavailableVersion::IncompatibleDist(
+                        incompatibility,
+                    )) = reason
+                    {
+                        match incompatibility {
+                            // Check for unavailable versions due to `--no-build` or `--no-binary`.
+                            IncompatibleDist::Wheel(IncompatibleWheel::NoBinary) => {
+                                output_hints.insert(PubGrubHint::NoBinary {
+                                    package: package.clone(),
+                                    option: options.build_options.no_binary().clone(),
+                                });
+                            }
+                            IncompatibleDist::Source(IncompatibleSource::NoBuild) => {
+                                output_hints.insert(PubGrubHint::NoBuild {
+                                    package: package.clone(),
+                                    option: options.build_options.no_build().clone(),
+                                });
+                            }
+                            // Check for unavailable versions due to incompatible tags.
+                            IncompatibleDist::Wheel(IncompatibleWheel::Tag(tag)) => {
+                                if let Some(hint) = self.tag_hint(
+                                    package,
+                                    name,
+                                    set,
+                                    *tag,
+                                    index,
+                                    selector,
+                                    fork_indexes,
+                                    env,
+                                ) {
+                                    output_hints.insert(hint);
+                                }
+                            }
+                            _ => {}
                         }
-                        IncompatibleDist::Source(IncompatibleSource::NoBuild) => {
-                            output_hints.insert(PubGrubHint::NoBuild {
-                                package: package.clone(),
-                                option: options.build_options.no_build().clone(),
-                            });
-                        }
-                        _ => {}
                     }
                 }
             }
@@ -661,6 +690,7 @@ impl PubGrubReportFormatter<'_> {
             DerivationTree::Derived(derived) => {
                 self.generate_hints(
                     &derived.cause1,
+                    index,
                     selector,
                     index_locations,
                     index_capabilities,
@@ -668,6 +698,7 @@ impl PubGrubReportFormatter<'_> {
                     unavailable_packages,
                     incomplete_packages,
                     fork_urls,
+                    fork_indexes,
                     env,
                     workspace_members,
                     options,
@@ -675,6 +706,7 @@ impl PubGrubReportFormatter<'_> {
                 );
                 self.generate_hints(
                     &derived.cause2,
+                    index,
                     selector,
                     index_locations,
                     index_capabilities,
@@ -682,6 +714,7 @@ impl PubGrubReportFormatter<'_> {
                     unavailable_packages,
                     incomplete_packages,
                     fork_urls,
+                    fork_indexes,
                     env,
                     workspace_members,
                     options,
@@ -689,6 +722,106 @@ impl PubGrubReportFormatter<'_> {
                 );
             }
         };
+    }
+
+    /// Generate a [`PubGrubHint`] for a package that doesn't have any wheels matching the current
+    /// Python version, ABI, or platform.
+    fn tag_hint(
+        &self,
+        package: &PubGrubPackage,
+        name: &PackageName,
+        set: &Range<Version>,
+        tag: IncompatibleTag,
+        index: &InMemoryIndex,
+        selector: &CandidateSelector,
+        fork_indexes: &ForkIndexes,
+        env: &ResolverEnvironment,
+    ) -> Option<PubGrubHint> {
+        let response = if let Some(url) = fork_indexes.get(name) {
+            index.explicit().get(&(name.clone(), url.clone()))
+        } else {
+            index.implicit().get(name)
+        }?;
+
+        let VersionsResponse::Found(version_maps) = &*response else {
+            return None;
+        };
+
+        let candidate = selector.select_no_preference(name, set, version_maps, env)?;
+
+        let prioritized = candidate.prioritized()?;
+
+        match tag {
+            IncompatibleTag::Invalid => None,
+            IncompatibleTag::Python => {
+                // Return all available language tags.
+                let tags = prioritized
+                    .python_tags()
+                    .into_iter()
+                    .filter_map(|tag| LanguageTag::from_str(tag).ok())
+                    .collect::<BTreeSet<_>>();
+                if tags.is_empty() {
+                    None
+                } else {
+                    Some(PubGrubHint::LanguageTags {
+                        package: package.clone(),
+                        version: candidate.version().clone(),
+                        tags,
+                    })
+                }
+            }
+            IncompatibleTag::Abi | IncompatibleTag::AbiPythonVersion => {
+                let tags = prioritized
+                    .abi_tags()
+                    .into_iter()
+                    .filter_map(|tag| AbiTag::from_str(tag).ok())
+                    // Ignore `none`, which is universally compatible.
+                    //
+                    // As an example, `none` can appear here if we're solving for Python 3.13, and
+                    // the distribution includes a wheel for `cp312-none-macosx_11_0_arm64`.
+                    //
+                    // In that case, the wheel isn't compatible, but when solving for Python 3.13,
+                    // the `cp312` Python tag _can_ be compatible (e.g., for `cp312-abi3-macosx_11_0_arm64.whl`),
+                    // so this is considered an ABI incompatibility rather than Python incompatibility.
+                    .filter(|tag| *tag != AbiTag::None)
+                    .collect::<BTreeSet<_>>();
+                if tags.is_empty() {
+                    None
+                } else {
+                    Some(PubGrubHint::AbiTags {
+                        package: package.clone(),
+                        version: candidate.version().clone(),
+                        tags,
+                    })
+                }
+            }
+            IncompatibleTag::Platform => {
+                // We don't want to report all available platforms, since it's plausible that there
+                // are wheels for the current platform, but at a different ABI. For example, when
+                // solving for Python 3.13 on macOS, `cp312-cp312-macosx_11_0_arm64` could be
+                // available along with `cp313-cp313-manylinux2014`. In this case, we'd consider
+                // the distribution to be platform-incompatible, since `cp313-cp313` matches the
+                // compatible wheel tags. But showing `macosx_11_0_arm64` here would be misleading.
+                //
+                // So, instead, we only show the platforms that are linked to otherwise-compatible
+                // wheels (e.g., `manylinux2014` in `cp313-cp313-manylinux2014`). In other words,
+                // we only show platforms for ABI-compatible wheels.
+                let tags = prioritized
+                    .platform_tags(self.tags?)
+                    .into_iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>();
+                if tags.is_empty() {
+                    None
+                } else {
+                    Some(PubGrubHint::PlatformTags {
+                        package: package.clone(),
+                        version: candidate.version().clone(),
+                        tags,
+                    })
+                }
+            }
+        }
     }
 
     fn index_hints(
@@ -991,6 +1124,30 @@ pub(crate) enum PubGrubHint {
     UnauthorizedIndex { index: IndexUrl },
     /// An index returned a Forbidden (403) response.
     ForbiddenIndex { index: IndexUrl },
+    /// No wheels are available for a package, and using source distributions was disabled.
+    LanguageTags {
+        package: PubGrubPackage,
+        // excluded from `PartialEq` and `Hash`
+        version: Version,
+        // excluded from `PartialEq` and `Hash`
+        tags: BTreeSet<LanguageTag>,
+    },
+    /// No wheels are available for a package, and using source distributions was disabled.
+    AbiTags {
+        package: PubGrubPackage,
+        // excluded from `PartialEq` and `Hash`
+        version: Version,
+        // excluded from `PartialEq` and `Hash`
+        tags: BTreeSet<AbiTag>,
+    },
+    /// No wheels are available for a package, and using source distributions was disabled.
+    PlatformTags {
+        package: PubGrubPackage,
+        // excluded from `PartialEq` and `Hash`
+        version: Version,
+        // excluded from `PartialEq` and `Hash`
+        tags: Vec<String>,
+    },
 }
 
 /// This private enum mirrors [`PubGrubHint`] but only includes fields that should be
@@ -1052,6 +1209,15 @@ enum PubGrubHintCore {
     NoBinary {
         package: PubGrubPackage,
     },
+    LanguageTags {
+        package: PubGrubPackage,
+    },
+    AbiTags {
+        package: PubGrubPackage,
+    },
+    PlatformTags {
+        package: PubGrubPackage,
+    },
 }
 
 impl From<PubGrubHint> for PubGrubHintCore {
@@ -1109,6 +1275,9 @@ impl From<PubGrubHint> for PubGrubHintCore {
             PubGrubHint::ForbiddenIndex { index } => Self::ForbiddenIndex { index },
             PubGrubHint::NoBuild { package, .. } => Self::NoBuild { package },
             PubGrubHint::NoBinary { package, .. } => Self::NoBinary { package },
+            PubGrubHint::LanguageTags { package, .. } => Self::LanguageTags { package },
+            PubGrubHint::AbiTags { package, .. } => Self::AbiTags { package },
+            PubGrubHint::PlatformTags { package, .. } => Self::PlatformTags { package },
         }
     }
 }
@@ -1413,6 +1582,60 @@ impl std::fmt::Display for PubGrubHint {
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.cyan(),
+                )
+            }
+            Self::LanguageTags {
+                package,
+                version,
+                tags,
+            } => {
+                let s = if tags.len() == 1 { "" } else { "s" };
+                write!(
+                    f,
+                    "{}{} Wheels are available for `{}` ({}) with the following Python tag{s}: {}",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.cyan(),
+                    format!("v{version}").cyan(),
+                    tags.iter()
+                        .map(|tag| format!("`{}`", tag.cyan()))
+                        .join(", "),
+                )
+            }
+            Self::AbiTags {
+                package,
+                version,
+                tags,
+            } => {
+                let s = if tags.len() == 1 { "" } else { "s" };
+                write!(
+                    f,
+                    "{}{} Wheels are available for `{}` ({}) with the following ABI tag{s}: {}",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.cyan(),
+                    format!("v{version}").cyan(),
+                    tags.iter()
+                        .map(|tag| format!("`{}`", tag.cyan()))
+                        .join(", "),
+                )
+            }
+            Self::PlatformTags {
+                package,
+                version,
+                tags,
+            } => {
+                let s = if tags.len() == 1 { "" } else { "s" };
+                write!(
+                    f,
+                    "{}{} Wheels are available for `{}` ({}) on the following platform{s}: {}",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.cyan(),
+                    format!("v{version}").cyan(),
+                    tags.iter()
+                        .map(|tag| format!("`{}`", tag.cyan()))
+                        .join(", "),
                 )
             }
         }
