@@ -469,9 +469,6 @@ impl RequiresPython {
                 } | AbiTag::GraalPy {
                     python_version: (2, ..),
                     ..
-                } | AbiTag::Pyston {
-                    python_version: (2, ..),
-                    ..
                 }
             ) {
                 // Python 2 is never allowed.
@@ -485,10 +482,6 @@ impl RequiresPython {
                 ..
             }
             | AbiTag::GraalPy {
-                python_version: (3, minor),
-                ..
-            }
-            | AbiTag::Pyston {
                 python_version: (3, minor),
                 ..
             } = abi_tag

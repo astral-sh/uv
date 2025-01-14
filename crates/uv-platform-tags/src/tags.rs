@@ -376,7 +376,7 @@ impl Implementation {
             Self::PyPy => LanguageTag::PyPy { python_version },
             // Ex) `graalpy310`
             Self::GraalPy => LanguageTag::GraalPy { python_version },
-            // Ex) `pt38``
+            // Ex) `pyston38`
             Self::Pyston => LanguageTag::Pyston { python_version },
         }
     }
@@ -398,9 +398,8 @@ impl Implementation {
                 python_version,
                 implementation_version,
             },
-            // Ex) `pyston38-pyston_23`
+            // Ex) `pyston_23_x86_64_linux`
             Self::Pyston => AbiTag::Pyston {
-                python_version,
                 implementation_version,
             },
         }
