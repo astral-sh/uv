@@ -72,6 +72,8 @@ impl WheelTag {
         }
     }
 
+
+
     pub fn python_tags(&self) -> &[LanguageTag] {
         match self {
             Self::Small { small } => std::slice::from_ref(&small.python_tag),
@@ -150,9 +152,9 @@ impl Display for WheelTagSmall {
 #[rkyv(derive(Debug))]
 pub struct WheelTagLarge {
     build_tag: Option<BuildTag>,
-    python_tag: TagSet<LanguageTag>,
-    abi_tag: TagSet<AbiTag>,
-    platform_tag: TagSet<PlatformTag>,
+    python_tag: Vec<LanguageTag>,
+    abi_tag: Vec<AbiTag>,
+    platform_tag: Vec<PlatformTag>,
 }
 
 impl Display for WheelTagLarge {
@@ -311,39 +313,92 @@ impl WheelFilename {
             })
             .transpose()?;
 
-        let tags = if build_tag.is_some() || python_tag.contains('.') || abi_tag.contains('.') || platform_tag.contains('.') {
-            WheelTag::Large {
+        let mut python_tags = python_tag.split('.').map(LanguageTag::from_str);
+        let mut abi_tags = abi_tag.split('.').map(AbiTag::from_str);
+        let mut platform_tags = platform_tag.split('.').map(PlatformTag::from_str);
+
+        // Identify the first tag of each type.
+        let python_tag = python_tags
+            .next()
+            .ok_or_else(|| WheelFilenameError::MissingLanguageTag(filename.to_string()))?
+            .map_err(|err| WheelFilenameError::InvalidLanguageTag(filename.to_string(), err))?;
+        let abi_tag = abi_tags
+            .next()
+            .ok_or_else(|| WheelFilenameError::MissingAbiTag(filename.to_string()))?
+            .map_err(|err| WheelFilenameError::InvalidAbiTag(filename.to_string(), err))?;
+        let platform_tag = platform_tags
+            .next()
+            .ok_or_else(|| WheelFilenameError::MissingPlatformTag(filename.to_string()))?
+            .map_err(|err| WheelFilenameError::InvalidPlatformTag(filename.to_string(), err))?;
+
+        let tags = match (
+            python_tags.next(),
+            abi_tags.next(),
+            platform_tags.next(),
+        ) {
+            (None, None, None) if build_tag.is_none() => WheelTag::Small {
+                small: WheelTagSmall {
+                    python_tag,
+                    abi_tag,
+                    platform_tag
+                },
+            },
+            (next_python_tag, next_abi_tag, next_platform_tag) => WheelTag::Large {
                 large: Box::new(WheelTagLarge {
                     build_tag,
-                    python_tag: python_tag
-                        .split('.')
-                        .map(LanguageTag::from_str)
+                    python_tag: std::iter::once(python_tag)
+                        .chain(next_python_tag.transpose().map_err(|err| WheelFilenameError::InvalidLanguageTag(filename.to_string(), err))?)
+                        .chain(python_tags)
                         .collect::<Result<_, _>>()
                         .map_err(|err| WheelFilenameError::InvalidLanguageTag(filename.to_string(), err))?,
-                    abi_tag: abi_tag
-                        .split('.')
-                        .map(AbiTag::from_str)
+                    abi_tag: std::iter::once(abi_tag)
+                        .chain(next_abi_tag.transpose()?)
+                        .chain(abi_tags)
                         .collect::<Result<_, _>>()
                         .map_err(|err| WheelFilenameError::InvalidAbiTag(filename.to_string(), err))?,
-                    platform_tag: platform_tag
-                        .split('.')
-                        .map(PlatformTag::from_str)
+                    platform_tag: std::iter::once(platform_tag)
+                        .chain(next_platform_tag.transpose()?)
+                        .chain(platform_tags)
                         .collect::<Result<_, _>>()
                         .map_err(|err| WheelFilenameError::InvalidPlatformTag(filename.to_string(), err))?,
                 }),
-            }
-        } else {
-            WheelTag::Small {
-                small: WheelTagSmall {
-                    python_tag: LanguageTag::from_str(python_tag)
-                        .map_err(|err| WheelFilenameError::InvalidLanguageTag(filename.to_string(), err))?,
-                    abi_tag: AbiTag::from_str(abi_tag)
-                        .map_err(|err| WheelFilenameError::InvalidAbiTag(filename.to_string(), err))?,
-                    platform_tag: PlatformTag::from_str(platform_tag)
-                        .map_err(|err| WheelFilenameError::InvalidPlatformTag(filename.to_string(), err))?,
-                },
-            }
+            },
         };
+        //
+        //
+        // let tags = if build_tag.is_some() || python_tag.contains('.') || abi_tag.contains('.') || platform_tag.contains('.') {
+        //     WheelTag::Large {
+        //         large: Box::new(WheelTagLarge {
+        //             build_tag,
+        //             python_tag: python_tag
+        //                 .split('.')
+        //                 .map(LanguageTag::from_str)
+        //                 .collect::<Result<_, _>>()
+        //                 .map_err(|err| WheelFilenameError::InvalidLanguageTag(filename.to_string(), err))?,
+        //             abi_tag: abi_tag
+        //                 .split('.')
+        //                 .map(AbiTag::from_str)
+        //                 .collect::<Result<_, _>>()
+        //                 .map_err(|err| WheelFilenameError::InvalidAbiTag(filename.to_string(), err))?,
+        //             platform_tag: platform_tag
+        //                 .split('.')
+        //                 .map(PlatformTag::from_str)
+        //                 .collect::<Result<_, _>>()
+        //                 .map_err(|err| WheelFilenameError::InvalidPlatformTag(filename.to_string(), err))?,
+        //         }),
+        //     }
+        // } else {
+        //     WheelTag::Small {
+        //         small: WheelTagSmall {
+        //             python_tag: LanguageTag::from_str(python_tag)
+        //                 .map_err(|err| WheelFilenameError::InvalidLanguageTag(filename.to_string(), err))?,
+        //             abi_tag: AbiTag::from_str(abi_tag)
+        //                 .map_err(|err| WheelFilenameError::InvalidAbiTag(filename.to_string(), err))?,
+        //             platform_tag: PlatformTag::from_str(platform_tag)
+        //                 .map_err(|err| WheelFilenameError::InvalidPlatformTag(filename.to_string(), err))?,
+        //         },
+        //     }
+        // };
 
         Ok(Self {
             name,

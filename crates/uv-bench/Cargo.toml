@@ -23,10 +23,10 @@ name = "distribution-filename"
 path = "benches/distribution_filename.rs"
 harness = false
 
-[[bench]]
-name = "uv"
-path = "benches/uv.rs"
-harness = false
+# [[bench]]
+# name = "uv"
+# path = "benches/uv.rs"
+# harness = false
 
 [dependencies]
 uv-cache = { workspace = true }
