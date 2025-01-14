@@ -8,33 +8,37 @@ Ok(
             "foo",
         ),
         version: "1.2.3",
-        build_tag: None,
-        python_tag: [
-            CPython {
-                python_version: (
-                    3,
-                    11,
-                ),
+        tags: Large {
+            large: WheelTagLarge {
+                build_tag: None,
+                python_tag: [
+                    CPython {
+                        python_version: (
+                            3,
+                            11,
+                        ),
+                    },
+                ],
+                abi_tag: [
+                    CPython {
+                        gil_disabled: false,
+                        python_version: (
+                            3,
+                            11,
+                        ),
+                    },
+                ],
+                platform_tag: [
+                    Manylinux {
+                        major: 2,
+                        minor: 17,
+                        arch: X86_64,
+                    },
+                    Manylinux2014 {
+                        arch: X86_64,
+                    },
+                ],
             },
-        ],
-        abi_tag: [
-            CPython {
-                gil_disabled: false,
-                python_version: (
-                    3,
-                    11,
-                ),
-            },
-        ],
-        platform_tag: [
-            Manylinux {
-                major: 2,
-                minor: 17,
-                arch: X86_64,
-            },
-            Manylinux2014 {
-                arch: X86_64,
-            },
-        ],
+        },
     },
 )

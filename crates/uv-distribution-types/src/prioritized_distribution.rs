@@ -527,7 +527,7 @@ impl PrioritizedDist {
         self.0
             .wheels
             .iter()
-            .flat_map(|(wheel, _)| wheel.filename.python_tag.iter().copied())
+            .flat_map(|(wheel, _)| wheel.filename.python_tags().iter().copied())
             .collect()
     }
 
@@ -536,7 +536,7 @@ impl PrioritizedDist {
         self.0
             .wheels
             .iter()
-            .flat_map(|(wheel, _)| wheel.filename.abi_tag.iter().copied())
+            .flat_map(|(wheel, _)| wheel.filename.abi_tags().iter().copied())
             .collect()
     }
 
@@ -545,10 +545,10 @@ impl PrioritizedDist {
     pub fn platform_tags<'a>(&'a self, tags: &'a Tags) -> BTreeSet<&'a PlatformTag> {
         let mut candidates = BTreeSet::new();
         for (wheel, _) in &self.0.wheels {
-            for wheel_py in &wheel.filename.python_tag {
-                for wheel_abi in &wheel.filename.abi_tag {
+            for wheel_py in wheel.filename.python_tags() {
+                for wheel_abi in wheel.filename.abi_tags() {
                     if tags.is_compatible_abi(*wheel_py, *wheel_abi) {
-                        candidates.extend(wheel.filename.platform_tag.iter());
+                        candidates.extend(wheel.filename.platform_tags().iter());
                     }
                 }
             }
@@ -724,7 +724,7 @@ impl IncompatibleWheel {
 /// supported platforms (rather than generating the supported tags from a given platform).
 pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
     let mut marker = MarkerTree::FALSE;
-    for platform_tag in &filename.platform_tag {
+    for platform_tag in filename.platform_tags() {
         match platform_tag {
             PlatformTag::Any => {
                 return MarkerTree::TRUE;
