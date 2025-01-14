@@ -461,8 +461,17 @@ def get_operating_system_and_architecture():
         # noinspection PyProtectedMember
         from .packaging._musllinux import _get_musl_version
 
+        # https://github.com/pypa/packaging/blob/4dc334c86d43f83371b194ca91618ed99e0e49ca/src/packaging/tags.py#L539-L543
+        # https://github.com/astral-sh/uv/issues/9842
+        if struct.calcsize("P") == 4:
+            if architecture == "x86_64":
+                architecture = "i686"
+            elif architecture == "aarch64":
+                architecture = "armv8l"
+
         musl_version = _get_musl_version(sys.executable)
         glibc_version = _get_glibc_version()
+
         if musl_version:
             operating_system = {
                 "name": "musllinux",
@@ -474,6 +483,11 @@ def get_operating_system_and_architecture():
                 "name": "manylinux",
                 "major": glibc_version[0],
                 "minor": glibc_version[1],
+            }
+        elif hasattr(sys, "getandroidapilevel"):
+            operating_system = {
+                "name": "android",
+                "api_level": sys.getandroidapilevel(),
             }
         else:
             print(json.dumps({"result": "error", "kind": "libc_not_found"}))
@@ -542,9 +556,11 @@ def main() -> None:
         "python_version": ".".join(platform.python_version_tuple()[:2]),
         "sys_platform": sys.platform,
     }
+
     os_and_arch = get_operating_system_and_architecture()
 
-    manylinux_compatible = True
+    manylinux_compatible = False
+
     if os_and_arch["os"]["name"] == "manylinux":
         # noinspection PyProtectedMember
         from .packaging._manylinux import _get_glibc_version, _is_compatible
@@ -552,6 +568,8 @@ def main() -> None:
         manylinux_compatible = _is_compatible(
             arch=os_and_arch["arch"], version=_get_glibc_version()
         )
+    elif os_and_arch["os"]["name"] == "musllinux":
+        manylinux_compatible = True
 
     interpreter_info = {
         "result": "success",
@@ -563,6 +581,10 @@ def main() -> None:
         "sys_executable": sys.executable,
         "sys_path": sys.path,
         "stdlib": sysconfig.get_path("stdlib"),
+        # Prior to the introduction of `sysconfig` patching, python-build-standalone installations would always use
+        # "/install" as the prefix. With `sysconfig` patching, we rewrite the prefix to match the actual installation
+        # location. So in newer versions, we also write a dedicated flag to indicate standalone builds.
+        "standalone": sysconfig.get_config_var("prefix") == "/install" or bool(sysconfig.get_config_var("PYTHON_BUILD_STANDALONE")),
         "scheme": get_scheme(),
         "virtualenv": get_virtualenv(),
         "platform": os_and_arch,

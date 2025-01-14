@@ -23,6 +23,8 @@ workspace = true
 
 [dependencies]
 uv-fs = { workspace = true }
+
+fs-err = {workspace = true }
 thiserror = { workspace = true }
 zip = { workspace = true }
 

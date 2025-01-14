@@ -13,28 +13,28 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, KeyringProviderType,
-    LowerBound, NoBinary, NoBuild, SourceStrategy, TrustedHost,
+    LowerBound, NoBinary, NoBuild, PreviewMode, SourceStrategy, TrustedHost,
 };
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
 use uv_fs::Simplified;
 use uv_install_wheel::linker::LinkMode;
 use uv_pypi_types::Requirement;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
-    PythonVariant, PythonVersionFile, VersionRequest,
 };
-use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
-use uv_shell::Shell;
-use uv_types::{BuildContext, BuildIsolation, HashStrategy};
-use uv_warnings::warn_user_once;
+use uv_resolver::{ExcludeNewer, FlatIndex};
+use uv_settings::PythonInstallMirrors;
+use uv_shell::{shlex_posix, shlex_windows, Shell};
+use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
+use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
-use crate::commands::pip::operations::Changelog;
-use crate::commands::project::find_requires_python;
+use crate::commands::pip::operations::{report_interpreter, Changelog};
+use crate::commands::project::{validate_project_requires_python, WorkspacePython};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, SharedState};
+use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Create a virtual environment.
@@ -43,6 +43,7 @@ pub(crate) async fn venv(
     project_dir: &Path,
     path: Option<PathBuf>,
     python_request: Option<&str>,
+    install_mirrors: PythonInstallMirrors,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     link_mode: LinkMode,
@@ -50,7 +51,7 @@ pub(crate) async fn venv(
     index_strategy: IndexStrategy,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
-    allow_insecure_host: Vec<TrustedHost>,
+    allow_insecure_host: &[TrustedHost],
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,
@@ -64,11 +65,13 @@ pub(crate) async fn venv(
     cache: &Cache,
     printer: Printer,
     relocatable: bool,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     match venv_impl(
         project_dir,
         path,
         python_request,
+        install_mirrors,
         link_mode,
         index_locations,
         index_strategy,
@@ -90,6 +93,7 @@ pub(crate) async fn venv(
         cache,
         printer,
         relocatable,
+        preview,
     )
     .await
     {
@@ -109,7 +113,7 @@ enum VenvError {
 
     #[error("Failed to install seed packages")]
     #[diagnostic(code(uv::venv::seed))]
-    Seed(#[source] anyhow::Error),
+    Seed(#[source] AnyErrorBuild),
 
     #[error("Failed to extract interpreter tags")]
     #[diagnostic(code(uv::venv::tags))]
@@ -126,12 +130,13 @@ async fn venv_impl(
     project_dir: &Path,
     path: Option<PathBuf>,
     python_request: Option<&str>,
+    install_mirrors: PythonInstallMirrors,
     link_mode: LinkMode,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
-    allow_insecure_host: Vec<TrustedHost>,
+    allow_insecure_host: &[TrustedHost],
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,
@@ -147,6 +152,7 @@ async fn venv_impl(
     cache: &Cache,
     printer: Printer,
     relocatable: bool,
+    preview: PreviewMode,
 ) -> miette::Result<ExitStatus> {
     let project = if no_project {
         None
@@ -156,8 +162,16 @@ async fn venv_impl(
             Err(WorkspaceError::MissingProject(_)) => None,
             Err(WorkspaceError::MissingPyprojectToml) => None,
             Err(WorkspaceError::NonWorkspace(_)) => None,
+            Err(WorkspaceError::Toml(path, err)) => {
+                warn_user!(
+                    "Failed to parse `{}` during environment creation:\n{}",
+                    path.user_display().cyan(),
+                    textwrap::indent(&err.to_string(), "  ")
+                );
+                None
+            }
             Err(err) => {
-                warn_user_once!("{err}");
+                warn_user!("{err}");
                 None
             }
         }
@@ -179,53 +193,42 @@ async fn venv_impl(
 
     let client_builder = BaseClientBuilder::default()
         .connectivity(connectivity)
-        .native_tls(native_tls);
+        .native_tls(native_tls)
+        .allow_insecure_host(allow_insecure_host.to_vec());
 
     let reporter = PythonDownloadReporter::single(printer);
 
-    // (1) Explicit request from user
-    let mut interpreter_request = python_request.map(PythonRequest::parse);
-
-    // (2) Request from `.python-version`
-    if interpreter_request.is_none() {
-        interpreter_request = PythonVersionFile::discover(project_dir, no_config, false)
-            .await
-            .into_diagnostic()?
-            .and_then(PythonVersionFile::into_version);
-    }
-
-    // (3) `Requires-Python` in `pyproject.toml`
-    if interpreter_request.is_none() {
-        if let Some(project) = project {
-            interpreter_request = find_requires_python(project.workspace())
-                .into_diagnostic()?
-                .as_ref()
-                .map(RequiresPython::specifiers)
-                .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(
-                        specifiers.clone(),
-                        PythonVariant::Default,
-                    ))
-                });
-        }
-    }
-
-    // Locate the Python interpreter to use in the environment
-    let python = PythonInstallation::find_or_download(
-        interpreter_request.as_ref(),
-        EnvironmentPreference::OnlySystem,
-        python_preference,
-        python_downloads,
-        &client_builder,
-        cache,
-        Some(&reporter),
+    let WorkspacePython {
+        source,
+        python_request,
+        requires_python,
+    } = WorkspacePython::from_request(
+        python_request.map(PythonRequest::parse),
+        project.as_ref().map(VirtualProject::workspace),
+        project_dir,
+        no_config,
     )
     .await
     .into_diagnostic()?;
 
-    let managed = python.source().is_managed();
-    let implementation = python.implementation();
-    let interpreter = python.into_interpreter();
+    // Locate the Python interpreter to use in the environment
+    let interpreter = {
+        let python = PythonInstallation::find_or_download(
+            python_request.as_ref(),
+            EnvironmentPreference::OnlySystem,
+            python_preference,
+            python_downloads,
+            &client_builder,
+            cache,
+            Some(&reporter),
+            install_mirrors.python_install_mirror.as_deref(),
+            install_mirrors.pypy_install_mirror.as_deref(),
+        )
+        .await
+        .into_diagnostic()?;
+        report_interpreter(&python, false, printer).into_diagnostic()?;
+        python.into_interpreter()
+    };
 
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
@@ -234,24 +237,20 @@ async fn venv_impl(
         }
     }
 
-    if managed {
-        writeln!(
-            printer.stderr(),
-            "Using {} {}",
-            implementation.pretty(),
-            interpreter.python_version().cyan()
-        )
-        .into_diagnostic()?;
-    } else {
-        writeln!(
-            printer.stderr(),
-            "Using {} {} interpreter at: {}",
-            implementation.pretty(),
-            interpreter.python_version(),
-            interpreter.sys_executable().user_display().cyan()
-        )
-        .into_diagnostic()?;
-    }
+    // Check if the discovered Python version is incompatible with the current workspace
+    if let Some(requires_python) = requires_python {
+        match validate_project_requires_python(
+            &interpreter,
+            project.as_ref().map(VirtualProject::workspace),
+            &requires_python,
+            &source,
+        ) {
+            Ok(()) => {}
+            Err(err) => {
+                warn_user!("{err}");
+            }
+        }
+    };
 
     writeln!(
         printer.stderr(),
@@ -292,7 +291,7 @@ async fn venv_impl(
             .index_urls(index_locations.index_urls())
             .index_strategy(index_strategy)
             .keyring(keyring_provider)
-            .allow_insecure_host(allow_insecure_host)
+            .allow_insecure_host(allow_insecure_host.to_vec())
             .markers(interpreter.markers())
             .platform(interpreter.platform())
             .build();
@@ -334,10 +333,7 @@ async fn venv_impl(
             index_locations,
             &flat_index,
             &dependency_metadata,
-            &state.index,
-            &state.git,
-            &state.capabilities,
-            &state.in_flight,
+            state.clone(),
             index_strategy,
             &config_settings,
             BuildIsolation::Isolated,
@@ -348,34 +344,37 @@ async fn venv_impl(
             LowerBound::Allow,
             sources,
             concurrency,
+            preview,
         );
 
         // Resolve the seed packages.
-        let requirements = if interpreter.python_tuple() < (3, 12) {
-            // Only include `setuptools` and `wheel` on Python <3.12
+        let requirements = if interpreter.python_tuple() >= (3, 12) {
+            vec![Requirement::from(
+                uv_pep508::Requirement::from_str("pip").unwrap(),
+            )]
+        } else {
+            // Include `setuptools` and `wheel` on Python <3.12.
             vec![
                 Requirement::from(uv_pep508::Requirement::from_str("pip").unwrap()),
                 Requirement::from(uv_pep508::Requirement::from_str("setuptools").unwrap()),
                 Requirement::from(uv_pep508::Requirement::from_str("wheel").unwrap()),
             ]
-        } else {
-            vec![Requirement::from(
-                uv_pep508::Requirement::from_str("pip").unwrap(),
-            )]
         };
+
+        let build_stack = BuildStack::default();
 
         // Resolve and install the requirements.
         //
         // Since the virtual environment is empty, and the set of requirements is trivial (no
         // constraints, no editables, etc.), we can use the build dispatch APIs directly.
         let resolution = build_dispatch
-            .resolve(&requirements)
+            .resolve(&requirements, &build_stack)
             .await
-            .map_err(VenvError::Seed)?;
+            .map_err(|err| VenvError::Seed(err.into()))?;
         let installed = build_dispatch
-            .install(&resolution, &venv)
+            .install(&resolution, &venv, &build_stack)
             .await
-            .map_err(VenvError::Seed)?;
+            .map_err(|err| VenvError::Seed(err.into()))?;
 
         let changelog = Changelog::from_installed(installed);
         DefaultInstallLogger
@@ -413,38 +412,4 @@ async fn venv_impl(
     }
 
     Ok(ExitStatus::Success)
-}
-
-/// Quote a path, if necessary, for safe use in a POSIX-compatible shell command.
-fn shlex_posix(executable: impl AsRef<Path>) -> String {
-    // Convert to a display path.
-    let executable = executable.as_ref().portable_display().to_string();
-
-    // Like Python's `shlex.quote`:
-    // > Use single quotes, and put single quotes into double quotes
-    // > The string $'b is then quoted as '$'"'"'b'
-    if executable.contains(' ') {
-        format!("'{}'", executable.replace('\'', r#"'"'"'"#))
-    } else {
-        executable
-    }
-}
-
-/// Quote a path, if necessary, for safe use in `PowerShell` and `cmd`.
-fn shlex_windows(executable: impl AsRef<Path>, shell: Shell) -> String {
-    // Convert to a display path.
-    let executable = executable.as_ref().user_display().to_string();
-
-    // Wrap the executable in quotes (and a `&` invocation on PowerShell), if it contains spaces.
-    if executable.contains(' ') {
-        if shell == Shell::Powershell {
-            // For PowerShell, wrap in a `&` invocation.
-            format!("& \"{executable}\"")
-        } else {
-            // Otherwise, assume `cmd`, which doesn't need the `&`.
-            format!("\"{executable}\"")
-        }
-    } else {
-        executable
-    }
 }

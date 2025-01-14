@@ -32,16 +32,22 @@ use uv_static::EnvVars;
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 
-pub const PACKSE_VERSION: &str = "0.3.37";
+pub const PACKSE_VERSION: &str = "0.3.44";
 
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
 pub fn build_vendor_links_url() -> String {
-    format!("https://raw.githubusercontent.com/astral-sh/packse/{PACKSE_VERSION}/vendor/links.html")
+    env::var(EnvVars::UV_TEST_VENDOR_LINKS_URL)
+        .ok()
+        .unwrap_or(format!(
+            "https://raw.githubusercontent.com/astral-sh/packse/{PACKSE_VERSION}/vendor/links.html"
+        ))
 }
 
 pub fn packse_index_url() -> String {
-    format!("https://astral-sh.github.io/packse/{PACKSE_VERSION}/simple-html/")
+    env::var(EnvVars::UV_TEST_INDEX_URL).ok().unwrap_or(format!(
+        "https://astral-sh.github.io/packse/{PACKSE_VERSION}/simple-html/"
+    ))
 }
 
 #[doc(hidden)] // Macro and test context only, don't use directly.
@@ -59,7 +65,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"uv\.exe", "uv"),
     // uv version display
     (
-        r"uv(-.*)? \d+\.\d+\.\d+( \(.*\))?",
+        r"uv(-.*)? \d+\.\d+\.\d+(\+\d+)?( \(.*\))?",
         r"uv [VERSION] ([COMMIT] DATE)",
     ),
     // The exact message is host language dependent
@@ -67,6 +73,8 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
         r"Caused by: .* \(os error 2\)",
         "Caused by: No such file or directory (os error 2)",
     ),
+    // Trim end-of-line whitespaces, to allow removing them on save.
+    (r"([^\s])[ \t]+(\r?\n)", "$1$2"),
 ];
 
 /// Create a context for tests which simplifies shared behavior across tests.
@@ -147,11 +155,11 @@ impl TestContext {
     #[must_use]
     pub fn with_filtered_python_sources(mut self) -> Self {
         self.filters.push((
-            "managed installations or system path".to_string(),
+            "managed installations or search path".to_string(),
             "[PYTHON SOURCES]".to_string(),
         ));
         self.filters.push((
-            "managed installations, system path, or `py` launcher".to_string(),
+            "managed installations, search path, or registry".to_string(),
             "[PYTHON SOURCES]".to_string(),
         ));
         self
@@ -215,8 +223,10 @@ impl TestContext {
 
     /// Adds a filter that ignores platform information in a Python installation key.
     pub fn with_filtered_python_keys(mut self) -> Self {
+        // Filter platform keys
         self.filters.push((
-            r"((?:cpython|pypy)-\d+\.\d+(:?\.\d+)?[a-z]?(:?\+[a-z]+)?)-.*".to_string(),
+            r"((?:cpython|pypy)-\d+\.\d+(?:\.(?:\[X\]|\d+))?[a-z]?(?:\+[a-z]+)?)-[a-z0-9]+-[a-z0-9_]+-[a-z]+"
+                .to_string(),
             "$1-[PLATFORM]".to_string(),
         ));
         self
@@ -281,7 +291,7 @@ impl TestContext {
 
         // The workspace root directory is not available without walking up the tree
         // https://github.com/rust-lang/cargo/issues/3946
-        let workspace_root = Path::new(&std::env::var(EnvVars::CARGO_MANIFEST_DIR).unwrap())
+        let workspace_root = Path::new(&env::var(EnvVars::CARGO_MANIFEST_DIR).unwrap())
             .parent()
             .expect("CARGO_MANIFEST_DIR should be nested in workspace")
             .parent()
@@ -312,7 +322,7 @@ impl TestContext {
         // Exclude `link-mode` on Windows since we set it in the remote test suite
         if cfg!(windows) {
             filters.push(("--link-mode <LINK_MODE> ".to_string(), String::new()));
-            filters.push(((r#"link-mode = "copy"\n"#).to_string(), String::new()));
+            filters.push((r#"link-mode = "copy"\n"#.to_string(), String::new()));
         }
 
         filters.extend(
@@ -477,7 +487,7 @@ impl TestContext {
 
         if cfg!(unix) {
             // Avoid locale issues in tests
-            command.env("LC_ALL", "C");
+            command.env(EnvVars::LC_ALL, "C");
         }
 
         if cfg!(all(windows, debug_assertions)) {
@@ -653,11 +663,20 @@ impl TestContext {
     pub fn python_install(&self) -> Command {
         let mut command = self.new_command();
         let managed = self.temp_dir.join("managed");
+        let bin = self.temp_dir.join("bin");
         self.add_shared_args(&mut command, true);
         command
             .arg("python")
             .arg("install")
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, managed)
+            .env(EnvVars::UV_PYTHON_BIN_DIR, bin.as_os_str())
+            .env(
+                EnvVars::PATH,
+                env::join_paths(std::iter::once(bin).chain(env::split_paths(
+                    &env::var(EnvVars::PATH).unwrap_or_default(),
+                )))
+                .unwrap(),
+            )
             .current_dir(&self.temp_dir);
         command
     }
@@ -666,11 +685,13 @@ impl TestContext {
     pub fn python_uninstall(&self) -> Command {
         let mut command = self.new_command();
         let managed = self.temp_dir.join("managed");
+        let bin = self.temp_dir.join("bin");
         self.add_shared_args(&mut command, true);
         command
             .arg("python")
             .arg("uninstall")
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, managed)
+            .env(EnvVars::UV_PYTHON_BIN_DIR, bin)
             .current_dir(&self.temp_dir);
         command
     }
@@ -871,7 +892,7 @@ impl TestContext {
     pub fn python_path(&self) -> OsString {
         if cfg!(unix) {
             // On Unix, we needed to normalize the Python executable names to `python3` for the tests
-            std::env::join_paths(
+            env::join_paths(
                 self.python_versions
                     .iter()
                     .map(|(version, _)| self.python_dir.join(version.to_string())),
@@ -879,7 +900,7 @@ impl TestContext {
             .unwrap()
         } else {
             // On Windows, just join the parent directories of the executables
-            std::env::join_paths(
+            env::join_paths(
                 self.python_versions
                     .iter()
                     .map(|(_, executable)| executable.parent().unwrap().to_path_buf()),
@@ -901,7 +922,7 @@ impl TestContext {
 
     /// For when we add pypy to the test suite.
     #[allow(clippy::unused_self)]
-    pub fn python_kind(&self) -> &str {
+    pub fn python_kind(&self) -> &'static str {
         "python"
     }
 
@@ -967,7 +988,7 @@ impl TestContext {
             change(self),
             self.filters(),
             "diff_lock",
-            Some(crate::common::WindowsFilters::Platform),
+            Some(WindowsFilters::Platform),
         );
         assert!(status.success(), "{snapshot}");
         let new_lock = fs_err::read_to_string(&lock_path).unwrap();
@@ -1060,7 +1081,7 @@ pub fn venv_to_interpreter(venv: &Path) -> PathBuf {
 
 /// Get the path to the python interpreter for a specific python version.
 pub fn get_python(version: &PythonVersion) -> PathBuf {
-    ManagedPythonInstallations::from_settings()
+    ManagedPythonInstallations::from_settings(None)
         .map(|installed_pythons| {
             installed_pythons
                 .find_version(version)
@@ -1076,11 +1097,7 @@ pub fn get_python(version: &PythonVersion) -> PathBuf {
 }
 
 /// Create a virtual environment at the given path.
-pub fn create_venv_from_executable<P: AsRef<std::path::Path>>(
-    path: P,
-    cache_dir: &ChildPath,
-    python: &Path,
-) {
+pub fn create_venv_from_executable<P: AsRef<Path>>(path: P, cache_dir: &ChildPath, python: &Path) {
     assert_cmd::Command::new(get_bin())
         .arg("venv")
         .arg(path.as_ref().as_os_str())
@@ -1108,7 +1125,7 @@ pub fn python_path_with_versions(
     temp_dir: &ChildPath,
     python_versions: &[&str],
 ) -> anyhow::Result<OsString> {
-    Ok(std::env::join_paths(
+    Ok(env::join_paths(
         python_installations_for_versions(temp_dir, python_versions)?
             .into_iter()
             .map(|path| path.parent().unwrap().to_path_buf()),
@@ -1277,21 +1294,6 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
     (snapshot, output, status)
 }
 
-/// Recursively copy a directory and its contents.
-pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
-    fs_err::create_dir_all(&dst)?;
-    for entry in fs_err::read_dir(src.as_ref())? {
-        let entry = entry?;
-        let ty = entry.file_type()?;
-        if ty.is_dir() {
-            copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
-        } else {
-            fs_err::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
-        }
-    }
-    Ok(())
-}
-
 /// Recursively copy a directory and its contents, skipping gitignored files.
 pub fn copy_dir_ignore(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
     for entry in ignore::Walk::new(&src) {
@@ -1365,7 +1367,7 @@ pub fn decode_token(content: &[&str]) -> String {
 /// certificate verification, passing through the `BaseClient`
 #[tokio::main(flavor = "current_thread")]
 pub async fn download_to_disk(url: &str, path: &Path) {
-    let trusted_hosts: Vec<_> = std::env::var(EnvVars::UV_INSECURE_HOST)
+    let trusted_hosts: Vec<_> = env::var(EnvVars::UV_INSECURE_HOST)
         .unwrap_or_default()
         .split(' ')
         .map(|h| uv_configuration::TrustedHost::from_str(h).unwrap())

@@ -1,13 +1,13 @@
-use uv_distribution_types::{BuiltDist, Dist, GitSourceDist, SourceDist};
-use uv_git::GitUrl;
-use uv_pypi_types::{Requirement, RequirementSource};
-
 pub use crate::extras::*;
 pub use crate::lookahead::*;
 pub use crate::source_tree::*;
 pub use crate::sources::*;
 pub use crate::specification::*;
 pub use crate::unnamed::*;
+
+use uv_distribution_types::{Dist, DistErrorKind, GitSourceDist, SourceDist};
+use uv_git::GitUrl;
+use uv_pypi_types::{Requirement, RequirementSource};
 
 mod extras;
 mod lookahead;
@@ -19,14 +19,8 @@ pub mod upgrade;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("Failed to download: `{0}`")]
-    Download(BuiltDist, #[source] uv_distribution::Error),
-
-    #[error("Failed to download and build: `{0}`")]
-    DownloadAndBuild(SourceDist, #[source] uv_distribution::Error),
-
-    #[error("Failed to build: `{0}`")]
-    Build(SourceDist, #[source] uv_distribution::Error),
+    #[error("{0} `{1}`")]
+    Dist(DistErrorKind, Box<Dist>, #[source] uv_distribution::Error),
 
     #[error(transparent)]
     Distribution(#[from] uv_distribution::Error),
@@ -36,6 +30,13 @@ pub enum Error {
 
     #[error(transparent)]
     WheelFilename(#[from] uv_distribution_filename::WheelFilenameError),
+}
+
+impl Error {
+    /// Create an [`Error`] from a distribution error.
+    pub(crate) fn from_dist(dist: Dist, err: uv_distribution::Error) -> Self {
+        Self::Dist(DistErrorKind::from_dist(&dist, &err), Box::new(dist), err)
+    }
 }
 
 /// Convert a [`Requirement`] into a [`Dist`], if it is a direct URL.

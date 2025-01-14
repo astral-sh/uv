@@ -7,8 +7,8 @@ use std::time::SystemTime;
 
 use crate::script::{scripts_from_ini, Script};
 use crate::wheel::{
-    extra_dist_info, install_data, parse_wheel_file, read_record_file, write_script_entrypoints,
-    LibKind,
+    install_data, parse_wheel_file, read_record_file, write_installer_metadata,
+    write_script_entrypoints, LibKind,
 };
 use crate::{Error, Layout};
 use fs_err as fs;
@@ -43,6 +43,7 @@ pub fn install_wheel(
     direct_url: Option<&DirectUrl>,
     cache_info: Option<&CacheInfo>,
     installer: Option<&str>,
+    installer_metadata: bool,
     link_mode: LinkMode,
     locks: &Locks,
 ) -> Result<(), Error> {
@@ -140,16 +141,18 @@ pub fn install_wheel(
         trace!(?name, "No data");
     }
 
-    trace!(?name, "Writing extra metadata");
-    extra_dist_info(
-        site_packages,
-        &dist_info_prefix,
-        true,
-        direct_url,
-        cache_info,
-        installer,
-        &mut record,
-    )?;
+    if installer_metadata {
+        trace!(?name, "Writing installer metadata");
+        write_installer_metadata(
+            site_packages,
+            &dist_info_prefix,
+            true,
+            direct_url,
+            cache_info,
+            installer,
+            &mut record,
+        )?;
+    }
 
     trace!(?name, "Writing record");
     let mut record_writer = csv::WriterBuilder::new()
@@ -384,7 +387,7 @@ fn clone_recursive(
     match attempt {
         Attempt::Initial => {
             if let Err(err) = reflink::reflink(&from, &to) {
-                if matches!(err.kind(), std::io::ErrorKind::AlreadyExists) {
+                if err.kind() == std::io::ErrorKind::AlreadyExists {
                     // If cloning/copying fails and the directory exists already, it must be merged recursively.
                     if entry.file_type()?.is_dir() {
                         for entry in fs::read_dir(from)? {
@@ -420,7 +423,7 @@ fn clone_recursive(
         }
         Attempt::Subsequent => {
             if let Err(err) = reflink::reflink(&from, &to) {
-                if matches!(err.kind(), std::io::ErrorKind::AlreadyExists) {
+                if err.kind() == std::io::ErrorKind::AlreadyExists {
                     // If cloning/copying fails and the directory exists already, it must be merged recursively.
                     if entry.file_type()?.is_dir() {
                         for entry in fs::read_dir(from)? {
@@ -466,11 +469,11 @@ fn copy_wheel_files(
     let mut count = 0usize;
 
     // Walk over the directory.
-    for entry in walkdir::WalkDir::new(&wheel) {
+    for entry in WalkDir::new(&wheel) {
         let entry = entry?;
         let path = entry.path();
 
-        let relative = path.strip_prefix(&wheel).unwrap();
+        let relative = path.strip_prefix(&wheel).expect("walkdir starts with root");
         let out_path = site_packages.as_ref().join(relative);
 
         if entry.file_type().is_dir() {
@@ -496,11 +499,11 @@ fn hardlink_wheel_files(
     let mut count = 0usize;
 
     // Walk over the directory.
-    for entry in walkdir::WalkDir::new(&wheel) {
+    for entry in WalkDir::new(&wheel) {
         let entry = entry?;
         let path = entry.path();
 
-        let relative = path.strip_prefix(&wheel).unwrap();
+        let relative = path.strip_prefix(&wheel).expect("walkdir starts with root");
         let out_path = site_packages.as_ref().join(relative);
 
         if entry.file_type().is_dir() {

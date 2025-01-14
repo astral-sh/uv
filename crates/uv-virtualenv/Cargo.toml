@@ -25,9 +25,13 @@ uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-version = { workspace = true }
+uv-shell = { workspace = true }
 
 fs-err = { workspace = true }
 itertools = { workspace = true }
 pathdiff = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+self-replace = { workspace = true }

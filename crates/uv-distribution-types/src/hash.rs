@@ -5,21 +5,16 @@ pub enum HashPolicy<'a> {
     /// No hash policy is specified.
     None,
     /// Hashes should be generated (specifically, a SHA-256 hash), but not validated.
-    Generate,
+    Generate(HashGeneration),
     /// Hashes should be validated against a pre-defined list of hashes. If necessary, hashes should
     /// be generated so as to ensure that the archive is valid.
     Validate(&'a [HashDigest]),
 }
 
-impl<'a> HashPolicy<'a> {
+impl HashPolicy<'_> {
     /// Returns `true` if the hash policy is `None`.
     pub fn is_none(&self) -> bool {
         matches!(self, Self::None)
-    }
-
-    /// Returns `true` if the hash policy is `Generate`.
-    pub fn is_generate(&self) -> bool {
-        matches!(self, Self::Generate)
     }
 
     /// Returns `true` if the hash policy is `Validate`.
@@ -27,11 +22,23 @@ impl<'a> HashPolicy<'a> {
         matches!(self, Self::Validate(_))
     }
 
+    /// Returns `true` if the hash policy indicates that hashes should be generated.
+    pub fn is_generate(&self, dist: &crate::BuiltDist) -> bool {
+        match self {
+            HashPolicy::Generate(HashGeneration::Url) => dist.file().is_none(),
+            HashPolicy::Generate(HashGeneration::All) => {
+                dist.file().map_or(true, |file| file.hashes.is_empty())
+            }
+            HashPolicy::Validate(_) => false,
+            HashPolicy::None => false,
+        }
+    }
+
     /// Return the algorithms used in the hash policy.
     pub fn algorithms(&self) -> Vec<HashAlgorithm> {
         match self {
             Self::None => vec![],
-            Self::Generate => vec![HashAlgorithm::Sha256],
+            Self::Generate(_) => vec![HashAlgorithm::Sha256],
             Self::Validate(hashes) => {
                 let mut algorithms = hashes.iter().map(HashDigest::algorithm).collect::<Vec<_>>();
                 algorithms.sort();
@@ -45,10 +52,20 @@ impl<'a> HashPolicy<'a> {
     pub fn digests(&self) -> &[HashDigest] {
         match self {
             Self::None => &[],
-            Self::Generate => &[],
+            Self::Generate(_) => &[],
             Self::Validate(hashes) => hashes,
         }
     }
+}
+
+/// The context in which hashes should be generated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HashGeneration {
+    /// Generate hashes for direct URL distributions.
+    Url,
+    /// Generate hashes for direct URL distributions, along with any distributions that are hosted
+    /// on a registry that does _not_ provide hashes.
+    All,
 }
 
 pub trait Hashed {
@@ -59,7 +76,7 @@ pub trait Hashed {
     fn satisfies(&self, hashes: HashPolicy) -> bool {
         match hashes {
             HashPolicy::None => true,
-            HashPolicy::Generate => self
+            HashPolicy::Generate(_) => self
                 .hashes()
                 .iter()
                 .any(|hash| hash.algorithm == HashAlgorithm::Sha256),
@@ -71,7 +88,7 @@ pub trait Hashed {
     fn has_digests(&self, hashes: HashPolicy) -> bool {
         match hashes {
             HashPolicy::None => true,
-            HashPolicy::Generate => self
+            HashPolicy::Generate(_) => self
                 .hashes()
                 .iter()
                 .any(|hash| hash.algorithm == HashAlgorithm::Sha256),

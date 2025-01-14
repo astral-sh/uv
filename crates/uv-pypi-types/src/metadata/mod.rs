@@ -1,3 +1,4 @@
+mod build_requires;
 mod metadata10;
 mod metadata12;
 mod metadata23;
@@ -5,14 +6,18 @@ mod metadata_resolver;
 mod pyproject_toml;
 mod requires_txt;
 
-use crate::VerbatimParsedUrl;
-use mailparse::{MailHeaderMap, MailParseError};
 use std::str::Utf8Error;
+
+use mailparse::{MailHeaderMap, MailParseError};
 use thiserror::Error;
+
 use uv_normalize::InvalidNameError;
 use uv_pep440::{VersionParseError, VersionSpecifiersParseError};
 use uv_pep508::Pep508Error;
 
+use crate::VerbatimParsedUrl;
+
+pub use build_requires::BuildRequires;
 pub use metadata10::Metadata10;
 pub use metadata12::Metadata12;
 pub use metadata23::Metadata23;
@@ -29,10 +34,10 @@ pub enum MetadataError {
     MailParse(#[from] MailParseError),
     #[error("Invalid `pyproject.toml`")]
     InvalidPyprojectTomlSyntax(#[source] toml_edit::TomlError),
-    #[error("`pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set.")]
-    InvalidPyprojectTomlMissingName(#[source] toml_edit::de::Error),
     #[error(transparent)]
     InvalidPyprojectTomlSchema(toml_edit::de::Error),
+    #[error("`pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set")]
+    MissingName,
     #[error("Metadata field {0} not found")]
     FieldNotFound(&'static str),
     #[error("Invalid version: {0}")]

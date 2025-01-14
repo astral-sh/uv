@@ -2,45 +2,19 @@ use std::cmp::Reverse;
 use std::sync::Arc;
 
 use futures::{stream::FuturesUnordered, FutureExt, Stream, TryFutureExt, TryStreamExt};
-use tokio::task::JoinError;
 use tracing::{debug, instrument};
 use url::Url;
-use uv_pep508::PackageName;
 
 use uv_cache::Cache;
 use uv_configuration::BuildOptions;
 use uv_distribution::{DistributionDatabase, LocalWheel};
 use uv_distribution_types::{
-    BuildableSource, BuiltDist, CachedDist, Dist, Hashed, Identifier, Name, RemoteSource,
-    SourceDist,
+    BuildableSource, CachedDist, DerivationChain, Dist, DistErrorKind, Hashed, Identifier, Name,
+    RemoteSource, Resolution,
 };
+use uv_pep508::PackageName;
 use uv_platform_tags::Tags;
 use uv_types::{BuildContext, HashStrategy, InFlight};
-
-#[derive(thiserror::Error, Debug)]
-pub enum Error {
-    #[error("Building source distributions is disabled, but attempted to build `{0}`")]
-    NoBuild(PackageName),
-    #[error("Using pre-built wheels is disabled, but attempted to use `{0}`")]
-    NoBinary(PackageName),
-    #[error("Failed to unzip wheel: {0}")]
-    Unzip(Dist, #[source] Box<uv_extract::Error>),
-    #[error("Failed to download `{0}`")]
-    Fetch(BuiltDist, #[source] Box<uv_distribution::Error>),
-    #[error("Failed to download and build `{0}`")]
-    FetchAndBuild(SourceDist, #[source] Box<uv_distribution::Error>),
-    #[error("Failed to build `{0}`")]
-    Build(SourceDist, #[source] Box<uv_distribution::Error>),
-    /// Should not occur; only seen when another task panicked.
-    #[error("The task executor is broken, did some other task panic?")]
-    Join(#[from] JoinError),
-    #[error(transparent)]
-    Editable(#[from] Box<uv_distribution::Error>),
-    #[error("Failed to write to the client cache")]
-    CacheWrite(#[source] std::io::Error),
-    #[error("Unzip failed in another thread: {0}")]
-    Thread(String),
-}
 
 /// Prepare distributions for installation.
 ///
@@ -74,15 +48,16 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
 
     /// Set the [`Reporter`] to use for operations.
     #[must_use]
-    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
-        let reporter: Arc<dyn Reporter> = Arc::new(reporter);
+    pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
             tags: self.tags,
             cache: self.cache,
             hashes: self.hashes,
             build_options: self.build_options,
-            database: self.database.with_reporter(Facade::from(reporter.clone())),
-            reporter: Some(reporter.clone()),
+            database: self
+                .database
+                .with_reporter(reporter.clone().into_distribution_reporter()),
+            reporter: Some(reporter),
         }
     }
 
@@ -91,11 +66,15 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
         &'stream self,
         distributions: Vec<Dist>,
         in_flight: &'stream InFlight,
+        resolution: &'stream Resolution,
     ) -> impl Stream<Item = Result<CachedDist, Error>> + 'stream {
         distributions
             .into_iter()
             .map(|dist| async {
-                let wheel = self.get_wheel(dist, in_flight).boxed_local().await?;
+                let wheel = self
+                    .get_wheel(dist, in_flight, resolution)
+                    .boxed_local()
+                    .await?;
                 if let Some(reporter) = self.reporter.as_ref() {
                     reporter.on_progress(&wheel);
                 }
@@ -110,13 +89,14 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
         &self,
         mut distributions: Vec<Dist>,
         in_flight: &InFlight,
+        resolution: &Resolution,
     ) -> Result<Vec<CachedDist>, Error> {
         // Sort the distributions by size.
         distributions
             .sort_unstable_by_key(|distribution| Reverse(distribution.size().unwrap_or(u64::MAX)));
 
         let wheels = self
-            .prepare_stream(distributions, in_flight)
+            .prepare_stream(distributions, in_flight, resolution)
             .try_collect()
             .await?;
 
@@ -128,7 +108,12 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
     }
     /// Download, build, and unzip a single wheel.
     #[instrument(skip_all, fields(name = % dist, size = ? dist.size(), url = dist.file().map(| file | file.url.to_string()).unwrap_or_default()))]
-    pub async fn get_wheel(&self, dist: Dist, in_flight: &InFlight) -> Result<CachedDist, Error> {
+    pub async fn get_wheel(
+        &self,
+        dist: Dist,
+        in_flight: &InFlight,
+        resolution: &Resolution,
+    ) -> Result<CachedDist, Error> {
         // Validate that the distribution is compatible with the build options.
         match dist {
             Dist::Built(ref dist) => {
@@ -155,16 +140,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                 .database
                 .get_or_build_wheel(&dist, self.tags, policy)
                 .boxed_local()
-                .map_err(|err| match &dist {
-                    Dist::Built(dist) => Error::Fetch(dist.clone(), Box::new(err)),
-                    Dist::Source(dist) => {
-                        if dist.is_local() {
-                            Error::Build(dist.clone(), Box::new(err))
-                        } else {
-                            Error::FetchAndBuild(dist.clone(), Box::new(err))
-                        }
-                    }
-                })
+                .map_err(|err| Error::from_dist(dist.clone(), err, resolution))
                 .await
                 .and_then(|wheel: LocalWheel| {
                     if wheel.satisfies(policy) {
@@ -175,16 +151,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                             policy.digests(),
                             wheel.hashes(),
                         );
-                        Err(match &dist {
-                            Dist::Built(dist) => Error::Fetch(dist.clone(), Box::new(err)),
-                            Dist::Source(dist) => {
-                                if dist.is_local() {
-                                    Error::Build(dist.clone(), Box::new(err))
-                                } else {
-                                    Error::FetchAndBuild(dist.clone(), Box::new(err))
-                                }
-                            }
-                        })
+                        Err(Error::from_dist(dist, err, resolution))
                     }
                 })
                 .map(CachedDist::from);
@@ -206,10 +173,71 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                 .expect("missing value for registered task");
 
             match result.as_ref() {
-                Ok(cached) => Ok(cached.clone()),
+                Ok(cached) => {
+                    // Validate that the wheel is compatible with the distribution.
+                    //
+                    // `get_or_build_wheel` is guaranteed to return a wheel that matches the
+                    // distribution. But there could be multiple requested distributions that share
+                    // a cache entry in `in_flight`, so we need to double-check here.
+                    //
+                    // For example, if two requirements are based on the same local path, but use
+                    // different names, then they'll share an `in_flight` entry, but one of the two
+                    // should be rejected (since at least one of the names will not match the
+                    // package name).
+                    if *dist.name() != cached.filename().name {
+                        let err = uv_distribution::Error::WheelMetadataNameMismatch {
+                            given: dist.name().clone(),
+                            metadata: cached.filename().name.clone(),
+                        };
+                        return Err(Error::from_dist(dist, err, resolution));
+                    }
+                    if let Some(version) = dist.version() {
+                        if *version != cached.filename().version {
+                            let err = uv_distribution::Error::WheelMetadataVersionMismatch {
+                                given: version.clone(),
+                                metadata: cached.filename().version.clone(),
+                            };
+                            return Err(Error::from_dist(dist, err, resolution));
+                        }
+                    }
+                    Ok(cached.clone())
+                }
                 Err(err) => Err(Error::Thread(err.to_string())),
             }
         }
+    }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error("Building source distributions is disabled, but attempted to build `{0}`")]
+    NoBuild(PackageName),
+    #[error("Using pre-built wheels is disabled, but attempted to use `{0}`")]
+    NoBinary(PackageName),
+    #[error("{0} `{1}`")]
+    Dist(
+        DistErrorKind,
+        Box<Dist>,
+        DerivationChain,
+        #[source] uv_distribution::Error,
+    ),
+    #[error("Cyclic build dependency detected for `{0}`")]
+    CyclicBuildDependency(PackageName),
+    #[error("Unzip failed in another thread: {0}")]
+    Thread(String),
+}
+
+impl Error {
+    /// Create an [`Error`] from a distribution error.
+    fn from_dist(dist: Dist, err: uv_distribution::Error, resolution: &Resolution) -> Self {
+        let chain =
+            DerivationChain::from_resolution(resolution, (&dist).into()).unwrap_or_default();
+        Self::Dist(
+            DistErrorKind::from_dist(&dist, &err),
+            Box::new(dist),
+            chain,
+            err,
+        )
     }
 }
 
@@ -244,15 +272,20 @@ pub trait Reporter: Send + Sync {
     fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize);
 }
 
-/// A facade for converting from [`Reporter`] to [`uv_git::Reporter`].
-struct Facade {
-    reporter: Arc<dyn Reporter>,
+impl dyn Reporter {
+    /// Converts this reporter to a [`uv_distribution::Reporter`].
+    pub(crate) fn into_distribution_reporter(
+        self: Arc<dyn Reporter>,
+    ) -> Arc<dyn uv_distribution::Reporter> {
+        Arc::new(Facade {
+            reporter: self.clone(),
+        })
+    }
 }
 
-impl From<Arc<dyn Reporter>> for Facade {
-    fn from(reporter: Arc<dyn Reporter>) -> Self {
-        Self { reporter }
-    }
+/// A facade for converting from [`Reporter`] to [`uv_distribution::Reporter`].
+struct Facade {
+    reporter: Arc<dyn Reporter>,
 }
 
 impl uv_distribution::Reporter for Facade {

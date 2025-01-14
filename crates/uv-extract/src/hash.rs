@@ -23,15 +23,6 @@ impl Hasher {
             Hasher::Sha512(hasher) => hasher.update(data),
         }
     }
-
-    pub fn finalize(self) -> Vec<u8> {
-        match self {
-            Hasher::Md5(hasher) => hasher.finalize().to_vec(),
-            Hasher::Sha256(hasher) => hasher.finalize().to_vec(),
-            Hasher::Sha384(hasher) => hasher.finalize().to_vec(),
-            Hasher::Sha512(hasher) => hasher.finalize().to_vec(),
-        }
-    }
 }
 
 impl From<HashAlgorithm> for Hasher {
@@ -89,7 +80,7 @@ where
     }
 }
 
-impl<'a, R> tokio::io::AsyncRead for HashReader<'a, R>
+impl<R> tokio::io::AsyncRead for HashReader<'_, R>
 where
     R: tokio::io::AsyncRead + Unpin,
 {

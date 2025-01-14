@@ -7,11 +7,11 @@ use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::str::contains;
 use std::path::Path;
-
+use uv_fs::copy_dir_all;
 use uv_python::PYTHON_VERSION_FILENAME;
 use uv_static::EnvVars;
 
-use crate::common::{copy_dir_all, uv_snapshot, TestContext};
+use crate::common::{uv_snapshot, TestContext};
 
 #[test]
 fn run_with_python_version() -> Result<()> {
@@ -196,7 +196,8 @@ fn run_args() -> Result<()> {
     Ok(())
 }
 
-/// Run without specifying any argunments.
+/// Run without specifying any arguments.
+///
 /// This should list the available scripts.
 #[test]
 fn run_no_args() -> Result<()> {
@@ -248,7 +249,7 @@ fn run_no_args() -> Result<()> {
 
     The following commands are available in the environment:
 
-    - pydoc
+    - pydoc.bat
     - python
     - pythonw
 
@@ -322,6 +323,9 @@ fn run_pep723_script() -> Result<()> {
     Reading inline script metadata from `main.py`
     Resolved 1 package in [TIME]
     "###);
+
+    // But neither invocation should create a lockfile.
+    assert!(!context.temp_dir.child("main.py.lock").exists());
 
     // Otherwise, the script requirements should _not_ be available, but the project requirements
     // should.
@@ -542,7 +546,6 @@ fn run_pep723_script_requires_python() -> Result<()> {
 
 /// Run a `.pyw` script. The script should be executed with `pythonw.exe`.
 #[test]
-#[cfg(windows)]
 fn run_pythonw_script() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -654,6 +657,310 @@ fn run_pep723_script_metadata() -> Result<()> {
     Ok(())
 }
 
+/// Run a PEP 723-compatible script with a `[[tool.uv.index]]`.
+#[test]
+fn run_pep723_script_index() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "idna>=2",
+        # ]
+        #
+        # [[tool.uv.index]]
+        # name = "test"
+        # url = "https://test.pypi.org/simple"
+        # explicit = true
+        #
+        # [tool.uv.sources]
+        # idna = { index = "test" }
+        # ///
+
+        import idna
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from `main.py`
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==2.7
+    "###);
+
+    Ok(())
+}
+
+/// Run a PEP 723-compatible script with `tool.uv` constraints.
+#[test]
+fn run_pep723_script_constraints() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio>=3",
+        # ]
+        #
+        # [tool.uv]
+        # constraint-dependencies = ["idna<=3"]
+        # ///
+
+        import anyio
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from `main.py`
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.0
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
+/// Run a PEP 723-compatible script with `tool.uv` overrides.
+#[test]
+fn run_pep723_script_overrides() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio>=3",
+        # ]
+        #
+        # [tool.uv]
+        # override-dependencies = ["idna<=2"]
+        # ///
+
+        import anyio
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from `main.py`
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==2.0
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
+/// Run a PEP 723-compatible script with a lockfile.
+#[test]
+fn run_pep723_script_lock() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+
+        import iniconfig
+
+        print("Hello, world!")
+       "#
+    })?;
+
+    // Explicitly lock the script.
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "###);
+
+    let lock = context.read("main.py.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.11"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        requirements = [{ name = "iniconfig" }]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+        "###
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Reading inline script metadata from `main.py`
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    // Modify the metadata.
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio",
+        # ]
+        # ///
+
+        import anyio
+
+        print("Hello, world!")
+       "#
+    })?;
+
+    // Re-running the script with `--locked` should error.
+    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from `main.py`
+    Resolved 3 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    "###);
+
+    // Re-running the script with `--frozen` should also error, but at runtime.
+    uv_snapshot!(context.filters(), context.run().arg("--frozen").arg("main.py"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from `main.py`
+    warning: `--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/main.py", line 8, in <module>
+        import anyio
+    ModuleNotFoundError: No module named 'anyio'
+    "###);
+
+    // Re-running the script should update the lockfile.
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Reading inline script metadata from `main.py`
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    let lock = context.read("main.py.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.11"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        requirements = [{ name = "anyio" }]
+
+        [[package]]
+        name = "anyio"
+        version = "4.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584 },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
+        ]
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
 /// With `managed = false`, we should avoid installing the project itself.
 #[test]
 fn run_managed_false() -> Result<()> {
@@ -683,6 +990,75 @@ fn run_managed_false() -> Result<()> {
     Python 3.12.[X]
 
     ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_exact() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["iniconfig"]
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    // Remove `iniconfig`.
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio"]
+        "#
+    })?;
+
+    // By default, `uv run` uses inexact semantics, so both `iniconfig` and `anyio` should still be available.
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import iniconfig; import anyio"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    // But under `--exact`, `iniconfig` should not be available.
+    uv_snapshot!(context.filters(), context.run().arg("--exact").arg("python").arg("-c").arg("import iniconfig"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - iniconfig==2.0.0
+    Traceback (most recent call last):
+      File "<string>", line 1, in <module>
+    ModuleNotFoundError: No module named 'iniconfig'
     "###);
 
     Ok(())
@@ -801,6 +1177,169 @@ fn run_with() -> Result<()> {
     Audited 2 packages in [TIME]
       × No solution found when resolving `--with` dependencies:
       ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
+    "###);
+
+    Ok(())
+}
+
+/// Sync all members in a workspace.
+#[test]
+fn run_in_workspace() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio>3"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.workspace]
+        members = ["child1", "child2"]
+
+        [tool.uv.sources]
+        child1 = { workspace = true }
+        child2 = { workspace = true }
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    let child1 = context.temp_dir.child("child1");
+    child1.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>1"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    child1
+        .child("src")
+        .child("child1")
+        .child("__init__.py")
+        .touch()?;
+
+    let child2 = context.temp_dir.child("child2");
+    child2.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child2"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions>4"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    child2
+        .child("src")
+        .child("child2")
+        .child("__init__.py")
+        .touch()?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r"
+        import anyio
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r"
+        import iniconfig
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Audited 4 packages in [TIME]
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/main.py", line 1, in <module>
+        import iniconfig
+    ModuleNotFoundError: No module named 'iniconfig'
+    "###);
+
+    uv_snapshot!(context.filters(), context.run().arg("--package").arg("child1").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child1==0.1.0 (from file://[TEMP_DIR]/child1)
+     + iniconfig==2.0.0
+    "###);
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r"
+        import typing_extensions
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Audited 4 packages in [TIME]
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/main.py", line 1, in <module>
+        import typing_extensions
+    ModuleNotFoundError: No module named 'typing_extensions'
+    "###);
+
+    uv_snapshot!(context.filters(), context.run().arg("--all-packages").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child2==0.1.0 (from file://[TEMP_DIR]/child2)
+     + typing-extensions==4.10.0
     "###);
 
     Ok(())
@@ -942,7 +1481,7 @@ fn run_with_editable() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Audited 3 packages in [TIME]
-      × Invalid `--with` requirement
+      × Failed to resolve `--with` requirement
       ╰─▶ Distribution not found at: file://[TEMP_DIR]/foo
     "###);
 
@@ -1053,6 +1592,32 @@ fn run_group() -> Result<()> {
     Audited 5 packages in [TIME]
     "###);
 
+    uv_snapshot!(context.filters(), context.run().arg("--all-groups").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    imported `anyio`
+    imported `iniconfig`
+    imported `typing_extensions`
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Audited 5 packages in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.run().arg("--all-groups").arg("--no-group").arg("bar").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    imported `anyio`
+    imported `iniconfig`
+    imported `typing_extensions`
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Audited 4 packages in [TIME]
+    "###);
+
     uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("--no-project").arg("main.py"), @r###"
     success: true
     exit_code: 0
@@ -1087,6 +1652,18 @@ fn run_group() -> Result<()> {
 
     ----- stderr -----
     warning: `--group dev` has no effect when used alongside `--no-project`
+    "###);
+
+    uv_snapshot!(context.filters(), context.run().arg("--all-groups").arg("--no-project").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    imported `anyio`
+    imported `iniconfig`
+    imported `typing_extensions`
+
+    ----- stderr -----
+    warning: `--all-groups` has no effect when used alongside `--no-project`
     "###);
 
     uv_snapshot!(context.filters(), context.run().arg("--dev").arg("--no-project").arg("main.py"), @r###"
@@ -1430,7 +2007,7 @@ fn run_empty_requirements_txt() -> Result<()> {
      + foo==1.0.0 (from file://[TEMP_DIR]/)
      + idna==3.6
      + sniffio==1.3.1
-    warning: Requirements file requirements.txt does not contain any dependencies
+    warning: Requirements file `requirements.txt` does not contain any dependencies
     "###);
 
     // Then reused in subsequent invocations
@@ -1442,7 +2019,7 @@ fn run_empty_requirements_txt() -> Result<()> {
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
-    warning: Requirements file requirements.txt does not contain any dependencies
+    warning: Requirements file `requirements.txt` does not contain any dependencies
     "###);
 
     Ok(())
@@ -1547,19 +2124,51 @@ fn run_requirements_txt() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    // But reject `-` as a requirements file.
+    // Allow `-` for stdin.
     uv_snapshot!(context.filters(), context.run()
         .arg("--with-requirements")
         .arg("-")
         .arg("--with")
         .arg("iniconfig")
-        .arg("main.py"), @r###"
+        .arg("main.py")
+        .stdin(std::fs::File::open(&requirements_txt)?), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Audited 4 packages in [TIME]
+    Resolved 2 packages in [TIME]
+    "###);
+
+    // But not in combination with reading the script from stdin
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--with-requirements")
+        .arg("-")
+        // The script to run
+        .arg("-")
+        .stdin(std::fs::File::open(&requirements_txt)?), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Reading requirements from stdin is not supported in `uv run`
+    error: Cannot read both requirements file and script from stdin
+    "###);
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--with-requirements")
+        .arg("-")
+        .arg("--script")
+        .arg("-")
+        .stdin(std::fs::File::open(&requirements_txt)?), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot read both requirements file and script from stdin
     "###);
 
     Ok(())
@@ -2173,6 +2782,20 @@ fn run_zipapp() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn run_stdin_args() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.argv)").arg("foo").arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ['-c', 'foo', 'bar']
+
+    ----- stderr -----
+    "###);
+}
+
 /// Run a module equivalent to `python -m foo`.
 #[test]
 fn run_module() {
@@ -2208,6 +2831,20 @@ fn run_module() {
 
     ----- stderr -----
     "#);
+}
+
+#[test]
+fn run_module_stdin() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.run().arg("-m").arg("-"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot run a Python module from stdin
+    "###);
 }
 
 /// When the `pyproject.toml` file is invalid.
@@ -2289,7 +2926,7 @@ fn run_isolated_incompatible_python() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
-    error: The Python request from `.python-version` resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.12`
+    error: The Python request from `.python-version` resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.12`. Use `uv python pin` to update the `.python-version` file to a compatible version.
     "###);
 
     // ...even if `--isolated` is provided.
@@ -2299,7 +2936,7 @@ fn run_isolated_incompatible_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The Python request from `.python-version` resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.12`
+    error: The Python request from `.python-version` resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.12`. Use `uv python pin` to update the `.python-version` file to a compatible version.
     "###);
 
     Ok(())
@@ -2454,13 +3091,11 @@ fn run_invalid_project_table() -> Result<()> {
 
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      Caused by: `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
       Caused by: TOML parse error at line 1, column 2
       |
     1 | [project.urls]
       |  ^^^^^^^
-    missing field `name`
-
+    `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
     "###);
 
     Ok(())
@@ -2543,6 +3178,40 @@ fn run_script_explicit() -> Result<()> {
 }
 
 #[test]
+fn run_script_explicit_stdin() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("script");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+        import iniconfig
+        print("Hello, world!")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--script").arg("-").stdin(std::fs::File::open(test_script)?), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Reading inline script metadata from `stdin`
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn run_script_explicit_no_file() {
     let context = TestContext::new("3.12");
     context
@@ -2567,8 +3236,146 @@ fn run_script_explicit_directory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to read from file `script`
-      Caused by: Is a directory (os error 21)
+    error: failed to read from file `script`: Is a directory (os error 21)
+    "###);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(windows)]
+fn run_gui_script_explicit_windows() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("script");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = []
+        # ///
+        import sys
+        import os
+
+        executable = os.path.basename(sys.executable).lower()
+        if not executable.startswith("pythonw"):
+            print(f"Error: Expected pythonw.exe but got: {executable}", file=sys.stderr)
+            sys.exit(1)
+        
+        print(f"Using executable: {executable}", file=sys.stderr)
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("script"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from `script`
+    Resolved in [TIME]
+    Audited in [TIME]
+    Using executable: pythonw.exe
+    "###);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(windows)]
+fn run_gui_script_explicit_stdin_windows() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("script");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+        import iniconfig
+        print("Hello, world!")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("-").stdin(std::fs::File::open(test_script)?), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Reading inline script metadata from `stdin`
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(not(windows))]
+fn run_gui_script_explicit_unix() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let test_script = context.temp_dir.child("script");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = []
+        # ///
+        import sys
+        import os
+
+        executable = os.path.basename(sys.executable).lower()
+        print(f"Using executable: {executable}", file=sys.stderr)
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("script"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from `script`
+    Resolved in [TIME]
+    Audited in [TIME]
+    Using executable: python3
+    "###);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(not(windows))]
+fn run_gui_script_explicit_stdin_unix() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("script");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+        import iniconfig
+        print("Hello, world!")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("-").stdin(std::fs::File::open(test_script)?), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Reading inline script metadata from `stdin`
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
     "###);
 
     Ok(())
@@ -2650,9 +3457,7 @@ fn run_stdin_with_pep723() -> Result<()> {
        "#
     })?;
 
-    let mut command = context.run();
-    let command_with_args = command.stdin(std::fs::File::open(test_script)?).arg("-");
-    uv_snapshot!(context.filters(), command_with_args, @r###"
+    uv_snapshot!(context.filters(), context.run().stdin(std::fs::File::open(test_script)?).arg("-"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2661,6 +3466,313 @@ fn run_stdin_with_pep723() -> Result<()> {
     ----- stderr -----
     Reading inline script metadata from `stdin`
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_with_env() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context.temp_dir.child("test.py").write_str(indoc! { "
+        import os
+        print(os.environ.get('THE_EMPIRE_VARIABLE'))
+        print(os.environ.get('REBEL_1'))
+        print(os.environ.get('REBEL_2'))
+        print(os.environ.get('REBEL_3'))
+       "
+    })?;
+
+    context.temp_dir.child(".env").write_str(indoc! { "
+        THE_EMPIRE_VARIABLE=palpatine
+        REBEL_1=leia_organa
+        REBEL_2=obi_wan_kenobi
+        REBEL_3=C3PO
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("test.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    None
+    None
+    None
+    None
+
+    ----- stderr -----
+    "###);
+
+    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env").arg("test.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    palpatine
+    leia_organa
+    obi_wan_kenobi
+    C3PO
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_with_env_file() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context.temp_dir.child("test.py").write_str(indoc! { "
+        import os
+        print(os.environ.get('THE_EMPIRE_VARIABLE'))
+        print(os.environ.get('REBEL_1'))
+        print(os.environ.get('REBEL_2'))
+        print(os.environ.get('REBEL_3'))
+       "
+    })?;
+
+    context.temp_dir.child(".file").write_str(indoc! { "
+        THE_EMPIRE_VARIABLE=palpatine
+        REBEL_1=leia_organa
+        REBEL_2=obi_wan_kenobi
+        REBEL_3=C3PO
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".file").arg("test.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    palpatine
+    leia_organa
+    obi_wan_kenobi
+    C3PO
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_with_multiple_env_files() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context.temp_dir.child("test.py").write_str(indoc! { "
+        import os
+        print(os.environ.get('THE_EMPIRE_VARIABLE'))
+        print(os.environ.get('REBEL_1'))
+        print(os.environ.get('REBEL_2'))
+       "
+    })?;
+
+    context.temp_dir.child(".env1").write_str(indoc! { "
+        THE_EMPIRE_VARIABLE=palpatine
+        REBEL_1=leia_organa
+       "
+    })?;
+
+    context.temp_dir.child(".env2").write_str(indoc! { "
+        THE_EMPIRE_VARIABLE=palpatine
+        REBEL_1=obi_wan_kenobi
+        REBEL_2=C3PO
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env1").arg("--env-file").arg(".env2").arg("test.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    palpatine
+    obi_wan_kenobi
+    C3PO
+
+    ----- stderr -----
+    "###);
+
+    uv_snapshot!(context.filters(), context.run().arg("test.py").env(EnvVars::UV_ENV_FILE, ".env1 .env2"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No environment file found at: `.env1 .env2`
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_with_env_omitted() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context.temp_dir.child("test.py").write_str(indoc! { "
+        import os
+        print(os.environ.get('THE_EMPIRE_VARIABLE'))
+       "
+    })?;
+
+    context.temp_dir.child(".env").write_str(indoc! { "
+        THE_EMPIRE_VARIABLE=palpatine
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env").arg("--no-env-file").arg("test.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    None
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_with_malformed_env() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context.temp_dir.child("test.py").write_str(indoc! { "
+        import os
+        print(os.environ.get('THE_EMPIRE_VARIABLE'))
+       "
+    })?;
+
+    context.temp_dir.child(".env").write_str(indoc! { "
+        THE_^EMPIRE_VARIABLE=darth_vader
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env").arg("test.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    None
+
+    ----- stderr -----
+    warning: Failed to parse environment file `.env` at position 4: THE_^EMPIRE_VARIABLE=darth_vader
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_with_not_existing_env_file() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context.temp_dir.child("test.py").write_str(indoc! { "
+        import os
+        print(os.environ.get('THE_EMPIRE_VARIABLE'))
+       "
+    })?;
+
+    let mut filters = context.filters();
+    filters.push((
+        r"(?m)^error: Failed to read environment file `.env.development`: .*$",
+        "error: Failed to read environment file `.env.development`: [ERR]",
+    ));
+
+    uv_snapshot!(filters, context.run().arg("--env-file").arg(".env.development").arg("test.py"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No environment file found at: `.env.development`
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_with_extra_conflict() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12.0"
+        dependencies = []
+
+        [project.optional-dependencies]
+        foo = ["iniconfig==2.0.0"]
+        bar = ["iniconfig==1.1.1"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { extra = "foo" },
+            { extra = "bar" },
+          ],
+        ]
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--extra")
+        .arg("foo")
+        .arg("python")
+        .arg("-c")
+        .arg("import iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_with_group_conflict() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12.0"
+        dependencies = []
+
+        [dependency-groups]
+        foo = ["iniconfig==2.0.0"]
+        bar = ["iniconfig==1.1.1"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { group = "foo" },
+            { group = "bar" },
+          ],
+        ]
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--group")
+        .arg("foo")
+        .arg("python")
+        .arg("-c")
+        .arg("import iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0

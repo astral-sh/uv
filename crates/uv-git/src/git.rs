@@ -1,6 +1,7 @@
 //! Git support is derived from Cargo's implementation.
 //! Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
 //! Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/sources/git/utils.rs>
+use std::env;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::str::{self, FromStr};
@@ -13,7 +14,7 @@ use cargo_util::{paths, ProcessBuilder};
 use reqwest::StatusCode;
 use reqwest_middleware::ClientWithMiddleware;
 
-use tracing::debug;
+use tracing::{debug, warn};
 use url::Url;
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -22,8 +23,20 @@ use uv_static::EnvVars;
 /// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
 const CHECKOUT_READY_LOCK: &str = ".ok";
 
+#[derive(Debug, thiserror::Error)]
+pub enum GitError {
+    #[error("Git executable not found. Ensure that Git is installed and available.")]
+    GitNotFound,
+    #[error(transparent)]
+    Other(#[from] which::Error),
+}
 /// A global cache of the result of `which git`.
-pub static GIT: LazyLock<Result<PathBuf, which::Error>> = LazyLock::new(|| which::which("git"));
+pub static GIT: LazyLock<Result<PathBuf, GitError>> = LazyLock::new(|| {
+    which::which("git").map_err(|e| match e {
+        which::Error::CannotFindBinaryPath => GitError::GitNotFound,
+        e => GitError::Other(e),
+    })
+});
 
 /// A reference to commit or commit-ish.
 #[derive(
@@ -239,6 +252,8 @@ impl GitRemote {
     ) -> Result<(GitDatabase, GitOid)> {
         let locked_ref = locked_rev.map(|oid| GitReference::FullCommit(oid.to_string()));
         let reference = locked_ref.as_ref().unwrap_or(reference);
+        let enable_lfs_fetch = env::var(EnvVars::UV_GIT_LFS).is_ok();
+
         if let Some(mut db) = db {
             fetch(&mut db.repo, self.url.as_str(), reference, client)
                 .with_context(|| format!("failed to fetch into: {}", into.user_display()))?;
@@ -249,6 +264,10 @@ impl GitRemote {
             };
 
             if let Some(rev) = resolved_commit_hash {
+                if enable_lfs_fetch {
+                    fetch_lfs(&mut db.repo, self.url.as_str(), &rev)
+                        .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
+                }
                 return Ok((db, rev));
             }
         }
@@ -268,6 +287,10 @@ impl GitRemote {
             Some(rev) => rev,
             None => reference.resolve(&repo)?,
         };
+        if enable_lfs_fetch {
+            fetch_lfs(&mut repo, self.url.as_str(), &rev)
+                .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
+        }
 
         Ok((GitDatabase { repo }, rev))
     }
@@ -622,6 +645,46 @@ fn fetch_with_cli(
     // We capture the output to avoid streaming it to the user's console during clones.
     // The required `on...line` callbacks currently do nothing.
     // The output appears to be included in error messages by default.
+    cmd.exec_with_output()?;
+
+    Ok(())
+}
+
+/// A global cache of the `git lfs` command.
+///
+/// Returns an error if Git LFS isn't available.
+/// Caching the command allows us to only check if LFS is installed once.
+static GIT_LFS: LazyLock<Result<ProcessBuilder>> = LazyLock::new(|| {
+    let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+    cmd.arg("lfs");
+
+    // Run a simple command to verify LFS is installed
+    cmd.clone().arg("version").exec_with_output()?;
+    Ok(cmd)
+});
+
+/// Attempts to use `git-lfs` CLI to fetch required LFS objects for a given revision.
+fn fetch_lfs(repo: &mut GitRepository, url: &str, revision: &GitOid) -> Result<()> {
+    let mut cmd = if let Ok(lfs) = GIT_LFS.as_ref() {
+        debug!("Fetching Git LFS objects");
+        lfs.clone()
+    } else {
+        // Since this feature is opt-in, warn if not available
+        warn!("Git LFS is not available, skipping LFS fetch");
+        return Ok(());
+    };
+
+    cmd.arg("fetch")
+        .arg(url)
+        .arg(revision.as_str())
+        // These variables are unset for the same reason as in `fetch_with_cli`.
+        .env_remove(EnvVars::GIT_DIR)
+        .env_remove(EnvVars::GIT_WORK_TREE)
+        .env_remove(EnvVars::GIT_INDEX_FILE)
+        .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
+        .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
+        .cwd(&repo.path);
+
     cmd.exec_with_output()?;
     Ok(())
 }

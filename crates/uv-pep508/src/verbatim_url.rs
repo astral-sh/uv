@@ -140,6 +140,7 @@ impl VerbatimUrl {
     }
 
     /// Return the underlying [`Path`], if the URL is a file URL.
+    #[cfg(feature = "non-pep508-extensions")]
     pub fn as_path(&self) -> Result<PathBuf, VerbatimUrlError> {
         self.url
             .to_file_path()
@@ -212,11 +213,8 @@ impl Pep508Url for VerbatimUrl {
     type Err = VerbatimUrlError;
 
     /// Create a `VerbatimUrl` to represent the requirement.
-    fn parse_url(
-        url: &str,
-        #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused_variables))]
-        working_dir: Option<&Path>,
-    ) -> Result<Self, Self::Err> {
+    #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused_variables))]
+    fn parse_url(url: &str, working_dir: Option<&Path>) -> Result<Self, Self::Err> {
         // Expand environment variables in the URL.
         let expanded = expand_env_vars(url);
 
@@ -225,18 +223,24 @@ impl Pep508Url for VerbatimUrl {
                 // Ex) `file:///home/ferris/project/scripts/...`, `file://localhost/home/ferris/project/scripts/...`, or `file:../ferris/`
                 Some(Scheme::File) => {
                     // Strip the leading slashes, along with the `localhost` host, if present.
-                    let path = strip_host(path);
 
                     // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
-                    let path = normalize_url_path(path);
-
                     #[cfg(feature = "non-pep508-extensions")]
-                    if let Some(working_dir) = working_dir {
-                        return Ok(VerbatimUrl::from_path(path.as_ref(), working_dir)?
-                            .with_given(url.to_string()));
-                    }
+                    {
+                        let path = strip_host(path);
 
-                    Ok(VerbatimUrl::from_absolute_path(path.as_ref())?.with_given(url.to_string()))
+                        let path = normalize_url_path(path);
+
+                        if let Some(working_dir) = working_dir {
+                            return Ok(VerbatimUrl::from_path(path.as_ref(), working_dir)?
+                                .with_given(url.to_string()));
+                        }
+
+                        Ok(VerbatimUrl::from_absolute_path(path.as_ref())?
+                            .with_given(url.to_string()))
+                    }
+                    #[cfg(not(feature = "non-pep508-extensions"))]
+                    Ok(VerbatimUrl::parse_url(expanded)?.with_given(url.to_string()))
                 }
 
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
@@ -248,24 +252,33 @@ impl Pep508Url for VerbatimUrl {
                 // Ex) `C:\Users\ferris\wheel-0.42.0.tar.gz`
                 _ => {
                     #[cfg(feature = "non-pep508-extensions")]
-                    if let Some(working_dir) = working_dir {
-                        return Ok(VerbatimUrl::from_path(expanded.as_ref(), working_dir)?
-                            .with_given(url.to_string()));
-                    }
+                    {
+                        if let Some(working_dir) = working_dir {
+                            return Ok(VerbatimUrl::from_path(expanded.as_ref(), working_dir)?
+                                .with_given(url.to_string()));
+                        }
 
-                    Ok(VerbatimUrl::from_absolute_path(expanded.as_ref())?
-                        .with_given(url.to_string()))
+                        Ok(VerbatimUrl::from_absolute_path(expanded.as_ref())?
+                            .with_given(url.to_string()))
+                    }
+                    #[cfg(not(feature = "non-pep508-extensions"))]
+                    Err(Self::Err::NotAUrl(expanded.to_string()))
                 }
             }
         } else {
             // Ex) `../editable/`
             #[cfg(feature = "non-pep508-extensions")]
-            if let Some(working_dir) = working_dir {
-                return Ok(VerbatimUrl::from_path(expanded.as_ref(), working_dir)?
-                    .with_given(url.to_string()));
+            {
+                if let Some(working_dir) = working_dir {
+                    return Ok(VerbatimUrl::from_path(expanded.as_ref(), working_dir)?
+                        .with_given(url.to_string()));
+                }
+
+                Ok(VerbatimUrl::from_absolute_path(expanded.as_ref())?.with_given(url.to_string()))
             }
 
-            Ok(VerbatimUrl::from_absolute_path(expanded.as_ref())?.with_given(url.to_string()))
+            #[cfg(not(feature = "non-pep508-extensions"))]
+            Err(Self::Err::NotAUrl(expanded.to_string()))
         }
     }
 }
@@ -288,6 +301,11 @@ pub enum VerbatimUrlError {
     /// Received a path that could not be normalized.
     #[error("path could not be normalized: {0}")]
     Normalization(PathBuf, #[source] std::io::Error),
+
+    /// Received a path that could not be normalized.
+    #[cfg(not(feature = "non-pep508-extensions"))]
+    #[error("Not a URL (missing scheme): {0}")]
+    NotAUrl(String),
 }
 
 /// Expand all available environment variables.
@@ -378,6 +396,19 @@ pub fn strip_host(path: &str) -> &str {
     path
 }
 
+/// Returns `true` if a URL looks like a reference to a Git repository (e.g., `https://github.com/user/repo.git`).
+pub fn looks_like_git_repository(url: &Url) -> bool {
+    matches!(
+        url.host_str(),
+        Some("github.com" | "gitlab.com" | "bitbucket.org")
+    ) && Path::new(url.path())
+        .extension()
+        .map_or(true, |ext| ext.eq_ignore_ascii_case("git"))
+        && url
+            .path_segments()
+            .is_some_and(|segments| segments.count() == 2)
+}
+
 /// Split the fragment from a URL.
 ///
 /// For example, given `file:///home/ferris/project/scripts#hash=somehash`, returns
@@ -395,20 +426,12 @@ fn split_fragment(path: &Path) -> (Cow<Path>, Option<&str>) {
 }
 
 /// A supported URL scheme for PEP 508 direct-URL requirements.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Scheme {
     /// `file://...`
     File,
-    /// `git+git://...`
-    GitGit,
-    /// `git+http://...`
-    GitHttp,
-    /// `git+file://...`
-    GitFile,
-    /// `git+ssh://...`
-    GitSsh,
-    /// `git+https://...`
-    GitHttps,
+    /// `git+{transport}://...` as git supports arbitrary transports through gitremote-helpers
+    Git(String),
     /// `bzr+http://...`
     BzrHttp,
     /// `bzr+https://...`
@@ -452,13 +475,11 @@ pub enum Scheme {
 impl Scheme {
     /// Determine the [`Scheme`] from the given string, if possible.
     pub fn parse(s: &str) -> Option<Self> {
+        if let Some(("git", transport)) = s.split_once('+') {
+            return Some(Self::Git(transport.into()));
+        }
         match s {
             "file" => Some(Self::File),
-            "git+git" => Some(Self::GitGit),
-            "git+http" => Some(Self::GitHttp),
-            "git+file" => Some(Self::GitFile),
-            "git+ssh" => Some(Self::GitSsh),
-            "git+https" => Some(Self::GitHttps),
             "bzr+http" => Some(Self::BzrHttp),
             "bzr+https" => Some(Self::BzrHttps),
             "bzr+ssh" => Some(Self::BzrSsh),
@@ -492,11 +513,7 @@ impl std::fmt::Display for Scheme {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::File => write!(f, "file"),
-            Self::GitGit => write!(f, "git+git"),
-            Self::GitHttp => write!(f, "git+http"),
-            Self::GitFile => write!(f, "git+file"),
-            Self::GitSsh => write!(f, "git+ssh"),
-            Self::GitHttps => write!(f, "git+https"),
+            Self::Git(transport) => write!(f, "git+{transport}"),
             Self::BzrHttp => write!(f, "bzr+http"),
             Self::BzrHttps => write!(f, "bzr+https"),
             Self::BzrSsh => write!(f, "bzr+ssh"),
@@ -521,4 +538,109 @@ impl std::fmt::Display for Scheme {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scheme() {
+        assert_eq!(
+            split_scheme("file:///home/ferris/project/scripts"),
+            Some(("file", "///home/ferris/project/scripts"))
+        );
+        assert_eq!(
+            split_scheme("file:home/ferris/project/scripts"),
+            Some(("file", "home/ferris/project/scripts"))
+        );
+        assert_eq!(
+            split_scheme("https://example.com"),
+            Some(("https", "//example.com"))
+        );
+        assert_eq!(split_scheme("https:"), Some(("https", "")));
+    }
+
+    #[test]
+    fn fragment() {
+        assert_eq!(
+            split_fragment(Path::new(
+                "file:///home/ferris/project/scripts#hash=somehash"
+            )),
+            (
+                Cow::Owned(PathBuf::from("file:///home/ferris/project/scripts")),
+                Some("hash=somehash")
+            )
+        );
+        assert_eq!(
+            split_fragment(Path::new("file:home/ferris/project/scripts#hash=somehash")),
+            (
+                Cow::Owned(PathBuf::from("file:home/ferris/project/scripts")),
+                Some("hash=somehash")
+            )
+        );
+        assert_eq!(
+            split_fragment(Path::new("/home/ferris/project/scripts#hash=somehash")),
+            (
+                Cow::Owned(PathBuf::from("/home/ferris/project/scripts")),
+                Some("hash=somehash")
+            )
+        );
+        assert_eq!(
+            split_fragment(Path::new("file:///home/ferris/project/scripts")),
+            (
+                Cow::Borrowed(Path::new("file:///home/ferris/project/scripts")),
+                None
+            )
+        );
+        assert_eq!(
+            split_fragment(Path::new("")),
+            (Cow::Borrowed(Path::new("")), None)
+        );
+    }
+
+    #[test]
+    fn git_repository() {
+        let url = Url::parse("https://github.com/user/repo.git").unwrap();
+        assert!(looks_like_git_repository(&url));
+
+        let url = Url::parse("https://gitlab.com/user/repo.git").unwrap();
+        assert!(looks_like_git_repository(&url));
+
+        let url = Url::parse("https://bitbucket.org/user/repo.git").unwrap();
+        assert!(looks_like_git_repository(&url));
+
+        let url = Url::parse("https://github.com/user/repo").unwrap();
+        assert!(looks_like_git_repository(&url));
+
+        let url = Url::parse("https://example.com/user/repo.git").unwrap();
+        assert!(!looks_like_git_repository(&url));
+
+        let url = Url::parse("https://github.com/user").unwrap();
+        assert!(!looks_like_git_repository(&url));
+
+        let url = Url::parse("https://github.com/user/repo.zip").unwrap();
+        assert!(!looks_like_git_repository(&url));
+
+        let url = Url::parse("https://github.com/").unwrap();
+        assert!(!looks_like_git_repository(&url));
+
+        let url = Url::parse("").unwrap_err();
+        assert_eq!(url.to_string(), "relative URL without a base");
+
+        let url = Url::parse("github.com/user/repo.git").unwrap_err();
+        assert_eq!(url.to_string(), "relative URL without a base");
+
+        let url = Url::parse("https://github.com/user/repo/extra.git").unwrap();
+        assert!(!looks_like_git_repository(&url));
+
+        let url = Url::parse("https://github.com/user/repo.GIT").unwrap();
+        assert!(looks_like_git_repository(&url));
+
+        let url = Url::parse("https://github.com/user/repo.git?foo=bar").unwrap();
+        assert!(looks_like_git_repository(&url));
+
+        let url = Url::parse("https://github.com/user/repo.git#readme").unwrap();
+        assert!(looks_like_git_repository(&url));
+
+        let url = Url::parse("https://github.com/pypa/pip/archive/1.3.1.zip#sha1=da9234ee9982d4bbb3c72346a6de940a148ea686").unwrap();
+        assert!(!looks_like_git_repository(&url));
+    }
+}

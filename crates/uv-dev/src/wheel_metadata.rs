@@ -33,7 +33,7 @@ pub(crate) async fn wheel_metadata(args: WheelMetadataArgs) -> Result<()> {
         .wheel_metadata(
             &BuiltDist::DirectUrl(DirectUrlBuiltDist {
                 filename,
-                location: archive.url,
+                location: Box::new(archive.url),
                 url: args.url,
             }),
             &capabilities,

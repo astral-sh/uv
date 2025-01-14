@@ -40,16 +40,16 @@ impl FlatIndex {
     ) -> Self {
         // Collect compatible distributions.
         let mut index = FxHashMap::default();
-        for (filename, file, url) in entries.entries {
-            let distributions = index.entry(filename.name().clone()).or_default();
+        for entry in entries.entries {
+            let distributions = index.entry(entry.filename.name().clone()).or_default();
             Self::add_file(
                 distributions,
-                file,
-                filename,
+                entry.file,
+                entry.filename,
                 tags,
                 hasher,
                 build_options,
-                url,
+                entry.index,
             );
         }
 
@@ -224,5 +224,12 @@ impl IntoIterator for FlatDistributions {
 impl From<FlatDistributions> for BTreeMap<Version, PrioritizedDist> {
     fn from(distributions: FlatDistributions) -> Self {
         distributions.0
+    }
+}
+
+/// For external users.
+impl From<BTreeMap<Version, PrioritizedDist>> for FlatDistributions {
+    fn from(distributions: BTreeMap<Version, PrioritizedDist>) -> Self {
+        Self(distributions)
     }
 }

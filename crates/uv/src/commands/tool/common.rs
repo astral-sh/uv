@@ -1,25 +1,32 @@
-use std::fmt::Write;
-use std::{collections::BTreeSet, ffi::OsString};
-
 use anyhow::{bail, Context};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use std::collections::Bound;
+use std::fmt::Write;
+use std::{collections::BTreeSet, ffi::OsString};
 use tracing::{debug, warn};
-
+use uv_cache::Cache;
+use uv_client::BaseClientBuilder;
 use uv_distribution_types::{InstalledDist, Name};
 #[cfg(unix)]
 use uv_fs::replace_symlink;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
+use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::PackageName;
 use uv_pypi_types::Requirement;
-use uv_python::PythonEnvironment;
-use uv_settings::ToolOptions;
+use uv_python::{
+    EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest, PythonVariant, VersionRequest,
+};
+use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
 use uv_tool::{entrypoint_paths, tool_executable_dir, InstalledTools, Tool, ToolEntrypoint};
 use uv_warnings::warn_user;
 
-use crate::commands::ExitStatus;
+use crate::commands::project::ProjectError;
+use crate::commands::reporters::PythonDownloadReporter;
+use crate::commands::{pip, ExitStatus};
 use crate::printer::Printer;
 
 /// Return all packages which contain an executable with the given name.
@@ -61,6 +68,95 @@ pub(crate) fn remove_entrypoints(tool: &Tool) {
     }
 }
 
+/// Given a no-solution error and the [`Interpreter`] that was used during the solve, attempt to
+/// discover an alternate [`Interpreter`] that satisfies the `requires-python` constraint.
+pub(crate) async fn refine_interpreter(
+    interpreter: &Interpreter,
+    python_request: Option<&PythonRequest>,
+    err: &pip::operations::Error,
+    client_builder: &BaseClientBuilder<'_>,
+    reporter: &PythonDownloadReporter,
+    install_mirrors: &PythonInstallMirrors,
+    python_preference: PythonPreference,
+    python_downloads: PythonDownloads,
+    cache: &Cache,
+) -> anyhow::Result<Option<Interpreter>, ProjectError> {
+    let pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(ref no_solution_err)) =
+        err
+    else {
+        return Ok(None);
+    };
+
+    // Infer the `requires-python` constraint from the error.
+    let requires_python = no_solution_err.find_requires_python();
+
+    // If the existing interpreter already satisfies the `requires-python` constraint, we don't need
+    // to refine it. We'd expect to fail again anyway.
+    if requires_python.contains(interpreter.python_version()) {
+        return Ok(None);
+    }
+
+    // If the user passed a `--python` request, and the refined interpreter is incompatible, we
+    // can't use it.
+    if let Some(python_request) = python_request {
+        if !python_request.satisfied(interpreter, cache) {
+            return Ok(None);
+        }
+    }
+
+    // We want an interpreter that's as close to the required version as possible. If we choose the
+    // "latest" Python, we risk choosing a version that lacks wheels for the tool's requirements
+    // (assuming those requirements don't publish source distributions).
+    //
+    // TODO(charlie): Solve for the Python version iteratively (or even, within the resolver
+    // itself). The current strategy can also fail if the tool's requirements have greater
+    // `requires-python` constraints, and we didn't see them in the initial solve. It can also fail
+    // if the tool's requirements don't publish wheels for this interpreter version, though that's
+    // rarer.
+    let lower_bound = match requires_python.as_ref() {
+        Bound::Included(version) => VersionSpecifier::greater_than_equal_version(version.clone()),
+        Bound::Excluded(version) => VersionSpecifier::greater_than_version(version.clone()),
+        Bound::Unbounded => unreachable!("`requires-python` should never be unbounded"),
+    };
+
+    let upper_bound = match requires_python.as_ref() {
+        Bound::Included(version) => {
+            let major = version.release().first().copied().unwrap_or(0);
+            let minor = version.release().get(1).copied().unwrap_or(0);
+            VersionSpecifier::less_than_version(Version::new([major, minor + 1]))
+        }
+        Bound::Excluded(version) => {
+            let major = version.release().first().copied().unwrap_or(0);
+            let minor = version.release().get(1).copied().unwrap_or(0);
+            VersionSpecifier::less_than_version(Version::new([major, minor + 1]))
+        }
+        Bound::Unbounded => unreachable!("`requires-python` should never be unbounded"),
+    };
+
+    let python_request = PythonRequest::Version(VersionRequest::Range(
+        VersionSpecifiers::from_iter([lower_bound, upper_bound]),
+        PythonVariant::default(),
+    ));
+
+    debug!("Refining interpreter with: {python_request}");
+
+    let interpreter = PythonInstallation::find_or_download(
+        Some(&python_request),
+        EnvironmentPreference::OnlySystem,
+        python_preference,
+        python_downloads,
+        client_builder,
+        cache,
+        Some(reporter),
+        install_mirrors.python_install_mirror.as_deref(),
+        install_mirrors.pypy_install_mirror.as_deref(),
+    )
+    .await?
+    .into_interpreter();
+
+    Ok(Some(interpreter))
+}
+
 /// Installs tool executables for a given package and handles any conflicts.
 pub(crate) fn install_executables(
     environment: &PythonEnvironment,
@@ -70,6 +166,8 @@ pub(crate) fn install_executables(
     force: bool,
     python: Option<String>,
     requirements: Vec<Requirement>,
+    constraints: Vec<Requirement>,
+    overrides: Vec<Requirement>,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
     let site_packages = SitePackages::from_environment(environment)?;
@@ -123,47 +221,52 @@ pub(crate) fn install_executables(
         return Ok(ExitStatus::Failure);
     }
 
-    // Check if they exist, before installing
-    let mut existing_entry_points = target_entry_points
-        .iter()
-        .filter(|(_, _, target_path)| target_path.exists())
-        .peekable();
+    // Error if we're overwriting an existing entrypoint, unless the user passed `--force`.
+    if !force {
+        let mut existing_entry_points = target_entry_points
+            .iter()
+            .filter(|(_, _, target_path)| target_path.exists())
+            .peekable();
+        if existing_entry_points.peek().is_some() {
+            // Clean up the environment we just created
+            installed_tools.remove_environment(name)?;
 
-    // Ignore any existing entrypoints if the user passed `--force`, or the existing recept was
-    // broken.
-    if force {
-        for (name, _, target) in existing_entry_points {
-            debug!("Removing existing executable: `{name}`");
-            fs_err::remove_file(target)?;
+            let existing_entry_points = existing_entry_points
+                // SAFETY: We know the target has a filename because we just constructed it above
+                .map(|(_, _, target)| target.file_name().unwrap().to_string_lossy())
+                .collect::<Vec<_>>();
+            let (s, exists) = if existing_entry_points.len() == 1 {
+                ("", "exists")
+            } else {
+                ("s", "exist")
+            };
+            bail!(
+                "Executable{s} already {exists}: {} (use `--force` to overwrite)",
+                existing_entry_points
+                    .iter()
+                    .map(|name| name.bold())
+                    .join(", ")
+            )
         }
-    } else if existing_entry_points.peek().is_some() {
-        // Clean up the environment we just created
-        installed_tools.remove_environment(name)?;
-
-        let existing_entry_points = existing_entry_points
-            // SAFETY: We know the target has a filename because we just constructed it above
-            .map(|(_, _, target)| target.file_name().unwrap().to_string_lossy())
-            .collect::<Vec<_>>();
-        let (s, exists) = if existing_entry_points.len() == 1 {
-            ("", "exists")
-        } else {
-            ("s", "exist")
-        };
-        bail!(
-            "Executable{s} already {exists}: {} (use `--force` to overwrite)",
-            existing_entry_points
-                .iter()
-                .map(|name| name.bold())
-                .join(", ")
-        )
     }
+
+    #[cfg(windows)]
+    let itself = std::env::current_exe().ok();
 
     for (name, source_path, target_path) in &target_entry_points {
         debug!("Installing executable: `{name}`");
+
         #[cfg(unix)]
         replace_symlink(source_path, target_path).context("Failed to install executable")?;
+
         #[cfg(windows)]
-        fs_err::copy(source_path, target_path).context("Failed to install entrypoint")?;
+        if itself.as_ref().is_some_and(|itself| {
+            std::path::absolute(target_path).is_ok_and(|target| *itself == target)
+        }) {
+            self_replace::self_replace(source_path).context("Failed to install entrypoint")?;
+        } else {
+            fs_err::copy(source_path, target_path).context("Failed to install entrypoint")?;
+        }
     }
 
     let s = if target_entry_points.len() == 1 {
@@ -183,7 +286,9 @@ pub(crate) fn install_executables(
 
     debug!("Adding receipt for tool `{name}`");
     let tool = Tool::new(
-        requirements.into_iter().collect(),
+        requirements,
+        constraints,
+        overrides,
         python,
         target_entry_points
             .into_iter()

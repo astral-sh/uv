@@ -1,17 +1,18 @@
+use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use thiserror::Error;
 use tracing::warn;
 
-use uv_normalize::GroupName;
+use uv_normalize::{GroupName, DEV_DEPENDENCIES};
 use uv_pep508::Pep508Error;
 use uv_pypi_types::VerbatimParsedUrl;
 
 use crate::pyproject::DependencyGroupSpecifier;
 
 /// PEP 735 dependency groups, with any `include-group` entries resolved.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct FlatDependencyGroups(
     BTreeMap<GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
 );
@@ -102,6 +103,31 @@ impl FlatDependencyGroups {
     ) -> Option<&Vec<uv_pep508::Requirement<VerbatimParsedUrl>>> {
         self.0.get(group)
     }
+
+    /// Return the entry for a given group, if any.
+    pub fn entry(
+        &mut self,
+        group: GroupName,
+    ) -> Entry<GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>> {
+        self.0.entry(group)
+    }
+
+    /// Consume the [`FlatDependencyGroups`] and return the inner map.
+    pub fn into_inner(self) -> BTreeMap<GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>> {
+        self.0
+    }
+}
+
+impl FromIterator<(GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>)>
+    for FlatDependencyGroups
+{
+    fn from_iter<
+        T: IntoIterator<Item = (GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>)>,
+    >(
+        iter: T,
+    ) -> Self {
+        Self(iter.into_iter().collect())
+    }
 }
 
 impl IntoIterator for FlatDependencyGroups {
@@ -126,8 +152,28 @@ pub enum DependencyGroupError {
     ),
     #[error("Failed to find group `{0}` included by `{1}`")]
     GroupNotFound(GroupName, GroupName),
+    #[error("Group `{0}` includes the `dev` group (`include = \"dev\"`), but only `tool.uv.dev-dependencies` was found. To reference the `dev` group via an `include`, remove the `tool.uv.dev-dependencies` section and add any development dependencies to the `dev` entry in the `[dependency-groups]` table instead.")]
+    DevGroupInclude(GroupName),
     #[error("Detected a cycle in `dependency-groups`: {0}")]
     DependencyGroupCycle(Cycle),
+}
+
+impl DependencyGroupError {
+    /// Enrich a [`DependencyGroupError`] with the `tool.uv.dev-dependencies` metadata, if applicable.
+    #[must_use]
+    pub fn with_dev_dependencies(
+        self,
+        dev_dependencies: Option<&Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    ) -> Self {
+        match self {
+            DependencyGroupError::GroupNotFound(group, parent)
+                if dev_dependencies.is_some() && group == *DEV_DEPENDENCIES =>
+            {
+                DependencyGroupError::DevGroupInclude(parent)
+            }
+            _ => self,
+        }
+    }
 }
 
 /// A cycle in the `dependency-groups` table.

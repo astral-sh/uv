@@ -86,9 +86,9 @@ uv supports both [platform-specific](#platform-specific-resolution) and
 uv's lockfile (`uv.lock`) is created with a universal resolution and is portable across platforms.
 This ensures that dependencies are locked for everyone working on the project, regardless of
 operating system, architecture, and Python version. The uv lockfile is created and modified by
-[project](../concepts/projects.md) commands such as `uv lock`, `uv sync`, and `uv add`.
+[project](../concepts/projects/index.md) commands such as `uv lock`, `uv sync`, and `uv add`.
 
-universal resolution is also available in uv's pip interface, i.e.,
+Universal resolution is also available in uv's pip interface, i.e.,
 [`uv pip compile`](../pip/compile.md), with the `--universal` flag. The resulting requirements file
 will contain markers to indicate which platform each dependency is relevant for.
 
@@ -96,12 +96,6 @@ During universal resolution, a package may be listed multiple times with differe
 if different versions are needed for different platforms — the markers determine which version will
 be used. A universal resolution is often more constrained than a platform-specific resolution, since
 we need to take the requirements for all markers into account.
-
-During universal resolution, a minimum Python version must be specified. Project commands read the
-minimum required version from `project.requires-python` in the `pyproject.toml`. When using uv's pip
-interface, provide a value with the `--python-version` option; otherwise, the current Python version
-will be treated as a lower bound. For example, `--universal --python-version 3.9` performs a
-universal resolution for Python 3.9 and later.
 
 During universal resolution, all selected dependency versions must be compatible with the _entire_
 `requires-python` range declared in the `pyproject.toml`. For example, if a project's
@@ -229,6 +223,40 @@ _intentionally_ limited and requires user opt-in for pre-releases to ensure corr
 For more details, see
 [Pre-release compatibility](../pip/compatibility.md#pre-release-compatibility).
 
+## Multi-version resolution
+
+During universal resolution, a package may be listed multiple times with different versions or URLs
+within the same lockfile, since different versions may be needed for different platforms or Python
+versions.
+
+The `--fork-strategy` setting can be used to control how uv trades off between (1) minimizing the
+number of selected versions and (2) selecting the latest-possible version for each platform. The
+former leads to greater consistency across platforms, while the latter leads to use of newer package
+versions where possible.
+
+By default (`--fork-strategy requires-python`), uv will optimize for selecting the latest version of
+each package for each supported Python version, while minimizing the number of selected versions
+across platforms.
+
+For example, when resolving `numpy` with a Python requirement of `>=3.8`, uv would select the
+following versions:
+
+```txt
+numpy==1.24.4 ; python_version == "3.8"
+numpy==2.0.2 ; python_version == "3.9"
+numpy==2.2.0 ; python_version >= "3.10"
+```
+
+This resolution reflects the fact that NumPy 2.2.0 and later require at least Python 3.10, while
+earlier versions are compatible with Python 3.8 and 3.9.
+
+Under `--fork-strategy fewest`, uv will instead minimize the number of selected versions for each
+package, preferring older versions that are compatible with a wider range of supported Python
+versions or platforms.
+
+For example, when in the scenario above, uv would select `numpy==1.24.4` for all Python versions,
+rather than upgrading to `numpy==2.0.2` for Python 3.9 and `numpy==2.2.0` for Python 3.10 and later.
+
 ## Dependency constraints
 
 Like pip, uv supports constraint files (`--constraint constraints.txt`) which narrow the set of
@@ -355,9 +383,10 @@ code.
 
 Lower bounds are particularly critical when writing a library. It's important to declare the lowest
 version for each dependency that your library works with, and to validate that the bounds are
-correct — testing with [`--resolution lowest` or `resolution lowest-direct`](#resolution-strategy).
-Otherwise, a user may receive an old, incompatible version of one of your library's dependencies and
-the library will fail with an unexpected error.
+correct — testing with
+[`--resolution lowest` or `--resolution lowest-direct`](#resolution-strategy). Otherwise, a user may
+receive an old, incompatible version of one of your library's dependencies and the library will fail
+with an unexpected error.
 
 ## Reproducible resolutions
 
@@ -416,6 +445,6 @@ update was backwards-compatible. However, this is not guaranteed, and uv may exi
 it encounters a lockfile with an outdated schema version.
 
 The schema version is considered part of the public API, and so is only bumped in minor releases, as
-a breaking change (see [Versioning](../reference/versioning.md)). As such, all uv patch versions
-within a given minor uv release are guaranteed to have full lockfile compatibility. In other words,
-lockfiles may only be rejected across minor releases.
+a breaking change (see [Versioning](../reference/policies/versioning.md)). As such, all uv patch
+versions within a given minor uv release are guaranteed to have full lockfile compatibility. In
+other words, lockfiles may only be rejected across minor releases.

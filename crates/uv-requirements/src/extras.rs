@@ -3,7 +3,7 @@ use std::sync::Arc;
 use futures::{stream::FuturesOrdered, TryStreamExt};
 
 use uv_distribution::{DistributionDatabase, Reporter};
-use uv_distribution_types::{Dist, DistributionMetadata};
+use uv_distribution_types::DistributionMetadata;
 use uv_pypi_types::Requirement;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
@@ -37,7 +37,7 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
 
     /// Set the [`Reporter`] to use for this resolver.
     #[must_use]
-    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
+    pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
             database: self.database.with_reporter(reporter),
             ..self
@@ -100,16 +100,7 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
                 let archive = database
                     .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
                     .await
-                    .map_err(|err| match &dist {
-                        Dist::Built(built) => Error::Download(built.clone(), err),
-                        Dist::Source(source) => {
-                            if source.is_local() {
-                                Error::Build(source.clone(), err)
-                            } else {
-                                Error::DownloadAndBuild(source.clone(), err)
-                            }
-                        }
-                    })?;
+                    .map_err(|err| Error::from_dist(dist, err))?;
 
                 let metadata = archive.metadata.clone();
 

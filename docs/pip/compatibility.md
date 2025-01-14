@@ -74,35 +74,6 @@ and are instead focused on behavior for a _single_ version specifier. As such, t
 questions around the correct and intended behavior for pre-releases in the packaging ecosystem more
 broadly.
 
-## Local version identifiers
-
-uv does not implement spec-compliant handling of local version identifiers (e.g., `1.2.3+local`).
-This is considered a known limitation. Although local version identifiers are rare in published
-packages (and, e.g., disallowed on PyPI), they're common in the PyTorch ecosystem, and uv's approach
-to local versions _does_ support typical PyTorch workflows to succeed out-of-the-box.
-
-[PEP 440](https://peps.python.org/pep-0440/#version-specifiers) specifies that the local version
-segment should typically be ignored when evaluating version specifiers, with a few exceptions. For
-example, `foo==1.2.3` should accept `1.2.3+local`, but `foo==1.2.3+local` should _not_ accept
-`1.2.3`. These asymmetries are hard to model in a resolution algorithm. As such, uv treats `1.2.3`
-and `1.2.3+local` as entirely separate versions, but respects local versions provided as direct
-dependencies throughout the resolution, such that if you provide `foo==1.2.3+local` as a direct
-dependency, `1.2.3+local` _will_ be accepted for any transitive dependencies that request
-`foo==1.2.3`.
-
-To take an example from the PyTorch ecosystem, it's common to specify `torch==2.0.0+cu118` and
-`torchvision==0.15.1+cu118` as direct dependencies. `torchvision @ 0.15.1+cu118` declares a
-dependency on `torch==2.0.0`. In this case, uv would recognize that `torch==2.0.0+cu118` satisfies
-the specifier, since it was provided as a direct dependency.
-
-As compared to pip, the main differences in observed behavior are as follows:
-
-- In general, local versions must be provided as direct dependencies. Resolution may succeed for
-  transitive dependencies that request a non-local version, but this is not guaranteed.
-- If _only_ local versions exist for a package `foo` at a given version (e.g., `1.2.3+local` exists,
-  but `1.2.3` does not), `uv pip install foo==1.2.3` will fail, while `pip install foo==1.2.3` will
-  resolve to an arbitrary local version.
-
 ## Packages that exist on multiple indexes
 
 In both uv and `pip`, users can specify multiple package indexes from which to search for the
@@ -137,7 +108,7 @@ As of v0.1.39, users can opt in to `pip`-style behavior for multiple indexes via
 `--index-strategy` command-line option, or the `UV_INDEX_STRATEGY` environment variable, which
 supports the following values:
 
-- `first-match` (default): Search for each package across all indexes, limiting the candidate
+- `first-index` (default): Search for each package across all indexes, limiting the candidate
   versions to those present in the first index that contains the package, prioritizing the
   `--extra-index-url` indexes over the default index URL.
 - `unsafe-first-match`: Search for each package across all indexes, but prefer the first index with
@@ -386,8 +357,8 @@ installs, pass the `--compile-bytecode` flag to `uv pip install` or `uv pip sync
 ## Strictness and spec enforcement
 
 uv tends to be stricter than `pip`, and will often reject packages that `pip` would install. For
-example, uv omits packages with invalid version specifiers in its metadata, which `pip` similarly
-plans to exclude in a [future release](https://github.com/pypa/pip/issues/12063).
+example, uv rejects HTML indexes with invalid URL fragments (see:
+[PEP 503](https://peps.python.org/pep-0503/)), while `pip` will ignore such fragments.
 
 In some cases, uv implements lenient behavior for popular packages that are known to have specific
 spec compliance issues.

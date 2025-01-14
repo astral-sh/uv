@@ -39,7 +39,9 @@ use std::str::FromStr;
 
 use url::Url;
 
-use uv_distribution_filename::{DistExtension, SourceDistExtension, WheelFilename};
+use uv_distribution_filename::{
+    DistExtension, SourceDistExtension, SourceDistFilename, WheelFilename,
+};
 use uv_fs::normalize_absolute_path;
 use uv_git::GitUrl;
 use uv_normalize::PackageName;
@@ -53,6 +55,7 @@ pub use crate::buildable::*;
 pub use crate::cached::*;
 pub use crate::dependency_metadata::*;
 pub use crate::diagnostic::*;
+pub use crate::dist_error::*;
 pub use crate::error::*;
 pub use crate::file::*;
 pub use crate::hash::*;
@@ -64,6 +67,7 @@ pub use crate::installed::*;
 pub use crate::origin::*;
 pub use crate::pip_index::*;
 pub use crate::prioritized_distribution::*;
+pub use crate::requested::*;
 pub use crate::resolution::*;
 pub use crate::resolved::*;
 pub use crate::specified_requirement::*;
@@ -75,6 +79,7 @@ mod buildable;
 mod cached;
 mod dependency_metadata;
 mod diagnostic;
+mod dist_error;
 mod error;
 mod file;
 mod hash;
@@ -86,6 +91,7 @@ mod installed;
 mod origin;
 mod pip_index;
 mod prioritized_distribution;
+mod requested;
 mod resolution;
 mod resolved;
 mod specified_requirement;
@@ -99,7 +105,7 @@ pub enum VersionOrUrlRef<'a, T: Pep508Url = VerbatimUrl> {
     Url(&'a T),
 }
 
-impl<'a, T: Pep508Url> VersionOrUrlRef<'a, T> {
+impl<T: Pep508Url> VersionOrUrlRef<'_, T> {
     /// If it is a URL, return its value.
     pub fn url(&self) -> Option<&T> {
         match self {
@@ -136,7 +142,7 @@ pub enum InstalledVersion<'a> {
     Url(&'a Url, &'a Version),
 }
 
-impl<'a> InstalledVersion<'a> {
+impl InstalledVersion<'_> {
     /// If it is a URL, return its value.
     pub fn url(&self) -> Option<&Url> {
         match self {
@@ -166,14 +172,21 @@ impl std::fmt::Display for InstalledVersion<'_> {
 /// Either a built distribution, a wheel, or a source distribution that exists at some location.
 ///
 /// The location can be an index, URL or path (wheel), or index, URL, path or Git repository (source distribution).
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Dist {
     Built(BuiltDist),
     Source(SourceDist),
 }
 
+/// A reference to a built or source distribution.
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum DistRef<'a> {
+    Built(&'a BuiltDist),
+    Source(&'a SourceDist),
+}
+
 /// A wheel, with its three possible origins (index, url, path)
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[allow(clippy::large_enum_variant)]
 pub enum BuiltDist {
     Registry(RegistryBuiltDist),
@@ -182,7 +195,7 @@ pub enum BuiltDist {
 }
 
 /// A source distribution, with its possible origins (index, url, path, git)
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[allow(clippy::large_enum_variant)]
 pub enum SourceDist {
     Registry(RegistrySourceDist),
@@ -193,7 +206,7 @@ pub enum SourceDist {
 }
 
 /// A built distribution (wheel) that exists in a registry, like `PyPI`.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct RegistryBuiltWheel {
     pub filename: WheelFilename,
     pub file: Box<File>,
@@ -201,7 +214,7 @@ pub struct RegistryBuiltWheel {
 }
 
 /// A built distribution (wheel) that exists in a registry, like `PyPI`.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct RegistryBuiltDist {
     /// All wheels associated with this distribution. It is guaranteed
     /// that there is at least one wheel.
@@ -231,19 +244,19 @@ pub struct RegistryBuiltDist {
 }
 
 /// A built distribution (wheel) that exists at an arbitrary URL.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct DirectUrlBuiltDist {
     /// We require that wheel urls end in the full wheel filename, e.g.
     /// `https://example.org/packages/flask-3.0.0-py3-none-any.whl`
     pub filename: WheelFilename,
     /// The URL without the subdirectory fragment.
-    pub location: Url,
+    pub location: Box<Url>,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
 
 /// A built distribution (wheel) that exists in a local directory.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct PathBuiltDist {
     pub filename: WheelFilename,
     /// The absolute path to the wheel which we use for installing.
@@ -253,7 +266,7 @@ pub struct PathBuiltDist {
 }
 
 /// A source distribution that exists in a registry, like `PyPI`.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct RegistrySourceDist {
     pub name: PackageName,
     pub version: Version,
@@ -272,7 +285,7 @@ pub struct RegistrySourceDist {
 }
 
 /// A source distribution that exists at an arbitrary URL.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct DirectUrlSourceDist {
     /// Unlike [`DirectUrlBuiltDist`], we can't require a full filename with a version here, people
     /// like using e.g. `foo @ https://github.com/org/repo/archive/master.zip`
@@ -288,7 +301,7 @@ pub struct DirectUrlSourceDist {
 }
 
 /// A source distribution that exists in a Git repository.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct GitSourceDist {
     pub name: PackageName,
     /// The URL without the revision and subdirectory fragment.
@@ -300,9 +313,10 @@ pub struct GitSourceDist {
 }
 
 /// A source distribution that exists in a local archive (e.g., a `.tar.gz` file).
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct PathSourceDist {
     pub name: PackageName,
+    pub version: Option<Version>,
     /// The absolute path to the distribution which we use for installing.
     pub install_path: PathBuf,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
@@ -312,7 +326,7 @@ pub struct PathSourceDist {
 }
 
 /// A source distribution that exists in a local directory.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct DirectorySourceDist {
     pub name: PackageName,
     /// The absolute path to the distribution which we use for installing.
@@ -349,7 +363,7 @@ impl Dist {
 
                 Ok(Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
                     filename,
-                    location,
+                    location: Box::new(location),
                     url,
                 })))
             }
@@ -401,12 +415,24 @@ impl Dist {
                     url,
                 })))
             }
-            DistExtension::Source(ext) => Ok(Self::Source(SourceDist::Path(PathSourceDist {
-                name,
-                install_path,
-                ext,
-                url,
-            }))),
+            DistExtension::Source(ext) => {
+                // If there is a version in the filename, record it.
+                let version = url
+                    .filename()
+                    .ok()
+                    .and_then(|filename| {
+                        SourceDistFilename::parse(filename.as_ref(), ext, &name).ok()
+                    })
+                    .map(|filename| filename.version);
+
+                Ok(Self::Source(SourceDist::Path(PathSourceDist {
+                    name,
+                    version,
+                    install_path,
+                    ext,
+                    url,
+                })))
+            }
         }
     }
 
@@ -512,11 +538,41 @@ impl Dist {
         }
     }
 
+    /// Returns the version of the distribution, if it is known.
     pub fn version(&self) -> Option<&Version> {
         match self {
             Self::Built(wheel) => Some(wheel.version()),
             Self::Source(source_dist) => source_dist.version(),
         }
+    }
+
+    /// Convert this distribution into a reference.
+    pub fn as_ref(&self) -> DistRef {
+        match self {
+            Self::Built(dist) => DistRef::Built(dist),
+            Self::Source(dist) => DistRef::Source(dist),
+        }
+    }
+}
+
+impl<'a> From<&'a Dist> for DistRef<'a> {
+    fn from(dist: &'a Dist) -> Self {
+        match dist {
+            Dist::Built(built) => DistRef::Built(built),
+            Dist::Source(source) => DistRef::Source(source),
+        }
+    }
+}
+
+impl<'a> From<&'a SourceDist> for DistRef<'a> {
+    fn from(dist: &'a SourceDist) -> Self {
+        DistRef::Source(dist)
+    }
+}
+
+impl<'a> From<&'a BuiltDist> for DistRef<'a> {
+    fn from(dist: &'a BuiltDist) -> Self {
+        DistRef::Built(dist)
     }
 }
 
@@ -1287,20 +1343,12 @@ mod test {
     /// Ensure that we don't accidentally grow the `Dist` sizes.
     #[test]
     fn dist_size() {
+        assert!(size_of::<Dist>() <= 272, "{}", size_of::<Dist>());
+        assert!(size_of::<BuiltDist>() <= 272, "{}", size_of::<BuiltDist>());
         assert!(
-            std::mem::size_of::<Dist>() <= 336,
+            size_of::<SourceDist>() <= 248,
             "{}",
-            std::mem::size_of::<Dist>()
-        );
-        assert!(
-            std::mem::size_of::<BuiltDist>() <= 336,
-            "{}",
-            std::mem::size_of::<BuiltDist>()
-        );
-        assert!(
-            std::mem::size_of::<SourceDist>() <= 264,
-            "{}",
-            std::mem::size_of::<SourceDist>()
+            size_of::<SourceDist>()
         );
     }
 

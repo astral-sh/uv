@@ -11,7 +11,7 @@ use tempfile::TempDir;
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, info_span, instrument, warn, Instrument};
+use tracing::{info_span, instrument, warn, Instrument};
 use url::Url;
 
 use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
@@ -21,13 +21,14 @@ use uv_client::{
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    BuildableSource, BuiltDist, Dist, FileLocation, HashPolicy, Hashed, Name, SourceDist,
+    BuildableSource, BuiltDist, Dist, FileLocation, HashPolicy, Hashed, InstalledDist, Name,
+    SourceDist,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
 use uv_platform_tags::Tags;
 use uv_pypi_types::HashDigest;
-use uv_types::BuildContext;
+use uv_types::{BuildContext, BuildStack};
 
 use crate::archive::Archive;
 use crate::locks::Locks;
@@ -70,13 +71,21 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         }
     }
 
-    /// Set the [`Reporter`] to use for this source distribution fetcher.
+    /// Set the build stack to use for the [`DistributionDatabase`].
     #[must_use]
-    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
-        let reporter = Arc::new(reporter);
+    pub fn with_build_stack(self, build_stack: &'a BuildStack) -> Self {
         Self {
-            reporter: Some(reporter.clone()),
-            builder: self.builder.with_reporter(reporter),
+            builder: self.builder.with_build_stack(build_stack),
+            ..self
+        }
+    }
+
+    /// Set the [`Reporter`] to use for the [`DistributionDatabase`].
+    #[must_use]
+    pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
+        Self {
+            builder: self.builder.with_reporter(reporter.clone()),
+            reporter: Some(reporter),
             ..self
         }
     }
@@ -121,6 +130,32 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// While hashes will be generated in some cases, hash-checking is only enforced for source
     /// distributions, and should be enforced by the caller for wheels.
     #[instrument(skip_all, fields(%dist))]
+    pub async fn get_installed_metadata(
+        &self,
+        dist: &InstalledDist,
+    ) -> Result<ArchiveMetadata, Error> {
+        // If the metadata was provided by the user directly, prefer it.
+        if let Some(metadata) = self
+            .build_context
+            .dependency_metadata()
+            .get(dist.name(), Some(dist.version()))
+        {
+            return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
+        }
+
+        let metadata = dist
+            .metadata()
+            .map_err(|err| Error::ReadInstalled(Box::new(dist.clone()), err))?;
+
+        Ok(ArchiveMetadata::from_metadata23(metadata))
+    }
+
+    /// Either fetch the only wheel metadata (directly from the index or with range requests) or
+    /// fetch and build the source distribution.
+    ///
+    /// While hashes will be generated in some cases, hash-checking is only enforced for source
+    /// distributions, and should be enforced by the caller for wheels.
+    #[instrument(skip_all, fields(%dist))]
     pub async fn get_or_build_wheel_metadata(
         &self,
         dist: &Dist,
@@ -151,7 +186,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     FileLocation::RelativeUrl(base, url) => {
                         uv_pypi_types::base_url_join_relative(base, url)?
                     }
-                    FileLocation::AbsoluteUrl(url) => url.to_url(),
+                    FileLocation::AbsoluteUrl(url) => url.to_url()?,
                 };
 
                 // Create a cache entry for the wheel.
@@ -369,22 +404,28 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
         }
 
-        // If hash generation is enabled, and the distribution isn't hosted on an index, get the
+        // If hash generation is enabled, and the distribution isn't hosted on a registry, get the
         // entire wheel to ensure that the hashes are included in the response. If the distribution
         // is hosted on an index, the hashes will be included in the simple metadata response.
         // For hash _validation_, callers are expected to enforce the policy when retrieving the
         // wheel.
+        //
+        // Historically, for `uv pip compile --universal`, we also generate hashes for
+        // registry-based distributions when the relevant registry doesn't provide them. This was
+        // motivated by `--find-links`. We continue that behavior (under `HashGeneration::All`) for
+        // backwards compatibility, but it's a little dubious, since we're only hashing _one_
+        // distribution here (as opposed to hashing all distributions for the version), and it may
+        // not even be a compatible distribution!
+        //
         // TODO(charlie): Request the hashes via a separate method, to reduce the coupling in this API.
-        if hashes.is_generate() {
-            if dist.file().map_or(true, |file| file.hashes.is_empty()) {
-                let wheel = self.get_wheel(dist, hashes).await?;
-                let metadata = wheel.metadata()?;
-                let hashes = wheel.hashes;
-                return Ok(ArchiveMetadata {
-                    metadata: Metadata::from_metadata23(metadata),
-                    hashes,
-                });
-            }
+        if hashes.is_generate(dist) {
+            let wheel = self.get_wheel(dist, hashes).await?;
+            let metadata = wheel.metadata()?;
+            let hashes = wheel.hashes;
+            return Ok(ArchiveMetadata {
+                metadata: Metadata::from_metadata23(metadata),
+                hashes,
+            });
         }
 
         let result = self
@@ -397,7 +438,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .await;
 
         match result {
-            Ok(metadata) => Ok(ArchiveMetadata::from_metadata23(metadata)),
+            Ok(metadata) => {
+                // Validate that the metadata is consistent with the distribution.
+                Ok(ArchiveMetadata::from_metadata23(metadata))
+            }
             Err(err) if err.is_http_streaming_unsupported() => {
                 warn!("Streaming unsupported when fetching metadata for {dist}; downloading wheel directly ({err})");
 
@@ -439,19 +483,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             }
         }
 
-        // Optimization: Skip source dist download when we must not build them anyway.
-        if self
-            .build_context
-            .build_options()
-            .no_build_requirement(source.name())
-        {
-            if source.is_editable() {
-                debug!("Allowing build for editable source distribution: {source}");
-            } else {
-                return Err(Error::NoBuild);
-            }
-        }
-
         let lock = self.locks.acquire(source).await;
         let _guard = lock.lock().await;
 
@@ -465,8 +496,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 
     /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
-    pub async fn requires_dist(&self, project_root: &Path) -> Result<RequiresDist, Error> {
-        self.builder.requires_dist(project_root).await
+    pub async fn requires_dist(&self, project_root: &Path) -> Result<Option<RequiresDist>, Error> {
+        self.builder.source_tree_requires_dist(project_root).await
     }
 
     /// Stream a wheel from a URL, unzipping it into the cache as it's downloaded.
@@ -556,9 +587,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let archive = self
             .client
             .managed(|client| {
-                client
-                    .cached_client()
-                    .get_serde(req, &http_entry, cache_control, download)
+                client.cached_client().get_serde_with_retry(
+                    req,
+                    &http_entry,
+                    cache_control,
+                    download,
+                )
             })
             .await
             .map_err(|err| match err {
@@ -578,7 +612,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .managed(|client| async {
                     client
                         .cached_client()
-                        .skip_cache(self.request(url)?, &http_entry, download)
+                        .skip_cache_with_retry(self.request(url)?, &http_entry, download)
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback(err) => err,
@@ -710,9 +744,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let archive = self
             .client
             .managed(|client| {
-                client
-                    .cached_client()
-                    .get_serde(req, &http_entry, cache_control, download)
+                client.cached_client().get_serde_with_retry(
+                    req,
+                    &http_entry,
+                    cache_control,
+                    download,
+                )
             })
             .await
             .map_err(|err| match err {
@@ -732,7 +769,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .managed(|client| async {
                     client
                         .cached_client()
-                        .skip_cache(self.request(url)?, &http_entry, download)
+                        .skip_cache_with_retry(self.request(url)?, &http_entry, download)
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback(err) => err,

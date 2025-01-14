@@ -139,7 +139,7 @@ impl From<ErrorKind> for Error {
 #[derive(Debug, thiserror::Error)]
 pub enum ErrorKind {
     #[error(transparent)]
-    UrlParse(#[from] url::ParseError),
+    InvalidUrl(#[from] uv_distribution_types::ToUrlError),
 
     #[error(transparent)]
     JoinRelativeUrl(#[from] uv_pypi_types::JoinRelativeError),
@@ -322,8 +322,10 @@ impl Deref for WrappedReqwestError {
 impl Display for WrappedReqwestError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if self.is_likely_offline() {
+            // Insert an extra hint, we'll show the wrapped error through `source`
             f.write_str("Could not connect, are you offline?")
         } else {
+            // Show the wrapped error
             Display::fmt(&self.0, f)
         }
     }
@@ -332,11 +334,10 @@ impl Display for WrappedReqwestError {
 impl std::error::Error for WrappedReqwestError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         if self.is_likely_offline() {
-            match &self.0 {
-                reqwest_middleware::Error::Middleware(err) => Some(err.as_ref()),
-                reqwest_middleware::Error::Reqwest(err) => Some(err),
-            }
+            // `Display` is inserting an extra message, so we need to show the wrapped error
+            Some(&self.0)
         } else {
+            // `Display` is showing the wrapped error, continue with its source
             self.0.source()
         }
     }

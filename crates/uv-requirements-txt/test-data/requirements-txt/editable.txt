@@ -15,3 +15,9 @@
 
 # OK (unterminated)
 -e ./editable[d
+
+# OK
+-e ./editable # comment
+
+# OK
+-e ./editable #comment

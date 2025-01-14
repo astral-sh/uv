@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, mem};
@@ -277,10 +278,10 @@ impl PyProjectTomlMut {
 
         // If necessary, update the name.
         if let Some(index) = index.name.as_deref() {
-            if !table
+            if table
                 .get("name")
                 .and_then(|name| name.as_str())
-                .is_some_and(|name| name == index)
+                .is_none_or(|name| name != index)
             {
                 let mut formatted = Formatted::new(index.to_string());
                 if let Some(value) = table.get("name").and_then(Item::as_value) {
@@ -296,13 +297,13 @@ impl PyProjectTomlMut {
         }
 
         // If necessary, update the URL.
-        if !table
+        if table
             .get("url")
             .and_then(|item| item.as_str())
             .and_then(|url| Url::parse(url).ok())
-            .is_some_and(|url| CanonicalUrl::new(&url) == CanonicalUrl::new(index.url.url()))
+            .is_none_or(|url| CanonicalUrl::new(&url) != CanonicalUrl::new(index.url.url()))
         {
-            let mut formatted = Formatted::new(index.url.to_string());
+            let mut formatted = Formatted::new(index.url.redacted().to_string());
             if let Some(value) = table.get("url").and_then(Item::as_value) {
                 if let Some(prefix) = value.decor().prefix() {
                     formatted.decor_mut().set_prefix(prefix.clone());
@@ -318,7 +319,7 @@ impl PyProjectTomlMut {
         if index.default {
             if !table
                 .get("default")
-                .and_then(toml_edit::Item::as_bool)
+                .and_then(Item::as_bool)
                 .is_some_and(|default| default)
             {
                 let mut formatted = Formatted::new(true);
@@ -370,7 +371,7 @@ impl PyProjectTomlMut {
         });
 
         // Set the position to the minimum, if it's not already the first element.
-        if let Some(min) = existing.iter().filter_map(toml_edit::Table::position).min() {
+        if let Some(min) = existing.iter().filter_map(Table::position).min() {
             table.set_position(min);
 
             // Increment the position of all existing elements.
@@ -413,7 +414,17 @@ impl PyProjectTomlMut {
         let name = req.name.clone();
         let added = add_dependency(req, group, source.is_some())?;
 
-        optional_dependencies.fmt();
+        // If `project.optional-dependencies` is an inline table, reformat it.
+        //
+        // Reformatting can drop comments between keys, but you can't put comments
+        // between items in an inline table anyway.
+        if let Some(optional_dependencies) = self
+            .project()?
+            .get_mut("optional-dependencies")
+            .and_then(Item::as_inline_table_mut)
+        {
+            optional_dependencies.fmt();
+        }
 
         if let Some(source) = source {
             self.add_source(&name, source)?;
@@ -448,7 +459,17 @@ impl PyProjectTomlMut {
         let name = req.name.clone();
         let added = add_dependency(req, group, source.is_some())?;
 
-        dependency_groups.fmt();
+        // If `dependency-groups` is an inline table, reformat it.
+        //
+        // Reformatting can drop comments between keys, but you can't put comments
+        // between items in an inline table anyway.
+        if let Some(dependency_groups) = self
+            .doc
+            .get_mut("dependency-groups")
+            .and_then(Item::as_inline_table_mut)
+        {
+            dependency_groups.fmt();
+        }
 
         if let Some(source) = source {
             self.add_source(&name, source)?;
@@ -898,12 +919,33 @@ pub fn add_dependency(
         [] => {
             #[derive(Debug, Copy, Clone)]
             enum Sort {
-                /// The list is sorted in a case-sensitive manner.
-                CaseSensitive,
                 /// The list is sorted in a case-insensitive manner.
                 CaseInsensitive,
+                /// The list is sorted in a case-sensitive manner.
+                CaseSensitive,
                 /// The list is unsorted.
                 Unsorted,
+            }
+
+            /// Compare two [`Value`] requirements case-insensitively.
+            fn case_insensitive(a: &Value, b: &Value) -> Ordering {
+                a.as_str()
+                    .map(str::to_lowercase)
+                    .as_deref()
+                    .map(split_specifiers)
+                    .cmp(
+                        &b.as_str()
+                            .map(str::to_lowercase)
+                            .as_deref()
+                            .map(split_specifiers),
+                    )
+            }
+
+            /// Compare two [`Value`] requirements case-sensitively.
+            fn case_sensitive(a: &Value, b: &Value) -> Ordering {
+                a.as_str()
+                    .map(split_specifiers)
+                    .cmp(&b.as_str().map(split_specifiers))
             }
 
             // Determine if the dependency list is sorted prior to
@@ -920,14 +962,12 @@ pub fn add_dependency(
                 .all(Value::is_str)
                 .then(|| {
                     if deps.iter().tuple_windows().all(|(a, b)| {
-                        a.as_str().map(str::to_lowercase) <= b.as_str().map(str::to_lowercase)
+                        matches!(case_insensitive(a, b), Ordering::Less | Ordering::Equal)
                     }) {
                         Some(Sort::CaseInsensitive)
-                    } else if deps
-                        .iter()
-                        .tuple_windows()
-                        .all(|(a, b)| a.as_str() <= b.as_str())
-                    {
+                    } else if deps.iter().tuple_windows().all(|(a, b)| {
+                        matches!(case_sensitive(a, b), Ordering::Less | Ordering::Equal)
+                    }) {
                         Some(Sort::CaseSensitive)
                     } else {
                         None
@@ -938,11 +978,11 @@ pub fn add_dependency(
 
             let req_string = req.to_string();
             let index = match sort {
-                Sort::CaseSensitive => deps
-                    .iter()
-                    .position(|d| d.as_str() > Some(req_string.as_str())),
                 Sort::CaseInsensitive => deps.iter().position(|d| {
-                    d.as_str().map(str::to_lowercase) > Some(req_string.as_str().to_lowercase())
+                    case_insensitive(d, &Value::from(req_string.as_str())) == Ordering::Greater
+                }),
+                Sort::CaseSensitive => deps.iter().position(|d| {
+                    case_sensitive(d, &Value::from(req_string.as_str())) == Ordering::Greater
                 }),
                 Sort::Unsorted => None,
             };
@@ -952,6 +992,23 @@ pub fn add_dependency(
 
             let decor = value.decor_mut();
 
+            // If we're adding to the end of the list, treat trailing comments as leading comments
+            // on the added dependency.
+            //
+            // For example, given:
+            // ```toml
+            // dependencies = [
+            //     "anyio", # trailing comment
+            // ]
+            // ```
+            //
+            // If we add `flask` to the end, we want to retain the comment on `anyio`:
+            // ```toml
+            // dependencies = [
+            //     "anyio", # trailing comment
+            //     "flask",
+            // ]
+            // ```
             if index == deps.len() {
                 decor.set_prefix(deps.trailing().clone());
                 deps.set_trailing("");
@@ -974,7 +1031,76 @@ pub fn add_dependency(
                     .unwrap()
                     .clone();
 
-                deps.get_mut(index).unwrap().decor_mut().set_prefix(prefix);
+                // However, if the prefix includes a comment, we don't want to duplicate it.
+                // Depending on the location of the comment, we either want to leave it as-is, or
+                // attach it to the entry that's being moved to the next line.
+                //
+                // For example, given:
+                // ```toml
+                // dependencies = [ # comment
+                //     "flask",
+                // ]
+                // ```
+                //
+                // If we add `anyio` to the beginning, we want to retain the comment on the open
+                // bracket:
+                // ```toml
+                // dependencies = [ # comment
+                //     "anyio",
+                //     "flask",
+                // ]
+                // ```
+                //
+                // However, given:
+                // ```toml
+                // dependencies = [
+                //     # comment
+                //     "flask",
+                // ]
+                // ```
+                //
+                // If we add `anyio` to the beginning, we want the comment to move down with the
+                // existing entry:
+                // entry:
+                // ```toml
+                // dependencies = [
+                //     "anyio",
+                //     # comment
+                //     "flask",
+                // ]
+                if let Some(prefix) = prefix.as_str() {
+                    // Treat anything before the first own-line comment as a prefix on the new
+                    // entry; anything after the first own-line comment is a prefix on the existing
+                    // entry.
+                    //
+                    // This is equivalent to using the first and last line content as the prefix for
+                    // the new entry, and the rest as the prefix for the existing entry.
+                    if let Some((first_line, rest)) = prefix.split_once(['\r', '\n']) {
+                        // Determine the appropriate newline character.
+                        let newline = {
+                            let mut chars = prefix[first_line.len()..].chars();
+                            match (chars.next(), chars.next()) {
+                                (Some('\r'), Some('\n')) => "\r\n",
+                                (Some('\r'), _) => "\r",
+                                (Some('\n'), _) => "\n",
+                                _ => "\n",
+                            }
+                        };
+                        let last_line = rest.lines().last().unwrap_or_default();
+                        let prefix = format!("{first_line}{newline}{last_line}");
+                        deps.get_mut(index).unwrap().decor_mut().set_prefix(prefix);
+
+                        let prefix = format!("{newline}{rest}");
+                        deps.get_mut(index + 1)
+                            .unwrap()
+                            .decor_mut()
+                            .set_prefix(prefix);
+                    } else {
+                        deps.get_mut(index).unwrap().decor_mut().set_prefix(prefix);
+                    }
+                } else {
+                    deps.get_mut(index).unwrap().decor_mut().set_prefix(prefix);
+                }
             }
 
             reformat_array_multiline(deps);
@@ -1014,7 +1140,7 @@ fn update_requirement(old: &mut Requirement, new: &Requirement, has_source: bool
 
     // Update the marker expression.
     if new.marker.contents().is_some() {
-        old.marker = new.marker.clone();
+        old.marker = new.marker;
     }
 }
 
@@ -1146,15 +1272,11 @@ fn reformat_array_multiline(deps: &mut Array) {
                 .map(|(s, _)| s)
                 .unwrap_or(decor_prefix);
 
-            // If there is no indentation, use four-space.
-            indentation_prefix = Some(if decor_prefix.is_empty() {
-                "    ".to_string()
-            } else {
-                decor_prefix.to_string()
-            });
+            indentation_prefix = (!decor_prefix.is_empty()).then_some(decor_prefix.to_string());
         }
 
-        let indentation_prefix_str = format!("\n{}", indentation_prefix.as_ref().unwrap());
+        let indentation_prefix_str =
+            format!("\n{}", indentation_prefix.as_deref().unwrap_or("    "));
 
         for comment in find_comments(decor.prefix()).chain(find_comments(decor.suffix())) {
             match comment.comment_type {
@@ -1180,7 +1302,7 @@ fn reformat_array_multiline(deps: &mut Array) {
                 match comment.comment_type {
                     CommentType::OwnLine => {
                         let indentation_prefix_str =
-                            format!("\n{}", indentation_prefix.as_ref().unwrap());
+                            format!("\n{}", indentation_prefix.as_deref().unwrap_or("    "));
                         rv.push_str(&indentation_prefix_str);
                     }
                     CommentType::EndOfLine => {
@@ -1196,4 +1318,37 @@ fn reformat_array_multiline(deps: &mut Array) {
         rv
     });
     deps.set_trailing_comma(true);
+}
+
+/// Split a requirement into the package name and its dependency specifiers.
+///
+/// E.g., given `flask>=1.0`, this function returns `("flask", ">=1.0")`. But given
+/// `Flask>=1.0`, this function returns `("Flask", ">=1.0")`.
+///
+/// Extras are retained, such that `flask[dotenv]>=1.0` returns `("flask[dotenv]", ">=1.0")`.
+fn split_specifiers(req: &str) -> (&str, &str) {
+    let (name, specifiers) = req
+        .find(['>', '<', '=', '~', '!', '@'])
+        .map_or((req, ""), |pos| {
+            let (name, specifiers) = req.split_at(pos);
+            (name, specifiers)
+        });
+    (name.trim(), specifiers.trim())
+}
+
+#[cfg(test)]
+mod test {
+    use super::split_specifiers;
+
+    #[test]
+    fn split() {
+        assert_eq!(split_specifiers("flask>=1.0"), ("flask", ">=1.0"));
+        assert_eq!(split_specifiers("Flask>=1.0"), ("Flask", ">=1.0"));
+        assert_eq!(
+            split_specifiers("flask[dotenv]>=1.0"),
+            ("flask[dotenv]", ">=1.0")
+        );
+        assert_eq!(split_specifiers("flask[dotenv]",), ("flask[dotenv]", ""));
+        assert_eq!(split_specifiers("flask @ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"), ("flask", "@ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"));
+    }
 }

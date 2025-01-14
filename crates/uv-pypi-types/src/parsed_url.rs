@@ -1,10 +1,14 @@
 use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
+
 use thiserror::Error;
 use url::{ParseError, Url};
+
 use uv_distribution_filename::{DistExtension, ExtensionError};
 use uv_git::{GitReference, GitSha, GitUrl, OidParseError};
-use uv_pep508::{Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError};
+use uv_pep508::{
+    looks_like_git_repository, Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError,
+};
 
 use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsInfo, VcsKind};
 
@@ -24,6 +28,8 @@ pub enum ParsedUrlError {
     UrlParse(String, #[source] ParseError),
     #[error(transparent)]
     VerbatimUrl(#[from] VerbatimUrlError),
+    #[error("Direct URL (`{0}`) references a Git repository, but is missing the `git+` prefix (e.g., `git+{0}`)")]
+    MissingGitPrefix(String),
     #[error("Expected direct URL (`{0}`) to end in a supported file extension: {1}")]
     MissingExtensionUrl(String, ExtensionError),
     #[error("Expected path (`{0}`) to end in a supported file extension: {1}")]
@@ -301,10 +307,20 @@ impl ParsedArchiveUrl {
 impl TryFrom<Url> for ParsedArchiveUrl {
     type Error = ParsedUrlError;
 
-    fn try_from(url: Url) -> Result<Self, Self::Error> {
+    fn try_from(mut url: Url) -> Result<Self, Self::Error> {
+        // Extract the `#subdirectory` fragment, if present.
         let subdirectory = get_subdirectory(&url);
-        let ext = DistExtension::from_path(url.path())
-            .map_err(|err| ParsedUrlError::MissingExtensionUrl(url.to_string(), err))?;
+        url.set_fragment(None);
+
+        // Infer the extension from the path.
+        let ext = match DistExtension::from_path(url.path()) {
+            Ok(ext) => ext,
+            Err(..) if looks_like_git_repository(&url) => {
+                return Err(ParsedUrlError::MissingGitPrefix(url.to_string()))
+            }
+            Err(err) => return Err(ParsedUrlError::MissingExtensionUrl(url.to_string(), err)),
+        };
+
         Ok(Self {
             url,
             subdirectory,
@@ -507,4 +523,46 @@ impl From<ParsedGitUrl> for Url {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use anyhow::Result;
+    use url::Url;
+
+    use crate::parsed_url::ParsedUrl;
+
+    #[test]
+    fn direct_url_from_url() -> Result<()> {
+        let expected = Url::parse("git+https://github.com/pallets/flask.git")?;
+        let actual = Url::from(ParsedUrl::try_from(expected.clone())?);
+        assert_eq!(expected, actual);
+
+        let expected = Url::parse("git+https://github.com/pallets/flask.git#subdirectory=pkg_dir")?;
+        let actual = Url::from(ParsedUrl::try_from(expected.clone())?);
+        assert_eq!(expected, actual);
+
+        let expected = Url::parse("git+https://github.com/pallets/flask.git@2.0.0")?;
+        let actual = Url::from(ParsedUrl::try_from(expected.clone())?);
+        assert_eq!(expected, actual);
+
+        let expected =
+            Url::parse("git+https://github.com/pallets/flask.git@2.0.0#subdirectory=pkg_dir")?;
+        let actual = Url::from(ParsedUrl::try_from(expected.clone())?);
+        assert_eq!(expected, actual);
+
+        // TODO(charlie): Preserve other fragments.
+        let expected =
+            Url::parse("git+https://github.com/pallets/flask.git#egg=flask&subdirectory=pkg_dir")?;
+        let actual = Url::from(ParsedUrl::try_from(expected.clone())?);
+        assert_ne!(expected, actual);
+
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn direct_url_from_url_absolute() -> Result<()> {
+        let expected = Url::parse("file:///path/to/directory")?;
+        let actual = Url::from(ParsedUrl::try_from(expected.clone())?);
+        assert_eq!(expected, actual);
+        Ok(())
+    }
+}

@@ -1,21 +1,13 @@
-use itertools::Itertools;
-use pubgrub::Range;
 use std::cmp::Ordering;
 use std::collections::Bound;
 use std::ops::Deref;
 
-use uv_distribution_filename::WheelFilename;
-use uv_pep440::{
-    Version, VersionRangesSpecifier, VersionRangesSpecifierError, VersionSpecifier,
-    VersionSpecifiers,
-};
-use uv_pep508::{MarkerExpression, MarkerTree, MarkerValueVersion};
+use pubgrub::Range;
 
-#[derive(thiserror::Error, Debug)]
-pub enum RequiresPythonError {
-    #[error(transparent)]
-    VersionRangesSpecifier(#[from] VersionRangesSpecifierError),
-}
+use uv_distribution_filename::WheelFilename;
+use uv_pep440::{release_specifiers_to_ranges, Version, VersionSpecifier, VersionSpecifiers};
+use uv_pep508::{MarkerExpression, MarkerTree, MarkerValueVersion};
+use uv_platform_tags::{AbiTag, LanguageTag};
 
 /// The `Requires-Python` requirement specifier.
 ///
@@ -54,16 +46,15 @@ impl RequiresPython {
     }
 
     /// Returns a [`RequiresPython`] from a version specifier.
-    pub fn from_specifiers(specifiers: &VersionSpecifiers) -> Result<Self, RequiresPythonError> {
-        let (lower_bound, upper_bound) =
-            VersionRangesSpecifier::from_release_specifiers(specifiers)?
-                .bounding_range()
-                .map(|(lower_bound, upper_bound)| (lower_bound.cloned(), upper_bound.cloned()))
-                .unwrap_or((Bound::Unbounded, Bound::Unbounded));
-        Ok(Self {
+    pub fn from_specifiers(specifiers: &VersionSpecifiers) -> Self {
+        let (lower_bound, upper_bound) = release_specifiers_to_ranges(specifiers.clone())
+            .bounding_range()
+            .map(|(lower_bound, upper_bound)| (lower_bound.cloned(), upper_bound.cloned()))
+            .unwrap_or((Bound::Unbounded, Bound::Unbounded));
+        Self {
             specifiers: specifiers.clone(),
             range: RequiresPythonRange(LowerBound(lower_bound), UpperBound(upper_bound)),
-        })
+        }
     }
 
     /// Returns a [`RequiresPython`] to express the intersection of the given version specifiers.
@@ -71,41 +62,56 @@ impl RequiresPython {
     /// For example, given `>=3.8` and `>=3.9`, this would return `>=3.9`.
     pub fn intersection<'a>(
         specifiers: impl Iterator<Item = &'a VersionSpecifiers>,
-    ) -> Result<Option<Self>, RequiresPythonError> {
+    ) -> Option<Self> {
         // Convert to PubGrub range and perform an intersection.
         let range = specifiers
             .into_iter()
-            .map(VersionRangesSpecifier::from_release_specifiers)
-            .fold_ok(None, |range: Option<Range<Version>>, requires_python| {
+            .map(|specifier| release_specifiers_to_ranges(specifier.clone()))
+            .fold(None, |range: Option<Range<Version>>, requires_python| {
                 if let Some(range) = range {
-                    Some(range.intersection(&requires_python.into()))
+                    Some(range.intersection(&requires_python))
                 } else {
-                    Some(requires_python.into())
+                    Some(requires_python)
                 }
             })?;
-
-        let Some(range) = range else {
-            return Ok(None);
-        };
-
-        // Extract the bounds.
-        let (lower_bound, upper_bound) = range
-            .bounding_range()
-            .map(|(lower_bound, upper_bound)| {
-                (
-                    LowerBound(lower_bound.cloned()),
-                    UpperBound(upper_bound.cloned()),
-                )
-            })
-            .unwrap_or((LowerBound::default(), UpperBound::default()));
 
         // Convert back to PEP 440 specifiers.
         let specifiers = VersionSpecifiers::from_release_only_bounds(range.iter());
 
-        Ok(Some(Self {
-            specifiers,
-            range: RequiresPythonRange(lower_bound, upper_bound),
-        }))
+        // Extract the bounds.
+        let range = RequiresPythonRange::from_range(&range);
+
+        Some(Self { specifiers, range })
+    }
+
+    /// Split the [`RequiresPython`] at the given version.
+    ///
+    /// For example, if the current requirement is `>=3.10`, and the split point is `3.11`, then
+    /// the result will be `>=3.10 and <3.11` and `>=3.11`.
+    pub fn split(&self, bound: Bound<Version>) -> Option<(Self, Self)> {
+        let RequiresPythonRange(.., upper) = &self.range;
+
+        let upper = Range::from_range_bounds((bound, upper.clone().into()));
+        let lower = upper.complement();
+
+        // Intersect left and right with the existing range.
+        let lower = lower.intersection(&Range::from(self.range.clone()));
+        let upper = upper.intersection(&Range::from(self.range.clone()));
+
+        if lower.is_empty() || upper.is_empty() {
+            None
+        } else {
+            Some((
+                Self {
+                    specifiers: VersionSpecifiers::from_release_only_bounds(lower.iter()),
+                    range: RequiresPythonRange::from_range(&lower),
+                },
+                Self {
+                    specifiers: VersionSpecifiers::from_release_only_bounds(upper.iter()),
+                    range: RequiresPythonRange::from_range(&upper),
+                },
+            ))
+        }
     }
 
     /// Narrow the [`RequiresPython`] by computing the intersection with the given range.
@@ -260,14 +266,10 @@ impl RequiresPython {
     /// N.B. This operation should primarily be used when evaluating the compatibility of a
     /// project's `Requires-Python` specifier against a dependency's `Requires-Python` specifier.
     pub fn is_contained_by(&self, target: &VersionSpecifiers) -> bool {
-        let Ok(target) = VersionRangesSpecifier::from_release_specifiers(target) else {
-            return false;
-        };
-        let target = target
-            .iter()
-            .next()
-            .map(|(lower, _)| lower)
-            .unwrap_or(&Bound::Unbounded);
+        let target = release_specifiers_to_ranges(target.clone())
+            .bounding_range()
+            .map(|bounding_range| bounding_range.0.cloned())
+            .unwrap_or(Bound::Unbounded);
 
         // We want, e.g., `self.range.lower()` to be `>=3.8` and `target` to be `>=3.7`.
         //
@@ -297,26 +299,26 @@ impl RequiresPython {
         }
     }
 
-    /// Returns the [`RequiresPythonBound`] truncated to the major and minor version.
-    pub fn bound_major_minor(&self) -> LowerBound {
-        match self.range.lower().as_ref() {
-            // Ex) `>=3.10.1` -> `>=3.10`
-            Bound::Included(version) => LowerBound(Bound::Included(Version::new(
-                version.release().iter().take(2),
-            ))),
-            // Ex) `>3.10.1` -> `>=3.10`
-            // This is unintuitive, but `>3.10.1` does indicate that _some_ version of Python 3.10
-            // is supported.
-            Bound::Excluded(version) => LowerBound(Bound::Included(Version::new(
-                version.release().iter().take(2),
-            ))),
-            Bound::Unbounded => LowerBound(Bound::Unbounded),
-        }
-    }
-
     /// Returns the [`Range`] bounding the `Requires-Python` specifier.
     pub fn range(&self) -> &RequiresPythonRange {
         &self.range
+    }
+
+    /// Returns a wheel tag that's compatible with the `Requires-Python` specifier.
+    pub fn abi_tag(&self) -> Option<AbiTag> {
+        match self.range.lower().as_ref() {
+            Bound::Included(version) | Bound::Excluded(version) => {
+                let major = version.release().first().copied()?;
+                let major = u8::try_from(major).ok()?;
+                let minor = version.release().get(1).copied()?;
+                let minor = u8::try_from(minor).ok()?;
+                Some(AbiTag::CPython {
+                    gil_disabled: false,
+                    python_version: (major, minor),
+                })
+            }
+            Bound::Unbounded => None,
+        }
     }
 
     /// Simplifies the given markers in such a way as to assume that
@@ -379,53 +381,73 @@ impl RequiresPython {
     /// sensitivity, we return `true` if the tags are unknown.
     pub fn matches_wheel_tag(&self, wheel: &WheelFilename) -> bool {
         wheel.abi_tag.iter().any(|abi_tag| {
-            if abi_tag == "abi3" {
+            if *abi_tag == AbiTag::Abi3 {
                 // Universal tags are allowed.
                 true
-            } else if abi_tag == "none" {
+            } else if *abi_tag == AbiTag::None {
                 wheel.python_tag.iter().any(|python_tag| {
                     // Remove `py2-none-any` and `py27-none-any` and analogous `cp` and `pp` tags.
-                    if python_tag.starts_with("py2")
-                        || python_tag.starts_with("cp2")
-                        || python_tag.starts_with("pp2")
-                    {
+                    if matches!(
+                        python_tag,
+                        LanguageTag::Python { major: 2, .. }
+                            | LanguageTag::CPython {
+                                python_version: (2, ..)
+                            }
+                            | LanguageTag::PyPy {
+                                python_version: (2, ..)
+                            }
+                            | LanguageTag::GraalPy {
+                                python_version: (2, ..)
+                            }
+                            | LanguageTag::Pyston {
+                                python_version: (2, ..)
+                            }
+                    ) {
                         return false;
                     }
 
                     // Remove (e.g.) `py312-none-any` if the specifier is `==3.10.*`. However,
                     // `py37-none-any` would be fine, since the `3.7` represents a lower bound.
-                    if let Some(minor) = python_tag.strip_prefix("py3") {
-                        let Ok(minor) = minor.parse::<u64>() else {
-                            return true;
-                        };
-
+                    if let LanguageTag::Python {
+                        major: 3,
+                        minor: Some(minor),
+                    } = python_tag
+                    {
                         // Ex) If the wheel bound is `3.12`, then it doesn't match `<=3.10.`.
-                        let wheel_bound = UpperBound(Bound::Included(Version::new([3, minor])));
+                        let wheel_bound =
+                            UpperBound(Bound::Included(Version::new([3, u64::from(*minor)])));
                         if wheel_bound > self.range.upper().major_minor() {
                             return false;
                         }
 
                         return true;
-                    };
+                    }
 
                     // Remove (e.g.) `cp36-none-any` or `cp312-none-any` if the specifier is
                     // `==3.10.*`, since these tags require an exact match.
-                    if let Some(minor) = python_tag
-                        .strip_prefix("cp3")
-                        .or_else(|| python_tag.strip_prefix("pp3"))
+                    if let LanguageTag::CPython {
+                        python_version: (3, minor),
+                    }
+                    | LanguageTag::PyPy {
+                        python_version: (3, minor),
+                    }
+                    | LanguageTag::GraalPy {
+                        python_version: (3, minor),
+                    }
+                    | LanguageTag::Pyston {
+                        python_version: (3, minor),
+                    } = python_tag
                     {
-                        let Ok(minor) = minor.parse::<u64>() else {
-                            return true;
-                        };
-
                         // Ex) If the wheel bound is `3.6`, then it doesn't match `>=3.10`.
-                        let wheel_bound = LowerBound(Bound::Included(Version::new([3, minor])));
+                        let wheel_bound =
+                            LowerBound(Bound::Included(Version::new([3, u64::from(*minor)])));
                         if wheel_bound < self.range.lower().major_minor() {
                             return false;
                         }
 
                         // Ex) If the wheel bound is `3.12`, then it doesn't match `<=3.10.`.
-                        let wheel_bound = UpperBound(Bound::Included(Version::new([3, minor])));
+                        let wheel_bound =
+                            UpperBound(Bound::Included(Version::new([3, u64::from(*minor)])));
                         if wheel_bound > self.range.upper().major_minor() {
                             return false;
                         }
@@ -436,50 +458,42 @@ impl RequiresPython {
                     // Unknown tags are allowed.
                     true
                 })
-            } else if abi_tag.starts_with("cp2") || abi_tag.starts_with("pypy2") {
+            } else if matches!(
+                abi_tag,
+                AbiTag::CPython {
+                    python_version: (2, ..),
+                    ..
+                } | AbiTag::PyPy {
+                    python_version: (2, ..),
+                    ..
+                } | AbiTag::GraalPy {
+                    python_version: (2, ..),
+                    ..
+                }
+            ) {
                 // Python 2 is never allowed.
                 false
-            } else if let Some(minor_no_dot_abi) = abi_tag.strip_prefix("cp3") {
-                // Remove ABI tags, both old (dmu) and future (t, and all other letters).
-                let minor_not_dot = minor_no_dot_abi.trim_matches(char::is_alphabetic);
-                let Ok(minor) = minor_not_dot.parse::<u64>() else {
-                    // Unknown version pattern are allowed.
-                    return true;
-                };
-
+            } else if let AbiTag::CPython {
+                python_version: (3, minor),
+                ..
+            }
+            | AbiTag::PyPy {
+                python_version: (3, minor),
+                ..
+            }
+            | AbiTag::GraalPy {
+                python_version: (3, minor),
+                ..
+            } = abi_tag
+            {
                 // Ex) If the wheel bound is `3.6`, then it doesn't match `>=3.10`.
-                let wheel_bound = LowerBound(Bound::Included(Version::new([3, minor])));
+                let wheel_bound = LowerBound(Bound::Included(Version::new([3, u64::from(*minor)])));
                 if wheel_bound < self.range.lower().major_minor() {
                     return false;
                 }
 
                 // Ex) If the wheel bound is `3.12`, then it doesn't match `<=3.10.`.
-                let wheel_bound = UpperBound(Bound::Included(Version::new([3, minor])));
-                if wheel_bound > self.range.upper().major_minor() {
-                    return false;
-                }
-
-                true
-            } else if let Some(minor_no_dot_abi) = abi_tag.strip_prefix("pypy3") {
-                // Given  `pypy39_pp73`, we just removed `pypy3`, now we remove `_pp73` ...
-                let Some((minor_not_dot, _)) = minor_no_dot_abi.split_once('_') else {
-                    // Unknown version pattern are allowed.
-                    return true;
-                };
-                // ... and get `9`.
-                let Ok(minor) = minor_not_dot.parse::<u64>() else {
-                    // Unknown version pattern are allowed.
-                    return true;
-                };
-
-                // Ex) If the wheel bound is `3.6`, then it doesn't match `>=3.10`.
-                let wheel_bound = LowerBound(Bound::Included(Version::new([3, minor])));
-                if wheel_bound < self.range.lower().major_minor() {
-                    return false;
-                }
-
-                // Ex) If the wheel bound is `3.12`, then it doesn't match `<=3.10.`.
-                let wheel_bound = UpperBound(Bound::Included(Version::new([3, minor])));
+                let wheel_bound = UpperBound(Bound::Included(Version::new([3, u64::from(*minor)])));
                 if wheel_bound > self.range.upper().major_minor() {
                     return false;
                 }
@@ -508,16 +522,9 @@ impl serde::Serialize for RequiresPython {
 impl<'de> serde::Deserialize<'de> for RequiresPython {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let specifiers = VersionSpecifiers::deserialize(deserializer)?;
-        let (lower_bound, upper_bound) =
-            VersionRangesSpecifier::from_release_specifiers(&specifiers)
-                .map_err(serde::de::Error::custom)?
-                .bounding_range()
-                .map(|(lower_bound, upper_bound)| (lower_bound.cloned(), upper_bound.cloned()))
-                .unwrap_or((Bound::Unbounded, Bound::Unbounded));
-        Ok(Self {
-            specifiers,
-            range: RequiresPythonRange(LowerBound(lower_bound), UpperBound(upper_bound)),
-        })
+        let range = release_specifiers_to_ranges(specifiers.clone());
+        let range = RequiresPythonRange::from_range(&range);
+        Ok(Self { specifiers, range })
     }
 }
 
@@ -525,6 +532,15 @@ impl<'de> serde::Deserialize<'de> for RequiresPython {
 pub struct RequiresPythonRange(LowerBound, UpperBound);
 
 impl RequiresPythonRange {
+    /// Initialize a [`RequiresPythonRange`] from a [`Range`].
+    pub fn from_range(range: &Range<Version>) -> Self {
+        let (lower, upper) = range
+            .bounding_range()
+            .map(|(lower_bound, upper_bound)| (lower_bound.cloned(), upper_bound.cloned()))
+            .unwrap_or((Bound::Unbounded, Bound::Unbounded));
+        Self(LowerBound(lower), UpperBound(upper))
+    }
+
     /// Initialize a [`RequiresPythonRange`] with the given bounds.
     pub fn new(lower: LowerBound, upper: UpperBound) -> Self {
         Self(lower, upper)
@@ -563,7 +579,7 @@ impl From<RequiresPythonRange> for Range<Version> {
 /// setting can be assumed. In order to get a "normal" marker out of
 /// a simplified marker, one must re-contextualize it by adding the
 /// `requires-python` constraint back to the marker.
-#[derive(Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 pub(crate) struct SimplifiedMarkerTree(MarkerTree);
 
 impl SimplifiedMarkerTree {
@@ -586,13 +602,13 @@ impl SimplifiedMarkerTree {
     ///
     /// This only returns `None` when the underlying marker is always true,
     /// i.e., it matches all possible marker environments.
-    pub(crate) fn try_to_string(&self) -> Option<String> {
+    pub(crate) fn try_to_string(self) -> Option<String> {
         self.0.try_to_string()
     }
 
     /// Returns the underlying marker tree without re-complexifying them.
-    pub(crate) fn as_simplified_marker_tree(&self) -> &MarkerTree {
-        &self.0
+    pub(crate) fn as_simplified_marker_tree(self) -> MarkerTree {
+        self.0
     }
 }
 
@@ -600,6 +616,17 @@ impl SimplifiedMarkerTree {
 pub struct LowerBound(Bound<Version>);
 
 impl LowerBound {
+    /// Initialize a [`LowerBound`] with the given bound.
+    ///
+    /// These bounds use release-only semantics when comparing versions.
+    pub fn new(bound: Bound<Version>) -> Self {
+        Self(match bound {
+            Bound::Included(version) => Bound::Included(version.only_release()),
+            Bound::Excluded(version) => Bound::Excluded(version.only_release()),
+            Bound::Unbounded => Bound::Unbounded,
+        })
+    }
+
     /// Return the [`LowerBound`] truncated to the major and minor version.
     fn major_minor(&self) -> Self {
         match &self.0 {
@@ -612,6 +639,15 @@ impl LowerBound {
                 version.release().iter().take(2),
             ))),
             Bound::Unbounded => Self(Bound::Unbounded),
+        }
+    }
+
+    /// Returns `true` if the lower bound contains the given version.
+    pub fn contains(&self, version: &Version) -> bool {
+        match self.0 {
+            Bound::Included(ref bound) => bound <= version,
+            Bound::Excluded(ref bound) => bound < version,
+            Bound::Unbounded => true,
         }
     }
 }
@@ -682,19 +718,6 @@ impl Default for LowerBound {
     }
 }
 
-impl LowerBound {
-    /// Initialize a [`LowerBound`] with the given bound.
-    ///
-    /// These bounds use release-only semantics when comparing versions.
-    pub fn new(bound: Bound<Version>) -> Self {
-        Self(match bound {
-            Bound::Included(version) => Bound::Included(version.only_release()),
-            Bound::Excluded(version) => Bound::Excluded(version.only_release()),
-            Bound::Unbounded => Bound::Unbounded,
-        })
-    }
-}
-
 impl Deref for LowerBound {
     type Target = Bound<Version>;
 
@@ -713,6 +736,17 @@ impl From<LowerBound> for Bound<Version> {
 pub struct UpperBound(Bound<Version>);
 
 impl UpperBound {
+    /// Initialize a [`UpperBound`] with the given bound.
+    ///
+    /// These bounds use release-only semantics when comparing versions.
+    pub fn new(bound: Bound<Version>) -> Self {
+        Self(match bound {
+            Bound::Included(version) => Bound::Included(version.only_release()),
+            Bound::Excluded(version) => Bound::Excluded(version.only_release()),
+            Bound::Unbounded => Bound::Unbounded,
+        })
+    }
+
     /// Return the [`UpperBound`] truncated to the major and minor version.
     fn major_minor(&self) -> Self {
         match &self.0 {
@@ -733,6 +767,15 @@ impl UpperBound {
                 }
             }
             Bound::Unbounded => Self(Bound::Unbounded),
+        }
+    }
+
+    /// Returns `true` if the upper bound contains the given version.
+    pub fn contains(&self, version: &Version) -> bool {
+        match self.0 {
+            Bound::Included(ref bound) => bound >= version,
+            Bound::Excluded(ref bound) => bound > version,
+            Bound::Unbounded => true,
         }
     }
 }
@@ -801,19 +844,6 @@ impl Default for UpperBound {
     }
 }
 
-impl UpperBound {
-    /// Initialize a [`UpperBound`] with the given bound.
-    ///
-    /// These bounds use release-only semantics when comparing versions.
-    pub fn new(bound: Bound<Version>) -> Self {
-        Self(match bound {
-            Bound::Included(version) => Bound::Included(version.only_release()),
-            Bound::Excluded(version) => Bound::Excluded(version.only_release()),
-            Bound::Unbounded => Bound::Unbounded,
-        })
-    }
-}
-
 impl Deref for UpperBound {
     type Target = Bound<Version>;
 
@@ -829,4 +859,227 @@ impl From<UpperBound> for Bound<Version> {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use std::cmp::Ordering;
+    use std::collections::Bound;
+    use std::str::FromStr;
+
+    use uv_distribution_filename::WheelFilename;
+    use uv_pep440::{Version, VersionSpecifiers};
+
+    use crate::requires_python::{LowerBound, UpperBound};
+    use crate::RequiresPython;
+
+    #[test]
+    fn requires_python_included() {
+        let version_specifiers = VersionSpecifiers::from_str("==3.10.*").unwrap();
+        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+        let wheel_names = &[
+            "bcrypt-4.1.3-cp37-abi3-macosx_10_12_universal2.whl",
+            "black-24.4.2-cp310-cp310-win_amd64.whl",
+            "black-24.4.2-cp310-none-win_amd64.whl",
+            "cbor2-5.6.4-py3-none-any.whl",
+            "solace_pubsubplus-1.8.0-py36-none-manylinux_2_12_x86_64.whl",
+            "torch-1.10.0-py310-none-macosx_10_9_x86_64.whl",
+            "torch-1.10.0-py37-none-macosx_10_9_x86_64.whl",
+            "watchfiles-0.22.0-pp310-pypy310_pp73-macosx_11_0_arm64.whl",
+        ];
+        for wheel_name in wheel_names {
+            assert!(
+                requires_python.matches_wheel_tag(&WheelFilename::from_str(wheel_name).unwrap()),
+                "{wheel_name}"
+            );
+        }
+
+        let version_specifiers = VersionSpecifiers::from_str(">=3.12.3").unwrap();
+        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+        let wheel_names = &["dearpygui-1.11.1-cp312-cp312-win_amd64.whl"];
+        for wheel_name in wheel_names {
+            assert!(
+                requires_python.matches_wheel_tag(&WheelFilename::from_str(wheel_name).unwrap()),
+                "{wheel_name}"
+            );
+        }
+
+        let version_specifiers = VersionSpecifiers::from_str("==3.12.6").unwrap();
+        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+        let wheel_names = &["lxml-5.3.0-cp312-cp312-musllinux_1_2_aarch64.whl"];
+        for wheel_name in wheel_names {
+            assert!(
+                requires_python.matches_wheel_tag(&WheelFilename::from_str(wheel_name).unwrap()),
+                "{wheel_name}"
+            );
+        }
+
+        let version_specifiers = VersionSpecifiers::from_str("==3.12").unwrap();
+        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+        let wheel_names = &["lxml-5.3.0-cp312-cp312-musllinux_1_2_x86_64.whl"];
+        for wheel_name in wheel_names {
+            assert!(
+                requires_python.matches_wheel_tag(&WheelFilename::from_str(wheel_name).unwrap()),
+                "{wheel_name}"
+            );
+        }
+    }
+
+    #[test]
+    fn requires_python_dropped() {
+        let version_specifiers = VersionSpecifiers::from_str("==3.10.*").unwrap();
+        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+        let wheel_names = &[
+            "PySocks-1.7.1-py27-none-any.whl",
+            "black-24.4.2-cp39-cp39-win_amd64.whl",
+            "dearpygui-1.11.1-cp312-cp312-win_amd64.whl",
+            "psutil-6.0.0-cp27-none-win32.whl",
+            "psutil-6.0.0-cp36-cp36m-win32.whl",
+            "pydantic_core-2.20.1-pp39-pypy39_pp73-win_amd64.whl",
+            "torch-1.10.0-cp311-none-macosx_10_9_x86_64.whl",
+            "torch-1.10.0-cp36-none-macosx_10_9_x86_64.whl",
+            "torch-1.10.0-py311-none-macosx_10_9_x86_64.whl",
+        ];
+        for wheel_name in wheel_names {
+            assert!(
+                !requires_python.matches_wheel_tag(&WheelFilename::from_str(wheel_name).unwrap()),
+                "{wheel_name}"
+            );
+        }
+
+        let version_specifiers = VersionSpecifiers::from_str(">=3.12.3").unwrap();
+        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+        let wheel_names = &["dearpygui-1.11.1-cp310-cp310-win_amd64.whl"];
+        for wheel_name in wheel_names {
+            assert!(
+                !requires_python.matches_wheel_tag(&WheelFilename::from_str(wheel_name).unwrap()),
+                "{wheel_name}"
+            );
+        }
+    }
+
+    #[test]
+    fn lower_bound_ordering() {
+        let versions = &[
+            // No bound
+            LowerBound::new(Bound::Unbounded),
+            // >=3.8
+            LowerBound::new(Bound::Included(Version::new([3, 8]))),
+            // >3.8
+            LowerBound::new(Bound::Excluded(Version::new([3, 8]))),
+            // >=3.8.1
+            LowerBound::new(Bound::Included(Version::new([3, 8, 1]))),
+            // >3.8.1
+            LowerBound::new(Bound::Excluded(Version::new([3, 8, 1]))),
+        ];
+        for (i, v1) in versions.iter().enumerate() {
+            for v2 in &versions[i + 1..] {
+                assert_eq!(v1.cmp(v2), Ordering::Less, "less: {v1:?}\ngreater: {v2:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn upper_bound_ordering() {
+        let versions = &[
+            // <3.8
+            UpperBound::new(Bound::Excluded(Version::new([3, 8]))),
+            // <=3.8
+            UpperBound::new(Bound::Included(Version::new([3, 8]))),
+            // <3.8.1
+            UpperBound::new(Bound::Excluded(Version::new([3, 8, 1]))),
+            // <=3.8.1
+            UpperBound::new(Bound::Included(Version::new([3, 8, 1]))),
+            // No bound
+            UpperBound::new(Bound::Unbounded),
+        ];
+        for (i, v1) in versions.iter().enumerate() {
+            for v2 in &versions[i + 1..] {
+                assert_eq!(v1.cmp(v2), Ordering::Less, "less: {v1:?}\ngreater: {v2:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn is_exact_without_patch() {
+        let test_cases = [
+            ("==3.12", true),
+            ("==3.10, <3.11", true),
+            ("==3.10, <=3.11", true),
+            ("==3.12.1", false),
+            ("==3.12.*", false),
+            ("==3.*", false),
+            (">=3.10", false),
+            (">3.9", false),
+            ("<4.0", false),
+            (">=3.10, <3.11", false),
+            ("", false),
+        ];
+        for (version, expected) in test_cases {
+            let version_specifiers = VersionSpecifiers::from_str(version).unwrap();
+            let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+            assert_eq!(requires_python.is_exact_without_patch(), expected);
+        }
+    }
+
+    #[test]
+    fn split_version() {
+        // Splitting `>=3.10` on `>3.12` should result in `>=3.10, <=3.12` and `>3.12`.
+        let version_specifiers = VersionSpecifiers::from_str(">=3.10").unwrap();
+        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+        let (lower, upper) = requires_python
+            .split(Bound::Excluded(Version::new([3, 12])))
+            .unwrap();
+        assert_eq!(
+            lower,
+            RequiresPython::from_specifiers(
+                &VersionSpecifiers::from_str(">=3.10, <=3.12").unwrap()
+            )
+        );
+        assert_eq!(
+            upper,
+            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">3.12").unwrap())
+        );
+
+        // Splitting `>=3.10` on `>=3.12` should result in `>=3.10, <3.12` and `>=3.12`.
+        let version_specifiers = VersionSpecifiers::from_str(">=3.10").unwrap();
+        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+        let (lower, upper) = requires_python
+            .split(Bound::Included(Version::new([3, 12])))
+            .unwrap();
+        assert_eq!(
+            lower,
+            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.10, <3.12").unwrap())
+        );
+        assert_eq!(
+            upper,
+            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.12").unwrap())
+        );
+
+        // Splitting `>=3.10` on `>=3.9` should return `None`.
+        let version_specifiers = VersionSpecifiers::from_str(">=3.10").unwrap();
+        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+        assert!(requires_python
+            .split(Bound::Included(Version::new([3, 9])))
+            .is_none());
+
+        // Splitting `>=3.10` on `>=3.10` should return `None`.
+        let version_specifiers = VersionSpecifiers::from_str(">=3.10").unwrap();
+        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+        assert!(requires_python
+            .split(Bound::Included(Version::new([3, 10])))
+            .is_none());
+
+        // Splitting `>=3.9, <3.13` on `>=3.11` should result in `>=3.9, <3.11` and `>=3.11, <3.13`.
+        let version_specifiers = VersionSpecifiers::from_str(">=3.9, <3.13").unwrap();
+        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+        let (lower, upper) = requires_python
+            .split(Bound::Included(Version::new([3, 11])))
+            .unwrap();
+        assert_eq!(
+            lower,
+            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.9, <3.11").unwrap())
+        );
+        assert_eq!(
+            upper,
+            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.11, <3.13").unwrap())
+        );
+    }
+}

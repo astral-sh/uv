@@ -29,7 +29,6 @@ uv-pypi-types = { workspace = true }
 uv-static = { workspace = true }
 uv-warnings = { workspace = true }
 
-either = { workspace = true }
 fs-err = { workspace = true }
 glob = { workspace = true }
 itertools = { workspace = true }

@@ -3,7 +3,6 @@ use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use predicates::prelude::*;
-
 use uv_python::{PYTHON_VERSIONS_FILENAME, PYTHON_VERSION_FILENAME};
 use uv_static::EnvVars;
 
@@ -42,6 +41,28 @@ fn create_venv() {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "###
+    );
+
+    context.venv.assert(predicates::path::is_dir());
+}
+
+#[test]
+fn create_venv_313() {
+    let context = TestContext::new_with_versions(&["3.13"]);
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.13"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     "###
@@ -453,6 +474,20 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
 
     context.venv.assert(predicates::path::is_dir());
 
+    // We warn if we receive an incompatible version
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12`
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "###
+    );
+
     Ok(())
 }
 
@@ -500,7 +535,13 @@ fn create_venv_warns_user_on_requires_python_discovery_error() -> Result<()> {
         |         ^
       expected `.`, `=`
 
-    warning: Failed to parse: `pyproject.toml`
+    warning: Failed to parse `pyproject.toml` during environment creation:
+      TOML parse error at line 1, column 9
+        |
+      1 | invalid toml
+        |         ^
+      expected `.`, `=`
+
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
@@ -605,7 +646,7 @@ fn create_venv_unknown_python_minor() {
         ----- stdout -----
 
         ----- stderr -----
-          × No interpreter found for Python 3.100 in managed installations, system path, or `py` launcher
+          × No interpreter found for Python 3.100 in managed installations, search path, or registry
         "###
         );
     } else {
@@ -615,7 +656,7 @@ fn create_venv_unknown_python_minor() {
         ----- stdout -----
 
         ----- stderr -----
-          × No interpreter found for Python 3.100 in managed installations or system path
+          × No interpreter found for Python 3.100 in managed installations or search path
         "###
         );
     }
@@ -643,7 +684,7 @@ fn create_venv_unknown_python_patch() {
         ----- stdout -----
 
         ----- stderr -----
-          × No interpreter found for Python 3.12.100 in managed installations, system path, or `py` launcher
+          × No interpreter found for Python 3.12.100 in managed installations, search path, or registry
         "###
         );
     } else {
@@ -653,7 +694,7 @@ fn create_venv_unknown_python_patch() {
         ----- stdout -----
 
         ----- stderr -----
-          × No interpreter found for Python 3.12.100 in managed installations or system path
+          × No interpreter found for Python 3.12.100 in managed installations or search path
         "###
         );
     }
@@ -1032,10 +1073,10 @@ fn path_with_trailing_space_gives_proper_error() {
     let path_with_trailing_slash = format!("{} ", context.cache_dir.path().display());
     let mut filters = context.filters();
     // Windows translates error messages, for example i get:
-    // "Caused by: Das System kann den angegebenen Pfad nicht finden. (os error 3)"
+    // ": Das System kann den angegebenen Pfad nicht finden. (os error 3)"
     filters.push((
-        r"Caused by: .* \(os error 3\)",
-        "Caused by: The system cannot find the path specified. (os error 3)",
+        r"CACHEDIR.TAG`: .* \(os error 3\)",
+        "CACHEDIR.TAG`: The system cannot find the path specified. (os error 3)",
     ));
     uv_snapshot!(filters, std::process::Command::new(crate::common::get_bin())
         .arg("venv")
@@ -1045,9 +1086,62 @@ fn path_with_trailing_space_gives_proper_error() {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to open file `[CACHE_DIR]/ /CACHEDIR.TAG`
-      Caused by: The system cannot find the path specified. (os error 3)
+    error: failed to open file `[CACHE_DIR]/ /CACHEDIR.TAG`: The system cannot find the path specified. (os error 3)
     "###
     );
     // Note the extra trailing `/` in the snapshot is due to the filters, not the actual output.
+}
+
+/// Check that the activate script still works with the path contains an apostrophe.
+#[test]
+#[cfg(target_os = "linux")]
+fn create_venv_apostrophe() {
+    use std::env;
+    use std::ffi::OsString;
+    use std::io::Write;
+    use std::process::Command;
+    use std::process::Stdio;
+
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    let venv_dir = context.temp_dir.join("Testing's");
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(&venv_dir)
+        .arg("--python")
+        .arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: Testing's
+    Activate with: source Testing's/[BIN]/activate
+    "###
+    );
+
+    // One of them should be commonly available on a linux developer machine, if not, we have to
+    // extend the fallbacks.
+    let shell = env::var_os(EnvVars::SHELL).unwrap_or(OsString::from("bash"));
+    let mut child = Command::new(shell)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .current_dir(&venv_dir)
+        .spawn()
+        .expect("Failed to spawn shell script");
+
+    let mut stdin = child.stdin.take().expect("Failed to open stdin");
+    std::thread::spawn(move || {
+        stdin
+            .write_all(". bin/activate && python -c 'import sys; print(sys.prefix)'".as_bytes())
+            .expect("Failed to write to stdin");
+    });
+
+    let output = child.wait_with_output().expect("Failed to read stdout");
+
+    assert!(output.status.success(), "{output:?}");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), venv_dir.to_string_lossy());
 }

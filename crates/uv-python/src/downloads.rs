@@ -1,18 +1,22 @@
-use futures::TryStreamExt;
-use owo_colors::OwoColorize;
 use std::fmt::Display;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::str::FromStr;
 use std::task::{Context, Poll};
+use std::time::{Duration, SystemTime};
+
+use futures::TryStreamExt;
+use owo_colors::OwoColorize;
+use reqwest_retry::RetryPolicy;
 use thiserror::Error;
 use tokio::io::{AsyncRead, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::either::Either;
 use tracing::{debug, instrument};
 use url::Url;
-use uv_client::WrappedReqwestError;
+
+use uv_client::{is_extended_transient_error, WrappedReqwestError};
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, Simplified};
@@ -137,6 +141,12 @@ impl PythonDownloadRequest {
     #[must_use]
     pub fn with_arch(mut self, arch: Arch) -> Self {
         self.arch = Some(arch);
+        self
+    }
+
+    #[must_use]
+    pub fn with_any_arch(mut self) -> Self {
+        self.arch = None;
         self
     }
 
@@ -417,13 +427,14 @@ impl FromStr for PythonDownloadRequest {
 
 include!("downloads.inc");
 
+#[derive(Debug, Clone)]
 pub enum DownloadResult {
     AlreadyAvailable(PathBuf),
     Fetched(PathBuf),
 }
 
 impl ManagedPythonDownload {
-    /// Return the first [`PythonDownload`] matching a request, if any.
+    /// Return the first [`ManagedPythonDownload`] matching a request, if any.
     pub fn from_request(
         request: &PythonDownloadRequest,
     ) -> Result<&'static ManagedPythonDownload, Error> {
@@ -433,7 +444,7 @@ impl ManagedPythonDownload {
             .ok_or(Error::NoDownloadFound(request.clone()))
     }
 
-    /// Iterate over all [`PythonDownload`]'s.
+    /// Iterate over all [`ManagedPythonDownload`]s.
     pub fn iter_all() -> impl Iterator<Item = &'static ManagedPythonDownload> {
         PYTHON_DOWNLOADS
             .iter()
@@ -458,17 +469,69 @@ impl ManagedPythonDownload {
         self.sha256
     }
 
-    /// Download and extract
-    #[instrument(skip(client, installation_dir, cache_dir, reporter), fields(download = % self.key()))]
+    /// Download and extract a Python distribution, retrying on failure.
+    #[instrument(skip(client, installation_dir, scratch_dir, reporter), fields(download = % self.key()))]
+    pub async fn fetch_with_retry(
+        &self,
+        client: &uv_client::BaseClient,
+        installation_dir: &Path,
+        scratch_dir: &Path,
+        reinstall: bool,
+        python_install_mirror: Option<&str>,
+        pypy_install_mirror: Option<&str>,
+        reporter: Option<&dyn Reporter>,
+    ) -> Result<DownloadResult, Error> {
+        let mut n_past_retries = 0;
+        let start_time = SystemTime::now();
+        let retry_policy = client.retry_policy();
+        loop {
+            let result = self
+                .fetch(
+                    client,
+                    installation_dir,
+                    scratch_dir,
+                    reinstall,
+                    python_install_mirror,
+                    pypy_install_mirror,
+                    reporter,
+                )
+                .await;
+            if result
+                .as_ref()
+                .err()
+                .is_some_and(|err| is_extended_transient_error(err))
+            {
+                let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
+                if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
+                    debug!(
+                        "Transient failure while handling response for {}; retrying...",
+                        self.key()
+                    );
+                    let duration = execute_after
+                        .duration_since(SystemTime::now())
+                        .unwrap_or_else(|_| Duration::default());
+                    tokio::time::sleep(duration).await;
+                    n_past_retries += 1;
+                    continue;
+                }
+            }
+            return result;
+        }
+    }
+
+    /// Download and extract a Python distribution.
+    #[instrument(skip(client, installation_dir, scratch_dir, reporter), fields(download = % self.key()))]
     pub async fn fetch(
         &self,
         client: &uv_client::BaseClient,
         installation_dir: &Path,
-        cache_dir: &Path,
+        scratch_dir: &Path,
         reinstall: bool,
+        python_install_mirror: Option<&str>,
+        pypy_install_mirror: Option<&str>,
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
-        let url = self.download_url()?;
+        let url = self.download_url(python_install_mirror, pypy_install_mirror)?;
         let path = installation_dir.join(self.key().to_string());
 
         // If it is not a reinstall and the dir already exists, return it.
@@ -486,11 +549,11 @@ impl ManagedPythonDownload {
             .map(|reporter| (reporter, reporter.on_download_start(&self.key, size)));
 
         // Download and extract into a temporary directory.
-        let temp_dir = tempfile::tempdir_in(cache_dir).map_err(Error::DownloadDirError)?;
+        let temp_dir = tempfile::tempdir_in(scratch_dir).map_err(Error::DownloadDirError)?;
 
         debug!(
             "Downloading {url} to temporary location: {}",
-            temp_dir.path().simplified().display()
+            temp_dir.path().simplified_display()
         );
 
         let mut hashers = self
@@ -585,12 +648,16 @@ impl ManagedPythonDownload {
 
     /// Return the [`Url`] to use when downloading the distribution. If a mirror is set via the
     /// appropriate environment variable, use it instead.
-    fn download_url(&self) -> Result<Url, Error> {
+    fn download_url(
+        &self,
+        python_install_mirror: Option<&str>,
+        pypy_install_mirror: Option<&str>,
+    ) -> Result<Url, Error> {
         match self.key.implementation {
             LenientImplementationName::Known(ImplementationName::CPython) => {
-                if let Ok(mirror) = std::env::var(EnvVars::UV_PYTHON_INSTALL_MIRROR) {
+                if let Some(mirror) = python_install_mirror {
                     let Some(suffix) = self.url.strip_prefix(
-                        "https://github.com/indygreg/python-build-standalone/releases/download/",
+                        "https://github.com/astral-sh/python-build-standalone/releases/download/",
                     ) else {
                         return Err(Error::Mirror(EnvVars::UV_PYTHON_INSTALL_MIRROR, self.url));
                     };
@@ -601,7 +668,7 @@ impl ManagedPythonDownload {
             }
 
             LenientImplementationName::Known(ImplementationName::PyPy) => {
-                if let Ok(mirror) = std::env::var(EnvVars::UV_PYPY_INSTALL_MIRROR) {
+                if let Some(mirror) = pypy_install_mirror {
                     let Some(suffix) = self.url.strip_prefix("https://downloads.python.org/pypy/")
                     else {
                         return Err(Error::Mirror(EnvVars::UV_PYPY_INSTALL_MIRROR, self.url));

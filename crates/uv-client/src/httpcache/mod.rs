@@ -992,6 +992,7 @@ impl ArchivedCachePolicy {
 /// This dictates what the caller should do next by indicating whether the
 /// cached response is stale or not.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum BeforeRequest {
     /// The cached response is still fresh, and the caller may return the
     /// cached response without issuing an HTTP requests.
@@ -1381,11 +1382,9 @@ fn unix_timestamp_to_rfc2822(seconds: u64) -> Option<String> {
     use jiff::fmt::rfc2822::DateTimePrinter;
 
     unix_timestamp_to_datetime(seconds).and_then(|timestamp| {
-        let mut buf = String::new();
         DateTimePrinter::new()
-            .print_timestamp(&timestamp, &mut buf)
-            .ok()?;
-        Some(buf)
+            .timestamp_to_rfc9110_string(&timestamp)
+            .ok()
     })
 }
 

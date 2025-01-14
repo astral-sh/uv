@@ -1,3 +1,8 @@
+---
+title: Using uv with dependency bots
+description: A guide to using uv with dependency bots like Renovate and Dependabot.
+---
+
 # Dependency bots
 
 It is considered best practice to regularly update dependencies, to avoid being exposed to
@@ -19,10 +24,10 @@ uv is supported by [Renovate](https://github.com/renovatebot/renovate).
 
 Renovate uses the presence of a `uv.lock` file to determine that uv is used for managing
 dependencies, and will suggest upgrades to
-[project dependencies](../../concepts/dependencies.md#project-dependencies),
-[optional dependencies](../../concepts/dependencies.md#optional-dependencies) and
-[development dependencies](../../concepts/dependencies.md#development-dependencies). Renovate will
-update both the `pyproject.toml` and `uv.lock` files.
+[project dependencies](../../concepts/projects/dependencies.md#project-dependencies),
+[optional dependencies](../../concepts/projects/dependencies.md#optional-dependencies) and
+[development dependencies](../../concepts/projects/dependencies.md#development-dependencies).
+Renovate will update both the `pyproject.toml` and `uv.lock` files.
 
 The lockfile can also be refreshed on a regular basis (for instance to update transitive
 dependencies) by enabling the

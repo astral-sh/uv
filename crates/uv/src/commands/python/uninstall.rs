@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 use std::fmt::Write;
+use std::path::PathBuf;
 
 use anyhow::Result;
 use futures::stream::FuturesUnordered;
@@ -7,22 +8,28 @@ use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 
+use rustc_hash::{FxHashMap, FxHashSet};
+use tracing::{debug, warn};
+use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
-use uv_python::managed::ManagedPythonInstallations;
-use uv_python::PythonRequest;
+use uv_python::managed::{python_executable_dir, ManagedPythonInstallations};
+use uv_python::{PythonInstallationKey, PythonRequest};
 
+use crate::commands::python::install::format_executables;
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
 
 /// Uninstall managed Python versions.
 pub(crate) async fn uninstall(
+    install_dir: Option<PathBuf>,
     targets: Vec<String>,
     all: bool,
 
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let installations = ManagedPythonInstallations::from_settings()?.init()?;
+    let installations = ManagedPythonInstallations::from_settings(install_dir)?.init()?;
+
     let _lock = installations.lock().await?;
 
     // Perform the uninstallation.
@@ -121,6 +128,54 @@ async fn do_uninstall(
         return Ok(ExitStatus::Failure);
     }
 
+    // Find and remove all relevant Python executables
+    let mut uninstalled_executables: FxHashMap<PythonInstallationKey, FxHashSet<PathBuf>> =
+        FxHashMap::default();
+    for executable in python_executable_dir()?
+        .read_dir()
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| match entry {
+            Ok(entry) => Some(entry),
+            Err(err) => {
+                warn!("Failed to read executable: {}", err);
+                None
+            }
+        })
+        .filter(|entry| entry.file_type().is_ok_and(|file_type| !file_type.is_dir()))
+        .map(|entry| entry.path())
+        // Only include files that match the expected Python executable names
+        // TODO(zanieb): This is a minor optimization to avoid opening more files, but we could
+        // leave broken links behind, i.e., if the user created them.
+        .filter(|path| {
+            matching_installations.iter().any(|installation| {
+                let name = path.file_name().and_then(|name| name.to_str());
+                name == Some(&installation.key().executable_name_minor())
+                    || name == Some(&installation.key().executable_name_major())
+                    || name == Some(&installation.key().executable_name())
+            })
+        })
+        .sorted()
+    {
+        let Some(installation) = matching_installations
+            .iter()
+            .find(|installation| installation.is_bin_link(executable.as_path()))
+        else {
+            continue;
+        };
+
+        fs_err::remove_file(&executable)?;
+        debug!(
+            "Removed `{}` for `{}`",
+            executable.simplified_display(),
+            installation.key()
+        );
+        uninstalled_executables
+            .entry(installation.key().clone())
+            .or_default()
+            .insert(executable);
+    }
+
     let mut tasks = FuturesUnordered::new();
     for installation in &matching_installations {
         tasks.push(async {
@@ -178,9 +233,16 @@ async fn do_uninstall(
             })
             .sorted_unstable_by(|a, b| a.key.cmp(&b.key).then_with(|| a.kind.cmp(&b.kind)))
         {
+            let executables = format_executables(&event, &uninstalled_executables);
             match event.kind {
                 ChangeEventKind::Removed => {
-                    writeln!(printer.stderr(), " {} {}", "-".red(), event.key.bold())?;
+                    writeln!(
+                        printer.stderr(),
+                        " {} {}{}",
+                        "-".red(),
+                        event.key.bold(),
+                        executables,
+                    )?;
                 }
                 _ => unreachable!(),
             }

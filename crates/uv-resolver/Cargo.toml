@@ -38,11 +38,12 @@ uv-types = { workspace = true }
 uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
-anyhow = { workspace = true }
+arcstr = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
 dashmap = { workspace = true }
 either = { workspace = true }
 futures = { workspace = true }
+hashbrown = { workspace = true }
 indexmap = { workspace = true }
 itertools = { workspace = true }
 jiff = { workspace = true, features = ["serde"] }
@@ -66,3 +67,6 @@ url = { workspace = true }
 [dev-dependencies]
 insta = { version = "1.40.0" }
 toml = { workspace = true }
+
+[features]
+tracing-durations-export = []

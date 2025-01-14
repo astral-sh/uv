@@ -21,6 +21,7 @@ uv-cache = { workspace = true }
 uv-cache-info = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-normalize = { workspace = true }
+uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true, features = ["schemars"] }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
@@ -29,6 +30,7 @@ uv-static = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
 either = { workspace = true }
 fs-err = { workspace = true }
+rayon = { workspace = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }

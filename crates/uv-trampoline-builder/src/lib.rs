@@ -1,6 +1,8 @@
-use std::io::{Cursor, Write};
-use std::path::Path;
+use std::io::{self, Cursor, Read, Seek, Write};
+use std::path::{Path, PathBuf};
+use std::str::Utf8Error;
 
+use fs_err::File;
 use thiserror::Error;
 use uv_fs::Simplified;
 use zip::write::FileOptions;
@@ -30,10 +32,95 @@ const LAUNCHER_AARCH64_GUI: &[u8] =
 const LAUNCHER_AARCH64_CONSOLE: &[u8] =
     include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-aarch64-console.exe");
 
+// See `uv-trampoline::bounce`. These numbers must match.
+const PATH_LENGTH_SIZE: usize = size_of::<u32>();
+const MAX_PATH_LENGTH: u32 = 32 * 1024;
+const MAGIC_NUMBER_SIZE: usize = 4;
+
+#[derive(Debug)]
+pub struct Launcher {
+    pub kind: LauncherKind,
+    pub python_path: PathBuf,
+}
+
+impl Launcher {
+    /// Read [`Launcher`] metadata from a trampoline executable file.
+    ///
+    /// Returns `Ok(None)` if the file is not a trampoline executable.
+    /// Returns `Err` if the file looks like a trampoline executable but is formatted incorrectly.
+    ///
+    /// Expects the following metadata to be at the end of the file:
+    ///
+    /// ```text
+    /// - file path (no greater than 32KB)
+    /// - file path length (u32)
+    /// - magic number(4 bytes)
+    /// ```
+    ///
+    /// This should only be used on Windows, but should just return `Ok(None)` on other platforms.
+    ///
+    /// This is an implementation of [`uv-trampoline::bounce::read_trampoline_metadata`] that
+    /// returns errors instead of panicking. Unlike the utility there, we don't assume that the
+    /// file we are reading is a trampoline.
+    #[allow(clippy::cast_possible_wrap)]
+    pub fn try_from_path(path: &Path) -> Result<Option<Self>, Error> {
+        let mut file = File::open(path)?;
+
+        // Read the magic number
+        let Some(kind) = LauncherKind::try_from_file(&mut file)? else {
+            return Ok(None);
+        };
+
+        // Seek to the start of the path length.
+        let path_length_offset = (MAGIC_NUMBER_SIZE + PATH_LENGTH_SIZE) as i64;
+        file.seek(io::SeekFrom::End(-path_length_offset))
+            .map_err(|err| {
+                Error::InvalidLauncherSeek("path length".to_string(), path_length_offset, err)
+            })?;
+
+        // Read the path length
+        let mut buffer = [0; PATH_LENGTH_SIZE];
+        file.read_exact(&mut buffer)
+            .map_err(|err| Error::InvalidLauncherRead("path length".to_string(), err))?;
+
+        let path_length = {
+            let raw_length = u32::from_le_bytes(buffer);
+
+            if raw_length > MAX_PATH_LENGTH {
+                return Err(Error::InvalidPathLength(raw_length));
+            }
+
+            // SAFETY: Above we guarantee the length is less than 32KB
+            raw_length as usize
+        };
+
+        // Seek to the start of the path
+        let path_offset = (MAGIC_NUMBER_SIZE + PATH_LENGTH_SIZE + path_length) as i64;
+        file.seek(io::SeekFrom::End(-path_offset)).map_err(|err| {
+            Error::InvalidLauncherSeek("executable path".to_string(), path_offset, err)
+        })?;
+
+        // Read the path
+        let mut buffer = vec![0u8; path_length];
+        file.read_exact(&mut buffer)
+            .map_err(|err| Error::InvalidLauncherRead("executable path".to_string(), err))?;
+
+        let path = PathBuf::from(
+            String::from_utf8(buffer).map_err(|err| Error::InvalidPath(err.utf8_error()))?,
+        );
+
+        Ok(Some(Self {
+            kind,
+            python_path: path,
+        }))
+    }
+}
+
 /// The kind of trampoline launcher to create.
 ///
 /// See [`uv-trampoline::bounce::TrampolineKind`].
-enum LauncherKind {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LauncherKind {
     /// The trampoline should execute itself, it's a zipped Python script.
     Script,
     /// The trampoline should just execute Python, it's a proxy Python executable.
@@ -41,17 +128,61 @@ enum LauncherKind {
 }
 
 impl LauncherKind {
-    const fn magic_number(&self) -> &'static [u8; 4] {
+    /// Return the magic number for this [`LauncherKind`].
+    const fn magic_number(self) -> &'static [u8; 4] {
         match self {
             Self::Script => b"UVSC",
             Self::Python => b"UVPY",
         }
+    }
+
+    /// Read a [`LauncherKind`] from 4 byte buffer.
+    ///
+    /// If the buffer does not contain a matching magic number, `None` is returned.
+    fn try_from_bytes(bytes: [u8; MAGIC_NUMBER_SIZE]) -> Option<Self> {
+        if &bytes == Self::Script.magic_number() {
+            return Some(Self::Script);
+        }
+        if &bytes == Self::Python.magic_number() {
+            return Some(Self::Python);
+        }
+        None
+    }
+
+    /// Read a [`LauncherKind`] from a file handle, based on the magic number.
+    ///
+    /// This will mutate the file handle, seeking to the end of the file.
+    ///
+    /// If the file cannot be read, an [`io::Error`] is returned. If the path is not a launcher,
+    /// `None` is returned.
+    #[allow(clippy::cast_possible_wrap)]
+    pub fn try_from_file(file: &mut File) -> Result<Option<Self>, Error> {
+        // If the file is less than four bytes, it's not a launcher.
+        let Ok(_) = file.seek(io::SeekFrom::End(-(MAGIC_NUMBER_SIZE as i64))) else {
+            return Ok(None);
+        };
+
+        let mut buffer = [0; MAGIC_NUMBER_SIZE];
+        file.read_exact(&mut buffer)
+            .map_err(|err| Error::InvalidLauncherRead("magic number".to_string(), err))?;
+
+        Ok(Self::try_from_bytes(buffer))
     }
 }
 
 /// Note: The caller is responsible for adding the path of the wheel we're installing.
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error(transparent)]
+    Io(#[from] io::Error),
+    #[error("Only paths with a length up to 32KB are supported but found a length of {0} bytes")]
+    InvalidPathLength(u32),
+    #[error("Failed to parse executable path")]
+    InvalidPath(#[source] Utf8Error),
+    #[error("Failed to seek to {0} at offset {1}")]
+    InvalidLauncherSeek(String, i64, #[source] io::Error),
+    #[error("Failed to read launcher {0}")]
+    InvalidLauncherRead(String, #[source] io::Error),
     #[error(
         "Unable to create Windows launcher for: {0} (only x86_64, x86, and arm64 are supported)"
     )]
@@ -137,7 +268,7 @@ pub fn windows_script_launcher(
     launcher.extend_from_slice(&payload);
     launcher.extend_from_slice(python_path.as_bytes());
     launcher.extend_from_slice(
-        &u32::try_from(python_path.as_bytes().len())
+        &u32::try_from(python_path.len())
             .expect("file path should be smaller than 4GB")
             .to_le_bytes(),
     );
@@ -169,7 +300,7 @@ pub fn windows_python_launcher(
     launcher.extend_from_slice(launcher_bin);
     launcher.extend_from_slice(python_path.as_bytes());
     launcher.extend_from_slice(
-        &u32::try_from(python_path.as_bytes().len())
+        &u32::try_from(python_path.len())
             .expect("file path should be smaller than 4GB")
             .to_le_bytes(),
     );
@@ -192,7 +323,7 @@ mod test {
 
     use which::which;
 
-    use super::{windows_python_launcher, windows_script_launcher};
+    use super::{windows_python_launcher, windows_script_launcher, Launcher, LauncherKind};
 
     #[test]
     #[cfg(all(windows, target_arch = "x86", feature = "production"))]
@@ -246,7 +377,7 @@ mod test {
     fn get_script_launcher(shebang: &str, is_gui: bool) -> String {
         if is_gui {
             format!(
-                r##"{shebang}
+                r#"{shebang}
 # -*- coding: utf-8 -*-
 import re
 import sys
@@ -263,11 +394,11 @@ def make_gui() -> None:
 if __name__ == "__main__":
     sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
     sys.exit(make_gui())
-"##
+"#
             )
         } else {
             format!(
-                r##"{shebang}
+                r#"{shebang}
 # -*- coding: utf-8 -*-
 import re
 import sys
@@ -281,7 +412,7 @@ def main_console() -> None:
 if __name__ == "__main__":
     sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
     sys.exit(main_console())
-"##
+"#
             )
         }
     }
@@ -340,6 +471,13 @@ if __name__ == "__main__":
             .stdout(stdout_predicate)
             .stderr(stderr_predicate);
 
+        let launcher = Launcher::try_from_path(console_bin_path.path())
+            .expect("We should succeed at reading the launcher")
+            .expect("The launcher should be valid");
+
+        assert!(launcher.kind == LauncherKind::Script);
+        assert!(launcher.python_path == python_executable_path);
+
         Ok(())
     }
 
@@ -370,6 +508,13 @@ if __name__ == "__main__":
             .assert()
             .success()
             .stdout("Hello from Python Launcher\r\n");
+
+        let launcher = Launcher::try_from_path(console_bin_path.path())
+            .expect("We should succeed at reading the launcher")
+            .expect("The launcher should be valid");
+
+        assert!(launcher.kind == LauncherKind::Python);
+        assert!(launcher.python_path == python_executable_path);
 
         Ok(())
     }

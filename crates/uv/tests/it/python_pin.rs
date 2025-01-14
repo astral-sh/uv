@@ -168,7 +168,7 @@ fn python_pin() {
         Updated `.python-version` from `[PYTHON-3.11]` -> `pypy`
 
         ----- stderr -----
-        warning: No interpreter found for PyPy in managed installations or system path
+        warning: No interpreter found for PyPy in managed installations or search path
         "###);
 
         let python_version = context.read(PYTHON_VERSION_FILENAME);
@@ -188,7 +188,7 @@ fn python_pin() {
         Updated `.python-version` from `pypy` -> `3.7`
 
         ----- stderr -----
-        warning: No interpreter found for Python 3.7 in managed installations or system path
+        warning: No interpreter found for Python 3.7 in managed installations or search path
         "###);
 
         let python_version = context.read(PYTHON_VERSION_FILENAME);
@@ -212,12 +212,12 @@ fn python_pin_no_python() {
     Pinned `.python-version` to `3.12`
 
     ----- stderr -----
-    warning: No interpreter found for Python 3.12 in managed installations or system path
+    warning: No interpreter found for Python 3.12 in managed installations or search path
     "###);
 }
 
 #[test]
-fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
+fn python_pin_compatible_with_requires_python() -> Result<()> {
     let context: TestContext =
         TestContext::new_with_versions(&["3.10", "3.11"]).with_filtered_python_sources();
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -388,7 +388,7 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
 }
 
 #[test]
-fn warning_pinned_python_version_not_installed() -> anyhow::Result<()> {
+fn warning_pinned_python_version_not_installed() -> Result<()> {
     let context: TestContext = TestContext::new_with_versions(&["3.10", "3.11"]);
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -411,7 +411,7 @@ fn warning_pinned_python_version_not_installed() -> anyhow::Result<()> {
         3.12
 
         ----- stderr -----
-        warning: Failed to resolve pinned Python version `3.12`: No interpreter found for Python 3.12 in managed installations, system path, or `py` launcher
+        warning: Failed to resolve pinned Python version `3.12`: No interpreter found for Python 3.12 in managed installations, search path, or registry
         "###);
     } else {
         uv_snapshot!(context.filters(), context.python_pin(), @r###"
@@ -421,7 +421,7 @@ fn warning_pinned_python_version_not_installed() -> anyhow::Result<()> {
         3.12
 
         ----- stderr -----
-        warning: Failed to resolve pinned Python version `3.12`: No interpreter found for Python 3.12 in managed installations or system path
+        warning: Failed to resolve pinned Python version `3.12`: No interpreter found for Python 3.12 in managed installations or search path
         "###);
     }
 
@@ -440,7 +440,7 @@ fn python_pin_resolve_no_python() {
         ----- stdout -----
 
         ----- stderr -----
-        error: No interpreter found for Python 3.12 in managed installations, system path, or `py` launcher
+        error: No interpreter found for Python 3.12 in managed installations, search path, or registry
         "###);
     } else {
         uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("3.12"), @r###"
@@ -449,21 +449,21 @@ fn python_pin_resolve_no_python() {
         ----- stdout -----
 
         ----- stderr -----
-        error: No interpreter found for Python 3.12 in managed installations or system path
+        error: No interpreter found for Python 3.12 in managed installations or search path
         "###);
     }
 }
 
 #[test]
 fn python_pin_resolve() {
-    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
+    let context: TestContext = TestContext::new_with_versions(&["3.12", "3.13"]);
 
     // We pin the first interpreter on the path
     uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("any"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
-    Pinned `.python-version` to `[PYTHON-3.11]`
+    Pinned `.python-version` to `[PYTHON-3.12]`
 
     ----- stderr -----
     "###);
@@ -472,17 +472,15 @@ fn python_pin_resolve() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(python_version, @r###"
-        [PYTHON-3.11]
-        "###);
+        assert_snapshot!(python_version, @"[PYTHON-3.12]");
     });
 
-    // Request Python 3.12
-    uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("3.12"), @r###"
+    // Request Python 3.13
+    uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("3.13"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
-    Updated `.python-version` from `[PYTHON-3.11]` -> `[PYTHON-3.12]`
+    Updated `.python-version` from `[PYTHON-3.12]` -> `[PYTHON-3.13]`
 
     ----- stderr -----
     "###);
@@ -491,17 +489,15 @@ fn python_pin_resolve() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(python_version, @r###"
-        [PYTHON-3.12]
-        "###);
+        assert_snapshot!(python_version, @"[PYTHON-3.13]");
     });
 
-    // Request Python 3.11
-    uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("3.11"), @r###"
+    // Request Python 3.13
+    uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("3.13"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
-    Updated `.python-version` from `[PYTHON-3.12]` -> `[PYTHON-3.11]`
+    Pinned `.python-version` to `[PYTHON-3.13]`
 
     ----- stderr -----
     "###);
@@ -510,9 +506,7 @@ fn python_pin_resolve() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(python_version, @r###"
-        [PYTHON-3.11]
-        "###);
+        assert_snapshot!(python_version, @"[PYTHON-3.13]");
     });
 
     // Request CPython
@@ -520,7 +514,7 @@ fn python_pin_resolve() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Pinned `.python-version` to `[PYTHON-3.11]`
+    Updated `.python-version` from `[PYTHON-3.13]` -> `[PYTHON-3.12]`
 
     ----- stderr -----
     "###);
@@ -529,17 +523,15 @@ fn python_pin_resolve() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(python_version, @r###"
-        [PYTHON-3.11]
-        "###);
+        assert_snapshot!(python_version, @"[PYTHON-3.12]");
     });
 
-    // Request CPython 3.12
-    uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("cpython@3.12"), @r###"
+    // Request CPython 3.13
+    uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("cpython@3.13"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
-    Updated `.python-version` from `[PYTHON-3.11]` -> `[PYTHON-3.12]`
+    Updated `.python-version` from `[PYTHON-3.12]` -> `[PYTHON-3.13]`
 
     ----- stderr -----
     "###);
@@ -548,17 +540,15 @@ fn python_pin_resolve() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(python_version, @r###"
-        [PYTHON-3.12]
-        "###);
+        assert_snapshot!(python_version, @"[PYTHON-3.13]");
     });
 
-    // Request CPython 3.12 via partial key syntax
-    uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("cpython-3.12"), @r###"
+    // Request CPython 3.13 via partial key syntax
+    uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("cpython-3.13"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
-    Pinned `.python-version` to `[PYTHON-3.12]`
+    Pinned `.python-version` to `[PYTHON-3.13]`
 
     ----- stderr -----
     "###);
@@ -567,22 +557,20 @@ fn python_pin_resolve() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(python_version, @r###"
-        [PYTHON-3.12]
-        "###);
+        assert_snapshot!(python_version, @"[PYTHON-3.13]");
     });
 
-    // Request CPython 3.12 for the current platform
+    // Request CPython 3.13 for the current platform
     let os = Os::from_env();
     let arch = Arch::from_env();
 
     uv_snapshot!(context.filters(), context.python_pin().arg("--resolved")
-    .arg(format!("cpython-3.12-{os}-{arch}"))
+    .arg(format!("cpython-3.13-{os}-{arch}"))
     , @r###"
     success: true
     exit_code: 0
     ----- stdout -----
-    Pinned `.python-version` to `[PYTHON-3.12]`
+    Pinned `.python-version` to `[PYTHON-3.13]`
 
     ----- stderr -----
     "###);
@@ -591,9 +579,7 @@ fn python_pin_resolve() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(python_version, @r###"
-        [PYTHON-3.12]
-        "###);
+        assert_snapshot!(python_version, @"[PYTHON-3.13]");
     });
 
     // Request an implementation that is not installed
@@ -605,16 +591,14 @@ fn python_pin_resolve() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for PyPy in managed installations or system path
+    error: No interpreter found for PyPy in managed installations or search path
     "###);
 
     let python_version = context.read(PYTHON_VERSION_FILENAME);
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(python_version, @r###"
-        [PYTHON-3.12]
-        "###);
+        assert_snapshot!(python_version, @"[PYTHON-3.13]");
     });
 
     // Request a version that is not installed
@@ -626,16 +610,14 @@ fn python_pin_resolve() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for Python 3.7 in managed installations or system path
+    error: No interpreter found for Python 3.7 in managed installations or search path
     "###);
 
     let python_version = context.read(PYTHON_VERSION_FILENAME);
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(python_version, @r###"
-        [PYTHON-3.12]
-        "###);
+        assert_snapshot!(python_version, @"[PYTHON-3.13]");
     });
 }
 

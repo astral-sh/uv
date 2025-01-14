@@ -4,7 +4,7 @@ use uv_pep508::MarkerEnvironment;
 
 /// A wrapper type around [`MarkerEnvironment`] that ensures the Python version markers are
 /// release-only, to match the resolver's semantics.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ResolverMarkerEnvironment(MarkerEnvironment);
 
 impl ResolverMarkerEnvironment {

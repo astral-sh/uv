@@ -48,7 +48,7 @@ pub(crate) fn pip_check(
     )?;
 
     // Determine the markers to use for resolution.
-    let markers = environment.interpreter().resolver_markers();
+    let markers = environment.interpreter().resolver_marker_environment();
 
     // Run the diagnostics.
     let diagnostics: Vec<SitePackagesDiagnostic> =

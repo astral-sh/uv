@@ -24,7 +24,9 @@ use uv_macros::OptionsMetadata;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTree;
-use uv_pypi_types::{RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
+use uv_pypi_types::{
+    Conflicts, RequirementSource, SchemaConflicts, SupportedEnvironments, VerbatimParsedUrl,
+};
 
 #[derive(Error, Debug)]
 pub enum PyprojectTomlError {
@@ -33,7 +35,9 @@ pub enum PyprojectTomlError {
     #[error(transparent)]
     TomlSchema(#[from] toml_edit::de::Error),
     #[error("`pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set")]
-    MissingName(#[source] toml_edit::de::Error),
+    MissingName,
+    #[error("`pyproject.toml` is using the `[project]` table, but the required `project.version` field is neither set nor present in the `project.dynamic` list")]
+    MissingVersion,
 }
 
 /// A `pyproject.toml` as specified in PEP 517.
@@ -61,15 +65,8 @@ impl PyProjectToml {
     pub fn from_string(raw: String) -> Result<Self, PyprojectTomlError> {
         let pyproject: toml_edit::ImDocument<_> =
             toml_edit::ImDocument::from_str(&raw).map_err(PyprojectTomlError::TomlSyntax)?;
-        let pyproject =
-            PyProjectToml::deserialize(pyproject.into_deserializer()).map_err(|err| {
-                // TODO(konsti): A typed error would be nicer, this can break on toml upgrades.
-                if err.message().contains("missing field `name`") {
-                    PyprojectTomlError::MissingName(err)
-                } else {
-                    PyprojectTomlError::TomlSchema(err)
-                }
-            })?;
+        let pyproject = PyProjectToml::deserialize(pyproject.into_deserializer())
+            .map_err(PyprojectTomlError::TomlSchema)?;
         Ok(PyProjectToml { raw, ..pyproject })
     }
 
@@ -97,6 +94,24 @@ impl PyProjectToml {
         } else {
             false
         }
+    }
+
+    /// Returns the set of conflicts for the project.
+    pub fn conflicts(&self) -> Conflicts {
+        let empty = Conflicts::empty();
+        let Some(project) = self.project.as_ref() else {
+            return empty;
+        };
+        let Some(tool) = self.tool.as_ref() else {
+            return empty;
+        };
+        let Some(tooluv) = tool.uv.as_ref() else {
+            return empty;
+        };
+        let Some(conflicting) = tooluv.conflicts.as_ref() else {
+            return empty;
+        };
+        conflicting.to_conflicts_with_package_name(&project.name)
     }
 }
 
@@ -187,7 +202,7 @@ impl<'de> Deserialize<'de> for DependencyGroupSpecifier {
 /// See <https://packaging.python.org/en/latest/specifications/pyproject-toml>.
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[cfg_attr(test, derive(Serialize))]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", try_from = "ProjectWire")]
 pub struct Project {
     /// The name of the project
     pub name: PackageName,
@@ -206,6 +221,48 @@ pub struct Project {
     /// Used to determine whether a `scripts` section is present.
     #[serde(default, skip_serializing)]
     pub(crate) scripts: Option<serde::de::IgnoredAny>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+struct ProjectWire {
+    name: Option<PackageName>,
+    version: Option<Version>,
+    dynamic: Option<Vec<String>>,
+    requires_python: Option<VersionSpecifiers>,
+    dependencies: Option<Vec<String>>,
+    optional_dependencies: Option<BTreeMap<ExtraName, Vec<String>>>,
+    gui_scripts: Option<serde::de::IgnoredAny>,
+    scripts: Option<serde::de::IgnoredAny>,
+}
+
+impl TryFrom<ProjectWire> for Project {
+    type Error = PyprojectTomlError;
+
+    fn try_from(value: ProjectWire) -> Result<Self, Self::Error> {
+        // If `[project.name]` is not present, show a dedicated error message.
+        let name = value.name.ok_or(PyprojectTomlError::MissingName)?;
+
+        // If `[project.version]` is not present (or listed in `[project.dynamic]`), show a dedicated error message.
+        if value.version.is_none()
+            && !value
+                .dynamic
+                .as_ref()
+                .is_some_and(|dynamic| dynamic.iter().any(|field| field == "version"))
+        {
+            return Err(PyprojectTomlError::MissingVersion);
+        }
+
+        Ok(Project {
+            name,
+            version: value.version,
+            requires_python: value.requires_python,
+            dependencies: value.dependencies,
+            optional_dependencies: value.optional_dependencies,
+            gui_scripts: value.gui_scripts,
+            scripts: value.scripts,
+        })
+    }
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -228,14 +285,14 @@ pub struct ToolUv {
     /// during development. A dependency source can be a Git repository, a URL, a local path, or an
     /// alternative registry.
     ///
-    /// See [Dependencies](../concepts/dependencies.md) for more.
+    /// See [Dependencies](../concepts/projects/dependencies.md) for more.
     #[option(
-        default = "\"[]\"",
+        default = "{}",
         value_type = "dict",
         example = r#"
             [tool.uv.sources]
             httpx = { git = "https://github.com/encode/httpx", tag = "0.27.0" }
-            pytest =  { url = "https://files.pythonhosted.org/packages/6b/77/7440a06a8ead44c7757a64362dd22df5760f9b12dc5f11b6188cd2fc27a0/pytest-8.3.3-py3-none-any.whl" }
+            pytest = { url = "https://files.pythonhosted.org/packages/6b/77/7440a06a8ead44c7757a64362dd22df5760f9b12dc5f11b6188cd2fc27a0/pytest-8.3.3-py3-none-any.whl" }
             pydantic = { path = "/path/to/pydantic", editable = true }
         "#
     )]
@@ -269,7 +326,7 @@ pub struct ToolUv {
     /// given the lowest priority when resolving packages. Additionally, marking an index as default will disable the
     /// PyPI default index.
     #[option(
-        default = "\"[]\"",
+        default = "[]",
         value_type = "dict",
         example = r#"
             [[tool.uv.index]]
@@ -340,7 +397,7 @@ pub struct ToolUv {
         )
     )]
     #[option(
-        default = r#"[]"#,
+        default = "[]",
         value_type = "list[str]",
         example = r#"
             dev-dependencies = ["ruff==0.5.0"]
@@ -374,7 +431,7 @@ pub struct ToolUv {
         )
     )]
     #[option(
-        default = r#"[]"#,
+        default = "[]",
         value_type = "list[str]",
         example = r#"
             # Always install Werkzeug 2.3.0, regardless of whether transitive dependencies request
@@ -405,7 +462,7 @@ pub struct ToolUv {
         )
     )]
     #[option(
-        default = r#"[]"#,
+        default = "[]",
         value_type = "list[str]",
         example = r#"
             # Ensure that the grpcio version is always less than 1.65, if it's requested by a
@@ -431,7 +488,7 @@ pub struct ToolUv {
         )
     )]
     #[option(
-        default = r#"[]"#,
+        default = "[]",
         value_type = "str | list[str]",
         example = r#"
             # Resolve for macOS, but not for Linux or Windows.
@@ -439,6 +496,54 @@ pub struct ToolUv {
         "#
     )]
     pub environments: Option<SupportedEnvironments>,
+
+    /// Conflicting extras or groups may be declared here.
+    ///
+    /// It's useful to declare conflicts when, for example, two or more extras
+    /// have mutually incompatible dependencies. Extra `foo` might depend
+    /// on `numpy==2.0.0` while extra `bar` might depend on `numpy==2.1.0`.
+    /// These extras cannot be activated at the same time. This usually isn't
+    /// a problem for pip-style workflows, but when using projects in uv that
+    /// support with universal resolution, it will try to produce a resolution
+    /// that satisfies both extras simultaneously.
+    ///
+    /// When this happens, resolution will fail, because one cannot install
+    /// both `numpy 2.0.0` and `numpy 2.1.0` into the same environment.
+    ///
+    /// To work around this, you may specify `foo` and `bar` as conflicting
+    /// extras (you can do the same with groups). When doing universal
+    /// resolution in project mode, these extras will get their own "forks"
+    /// distinct from one another in order to permit conflicting dependencies.
+    /// In exchange, if one tries to install from the lock file with both
+    /// conflicting extras activated, installation will fail.
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(description = "A list sets of conflicting groups or extras.")
+    )]
+    #[option(
+        default = r#"[]"#,
+        value_type = "list[list[dict]]",
+        example = r#"
+            # Require that `package[test1]` and `package[test2]`
+            # requirements are resolved in different forks so that they
+            # cannot conflict with one another.
+            conflicts = [
+                [
+                    { extra = "test1" },
+                    { extra = "test2" },
+                ]
+            ]
+
+            # Or, to declare conflicting groups:
+            conflicts = [
+                [
+                    { group = "test1" },
+                    { group = "test2" },
+                ]
+            ]
+        "#
+    )]
+    pub conflicts: Option<SchemaConflicts>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
@@ -511,7 +616,7 @@ pub struct ToolUvWorkspace {
     ///
     /// For more information on the glob syntax, refer to the [`glob` documentation](https://docs.rs/glob/latest/glob/struct.Pattern.html).
     #[option(
-        default = r#"[]"#,
+        default = "[]",
         value_type = "list[str]",
         example = r#"
             members = ["member1", "path/to/member2", "libs/*"]
@@ -525,7 +630,7 @@ pub struct ToolUvWorkspace {
     ///
     /// For more information on the glob syntax, refer to the [`glob` documentation](https://docs.rs/glob/latest/glob/struct.Pattern.html).
     #[option(
-        default = r#"[]"#,
+        default = "[]",
         value_type = "list[str]",
         example = r#"
             exclude = ["member1", "path/to/member2", "libs/*"]
@@ -661,6 +766,12 @@ impl Sources {
     }
 }
 
+impl FromIterator<Source> for Sources {
+    fn from_iter<T: IntoIterator<Item = Source>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
+
 impl IntoIterator for Sources {
     type Item = Source;
     type IntoIter = std::vec::IntoIter<Source>;
@@ -724,30 +835,34 @@ impl TryFrom<SourcesWire> for Sources {
         match wire {
             SourcesWire::One(source) => Ok(Self(vec![source])),
             SourcesWire::Many(sources) => {
-                // Ensure that the markers are disjoint.
-                for (lhs, rhs) in sources
-                    .iter()
-                    .map(Source::marker)
-                    .zip(sources.iter().skip(1).map(Source::marker))
-                {
-                    if !lhs.is_disjoint(&rhs) {
-                        let mut hint = lhs.negate();
-                        hint.and(rhs.clone());
+                for (lhs, rhs) in sources.iter().zip(sources.iter().skip(1)) {
+                    if lhs.extra() != rhs.extra() {
+                        continue;
+                    };
+                    if lhs.group() != rhs.group() {
+                        continue;
+                    };
 
-                        let lhs = lhs
-                            .contents()
-                            .map(|contents| contents.to_string())
-                            .unwrap_or_else(|| "true".to_string());
-                        let rhs = rhs
-                            .contents()
-                            .map(|contents| contents.to_string())
-                            .unwrap_or_else(|| "true".to_string());
+                    let lhs = lhs.marker();
+                    let rhs = rhs.marker();
+                    if !lhs.is_disjoint(rhs) {
+                        let Some(left) = lhs.contents().map(|contents| contents.to_string()) else {
+                            return Err(SourceError::MissingMarkers);
+                        };
+
+                        let Some(right) = rhs.contents().map(|contents| contents.to_string())
+                        else {
+                            return Err(SourceError::MissingMarkers);
+                        };
+
+                        let mut hint = lhs.negate();
+                        hint.and(rhs);
                         let hint = hint
                             .contents()
                             .map(|contents| contents.to_string())
                             .unwrap_or_else(|| "true".to_string());
 
-                        return Err(SourceError::OverlappingMarkers(lhs, rhs, hint));
+                        return Err(SourceError::OverlappingMarkers(left, right, hint));
                     }
                 }
 
@@ -788,6 +903,8 @@ pub enum Source {
             default
         )]
         marker: MarkerTree,
+        extra: Option<ExtraName>,
+        group: Option<GroupName>,
     },
     /// A remote `http://` or `https://` URL, either a wheel (`.whl`) or a source distribution
     /// (`.zip`, `.tar.gz`).
@@ -807,6 +924,8 @@ pub enum Source {
             default
         )]
         marker: MarkerTree,
+        extra: Option<ExtraName>,
+        group: Option<GroupName>,
     },
     /// The path to a dependency, either a wheel (a `.whl` file), source distribution (a `.zip` or
     /// `.tar.gz` file), or source tree (i.e., a directory containing a `pyproject.toml` or
@@ -821,6 +940,8 @@ pub enum Source {
             default
         )]
         marker: MarkerTree,
+        extra: Option<ExtraName>,
+        group: Option<GroupName>,
     },
     /// A dependency pinned to a specific index, e.g., `torch` after setting `torch` to `https://download.pytorch.org/whl/cu118`.
     Registry {
@@ -831,6 +952,8 @@ pub enum Source {
             default
         )]
         marker: MarkerTree,
+        extra: Option<ExtraName>,
+        group: Option<GroupName>,
     },
     /// A dependency on another package in the workspace.
     Workspace {
@@ -843,6 +966,8 @@ pub enum Source {
             default
         )]
         marker: MarkerTree,
+        extra: Option<ExtraName>,
+        group: Option<GroupName>,
     },
 }
 
@@ -872,6 +997,8 @@ impl<'de> Deserialize<'de> for Source {
                 default
             )]
             marker: MarkerTree,
+            extra: Option<ExtraName>,
+            group: Option<GroupName>,
         }
 
         // Attempt to deserialize as `CatchAll`.
@@ -887,7 +1014,16 @@ impl<'de> Deserialize<'de> for Source {
             index,
             workspace,
             marker,
+            extra,
+            group,
         } = CatchAll::deserialize(deserializer)?;
+
+        // If both `extra` and `group` are set, return an error.
+        if extra.is_some() && group.is_some() {
+            return Err(serde::de::Error::custom(
+                "cannot specify both `extra` and `group`",
+            ));
+        }
 
         // If the `git` field is set, we're dealing with a Git source.
         if let Some(git) = git {
@@ -944,6 +1080,8 @@ impl<'de> Deserialize<'de> for Source {
                 tag,
                 branch,
                 marker,
+                extra,
+                group,
             });
         }
 
@@ -994,6 +1132,8 @@ impl<'de> Deserialize<'de> for Source {
                 url,
                 subdirectory,
                 marker,
+                extra,
+                group,
             });
         }
 
@@ -1039,6 +1179,8 @@ impl<'de> Deserialize<'de> for Source {
                 path,
                 editable,
                 marker,
+                extra,
+                group,
             });
         }
 
@@ -1085,7 +1227,12 @@ impl<'de> Deserialize<'de> for Source {
                 ));
             }
 
-            return Ok(Self::Registry { index, marker });
+            return Ok(Self::Registry {
+                index,
+                marker,
+                extra,
+                group,
+            });
         }
 
         // If the `workspace` field is set, we're dealing with a workspace source.
@@ -1131,7 +1278,12 @@ impl<'de> Deserialize<'de> for Source {
                 ));
             }
 
-            return Ok(Self::Workspace { workspace, marker });
+            return Ok(Self::Workspace {
+                workspace,
+                marker,
+                extra,
+                group,
+            });
         }
 
         // If none of the fields are set, we're dealing with an error.
@@ -1163,6 +1315,8 @@ pub enum SourceError {
     NonUtf8Path(PathBuf),
     #[error("Source markers must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
     OverlappingMarkers(String, String, String),
+    #[error("When multiple sources are provided, each source must include a platform marker (e.g., `marker = \"sys_platform == 'linux'\"`)")]
+    MissingMarkers,
     #[error("Must provide at least one source")]
     EmptySources,
 }
@@ -1199,6 +1353,8 @@ impl Source {
                     Ok(Some(Source::Workspace {
                         workspace: true,
                         marker: MarkerTree::TRUE,
+                        extra: None,
+                        group: None,
                     }))
                 }
                 RequirementSource::Url { .. } => {
@@ -1222,6 +1378,8 @@ impl Source {
                     Source::Registry {
                         index,
                         marker: MarkerTree::TRUE,
+                        extra: None,
+                        group: None,
                     }
                 } else {
                     return Ok(None);
@@ -1236,13 +1394,19 @@ impl Source {
                         .map_err(SourceError::Absolute)?,
                 ),
                 marker: MarkerTree::TRUE,
+                extra: None,
+                group: None,
             },
             RequirementSource::Url {
-                subdirectory, url, ..
+                location,
+                subdirectory,
+                ..
             } => Source::Url {
-                url: url.to_url(),
+                url: location,
                 subdirectory: subdirectory.map(PortablePathBuf::from),
                 marker: MarkerTree::TRUE,
+                extra: None,
+                group: None,
             },
             RequirementSource::Git {
                 repository,
@@ -1268,6 +1432,8 @@ impl Source {
                         git: repository,
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,
+                        extra: None,
+                        group: None,
                     }
                 } else {
                     Source::Git {
@@ -1277,6 +1443,8 @@ impl Source {
                         git: repository,
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,
+                        extra: None,
+                        group: None,
                     }
                 }
             }
@@ -1288,11 +1456,33 @@ impl Source {
     /// Return the [`MarkerTree`] for the source.
     pub fn marker(&self) -> MarkerTree {
         match self {
-            Source::Git { marker, .. } => marker.clone(),
-            Source::Url { marker, .. } => marker.clone(),
-            Source::Path { marker, .. } => marker.clone(),
-            Source::Registry { marker, .. } => marker.clone(),
-            Source::Workspace { marker, .. } => marker.clone(),
+            Source::Git { marker, .. } => *marker,
+            Source::Url { marker, .. } => *marker,
+            Source::Path { marker, .. } => *marker,
+            Source::Registry { marker, .. } => *marker,
+            Source::Workspace { marker, .. } => *marker,
+        }
+    }
+
+    /// Return the extra name for the source.
+    pub fn extra(&self) -> Option<&ExtraName> {
+        match self {
+            Source::Git { extra, .. } => extra.as_ref(),
+            Source::Url { extra, .. } => extra.as_ref(),
+            Source::Path { extra, .. } => extra.as_ref(),
+            Source::Registry { extra, .. } => extra.as_ref(),
+            Source::Workspace { extra, .. } => extra.as_ref(),
+        }
+    }
+
+    /// Return the dependency group name for the source.
+    pub fn group(&self) -> Option<&GroupName> {
+        match self {
+            Source::Git { group, .. } => group.as_ref(),
+            Source::Url { group, .. } => group.as_ref(),
+            Source::Path { group, .. } => group.as_ref(),
+            Source::Registry { group, .. } => group.as_ref(),
+            Source::Workspace { group, .. } => group.as_ref(),
         }
     }
 }

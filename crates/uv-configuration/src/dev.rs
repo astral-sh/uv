@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 
-use either::Either;
 use uv_normalize::{GroupName, DEV_DEPENDENCIES};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -34,20 +33,11 @@ impl DevMode {
         }
     }
 
-    /// Iterate over the group names to include.
-    pub fn iter(&self) -> impl Iterator<Item = &GroupName> {
-        <&Self as IntoIterator>::into_iter(self)
-    }
-}
-
-impl<'a> IntoIterator for &'a DevMode {
-    type Item = &'a GroupName;
-    type IntoIter = Either<std::iter::Empty<&'a GroupName>, std::iter::Once<&'a GroupName>>;
-
-    fn into_iter(self) -> Self::IntoIter {
+    /// Returns `true` if the group is `dev`, and development dependencies should be included.
+    pub fn contains(&self, group: &GroupName) -> bool {
         match self {
-            DevMode::Exclude => Either::Left(std::iter::empty()),
-            DevMode::Include | DevMode::Only => Either::Right(std::iter::once(&*DEV_DEPENDENCIES)),
+            DevMode::Exclude => false,
+            DevMode::Include | DevMode::Only => group == &*DEV_DEPENDENCIES,
         }
     }
 }
@@ -69,10 +59,10 @@ pub struct DevGroupsSpecification {
 pub enum GroupsSpecification {
     /// Include dependencies from the specified groups.
     ///
-    /// The `include` list is guaranteed to omit groups in the `exclude` list (i.e., they have an
-    /// empty intersection).
+    /// If the `include` is `IncludeGroups::Some`, it is guaranteed to omit groups in the `exclude`
+    /// list (i.e., they have an empty intersection).
     Include {
-        include: Vec<GroupName>,
+        include: IncludeGroups,
         exclude: Vec<GroupName>,
     },
     /// Only include dependencies from the specified groups, exclude all other dependencies.
@@ -89,7 +79,7 @@ impl GroupsSpecification {
     /// Create a [`GroupsSpecification`] that includes the given group.
     pub fn from_group(group: GroupName) -> Self {
         Self::Include {
-            include: vec![group],
+            include: IncludeGroups::Some(vec![group]),
             exclude: Vec::new(),
         }
     }
@@ -107,14 +97,17 @@ impl GroupsSpecification {
     /// Returns the option that was used to request the groups, if any.
     pub fn as_flag(&self) -> Option<Cow<'_, str>> {
         match self {
-            Self::Include { include, exclude } => match include.as_slice() {
-                [] => match exclude.as_slice() {
-                    [] => None,
-                    [group] => Some(Cow::Owned(format!("--no-group {group}"))),
-                    [..] => Some(Cow::Borrowed("--no-group")),
+            Self::Include { include, exclude } => match include {
+                IncludeGroups::All => Some(Cow::Borrowed("--all-groups")),
+                IncludeGroups::Some(groups) => match groups.as_slice() {
+                    [] => match exclude.as_slice() {
+                        [] => None,
+                        [group] => Some(Cow::Owned(format!("--no-group {group}"))),
+                        [..] => Some(Cow::Borrowed("--no-group")),
+                    },
+                    [group] => Some(Cow::Owned(format!("--group {group}"))),
+                    [..] => Some(Cow::Borrowed("--group")),
                 },
-                [group] => Some(Cow::Owned(format!("--group {group}"))),
-                [..] => Some(Cow::Borrowed("--group")),
             },
             Self::Only { include, exclude } => match include.as_slice() {
                 [] => match exclude.as_slice() {
@@ -131,39 +124,54 @@ impl GroupsSpecification {
     /// Iterate over all groups referenced in the [`DevGroupsSpecification`].
     pub fn names(&self) -> impl Iterator<Item = &GroupName> {
         match self {
-            GroupsSpecification::Include { include, exclude }
-            | GroupsSpecification::Only { include, exclude } => {
-                include.iter().chain(exclude.iter())
+            GroupsSpecification::Include { include, exclude } => {
+                include.names().chain(exclude.iter())
             }
+            GroupsSpecification::Only { include, exclude } => include.iter().chain(exclude.iter()),
         }
     }
 
-    /// Iterate over the group names to include.
-    pub fn iter(&self) -> impl Iterator<Item = &GroupName> {
-        <&Self as IntoIterator>::into_iter(self)
+    /// Returns `true` if the specification includes the given group.
+    pub fn contains(&self, group: &GroupName) -> bool {
+        match self {
+            GroupsSpecification::Include { include, exclude } => {
+                // For `--all-groups`, the group is included unless it is explicitly excluded.
+                include.contains(group) && !exclude.contains(group)
+            }
+            GroupsSpecification::Only { include, .. } => include.contains(group),
+        }
     }
 }
 
-impl<'a> IntoIterator for &'a GroupsSpecification {
-    type Item = &'a GroupName;
-    type IntoIter = std::slice::Iter<'a, GroupName>;
+#[derive(Debug, Clone)]
+pub enum IncludeGroups {
+    /// Include dependencies from the specified groups.
+    Some(Vec<GroupName>),
+    /// A marker indicates including dependencies from all groups.
+    All,
+}
 
-    fn into_iter(self) -> Self::IntoIter {
+impl IncludeGroups {
+    /// Returns `true` if the specification includes the given group.
+    pub fn contains(&self, group: &GroupName) -> bool {
         match self {
-            GroupsSpecification::Include {
-                include,
-                exclude: _,
-            }
-            | GroupsSpecification::Only {
-                include,
-                exclude: _,
-            } => include.iter(),
+            IncludeGroups::Some(groups) => groups.contains(group),
+            IncludeGroups::All => true,
+        }
+    }
+
+    /// Iterate over all groups referenced in the [`IncludeGroups`].
+    pub fn names(&self) -> std::slice::Iter<GroupName> {
+        match self {
+            IncludeGroups::Some(groups) => groups.iter(),
+            IncludeGroups::All => [].iter(),
         }
     }
 }
 
 impl DevGroupsSpecification {
     /// Determine the [`DevGroupsSpecification`] policy from the command-line arguments.
+    #[allow(clippy::fn_params_excessive_bools)]
     pub fn from_args(
         dev: bool,
         no_dev: bool,
@@ -171,6 +179,7 @@ impl DevGroupsSpecification {
         mut group: Vec<GroupName>,
         no_group: Vec<GroupName>,
         mut only_group: Vec<GroupName>,
+        all_groups: bool,
     ) -> Self {
         let dev = if only_dev {
             Some(DevMode::Only)
@@ -182,7 +191,12 @@ impl DevGroupsSpecification {
             None
         };
 
-        let groups = if !group.is_empty() {
+        let groups = if all_groups {
+            Some(GroupsSpecification::Include {
+                include: IncludeGroups::All,
+                exclude: no_group,
+            })
+        } else if !group.is_empty() {
             if matches!(dev, Some(DevMode::Only)) {
                 unreachable!("cannot specify both `--only-dev` and `--group`")
             };
@@ -191,7 +205,7 @@ impl DevGroupsSpecification {
             group.retain(|group| !no_group.contains(group));
 
             Some(GroupsSpecification::Include {
-                include: group,
+                include: IncludeGroups::Some(group),
                 exclude: no_group,
             })
         } else if !only_group.is_empty() {
@@ -208,7 +222,7 @@ impl DevGroupsSpecification {
             })
         } else if !no_group.is_empty() {
             Some(GroupsSpecification::Include {
-                include: Vec::new(),
+                include: IncludeGroups::Some(Vec::new()),
                 exclude: no_group,
             })
         } else {
@@ -251,25 +265,34 @@ impl DevGroupsSpecification {
         self.groups.as_ref()
     }
 
-    /// Returns an [`Iterator`] over the group names to include.
-    pub fn iter(&self) -> impl Iterator<Item = &GroupName> {
-        <&Self as IntoIterator>::into_iter(self)
-    }
-}
+    /// Returns `true` if the group is included in the specification.
+    pub fn contains(&self, group: &GroupName) -> bool {
+        if group == &*DEV_DEPENDENCIES {
+            match self.dev.as_ref() {
+                None => {}
+                Some(DevMode::Exclude) => {
+                    // If `--no-dev` was provided, always exclude dev.
+                    return false;
+                }
+                Some(DevMode::Only) => {
+                    // If `--only-dev` was provided, always include dev.
+                    return true;
+                }
+                Some(DevMode::Include) => {
+                    // If `--no-group dev` was provided, exclude dev.
+                    return match self.groups.as_ref() {
+                        Some(GroupsSpecification::Include { exclude, .. }) => {
+                            !exclude.contains(group)
+                        }
+                        _ => true,
+                    };
+                }
+            }
+        }
 
-impl<'a> IntoIterator for &'a DevGroupsSpecification {
-    type Item = &'a GroupName;
-    type IntoIter = std::iter::Chain<
-        std::iter::Flatten<std::option::IntoIter<&'a DevMode>>,
-        std::iter::Flatten<std::option::IntoIter<&'a GroupsSpecification>>,
-    >;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.dev
+        self.groups
             .as_ref()
-            .into_iter()
-            .flatten()
-            .chain(self.groups.as_ref().into_iter().flatten())
+            .is_some_and(|groups| groups.contains(group))
     }
 }
 
@@ -293,7 +316,7 @@ impl From<GroupsSpecification> for DevGroupsSpecification {
 
 /// The manifest of `dependency-groups` to include, taking into account the user-provided
 /// [`DevGroupsSpecification`] and the project-specific default groups.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct DevGroupsManifest {
     /// The specification for the development dependencies.
     pub(crate) spec: DevGroupsSpecification,
@@ -323,36 +346,49 @@ impl DevGroupsManifest {
         self.spec.prod()
     }
 
-    /// Returns an [`Iterator`] over the group names to include.
-    pub fn iter(&self) -> impl Iterator<Item = &GroupName> {
-        if self.spec.only() {
-            Either::Left(self.spec.iter())
+    /// Returns `true` if the group was enabled by default.
+    pub fn is_default(&self, group: &GroupName) -> bool {
+        if self.spec.contains(group) {
+            // If the group was explicitly requested, then it wasn't enabled by default.
+            false
         } else {
-            Either::Right(
-                self.spec
-                    .iter()
-                    .chain(self.defaults.iter().filter(|default| {
-                        // If `--no-dev` was provided, exclude the `dev` group from the list of defaults.
-                        if matches!(self.spec.dev_mode(), Some(DevMode::Exclude)) {
-                            if *default == &*DEV_DEPENDENCIES {
-                                return false;
-                            };
-                        }
-
-                        // If `--no-group` was provided, exclude the group from the list of defaults.
-                        if let Some(GroupsSpecification::Include {
-                            include: _,
-                            exclude,
-                        }) = self.spec.groups()
-                        {
-                            if exclude.contains(default) {
-                                return false;
-                            }
-                        }
-
-                        true
-                    })),
-            )
+            // If the group was enabled, but wasn't explicitly requested, then it was enabled by
+            // default.
+            self.contains(group)
         }
+    }
+
+    /// Returns `true` if the group is included in the manifest.
+    pub fn contains(&self, group: &GroupName) -> bool {
+        if self.spec.contains(group) {
+            return true;
+        }
+        if self.spec.only() {
+            return false;
+        }
+        self.defaults
+            .iter()
+            .filter(|default| {
+                // If `--no-dev` was provided, exclude the `dev` group from the list of defaults.
+                if matches!(self.spec.dev_mode(), Some(DevMode::Exclude)) {
+                    if *default == &*DEV_DEPENDENCIES {
+                        return false;
+                    };
+                }
+
+                // If `--no-group` was provided, exclude the group from the list of defaults.
+                if let Some(GroupsSpecification::Include {
+                    include: _,
+                    exclude,
+                }) = self.spec.groups()
+                {
+                    if exclude.contains(default) {
+                        return false;
+                    }
+                }
+
+                true
+            })
+            .any(|default| default == group)
     }
 }

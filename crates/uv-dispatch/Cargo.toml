@@ -17,22 +17,28 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-build-backend = { workspace = true }
 uv-build-frontend = { workspace = true }
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution = { workspace = true }
+uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-git = { workspace = true }
 uv-install-wheel = { workspace = true }
 uv-installer = { workspace = true }
+uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-resolver = { workspace = true }
 uv-types = { workspace = true }
+uv-version = { workspace = true }
 
 anyhow = { workspace = true }
 futures = { workspace = true }
 itertools = { workspace = true }
 rustc-hash = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
 tracing = { workspace = true }

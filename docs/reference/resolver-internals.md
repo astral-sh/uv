@@ -14,9 +14,9 @@ in the worst case you have to try all possible combinations of all versions of a
 there are no general, fast algorithms. In practice, this is misleading for a number of reasons:
 
 - The slowest part of resolution in uv is loading package and version metadata, even if it's cached.
-- There are many possible solutions, but some are preferable than others. For example we generally
+- There are many possible solutions, but some are preferable to others. For example, we generally
   prefer using the latest version of packages.
-- Package's dependencies are complex, e.g., there are contiguous versions ranges — not arbitrary
+- Package dependencies are complex, e.g., there are contiguous versions ranges — not arbitrary
   boolean inclusion/exclusions of versions, adjacent releases often have the same or similar
   requirements, etc.
 - For most resolutions, the resolver doesn't need to backtrack, picking versions iteratively is
@@ -63,6 +63,9 @@ involved packages.
     For more details on the PubGrub algorithm, see [Internals of the PubGrub
     algorithm](https://pubgrub-rs-guide.pages.dev/internals/intro).
 
+In addition to PubGrub's base algorithm, we also use a heuristic that backtracks and switches the
+order of two packages if they have been conflicting too much.
+
 ## Forking
 
 Python resolvers historically didn't support backtracking, and even with backtracking, resolution
@@ -70,7 +73,7 @@ was usually limited to single environment, which one specific architecture, oper
 version, and Python implementation. Some packages use contradictory requirements for different
 environments, for example:
 
-```python
+```
 numpy>=2,<3 ; python_version >= "3.11"
 numpy>=1.16,<2 ; python_version < "3.11"
 ```
@@ -85,7 +88,7 @@ In the above example, the partial solution would be split into two resolutions, 
 If markers overlap or are missing a part of the marker space, the resolver splits additional times —
 there can be many forks per package. For example, given:
 
-```python
+```
 flask > 1 ; sys_platform == 'darwin'
 flask > 2 ; sys_platform == 'win32'
 flask

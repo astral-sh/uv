@@ -24,10 +24,10 @@ An extremely fast Python package and project manager, written in Rust.
 - ❇️ [Runs scripts](#script-support), with support for
   [inline dependency metadata](./guides/scripts.md#declaring-script-dependencies).
 - 🗂️ Provides [comprehensive project management](#project-management), with a
-  [universal lockfile](./concepts/projects.md#project-lockfile).
+  [universal lockfile](./concepts/projects/layout.md#the-lockfile).
 - 🔩 Includes a [pip-compatible interface](#the-pip-interface) for a performance boost with a
   familiar CLI.
-- 🏢 Supports Cargo-style [workspaces](./concepts/workspaces.md) for scalable projects.
+- 🏢 Supports Cargo-style [workspaces](./concepts/projects/workspaces.md) for scalable projects.
 - 💾 Disk-space efficient, with a [global cache](./concepts/cache.md) for dependency deduplication.
 - ⏬ Installable without Rust or Python via `curl` or `pip`.
 - 🖥️ Supports macOS, Linux, and Windows.
@@ -160,8 +160,8 @@ Type "help", "copyright", "credits" or "license" for more information.
 Use a specific Python version in the current directory:
 
 ```console
-$ uv python pin pypy@3.11
-Pinned `.python-version` to `pypy@3.11`
+$ uv python pin 3.11
+Pinned `.python-version` to `3.11`
 ```
 
 See the [installing Python guide](./guides/install-python.md) to get started.

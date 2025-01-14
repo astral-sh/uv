@@ -167,9 +167,6 @@ impl CompatArgs for PipCompileCompatArgs {
 pub struct PipListCompatArgs {
     #[clap(long, hide = true)]
     disable_pip_version_check: bool,
-
-    #[clap(long, hide = true)]
-    outdated: bool,
 }
 
 impl CompatArgs for PipListCompatArgs {
@@ -177,14 +174,10 @@ impl CompatArgs for PipListCompatArgs {
     ///
     /// This method will warn when an argument is passed that has no effect but matches uv's
     /// behavior. If an argument is passed that does _not_ match uv's behavior (e.g.,
-    /// `--outdated`), this method will return an error.
+    /// `--disable-pip-version-check`), this method will return an error.
     fn validate(&self) -> Result<()> {
         if self.disable_pip_version_check {
             warn_user!("pip's `--disable-pip-version-check` has no effect");
-        }
-
-        if self.outdated {
-            return Err(anyhow!("pip's `--outdated` is unsupported"));
         }
 
         Ok(())

@@ -43,6 +43,7 @@ pub struct InvalidEnvironment {
 #[derive(Debug, Clone)]
 pub enum InvalidEnvironmentKind {
     NotDirectory,
+    Empty,
     MissingExecutable(PathBuf),
 }
 
@@ -110,8 +111,8 @@ impl fmt::Display for EnvironmentNotFound {
     }
 }
 
-impl std::fmt::Display for InvalidEnvironment {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Display for InvalidEnvironment {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
             "Invalid environment at `{}`: {}",
@@ -121,13 +122,14 @@ impl std::fmt::Display for InvalidEnvironment {
     }
 }
 
-impl std::fmt::Display for InvalidEnvironmentKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Display for InvalidEnvironmentKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::NotDirectory => write!(f, "expected directory but found a file"),
             Self::MissingExecutable(path) => {
                 write!(f, "missing Python executable at `{}`", path.user_display())
             }
+            Self::Empty => write!(f, "directory is empty"),
         }
     }
 }
@@ -174,6 +176,14 @@ impl PythonEnvironment {
             return Err(InvalidEnvironment {
                 path: venv,
                 kind: InvalidEnvironmentKind::NotDirectory,
+            }
+            .into());
+        }
+
+        if venv.read_dir().is_ok_and(|mut dir| dir.next().is_none()) {
+            return Err(InvalidEnvironment {
+                path: venv,
+                kind: InvalidEnvironmentKind::Empty,
             }
             .into());
         }

@@ -708,21 +708,21 @@ fn workspace_lock_idempotence_virtual_workspace() -> Result<()> {
 }
 
 /// Extract just the sources from the lockfile, to test path resolution.
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug, PartialEq)]
 struct SourceLock {
     package: Vec<Package>,
 }
 
 impl SourceLock {
-    fn sources(self) -> BTreeMap<String, toml::Value> {
+    fn sources(&self) -> BTreeMap<String, toml::Value> {
         self.package
-            .into_iter()
-            .map(|package| (package.name, package.source))
+            .iter()
+            .map(|package| (package.name.clone(), package.source.clone()))
             .collect()
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug, PartialEq)]
 struct Package {
     name: String,
     source: toml::Value,
@@ -1624,9 +1624,8 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
-      ╰─▶ Because bar depends on bar:dev and bar:dev depends on anyio==4.2.0, we can conclude that bar depends on anyio==4.2.0.
-          And because foo depends on anyio==4.1.0, we can conclude that bar and foo are incompatible.
-          And because your workspace requires bar and foo, we can conclude that your workspace's requirements are unsatisfiable.
+      ╰─▶ Because bar:dev depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that foo and bar:dev are incompatible.
+          And because your workspace requires bar:dev and foo, we can conclude that your workspace's requirements are unsatisfiable.
     "###
     );
 
@@ -1690,14 +1689,14 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
     // TODO(zanieb): This error message is bad?
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: Failed to build: `foo @ file://[TEMP_DIR]/workspace/packages/foo`
-      Caused by: Failed to parse entry: `anyio`
-      Caused by: Package is not included as workspace package in `tool.uv.workspace`
+      × Failed to build `foo @ file://[TEMP_DIR]/workspace/packages/foo`
+      ├─▶ Failed to parse entry: `anyio`
+      ╰─▶ `anyio` is included as a workspace member, but is missing an entry in `tool.uv.sources` (e.g., `anyio = { workspace = true }`)
     "###
     );
 
@@ -1758,6 +1757,148 @@ fn test_path_hopping() -> Result<()> {
       }
     }
     "###);
+
+    Ok(())
+}
+
+/// `c` is a package in a git workspace, and it has a workspace dependency to `d`. Check that we
+/// are correctly resolving `d` to a git dependency with a subdirectory and not relative to the
+/// checkout directory.
+#[test]
+fn transitive_dep_in_git_workspace_no_root() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["c"]
+
+        [tool.uv.sources]
+        c = { git = "https://github.com/astral-sh/workspace-virtual-root-test", subdirectory = "packages/c", rev = "fac39c8d4c5d0ef32744e2bb309bbe34a759fd46" }
+    "#
+    )?;
+
+    context.lock().assert().success();
+
+    let lock1: SourceLock =
+        toml::from_str(&fs_err::read_to_string(context.temp_dir.child("uv.lock"))?)?;
+
+    assert_json_snapshot!(lock1.sources(), @r###"
+    {
+      "a": {
+        "virtual": "."
+      },
+      "anyio": {
+        "registry": "https://pypi.org/simple"
+      },
+      "c": {
+        "git": "https://github.com/astral-sh/workspace-virtual-root-test?subdirectory=packages%2Fc&rev=fac39c8d4c5d0ef32744e2bb309bbe34a759fd46#fac39c8d4c5d0ef32744e2bb309bbe34a759fd46"
+      },
+      "d": {
+        "git": "https://github.com/astral-sh/workspace-virtual-root-test?subdirectory=packages%2Fd&rev=fac39c8d4c5d0ef32744e2bb309bbe34a759fd46#fac39c8d4c5d0ef32744e2bb309bbe34a759fd46"
+      },
+      "idna": {
+        "registry": "https://pypi.org/simple"
+      },
+      "sniffio": {
+        "registry": "https://pypi.org/simple"
+      }
+    }
+    "###);
+
+    // Check that we don't report a conflict here either.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["c", "d"]
+
+        [tool.uv.sources]
+        c = { git = "https://github.com/astral-sh/workspace-virtual-root-test", subdirectory = "packages/c", rev = "fac39c8d4c5d0ef32744e2bb309bbe34a759fd46" }
+        d = { git = "https://github.com/astral-sh/workspace-virtual-root-test", subdirectory = "packages/d", rev = "fac39c8d4c5d0ef32744e2bb309bbe34a759fd46" }
+    "#
+    )?;
+
+    context.lock().assert().success();
+
+    let lock2: SourceLock =
+        toml::from_str(&fs_err::read_to_string(context.temp_dir.child("uv.lock"))?)?;
+
+    assert_eq!(lock1, lock2, "sources changed");
+
+    Ok(())
+}
+
+/// `workspace-member-in-subdir` is a package in a git workspace, and it has a workspace dependency
+/// to `uv-git-workspace-in-root`. Check that we are correctly resolving `uv-git-workspace-in-root`
+/// to a git dependency without a subdirectory and not relative to the checkout directory.
+#[test]
+fn transitive_dep_in_git_workspace_with_root() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "git-with-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "workspace-member-in-subdir",
+        ]
+
+        [tool.uv.sources]
+        workspace-member-in-subdir = { git = "https://github.com/astral-sh/workspace-in-root-test", subdirectory = "workspace-member-in-subdir", rev = "d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68" }
+    "#
+    )?;
+
+    context.lock().assert().success();
+
+    let lock1: SourceLock =
+        toml::from_str(&fs_err::read_to_string(context.temp_dir.child("uv.lock"))?)?;
+    assert_json_snapshot!(lock1.sources(), @r###"
+    {
+      "git-with-root": {
+        "virtual": "."
+      },
+      "uv-git-workspace-in-root": {
+        "git": "https://github.com/astral-sh/workspace-in-root-test?rev=d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68#d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68"
+      },
+      "workspace-member-in-subdir": {
+        "git": "https://github.com/astral-sh/workspace-in-root-test?subdirectory=workspace-member-in-subdir&rev=d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68#d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68"
+      }
+    }
+    "###);
+
+    // Check that we don't report a conflict here either
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "git-with-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "workspace-member-in-subdir",
+            "uv-git-workspace-in-root",
+        ]
+
+        [tool.uv.sources]
+        workspace-member-in-subdir = { git = "https://github.com/astral-sh/workspace-in-root-test", subdirectory = "workspace-member-in-subdir", rev = "d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68" }
+        uv-git-workspace-in-root = { git = "https://github.com/astral-sh/workspace-in-root-test", rev = "d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68" }
+    "#
+    )?;
+
+    context.lock().assert().success();
+    let lock2: SourceLock =
+        toml::from_str(&fs_err::read_to_string(context.temp_dir.child("uv.lock"))?)?;
+
+    assert_eq!(lock1, lock2, "sources changed");
 
     Ok(())
 }

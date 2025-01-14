@@ -20,6 +20,7 @@ uv-cache = { workspace = true }
 uv-cache-info = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-client = { workspace = true }
+uv-dirs = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
@@ -30,6 +31,7 @@ uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-state = { workspace = true }
 uv-static = { workspace = true }
+uv-trampoline-builder = { workspace = true }
 uv-warnings = { workspace = true }
 
 anyhow = { workspace = true }
@@ -37,12 +39,13 @@ clap = { workspace = true, optional = true }
 configparser = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
-goblin = { workspace = true }
+goblin = { workspace = true, default-features = false }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
+reqwest-retry = { workspace = true }
 rmp-serde = { workspace = true }
 same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
@@ -68,8 +71,9 @@ windows-result = { workspace = true }
 [dev-dependencies]
 anyhow = { version = "1.0.89" }
 assert_fs = { version = "1.1.2" }
-indoc = { version = "2.0.5" }
-itertools = { version = "0.13.0" }
+indoc = { workspace = true }
+insta = { version = "1.40.0" }
+itertools = { version = "0.14.0" }
 temp-env = { version = "0.3.6" }
-tempfile = { version = "3.12.0" }
+tempfile = { workspace = true }
 test-log = { version = "0.2.16", features = ["trace"], default-features = false }

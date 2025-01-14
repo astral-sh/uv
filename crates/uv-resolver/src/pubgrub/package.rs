@@ -2,7 +2,8 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::{MarkerTree, MarkerTreeContents};
+use uv_pep508::MarkerTree;
+use uv_pypi_types::ConflictItemRef;
 
 use crate::python_requirement::PythonRequirement;
 
@@ -51,7 +52,7 @@ pub(crate) enum PubGrubPackageInner {
         name: PackageName,
         extra: Option<ExtraName>,
         dev: Option<GroupName>,
-        marker: Option<MarkerTreeContents>,
+        marker: MarkerTree,
     },
     /// A proxy package to represent a dependency with an extra (e.g., `black[colorama]`).
     ///
@@ -69,7 +70,7 @@ pub(crate) enum PubGrubPackageInner {
     Extra {
         name: PackageName,
         extra: ExtraName,
-        marker: Option<MarkerTreeContents>,
+        marker: MarkerTree,
     },
     /// A proxy package to represent an enabled "dependency group" (e.g., development dependencies).
     ///
@@ -79,7 +80,7 @@ pub(crate) enum PubGrubPackageInner {
     Dev {
         name: PackageName,
         dev: GroupName,
-        marker: Option<MarkerTreeContents>,
+        marker: MarkerTree,
     },
     /// A proxy package for a base package with a marker (e.g., `black; python_version >= "3.6"`).
     ///
@@ -97,6 +98,7 @@ impl PubGrubPackage {
     pub(crate) fn from_package(
         name: PackageName,
         extra: Option<ExtraName>,
+        group: Option<GroupName>,
         marker: MarkerTree,
     ) -> Self {
         // Remove all extra expressions from the marker, since we track extras
@@ -104,16 +106,17 @@ impl PubGrubPackage {
         // extras end up having two distinct marker expressions, which in turn
         // makes them two distinct packages. This results in PubGrub being
         // unable to unify version constraints across such packages.
-        let tree = marker.simplify_extras_with(|_| true);
-        let marker = tree.contents();
+        let marker = marker.simplify_extras_with(|_| true);
         if let Some(extra) = extra {
             Self(Arc::new(PubGrubPackageInner::Extra {
                 name,
                 extra,
                 marker,
             }))
-        } else if marker.is_some() {
-            Self(Arc::new(PubGrubPackageInner::Marker { name, marker: tree }))
+        } else if let Some(dev) = group {
+            Self(Arc::new(PubGrubPackageInner::Dev { name, dev, marker }))
+        } else if !marker.is_true() {
+            Self(Arc::new(PubGrubPackageInner::Marker { name, marker }))
         } else {
             Self(Arc::new(PubGrubPackageInner::Package {
                 name,
@@ -152,17 +155,76 @@ impl PubGrubPackage {
 
     /// Returns the marker expression associated with this PubGrub package, if
     /// it has one.
-    pub(crate) fn marker(&self) -> Option<&MarkerTree> {
+    pub(crate) fn marker(&self) -> MarkerTree {
         match &**self {
             // A root can never be a dependency of another package, and a `Python` pubgrub
             // package is never returned by `get_dependencies`. So these cases never occur.
-            PubGrubPackageInner::Root(_) | PubGrubPackageInner::Python(_) => None,
+            PubGrubPackageInner::Root(_) | PubGrubPackageInner::Python(_) => MarkerTree::TRUE,
             PubGrubPackageInner::Package { marker, .. }
             | PubGrubPackageInner::Extra { marker, .. }
-            | PubGrubPackageInner::Dev { marker, .. } => {
-                marker.as_ref().map(MarkerTreeContents::as_ref)
+            | PubGrubPackageInner::Dev { marker, .. } => *marker,
+            PubGrubPackageInner::Marker { marker, .. } => *marker,
+        }
+    }
+
+    /// Returns the extra name associated with this PubGrub package, if it has
+    /// one.
+    ///
+    /// Note that if this returns `Some`, then `dev` must return `None`.
+    pub(crate) fn extra(&self) -> Option<&ExtraName> {
+        match &**self {
+            // A root can never be a dependency of another package, and a `Python` pubgrub
+            // package is never returned by `get_dependencies`. So these cases never occur.
+            PubGrubPackageInner::Root(_)
+            | PubGrubPackageInner::Python(_)
+            | PubGrubPackageInner::Package { extra: None, .. }
+            | PubGrubPackageInner::Dev { .. }
+            | PubGrubPackageInner::Marker { .. } => None,
+            PubGrubPackageInner::Package {
+                extra: Some(ref extra),
+                ..
             }
-            PubGrubPackageInner::Marker { marker, .. } => Some(marker),
+            | PubGrubPackageInner::Extra { ref extra, .. } => Some(extra),
+        }
+    }
+
+    /// Returns the dev (aka "group") name associated with this PubGrub
+    /// package, if it has one.
+    ///
+    /// Note that if this returns `Some`, then `extra` must return `None`.
+    pub(crate) fn dev(&self) -> Option<&GroupName> {
+        match &**self {
+            // A root can never be a dependency of another package, and a `Python` pubgrub
+            // package is never returned by `get_dependencies`. So these cases never occur.
+            PubGrubPackageInner::Root(_)
+            | PubGrubPackageInner::Python(_)
+            | PubGrubPackageInner::Package { dev: None, .. }
+            | PubGrubPackageInner::Extra { .. }
+            | PubGrubPackageInner::Marker { .. } => None,
+            PubGrubPackageInner::Package {
+                dev: Some(ref dev), ..
+            }
+            | PubGrubPackageInner::Dev { ref dev, .. } => Some(dev),
+        }
+    }
+
+    /// Extracts a possible conflicting group from this package.
+    ///
+    /// If this package can't possibly be classified as a conflicting group,
+    /// then this returns `None`.
+    pub(crate) fn conflicting_item(&self) -> Option<ConflictItemRef<'_>> {
+        let package = self.name_no_root()?;
+        match (self.extra(), self.dev()) {
+            (None, None) => None,
+            (Some(extra), None) => Some(ConflictItemRef::from((package, extra))),
+            (None, Some(group)) => Some(ConflictItemRef::from((package, group))),
+            (Some(extra), Some(group)) => {
+                unreachable!(
+                    "PubGrub package cannot have both an extra and a group, \
+                     but found extra=`{extra}` and group=`{group}` for \
+                     package `{package}`",
+                )
+            }
         }
     }
 
@@ -192,19 +254,14 @@ impl PubGrubPackage {
             PubGrubPackageInner::Root(_) | PubGrubPackageInner::Python(_) => {}
             PubGrubPackageInner::Package { ref mut marker, .. }
             | PubGrubPackageInner::Extra { ref mut marker, .. }
-            | PubGrubPackageInner::Dev { ref mut marker, .. } => {
-                let Some(contents) = marker.as_mut() else {
-                    return;
-                };
-                let tree = MarkerTree::from(contents.clone());
-                *marker = python_requirement.simplify_markers(tree).contents();
-            }
-            PubGrubPackageInner::Marker { ref mut marker, .. } => {
-                *marker = python_requirement.simplify_markers(marker.clone());
+            | PubGrubPackageInner::Dev { ref mut marker, .. }
+            | PubGrubPackageInner::Marker { ref mut marker, .. } => {
+                *marker = python_requirement.simplify_markers(*marker);
             }
         }
     }
 
+    /// This isn't actually used anywhere, but can be useful for printf-debugging.
     #[allow(dead_code)]
     pub(crate) fn kind(&self) -> &'static str {
         match &**self {
@@ -240,44 +297,38 @@ impl std::fmt::Display for PubGrubPackageInner {
             Self::Package {
                 name,
                 extra: None,
-                marker: None,
+                marker,
                 dev: None,
-            } => write!(f, "{name}"),
+            } => {
+                if let Some(marker) = marker.contents() {
+                    write!(f, "{name}{{{marker}}}")
+                } else {
+                    write!(f, "{name}")
+                }
+            }
             Self::Package {
                 name,
                 extra: Some(extra),
-                marker: None,
+                marker,
                 dev: None,
             } => {
-                write!(f, "{name}[{extra}]")
+                if let Some(marker) = marker.contents() {
+                    write!(f, "{name}[{extra}]{{{marker}}}")
+                } else {
+                    write!(f, "{name}[{extra}]")
+                }
             }
             Self::Package {
                 name,
                 extra: None,
-                marker: Some(marker),
-                dev: None,
-            } => write!(f, "{name}{{{marker}}}"),
-            Self::Package {
-                name,
-                extra: Some(extra),
-                marker: Some(marker),
-                dev: None,
-            } => {
-                write!(f, "{name}[{extra}]{{{marker}}}")
-            }
-            Self::Package {
-                name,
-                extra: None,
-                marker: None,
-                dev: Some(dev),
-            } => write!(f, "{name}:{dev}"),
-            Self::Package {
-                name,
-                extra: None,
-                marker: Some(marker),
+                marker,
                 dev: Some(dev),
             } => {
-                write!(f, "{name}[{dev}]{{{marker}}}")
+                if let Some(marker) = marker.contents() {
+                    write!(f, "{name}:{dev}{{{marker}}}")
+                } else {
+                    write!(f, "{name}:{dev}")
+                }
             }
             Self::Marker { name, marker, .. } => {
                 if let Some(marker) = marker.contents() {

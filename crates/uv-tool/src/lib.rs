@@ -1,5 +1,4 @@
 use core::fmt;
-
 use fs_err as fs;
 
 use uv_dirs::user_executable_directory;
@@ -42,7 +41,7 @@ pub enum Error {
     EntrypointRead(#[from] uv_install_wheel::Error),
     #[error("Failed to find dist-info directory `{0}` in environment at {1}")]
     DistInfoMissing(String, PathBuf),
-    #[error("Failed to find a directory for executables")]
+    #[error("Failed to find a directory to install executables into")]
     NoExecutableDirectory,
     #[error(transparent)]
     ToolName(#[from] InvalidNameError),
@@ -184,6 +183,16 @@ impl InstalledTools {
             "Deleting environment for tool `{name}` at {}",
             environment_path.user_display()
         );
+
+        // On Windows, if the current executable is in the directory, guard against self-deletion.
+        #[cfg(windows)]
+        if let Ok(itself) = std::env::current_exe() {
+            let target = std::path::absolute(&environment_path)?;
+            if itself.starts_with(&target) {
+                debug!("Detected self-delete of executable: {}", itself.display());
+                self_replace::self_delete_outside_path(&environment_path)?;
+            }
+        }
 
         fs_err::remove_dir_all(environment_path)?;
 
@@ -417,12 +426,11 @@ pub fn entrypoint_paths(
         };
 
         let absolute_path = layout.scheme.scripts.join(path_in_scripts);
-        let script_name = entry
-            .path
-            .rsplit(std::path::MAIN_SEPARATOR)
-            .next()
-            .unwrap_or(&entry.path)
-            .to_string();
+        let script_name = relative_path
+            .file_name()
+            .and_then(|filename| filename.to_str())
+            .map(ToString::to_string)
+            .unwrap_or(entry.path);
         entrypoints.push((script_name, absolute_path));
     }
 

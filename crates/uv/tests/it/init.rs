@@ -1218,7 +1218,7 @@ fn init_workspace_outside() -> Result<()> {
 fn init_normalized_names() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // `foo-bar` module is normalized to `foo_bar`.
+    // `foo-bar` module is normalized to `foo-bar`.
     uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("foo-bar").arg("--lib"), @r###"
     success: true
     exit_code: 0
@@ -1252,17 +1252,17 @@ fn init_normalized_names() -> Result<()> {
         );
     });
 
-    // `foo-bar` module is normalized to `foo_bar`.
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("foo-bar").arg("--app"), @r###"
-    success: false
-    exit_code: 2
+    // `bar_baz` module is normalized to `bar-baz`.
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("bar_baz").arg("--app"), @r###"
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Project is already initialized in `[TEMP_DIR]/foo-bar` (`pyproject.toml` file exists)
+    Initialized project `bar-baz` at `[TEMP_DIR]/bar_baz`
     "###);
 
-    let child = context.temp_dir.child("foo-bar");
+    let child = context.temp_dir.child("bar_baz");
     let pyproject = fs_err::read_to_string(child.join("pyproject.toml"))?;
 
     insta::with_settings!({
@@ -1271,29 +1271,44 @@ fn init_normalized_names() -> Result<()> {
         assert_snapshot!(
             pyproject, @r###"
         [project]
-        name = "foo-bar"
+        name = "bar-baz"
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
         "###
         );
     });
 
-    // "bar baz" is not allowed.
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("bar baz"), @r###"
-    success: false
-    exit_code: 2
+    // "baz bop" is normalized to "baz-bop".
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("baz bop"), @r###"
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Not a valid package or extra name: "bar baz". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
+    Initialized project `baz-bop` at `[TEMP_DIR]/baz bop`
     "###);
+
+    let child = context.temp_dir.child("baz bop");
+    let pyproject = fs_err::read_to_string(child.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "baz-bop"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+        "###
+        );
+    });
 
     Ok(())
 }
@@ -2005,6 +2020,140 @@ fn init_requires_python_specifiers() -> Result<()> {
     Ok(())
 }
 
+/// Run `uv init`, inferring the `requires-python` from the `.python-version` file.
+#[test]
+fn init_requires_python_version_file() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+
+    context.temp_dir.child(".python-version").write_str("3.8")?;
+
+    let child = context.temp_dir.join("foo");
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(child.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.8"
+        dependencies = []
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Run `uv init`, inferring the Python version from an existing `.venv`
+#[test]
+fn init_existing_environment() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    // Create a new virtual environment in the directory
+    uv_snapshot!(context.filters(), context.venv().current_dir(&child).arg("--python").arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "###);
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(child.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(child.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Run `uv init`, it should ignore a the Python version from a parent `.venv`
+#[test]
+fn init_existing_environment_parent() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+
+    // Create a new virtual environment in the parent directory
+    uv_snapshot!(context.filters(), context.venv().current_dir(&context.temp_dir).arg("--python").arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "###);
+
+    let child = context.temp_dir.child("foo");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(child.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(child.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.8"
+        dependencies = []
+        "###
+        );
+    });
+
+    Ok(())
+}
+
 /// Run `uv init` from within an unmanaged project.
 #[test]
 fn init_unmanaged() -> Result<()> {
@@ -2416,7 +2565,7 @@ fn init_application_package_flit() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove("VIRTUAL_ENV").arg("foo"), @r###"
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove(EnvVars::VIRTUAL_ENV).arg("foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2497,7 +2646,7 @@ fn init_library_flit() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove("VIRTUAL_ENV").arg("python").arg("-c").arg("import foo; print(foo.hello())"), @r###"
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove(EnvVars::VIRTUAL_ENV).arg("python").arg("-c").arg("import foo; print(foo.hello())"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2615,6 +2764,7 @@ fn init_app_build_backend_maturin() -> Result<()> {
             init, @r###"
         from foo._core import hello_from_bin
 
+
         def main() -> None:
             print(hello_from_bin())
         "###
@@ -2627,8 +2777,6 @@ fn init_app_build_backend_maturin() -> Result<()> {
     }, {
         assert_snapshot!(
             pyi_contents, @r###"
-        from __future__ import annotations
-
         def hello_from_bin() -> str: ...
         "###
         );
@@ -2745,6 +2893,7 @@ fn init_app_build_backend_scikit() -> Result<()> {
             init, @r###"
         from foo._core import hello_from_bin
 
+
         def main() -> None:
             print(hello_from_bin())
         "###
@@ -2757,8 +2906,6 @@ fn init_app_build_backend_scikit() -> Result<()> {
     }, {
         assert_snapshot!(
             pyi_contents, @r###"
-        from __future__ import annotations
-
         def hello_from_bin() -> str: ...
         "###
         );
@@ -2868,6 +3015,7 @@ fn init_lib_build_backend_maturin() -> Result<()> {
             init, @r###"
         from foo._core import hello_from_bin
 
+
         def hello() -> str:
             return hello_from_bin()
         "###
@@ -2880,8 +3028,6 @@ fn init_lib_build_backend_maturin() -> Result<()> {
     }, {
         assert_snapshot!(
             pyi_contents, @r###"
-        from __future__ import annotations
-
         def hello_from_bin() -> str: ...
         "###
         );
@@ -2995,6 +3141,7 @@ fn init_lib_build_backend_scikit() -> Result<()> {
             init, @r###"
         from foo._core import hello_from_bin
 
+
         def hello() -> str:
             return hello_from_bin()
         "###
@@ -3007,8 +3154,6 @@ fn init_lib_build_backend_scikit() -> Result<()> {
     }, {
         assert_snapshot!(
             pyi_contents, @r###"
-        from __future__ import annotations
-
         def hello_from_bin() -> str: ...
         "###
         );
@@ -3056,6 +3201,170 @@ fn init_lib_build_backend_scikit() -> Result<()> {
     });
 
     // We do not test with uv run since it would otherwise require specific CXX build tooling
+
+    Ok(())
+}
+
+/// Run `uv init --app --package --build-backend uv` to create a packaged application project
+#[test]
+fn init_application_package_uv() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let pyproject_toml = child.join("pyproject.toml");
+    let init_py = child.join("src").join("foo").join("__init__.py");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").arg("--package").arg("--build-backend").arg("uv"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The uv build backend is experimental and may change without warning
+    Initialized project `foo`
+    "###);
+
+    let pyproject = fs_err::read_to_string(&pyproject_toml)?;
+    let mut filters = context.filters();
+    filters.push((r#"\["uv>=.*,<.*"\]"#, r#"["uv[SPECIFIERS]"]"#));
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv[SPECIFIERS]"]
+        build-backend = "uv"
+        "###
+        );
+    });
+
+    let init = fs_err::read_to_string(init_py)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            init, @r###"
+        def main() -> None:
+            print("Hello from foo!")
+        "###
+        );
+    });
+
+    // Use preview to go through the fast path.
+    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("foo").current_dir(&child).env_remove(EnvVars::VIRTUAL_ENV), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from foo!
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn init_with_description() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.join("foo");
+    fs_err::create_dir_all(&child)?;
+
+    // Initialize the project with a description
+    context
+        .init()
+        .current_dir(&child)
+        .arg("--description")
+        .arg("A sample project description")
+        .arg("--lib")
+        .assert()
+        .success();
+
+    // Read the generated pyproject.toml
+    let pyproject = fs_err::read_to_string(child.join("pyproject.toml"))?;
+
+    // Verify the description in pyproject.toml
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "A sample project description"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn init_without_description() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.join("bar");
+    fs_err::create_dir_all(&child)?;
+
+    // Initialize the project without a description
+    context
+        .init()
+        .current_dir(&child)
+        .arg("--lib")
+        .assert()
+        .success();
+
+    // Read the generated pyproject.toml
+    let pyproject = fs_err::read_to_string(child.join("pyproject.toml"))?;
+
+    // Verify the default description in pyproject.toml
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#
+        );
+    });
 
     Ok(())
 }

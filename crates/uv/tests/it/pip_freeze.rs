@@ -39,7 +39,7 @@ fn freeze_many() -> Result<()> {
 #[test]
 #[cfg(unix)]
 fn freeze_duplicate() -> Result<()> {
-    use crate::common::copy_dir_all;
+    use uv_fs::copy_dir_all;
 
     // Sync a version of `pip` into a virtual environment.
     let context1 = TestContext::new("3.12");
@@ -72,7 +72,7 @@ fn freeze_duplicate() -> Result<()> {
     )?;
 
     // Run `pip freeze`.
-    uv_snapshot!(context1.filters(), context1.pip_freeze().arg("--strict"), @r#"
+    uv_snapshot!(context1.filters(), context1.pip_freeze().arg("--strict"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -80,10 +80,10 @@ fn freeze_duplicate() -> Result<()> {
     pip==22.1.1
 
     ----- stderr -----
-    warning: The package `pip` has multiple installed distributions: 
+    warning: The package `pip` has multiple installed distributions:
       - [SITE_PACKAGES]/pip-21.3.1.dist-info
       - [SITE_PACKAGES]/pip-22.1.1.dist-info
-    "#
+    "###
     );
 
     Ok(())
@@ -353,4 +353,103 @@ Version: 0.22.0
     "###);
 
     Ok(())
+}
+
+#[test]
+fn freeze_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+
+    let target = context.temp_dir.child("install-path");
+
+    // Run `pip sync`.
+    context
+        .pip_sync()
+        .arg(requirements_txt.path())
+        .arg("--target")
+        .arg(target.path())
+        .assert()
+        .success();
+
+    // Run `pip freeze`.
+    uv_snapshot!(context.filters(), context.pip_freeze()
+        .arg("--path")
+        .arg(target.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    markupsafe==2.1.3
+    tomli==2.0.1
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn freeze_multiple_paths() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt1 = context.temp_dir.child("requirements1.txt");
+    requirements_txt1.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+
+    let requirements_txt2 = context.temp_dir.child("requirements2.txt");
+    requirements_txt2.write_str("MarkupSafe==2.1.3\nrequests==2.31.0")?;
+
+    let target1 = context.temp_dir.child("install-path1");
+    let target2 = context.temp_dir.child("install-path2");
+
+    // Run `pip sync`.
+    for (target, requirements_txt) in [
+        (target1.path(), requirements_txt1),
+        (target2.path(), requirements_txt2),
+    ] {
+        context
+            .pip_sync()
+            .arg(requirements_txt.path())
+            .arg("--target")
+            .arg(target)
+            .assert()
+            .success();
+    }
+
+    // Run `pip freeze`.
+    uv_snapshot!(context.filters(), context.pip_freeze().arg("--path").arg(target1.path()).arg("--path").arg(target2.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    markupsafe==2.1.3
+    requests==2.31.0
+    tomli==2.0.1
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+// We follow pip in just ignoring nonexistent paths
+#[test]
+fn freeze_nonexistent_path() {
+    let context = TestContext::new("3.12");
+
+    let nonexistent_dir = {
+        let dir = context.temp_dir.child("blahblah");
+        assert!(!dir.exists());
+        dir
+    };
+
+    // Run `pip freeze`.
+    uv_snapshot!(context.filters(), context.pip_freeze()
+        .arg("--path")
+        .arg(nonexistent_dir.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
 }

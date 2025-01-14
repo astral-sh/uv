@@ -11,11 +11,6 @@ documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 
-[lib]
-name = "uv_pep440"
-crate-type = ["rlib", "cdylib"]
-doctest = false
-
 [lints]
 workspace = true
 
@@ -25,10 +20,11 @@ serde = { workspace = true, features = ["derive"] }
 tracing = { workspace = true, optional = true }
 unicode-width = { workspace = true }
 unscanny = { workspace = true }
+# Adds conversions from [`VersionSpecifiers`] to [`version_ranges::Ranges`]
 version-ranges = { workspace = true, optional = true }
 
 [dev-dependencies]
-indoc = { version = "2.0.5" }
+indoc = { workspace = true }
 tracing = { workspace = true }
 
 [features]

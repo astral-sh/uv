@@ -2,8 +2,11 @@
 
 ## Changing the install path
 
-By default, uv is installed to `~/.cargo/bin`. To change the installation path, use
-`UV_INSTALL_DIR`:
+By default, uv is installed to `~/.local/bin`. If `XDG_BIN_HOME` is set, it will be used instead.
+Similarly, if `XDG_DATA_HOME` is set, the target directory will be inferred as
+`XDG_DATA_HOME/../bin`.
+
+To change the installation path, use `UV_INSTALL_DIR`:
 
 === "macOS and Linux"
 
@@ -14,7 +17,7 @@ By default, uv is installed to `~/.cargo/bin`. To change the installation path, 
 === "Windows"
 
     ```powershell
-    $env:UV_INSTALL_DIR = "C:\Custom\Path" powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+    powershell -ExecutionPolicy ByPass -c {$env:UV_INSTALL_DIR = "C:\Custom\Path";irm https://astral.sh/uv/install.ps1 | iex}
     ```
 
 ## Disabling shell modifications

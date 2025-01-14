@@ -39,6 +39,17 @@ indexes.
 Index names may only contain alphanumeric characters, dashes, underscores, and periods, and must be
 valid ASCII.
 
+When providing an index on the command line (with `--index` or `--default-index`) or through an
+environment variable (`UV_INDEX` or `UV_DEFAULT_INDEX`), names are optional but can be included
+using the `<name>=<url>` syntax, as in:
+
+```shell
+# On the command line.
+$ uv lock --index pytorch=https://download.pytorch.org/whl/cpu
+# Via an environment variable.
+$ UV_INDEX=pytorch=https://download.pytorch.org/whl/cpu uv lock
+```
+
 ## Pinning a package to an index
 
 A package can be pinned to a specific index by specifying the index in its `tool.uv.sources` entry.
@@ -94,10 +105,14 @@ Named indexes referenced via `tool.uv.sources` must be defined within the projec
 file; indexes provided via the command-line, environment variables, or user-level configuration will
 not be recognized.
 
+If an index is marked as both `default = true` and `explicit = true`, it will be treated as an
+explicit index (i.e., only usable via `tool.uv.sources`) while also removing PyPI as the default
+index.
+
 ## Searching across multiple indexes
 
 By default, uv will stop at the first index on which a given package is available, and limit
-resolutions to those present on that first index (`first-match`).
+resolutions to those present on that first index (`first-index`).
 
 For example, if an internal index is specified via `[[tool.uv.index]]`, uv's behavior is such that
 if a package exists on that internal index, it will _always_ be installed from that internal index,
@@ -110,7 +125,7 @@ December 2022.
 Users can opt in to alternate index behaviors via the`--index-strategy` command-line option, or the
 `UV_INDEX_STRATEGY` environment variable, which supports the following values:
 
-- `first-match` (default): Search for each package across all indexes, limiting the candidate
+- `first-index` (default): Search for each package across all indexes, limiting the candidate
   versions to those present in the first index that contains the package.
 - `unsafe-first-match`: Search for each package across all indexes, but prefer the first index with
   a compatible version, even if newer versions are available on other indexes.
@@ -138,12 +153,12 @@ url = "https://example.com/simple"
 ```
 
 From there, you can set the `UV_INDEX_INTERNAL_PROXY_USERNAME` and
-`UV_INDEX_INTERNAL_PROXY_PASSWORD` environment variables, where `INTERNAL` is the uppercase version
-of the index name, with non-alphanumeric characters replaced by underscores:
+`UV_INDEX_INTERNAL_PROXY_PASSWORD` environment variables, where `INTERNAL_PROXY` is the uppercase
+version of the index name, with non-alphanumeric characters replaced by underscores:
 
 ```sh
-export UV_INDEX_INTERNAL_USERNAME=public
-export UV_INDEX_INTERNAL_PASSWORD=koala
+export UV_INDEX_INTERNAL_PROXY_USERNAME=public
+export UV_INDEX_INTERNAL_PROXY_PASSWORD=koala
 ```
 
 By providing credentials via environment variables, you can avoid storing sensitive information in

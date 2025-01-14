@@ -1,5 +1,7 @@
+use std::collections::Bound;
+
 use uv_pep440::Version;
-use uv_pep508::MarkerTree;
+use uv_pep508::{MarkerEnvironment, MarkerTree};
 use uv_python::{Interpreter, PythonVersion};
 
 use crate::{RequiresPython, RequiresPythonRange};
@@ -22,8 +24,15 @@ impl PythonRequirement {
     /// [`PythonVersion`].
     pub fn from_python_version(interpreter: &Interpreter, python_version: &PythonVersion) -> Self {
         let exact = interpreter.python_full_version().version.clone();
-        let installed = interpreter.python_full_version().version.only_release();
-        let target = python_version.python_full_version().only_release();
+        let installed = interpreter
+            .python_full_version()
+            .version
+            .only_release()
+            .without_trailing_zeros();
+        let target = python_version
+            .python_full_version()
+            .only_release()
+            .without_trailing_zeros();
         Self {
             exact,
             installed: RequiresPython::greater_than_equal_version(&installed),
@@ -38,25 +47,54 @@ impl PythonRequirement {
         interpreter: &Interpreter,
         requires_python: RequiresPython,
     ) -> Self {
-        let exact = interpreter.python_full_version().version.clone();
-        let installed = interpreter.python_full_version().version.only_release();
-        Self {
-            exact,
-            installed: RequiresPython::greater_than_equal_version(&installed),
-            target: requires_python,
-            source: PythonRequirementSource::RequiresPython,
-        }
+        Self::from_marker_environment(interpreter.markers(), requires_python)
     }
 
     /// Create a [`PythonRequirement`] to resolve against an [`Interpreter`].
     pub fn from_interpreter(interpreter: &Interpreter) -> Self {
-        let exact = interpreter.python_full_version().version.clone();
-        let installed = interpreter.python_full_version().version.only_release();
+        let exact = interpreter
+            .python_full_version()
+            .version
+            .clone()
+            .without_trailing_zeros();
+        let installed = interpreter
+            .python_full_version()
+            .version
+            .only_release()
+            .without_trailing_zeros();
         Self {
             exact,
             installed: RequiresPython::greater_than_equal_version(&installed),
             target: RequiresPython::greater_than_equal_version(&installed),
             source: PythonRequirementSource::Interpreter,
+        }
+    }
+
+    /// Create a [`PythonRequirement`] from a [`MarkerEnvironment`] and a
+    /// specific `Requires-Python` directive.
+    ///
+    /// This has the same "source" as
+    /// [`PythonRequirement::from_requires_python`], but is useful for
+    /// constructing a `PythonRequirement` without an [`Interpreter`].
+    pub fn from_marker_environment(
+        marker_env: &MarkerEnvironment,
+        requires_python: RequiresPython,
+    ) -> Self {
+        let exact = marker_env
+            .python_full_version()
+            .version
+            .clone()
+            .without_trailing_zeros();
+        let installed = marker_env
+            .python_full_version()
+            .version
+            .only_release()
+            .without_trailing_zeros();
+        Self {
+            exact,
+            installed: RequiresPython::greater_than_equal_version(&installed),
+            target: requires_python,
+            source: PythonRequirementSource::RequiresPython,
         }
     }
 
@@ -69,6 +107,28 @@ impl PythonRequirement {
             target: self.target.narrow(target)?,
             source: self.source,
         })
+    }
+
+    /// Split the [`PythonRequirement`] at the given version.
+    ///
+    /// For example, if the current requirement is `>=3.10`, and the split point is `3.11`, then
+    /// the result will be `>=3.10 and <3.11` and `>=3.11`.
+    pub fn split(&self, at: Bound<Version>) -> Option<(Self, Self)> {
+        let (lower, upper) = self.target.split(at)?;
+        Some((
+            Self {
+                exact: self.exact.clone(),
+                installed: self.installed.clone(),
+                target: lower,
+                source: self.source,
+            },
+            Self {
+                exact: self.exact.clone(),
+                installed: self.installed.clone(),
+                target: upper,
+                source: self.source,
+            },
+        ))
     }
 
     /// Returns `true` if the minimum version of Python required by the target is greater than the

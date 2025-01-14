@@ -1,6 +1,6 @@
 ---
 source: crates/uv-distribution-filename/src/wheel.rs
-expression: "WheelFilename::from_str(\"foo-1.2.3-202206090410-python-abi-platform.whl\")"
+expression: "WheelFilename::from_str(\"foo-1.2.3-202206090410-py3-none-any.whl\")"
 ---
 Ok(
     WheelFilename {
@@ -15,13 +15,16 @@ Ok(
             ),
         ),
         python_tag: [
-            "python",
+            Python {
+                major: 3,
+                minor: None,
+            },
         ],
         abi_tag: [
-            "abi",
+            None,
         ],
         platform_tag: [
-            "platform",
+            Any,
         ],
     },
 )

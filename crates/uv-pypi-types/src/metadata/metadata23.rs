@@ -211,7 +211,7 @@ impl Metadata23 {
                 writer.push_str(&format!("{}{}\n", " ".repeat(key.len() + 2), line));
             }
         }
-        fn write_opt_str(writer: &mut String, key: &str, value: &Option<impl Display>) {
+        fn write_opt_str(writer: &mut String, key: &str, value: Option<&impl Display>) {
             if let Some(value) = value {
                 write_str(writer, key, value);
             }
@@ -233,28 +233,40 @@ impl Metadata23 {
         write_all(&mut writer, "Platform", &self.platforms);
         write_all(&mut writer, "Supported-Platform", &self.supported_platforms);
         write_all(&mut writer, "Summary", &self.summary);
-        write_opt_str(&mut writer, "Keywords", &self.keywords);
-        write_opt_str(&mut writer, "Home-Page", &self.home_page);
-        write_opt_str(&mut writer, "Download-URL", &self.download_url);
-        write_opt_str(&mut writer, "Author", &self.author);
-        write_opt_str(&mut writer, "Author-email", &self.author_email);
-        write_opt_str(&mut writer, "License", &self.license);
-        write_opt_str(&mut writer, "License-Expression", &self.license_expression);
+        write_opt_str(&mut writer, "Keywords", self.keywords.as_ref());
+        write_opt_str(&mut writer, "Home-Page", self.home_page.as_ref());
+        write_opt_str(&mut writer, "Download-URL", self.download_url.as_ref());
+        write_opt_str(&mut writer, "Author", self.author.as_ref());
+        write_opt_str(&mut writer, "Author-email", self.author_email.as_ref());
+        write_opt_str(&mut writer, "License", self.license.as_ref());
+        write_opt_str(
+            &mut writer,
+            "License-Expression",
+            self.license_expression.as_ref(),
+        );
         write_all(&mut writer, "License-File", &self.license_files);
         write_all(&mut writer, "Classifier", &self.classifiers);
         write_all(&mut writer, "Requires-Dist", &self.requires_dist);
         write_all(&mut writer, "Provides-Dist", &self.provides_dist);
         write_all(&mut writer, "Obsoletes-Dist", &self.obsoletes_dist);
-        write_opt_str(&mut writer, "Maintainer", &self.maintainer);
-        write_opt_str(&mut writer, "Maintainer-email", &self.maintainer_email);
-        write_opt_str(&mut writer, "Requires-Python", &self.requires_python);
+        write_opt_str(&mut writer, "Maintainer", self.maintainer.as_ref());
+        write_opt_str(
+            &mut writer,
+            "Maintainer-email",
+            self.maintainer_email.as_ref(),
+        );
+        write_opt_str(
+            &mut writer,
+            "Requires-Python",
+            self.requires_python.as_ref(),
+        );
         write_all(&mut writer, "Requires-External", &self.requires_external);
         write_all(&mut writer, "Project-URL", &self.project_urls);
         write_all(&mut writer, "Provides-Extra", &self.provides_extras);
         write_opt_str(
             &mut writer,
             "Description-Content-Type",
-            &self.description_content_type,
+            self.description_content_type.as_ref(),
         );
         write_all(&mut writer, "Dynamic", &self.dynamic);
 
@@ -275,4 +287,37 @@ impl FromStr for Metadata23 {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use super::*;
+    use crate::MetadataError;
+
+    #[test]
+    fn test_parse_from_str() {
+        let s = "Metadata-Version: 1.0";
+        let meta: Result<Metadata23, MetadataError> = s.parse();
+        assert!(matches!(meta, Err(MetadataError::FieldNotFound("Name"))));
+
+        let s = "Metadata-Version: 1.0\nName: asdf";
+        let meta = Metadata23::parse(s.as_bytes());
+        assert!(matches!(meta, Err(MetadataError::FieldNotFound("Version"))));
+
+        let s = "Metadata-Version: 1.0\nName: asdf\nVersion: 1.0";
+        let meta = Metadata23::parse(s.as_bytes()).unwrap();
+        assert_eq!(meta.metadata_version, "1.0");
+        assert_eq!(meta.name, "asdf");
+        assert_eq!(meta.version, "1.0");
+
+        let s = "Metadata-Version: 1.0\nName: asdf\nVersion: 1.0\nDescription: a Python package";
+        let meta: Metadata23 = s.parse().unwrap();
+        assert_eq!(meta.description.as_deref(), Some("a Python package"));
+
+        let s = "Metadata-Version: 1.0\nName: asdf\nVersion: 1.0\n\na Python package";
+        let meta: Metadata23 = s.parse().unwrap();
+        assert_eq!(meta.description.as_deref(), Some("a Python package"));
+
+        let s = "Metadata-Version: 1.0\nName: asdf\nVersion: 1.0\nAuthor: 中文\n\n一个 Python 包";
+        let meta: Metadata23 = s.parse().unwrap();
+        assert_eq!(meta.author.as_deref(), Some("中文"));
+        assert_eq!(meta.description.as_deref(), Some("一个 Python 包"));
+    }
+}

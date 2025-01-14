@@ -78,16 +78,18 @@ impl PythonInstallation {
     /// Find or fetch a [`PythonInstallation`].
     ///
     /// Unlike [`PythonInstallation::find`], if the required Python is not installed it will be installed automatically.
-    pub async fn find_or_download<'a>(
+    pub async fn find_or_download(
         request: Option<&PythonRequest>,
         environments: EnvironmentPreference,
         preference: PythonPreference,
         python_downloads: PythonDownloads,
-        client_builder: &BaseClientBuilder<'a>,
+        client_builder: &BaseClientBuilder<'_>,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
+        python_install_mirror: Option<&str>,
+        pypy_install_mirror: Option<&str>,
     ) -> Result<Self, Error> {
-        let request = request.unwrap_or_else(|| &PythonRequest::Default);
+        let request = request.unwrap_or(&PythonRequest::Default);
 
         // Search for the installation
         match Self::find(request, environments, preference, cache) {
@@ -100,7 +102,16 @@ impl PythonInstallation {
             {
                 if let Some(request) = PythonDownloadRequest::from_request(request) {
                     debug!("Requested Python not found, checking for available download...");
-                    match Self::fetch(request.fill()?, client_builder, cache, reporter).await {
+                    match Self::fetch(
+                        request.fill()?,
+                        client_builder,
+                        cache,
+                        reporter,
+                        python_install_mirror,
+                        pypy_install_mirror,
+                    )
+                    .await
+                    {
                         Ok(installation) => Ok(installation),
                         Err(Error::Download(downloads::Error::NoDownloadFound(_))) => {
                             Err(Error::MissingPython(err))
@@ -116,15 +127,17 @@ impl PythonInstallation {
     }
 
     /// Download and install the requested installation.
-    pub async fn fetch<'a>(
+    pub async fn fetch(
         request: PythonDownloadRequest,
-        client_builder: &BaseClientBuilder<'a>,
+        client_builder: &BaseClientBuilder<'_>,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
+        python_install_mirror: Option<&str>,
+        pypy_install_mirror: Option<&str>,
     ) -> Result<Self, Error> {
-        let installations = ManagedPythonInstallations::from_settings()?.init()?;
+        let installations = ManagedPythonInstallations::from_settings(None)?.init()?;
         let installations_dir = installations.root();
-        let cache_dir = installations.cache();
+        let scratch_dir = installations.scratch();
         let _lock = installations.lock().await?;
 
         let download = ManagedPythonDownload::from_request(&request)?;
@@ -132,7 +145,15 @@ impl PythonInstallation {
 
         info!("Fetching requested Python...");
         let result = download
-            .fetch(&client, installations_dir, &cache_dir, false, reporter)
+            .fetch_with_retry(
+                &client,
+                installations_dir,
+                &scratch_dir,
+                false,
+                python_install_mirror,
+                pypy_install_mirror,
+                reporter,
+            )
             .await?;
 
         let path = match result {
@@ -142,6 +163,7 @@ impl PythonInstallation {
 
         let installed = ManagedPythonInstallation::new(path)?;
         installed.ensure_externally_managed()?;
+        installed.ensure_sysconfig_patched()?;
         installed.ensure_canonical_executables()?;
 
         Ok(Self {
@@ -207,6 +229,7 @@ impl PythonInstallation {
         &self.interpreter
     }
 
+    /// Consume the [`PythonInstallation`] and return the [`Interpreter`].
     pub fn into_interpreter(self) -> Interpreter {
         self.interpreter
     }
@@ -304,6 +327,40 @@ impl PythonInstallationKey {
 
     pub fn libc(&self) -> &Libc {
         &self.libc
+    }
+
+    pub fn variant(&self) -> &PythonVariant {
+        &self.variant
+    }
+
+    /// Return a canonical name for a minor versioned executable.
+    pub fn executable_name_minor(&self) -> String {
+        format!(
+            "python{maj}.{min}{var}{exe}",
+            maj = self.major,
+            min = self.minor,
+            var = self.variant.suffix(),
+            exe = std::env::consts::EXE_SUFFIX
+        )
+    }
+
+    /// Return a canonical name for a major versioned executable.
+    pub fn executable_name_major(&self) -> String {
+        format!(
+            "python{maj}{var}{exe}",
+            maj = self.major,
+            var = self.variant.suffix(),
+            exe = std::env::consts::EXE_SUFFIX
+        )
+    }
+
+    /// Return a canonical name for an un-versioned executable.
+    pub fn executable_name(&self) -> String {
+        format!(
+            "python{var}{exe}",
+            var = self.variant.suffix(),
+            exe = std::env::consts::EXE_SUFFIX
+        )
     }
 }
 

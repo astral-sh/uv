@@ -1,12 +1,13 @@
-use memchr::memmem::Finder;
-use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::LazyLock;
+
+use memchr::memmem::Finder;
+use serde::Deserialize;
 use thiserror::Error;
-use uv_distribution_types::Index;
+
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::PackageName;
 use uv_pypi_types::VerbatimParsedUrl;
@@ -44,10 +45,68 @@ impl Pep723Item {
             Self::Remote(metadata) => metadata,
         }
     }
+
+    /// Return the path of the PEP 723 item, if any.
+    pub fn path(&self) -> Option<&Path> {
+        match self {
+            Self::Script(script) => Some(&script.path),
+            Self::Stdin(_) => None,
+            Self::Remote(_) => None,
+        }
+    }
+
+    /// Return the PEP 723 script, if any.
+    pub fn as_script(&self) -> Option<&Pep723Script> {
+        match self {
+            Self::Script(script) => Some(script),
+            _ => None,
+        }
+    }
+}
+
+/// A reference to a PEP 723 item.
+#[derive(Debug)]
+pub enum Pep723ItemRef<'item> {
+    /// A PEP 723 script read from disk.
+    Script(&'item Pep723Script),
+    /// A PEP 723 script provided via `stdin`.
+    Stdin(&'item Pep723Metadata),
+    /// A PEP 723 script provided via a remote URL.
+    Remote(&'item Pep723Metadata),
+}
+
+impl Pep723ItemRef<'_> {
+    /// Return the [`Pep723Metadata`] associated with the item.
+    pub fn metadata(&self) -> &Pep723Metadata {
+        match self {
+            Self::Script(script) => &script.metadata,
+            Self::Stdin(metadata) => metadata,
+            Self::Remote(metadata) => metadata,
+        }
+    }
+
+    /// Return the path of the PEP 723 item, if any.
+    pub fn path(&self) -> Option<&Path> {
+        match self {
+            Self::Script(script) => Some(&script.path),
+            Self::Stdin(_) => None,
+            Self::Remote(_) => None,
+        }
+    }
+}
+
+impl<'item> From<&'item Pep723Item> for Pep723ItemRef<'item> {
+    fn from(item: &'item Pep723Item) -> Self {
+        match item {
+            Pep723Item::Script(script) => Self::Script(script),
+            Pep723Item::Stdin(metadata) => Self::Stdin(metadata),
+            Pep723Item::Remote(metadata) => Self::Remote(metadata),
+        }
+    }
 }
 
 /// A PEP 723 script, including its [`Pep723Metadata`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Pep723Script {
     /// The path to the Python script.
     pub path: PathBuf,
@@ -85,7 +144,7 @@ impl Pep723Script {
         let metadata = Pep723Metadata::from_str(&metadata)?;
 
         Ok(Some(Self {
-            path: file.as_ref().to_path_buf(),
+            path: std::path::absolute(file)?,
             metadata,
             prelude,
             postlude,
@@ -114,7 +173,7 @@ impl Pep723Script {
         let (shebang, postlude) = extract_shebang(&contents)?;
 
         Ok(Self {
-            path: file.as_ref().to_path_buf(),
+            path: std::path::absolute(file)?,
             prelude: if shebang.is_empty() {
                 String::new()
             } else {
@@ -146,10 +205,10 @@ impl Pep723Script {
         let metadata = serialize_metadata(&default_metadata);
 
         let script = if let Some(existing_contents) = existing_contents {
-            indoc::formatdoc! {r#"
+            indoc::formatdoc! {r"
             {metadata}
             {content}
-            "#,
+            ",
             content = String::from_utf8(existing_contents).map_err(|err| Pep723Error::Utf8(err.utf8_error()))?}
         } else {
             indoc::formatdoc! {r#"
@@ -171,7 +230,7 @@ impl Pep723Script {
     }
 
     /// Replace the existing metadata in the file with new metadata and write the updated content.
-    pub async fn write(&self, metadata: &str) -> Result<(), Pep723Error> {
+    pub fn write(&self, metadata: &str) -> Result<(), io::Error> {
         let content = format!(
             "{}{}{}",
             self.prelude,
@@ -179,16 +238,28 @@ impl Pep723Script {
             self.postlude
         );
 
-        fs_err::tokio::write(&self.path, content).await?;
+        fs_err::write(&self.path, content)?;
 
         Ok(())
+    }
+
+    /// Return the [`Sources`] defined in the PEP 723 metadata.
+    pub fn sources(&self) -> &BTreeMap<PackageName, Sources> {
+        static EMPTY: BTreeMap<PackageName, Sources> = BTreeMap::new();
+
+        self.metadata
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.sources.as_ref())
+            .unwrap_or(&EMPTY)
     }
 }
 
 /// PEP 723 metadata as parsed from a `script` comment block.
 ///
 /// See: <https://peps.python.org/pep-0723/>
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Pep723Metadata {
     pub dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
@@ -236,7 +307,7 @@ impl Pep723Metadata {
 }
 
 impl FromStr for Pep723Metadata {
-    type Err = Pep723Error;
+    type Err = toml::de::Error;
 
     /// Parse `Pep723Metadata` from a raw TOML string.
     fn from_str(raw: &str) -> Result<Self, Self::Err> {
@@ -248,21 +319,22 @@ impl FromStr for Pep723Metadata {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Tool {
     pub uv: Option<ToolUv>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct ToolUv {
     #[serde(flatten)]
     pub globals: GlobalOptions,
     #[serde(flatten)]
     pub top_level: ResolverInstallerOptions,
+    pub override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub sources: Option<BTreeMap<PackageName, Sources>>,
-    pub indexes: Option<Vec<Index>>,
 }
 
 #[derive(Debug, Error)]
@@ -339,7 +411,7 @@ impl ScriptTag {
         let mut lines = contents.lines();
 
         // Ensure that the first line is exactly `# /// script`.
-        if !lines.next().is_some_and(|line| line == "# /// script") {
+        if lines.next().is_none_or(|line| line != "# /// script") {
             return Ok(None);
         }
 
@@ -481,4 +553,233 @@ fn serialize_metadata(metadata: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use crate::{serialize_metadata, Pep723Error, ScriptTag};
+
+    #[test]
+    fn missing_space() {
+        let contents = indoc::indoc! {r"
+        # /// script
+        #requires-python = '>=3.11'
+        # ///
+    "};
+
+        assert!(matches!(
+            ScriptTag::parse(contents.as_bytes()),
+            Err(Pep723Error::UnclosedBlock)
+        ));
+    }
+
+    #[test]
+    fn no_closing_pragma() {
+        let contents = indoc::indoc! {r"
+        # /// script
+        # requires-python = '>=3.11'
+        # dependencies = [
+        #     'requests<3',
+        #     'rich',
+        # ]
+    "};
+
+        assert!(matches!(
+            ScriptTag::parse(contents.as_bytes()),
+            Err(Pep723Error::UnclosedBlock)
+        ));
+    }
+
+    #[test]
+    fn leading_content() {
+        let contents = indoc::indoc! {r"
+        pass # /// script
+        # requires-python = '>=3.11'
+        # dependencies = [
+        #   'requests<3',
+        #   'rich',
+        # ]
+        # ///
+        #
+        #
+    "};
+
+        assert_eq!(ScriptTag::parse(contents.as_bytes()).unwrap(), None);
+    }
+
+    #[test]
+    fn simple() {
+        let contents = indoc::indoc! {r"
+        # /// script
+        # requires-python = '>=3.11'
+        # dependencies = [
+        #     'requests<3',
+        #     'rich',
+        # ]
+        # ///
+
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get('https://peps.python.org/api/peps.json')
+        data = resp.json()
+    "};
+
+        let expected_metadata = indoc::indoc! {r"
+        requires-python = '>=3.11'
+        dependencies = [
+            'requests<3',
+            'rich',
+        ]
+    "};
+
+        let expected_data = indoc::indoc! {r"
+
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get('https://peps.python.org/api/peps.json')
+        data = resp.json()
+    "};
+
+        let actual = ScriptTag::parse(contents.as_bytes()).unwrap().unwrap();
+
+        assert_eq!(actual.prelude, String::new());
+        assert_eq!(actual.metadata, expected_metadata);
+        assert_eq!(actual.postlude, expected_data);
+    }
+
+    #[test]
+    fn simple_with_shebang() {
+        let contents = indoc::indoc! {r"
+        #!/usr/bin/env python3
+        # /// script
+        # requires-python = '>=3.11'
+        # dependencies = [
+        #     'requests<3',
+        #     'rich',
+        # ]
+        # ///
+
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get('https://peps.python.org/api/peps.json')
+        data = resp.json()
+    "};
+
+        let expected_metadata = indoc::indoc! {r"
+        requires-python = '>=3.11'
+        dependencies = [
+            'requests<3',
+            'rich',
+        ]
+    "};
+
+        let expected_data = indoc::indoc! {r"
+
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get('https://peps.python.org/api/peps.json')
+        data = resp.json()
+    "};
+
+        let actual = ScriptTag::parse(contents.as_bytes()).unwrap().unwrap();
+
+        assert_eq!(actual.prelude, "#!/usr/bin/env python3\n".to_string());
+        assert_eq!(actual.metadata, expected_metadata);
+        assert_eq!(actual.postlude, expected_data);
+    }
+    #[test]
+    fn embedded_comment() {
+        let contents = indoc::indoc! {r"
+        # /// script
+        # embedded-csharp = '''
+        # /// <summary>
+        # /// text
+        # ///
+        # /// </summary>
+        # public class MyClass { }
+        # '''
+        # ///
+    "};
+
+        let expected = indoc::indoc! {r"
+        embedded-csharp = '''
+        /// <summary>
+        /// text
+        ///
+        /// </summary>
+        public class MyClass { }
+        '''
+    "};
+
+        let actual = ScriptTag::parse(contents.as_bytes())
+            .unwrap()
+            .unwrap()
+            .metadata;
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn trailing_lines() {
+        let contents = indoc::indoc! {r"
+        # /// script
+        # requires-python = '>=3.11'
+        # dependencies = [
+        #     'requests<3',
+        #     'rich',
+        # ]
+        # ///
+        #
+        #
+    "};
+
+        let expected = indoc::indoc! {r"
+        requires-python = '>=3.11'
+        dependencies = [
+            'requests<3',
+            'rich',
+        ]
+    "};
+
+        let actual = ScriptTag::parse(contents.as_bytes())
+            .unwrap()
+            .unwrap()
+            .metadata;
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_serialize_metadata_formatting() {
+        let metadata = indoc::indoc! {r"
+        requires-python = '>=3.11'
+        dependencies = [
+          'requests<3',
+          'rich',
+        ]
+    "};
+
+        let expected_output = indoc::indoc! {r"
+        # /// script
+        # requires-python = '>=3.11'
+        # dependencies = [
+        #   'requests<3',
+        #   'rich',
+        # ]
+        # ///
+    "};
+
+        let result = serialize_metadata(metadata);
+        assert_eq!(result, expected_output);
+    }
+
+    #[test]
+    fn test_serialize_metadata_empty() {
+        let metadata = "";
+        let expected_output = "# /// script\n# ///\n";
+
+        let result = serialize_metadata(metadata);
+        assert_eq!(result, expected_output);
+    }
+}

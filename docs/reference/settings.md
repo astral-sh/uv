@@ -1,4 +1,55 @@
 ## Project metadata
+### [`conflicts`](#conflicts) {: #conflicts }
+
+Conflicting extras or groups may be declared here.
+
+It's useful to declare conflicts when, for example, two or more extras
+have mutually incompatible dependencies. Extra `foo` might depend
+on `numpy==2.0.0` while extra `bar` might depend on `numpy==2.1.0`.
+These extras cannot be activated at the same time. This usually isn't
+a problem for pip-style workflows, but when using projects in uv that
+support with universal resolution, it will try to produce a resolution
+that satisfies both extras simultaneously.
+
+When this happens, resolution will fail, because one cannot install
+both `numpy 2.0.0` and `numpy 2.1.0` into the same environment.
+
+To work around this, you may specify `foo` and `bar` as conflicting
+extras (you can do the same with groups). When doing universal
+resolution in project mode, these extras will get their own "forks"
+distinct from one another in order to permit conflicting dependencies.
+In exchange, if one tries to install from the lock file with both
+conflicting extras activated, installation will fail.
+
+**Default value**: `[]`
+
+**Type**: `list[list[dict]]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+# Require that `package[test1]` and `package[test2]`
+# requirements are resolved in different forks so that they
+# cannot conflict with one another.
+conflicts = [
+    [
+        { extra = "test1" },
+        { extra = "test2" },
+    ]
+]
+
+# Or, to declare conflicting groups:
+conflicts = [
+    [
+        { group = "test1" },
+        { group = "test2" },
+    ]
+]
+```
+
+---
+
 ### [`constraint-dependencies`](#constraint-dependencies) {: #constraint-dependencies }
 
 Constraints to apply when resolving the project's dependencies.
@@ -127,7 +178,7 @@ If an index is marked as `default = true`, it will be moved to the end of the pr
 given the lowest priority when resolving packages. Additionally, marking an index as default will disable the
 PyPI default index.
 
-**Default value**: `"[]"`
+**Default value**: `[]`
 
 **Type**: `dict`
 
@@ -230,9 +281,9 @@ The sources to use when resolving dependencies.
 during development. A dependency source can be a Git repository, a URL, a local path, or an
 alternative registry.
 
-See [Dependencies](../concepts/dependencies.md) for more.
+See [Dependencies](../concepts/projects/dependencies.md) for more.
 
-**Default value**: `"[]"`
+**Default value**: `{}`
 
 **Type**: `dict`
 
@@ -242,7 +293,7 @@ See [Dependencies](../concepts/dependencies.md) for more.
 
 [tool.uv.sources]
 httpx = { git = "https://github.com/encode/httpx", tag = "0.27.0" }
-pytest =  { url = "https://files.pythonhosted.org/packages/6b/77/7440a06a8ead44c7757a64362dd22df5760f9b12dc5f11b6188cd2fc27a0/pytest-8.3.3-py3-none-any.whl" }
+pytest = { url = "https://files.pythonhosted.org/packages/6b/77/7440a06a8ead44c7757a64362dd22df5760f9b12dc5f11b6188cd2fc27a0/pytest-8.3.3-py3-none-any.whl" }
 pydantic = { path = "/path/to/pydantic", editable = true }
 ```
 
@@ -382,6 +433,11 @@ Cache keys can also include version control information. For example, if a proje
 to include the current Git commit hash in the cache key (in addition to the
 `pyproject.toml`). Git tags are also supported via `cache-keys = [{ git = { commit = true, tags = true } }]`.
 
+Cache keys can also include environment variables. For example, if a project relies on
+`MACOSX_DEPLOYMENT_TARGET` or other environment variables to determine its behavior, you can
+specify `cache-keys = [{ env = "MACOSX_DEPLOYMENT_TARGET" }]` to invalidate the cache
+whenever the environment variable changes.
+
 Cache keys only affect the project defined by the `pyproject.toml` in which they're
 specified (as opposed to, e.g., affecting all members in a workspace), and all paths and
 globs are interpreted as relative to the project directory.
@@ -402,6 +458,42 @@ globs are interpreted as relative to the project directory.
 
     ```toml
     cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true }]
+    ```
+
+---
+
+### [`check-url`](#check-url) {: #check-url }
+
+Check an index URL for existing files to skip duplicate uploads.
+
+This option allows retrying publishing that failed after only some, but not all files have
+been uploaded, and handles error due to parallel uploads of the same file.
+
+Before uploading, the index is checked. If the exact same file already exists in the index,
+the file will not be uploaded. If an error occurred during the upload, the index is checked
+again, to handle cases where the identical file was uploaded twice in parallel.
+
+The exact behavior will vary based on the index. When uploading to PyPI, uploading the same
+file succeeds even without `--check-url`, while most other indexes error.
+
+The index must provide one of the supported hashes (SHA-256, SHA-384, or SHA-512).
+
+**Default value**: `None`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    check-url = "https://test.pypi.org/simple"
+    ```
+=== "uv.toml"
+
+    ```toml
+    check-url = "https://test.pypi.org/simple"
     ```
 
 ---
@@ -677,6 +769,42 @@ formats described above.
 
 ---
 
+### [`fork-strategy`](#fork-strategy) {: #fork-strategy }
+
+The strategy to use when selecting multiple versions of a given package across Python
+versions and platforms.
+
+By default, uv will optimize for selecting the latest version of each package for each
+supported Python version (`requires-python`), while minimizing the number of selected
+versions across platforms.
+
+Under `fewest`, uv will minimize the number of selected versions for each package,
+preferring older versions that are compatible with a wider range of supported Python
+versions or platforms.
+
+**Default value**: `"requires-python"`
+
+**Possible values**:
+
+- `"fewest"`: Optimize for selecting the fewest number of versions for each package. Older versions may be preferred if they are compatible with a wider range of supported Python versions or platforms
+- `"requires-python"`: Optimize for selecting latest supported version of each package, for each supported Python version
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    fork-strategy = "fewest"
+    ```
+=== "uv.toml"
+
+    ```toml
+    fork-strategy = "fewest"
+    ```
+
+---
+
 ### [`index`](#index) {: #index }
 
 The package indexes to use when resolving dependencies.
@@ -735,7 +863,7 @@ PyPI default index.
 The strategy to use when resolving against multiple index URLs.
 
 By default, uv will stop at the first index on which a given package is available, and
-limit resolutions to those present on that first index (`first-match`). This prevents
+limit resolutions to those present on that first index (`first-index`). This prevents
 "dependency confusion" attacks, whereby an attacker can upload a malicious package under the
 same name to an alternate index.
 
@@ -1001,7 +1129,7 @@ are already installed.
 
 **Default value**: `[]`
 
-**Type**: `Vec<PackageName>`
+**Type**: `list[str]`
 
 **Example usage**:
 
@@ -1226,6 +1354,37 @@ The URL for publishing packages to the Python package index (by default:
 
 ---
 
+### [`pypy-install-mirror`](#pypy-install-mirror) {: #pypy-install-mirror }
+
+Mirror URL to use for downloading managed PyPy installations.
+
+By default, managed PyPy installations are downloaded from [downloads.python.org](https://downloads.python.org/).
+This variable can be set to a mirror URL to use a different source for PyPy installations.
+The provided URL will replace `https://downloads.python.org/pypy` in, e.g., `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
+
+Distributions can be read from a
+local directory by using the `file://` URL scheme.
+
+**Default value**: `None`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    pypy-install-mirror = "https://downloads.python.org/pypy"
+    ```
+=== "uv.toml"
+
+    ```toml
+    pypy-install-mirror = "https://downloads.python.org/pypy"
+    ```
+
+---
+
 ### [`python-downloads`](#python-downloads) {: #python-downloads }
 
 Whether to allow Python downloads.
@@ -1250,6 +1409,36 @@ Whether to allow Python downloads.
 
     ```toml
     python-downloads = "manual"
+    ```
+
+---
+
+### [`python-install-mirror`](#python-install-mirror) {: #python-install-mirror }
+
+Mirror URL for downloading managed Python installations.
+
+By default, managed Python installations are downloaded from [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone).
+This variable can be set to a mirror URL to use a different source for Python installations.
+The provided URL will replace `https://github.com/astral-sh/python-build-standalone/releases/download` in, e.g., `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+
+Distributions can be read from a local directory by using the `file://` URL scheme.
+
+**Default value**: `None`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    python-install-mirror = "https://github.com/astral-sh/python-build-standalone/releases/download"
+    ```
+=== "uv.toml"
+
+    ```toml
+    python-install-mirror = "https://github.com/astral-sh/python-build-standalone/releases/download"
     ```
 
 ---
@@ -1329,6 +1518,35 @@ Reinstall a specific package, regardless of whether it's already installed. Impl
 
     ```toml
     reinstall-package = ["ruff"]
+    ```
+
+---
+
+### [`required-version`](#required-version) {: #required-version }
+
+Enforce a requirement on the version of uv.
+
+If the version of uv does not meet the requirement at runtime, uv will exit
+with an error.
+
+Accepts a [PEP 440](https://peps.python.org/pep-0440/) specifier, like `==0.5.0` or `>=0.5.0`.
+
+**Default value**: `null`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    required-version = ">=0.5.0"
+    ```
+=== "uv.toml"
+
+    ```toml
+    required-version = ">=0.5.0"
     ```
 
 ---
@@ -1501,39 +1719,6 @@ packages.
     ```toml
     [pip]
     allow-empty-requirements = true
-    ```
-
----
-
-#### [`allow-insecure-host`](#pip_allow-insecure-host) {: #pip_allow-insecure-host }
-<span id="allow-insecure-host"></span>
-
-Allow insecure connections to host.
-
-Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
-`localhost:8080`), or a URL (e.g., `https://localhost`).
-
-WARNING: Hosts included in this list will not be verified against the system's certificate
-store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
-bypasses SSL verification and could expose you to MITM attacks.
-
-**Default value**: `[]`
-
-**Type**: `list[str]`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv.pip]
-    allow-insecure-host = ["localhost:8080"]
-    ```
-=== "uv.toml"
-
-    ```toml
-    [pip]
-    allow-insecure-host = ["localhost:8080"]
     ```
 
 ---
@@ -1870,11 +2055,11 @@ be correct.
 #### [`exclude-newer`](#pip_exclude-newer) {: #pip_exclude-newer }
 <span id="exclude-newer"></span>
 
-Limit candidate packages to those that were uploaded prior to the given date.
+Limit candidate packages to those that were uploaded prior to a given point in time.
 
-Accepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g.,
-`2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`) in your
-system's configured time zone.
+Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
+`2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will
+behave consistently across timezones.
 
 **Default value**: `None`
 
@@ -1886,13 +2071,13 @@ system's configured time zone.
 
     ```toml
     [tool.uv.pip]
-    exclude-newer = "2006-12-02"
+    exclude-newer = "2006-12-02T02:07:43Z"
     ```
 === "uv.toml"
 
     ```toml
     [pip]
-    exclude-newer = "2006-12-02"
+    exclude-newer = "2006-12-02T02:07:43Z"
     ```
 
 ---
@@ -1993,6 +2178,44 @@ formats described above.
 
 ---
 
+#### [`fork-strategy`](#pip_fork-strategy) {: #pip_fork-strategy }
+<span id="fork-strategy"></span>
+
+The strategy to use when selecting multiple versions of a given package across Python
+versions and platforms.
+
+By default, uv will optimize for selecting the latest version of each package for each
+supported Python version (`requires-python`), while minimizing the number of selected
+versions across platforms.
+
+Under `fewest`, uv will minimize the number of selected versions for each package,
+preferring older versions that are compatible with a wider range of supported Python
+versions or platforms.
+
+**Default value**: `"requires-python"`
+
+**Possible values**:
+
+- `"fewest"`: Optimize for selecting the fewest number of versions for each package. Older versions may be preferred if they are compatible with a wider range of supported Python versions or platforms
+- `"requires-python"`: Optimize for selecting latest supported version of each package, for each supported Python version
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    fork-strategy = "fewest"
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    fork-strategy = "fewest"
+    ```
+
+---
+
 #### [`generate-hashes`](#pip_generate-hashes) {: #pip_generate-hashes }
 <span id="generate-hashes"></span>
 
@@ -2025,7 +2248,7 @@ Include distribution hashes in the output file.
 The strategy to use when resolving against multiple index URLs.
 
 By default, uv will stop at the first index on which a given package is available, and
-limit resolutions to those present on that first index (`first-match`). This prevents
+limit resolutions to those present on that first index (`first-index`). This prevents
 "dependency confusion" attacks, whereby an attacker can upload a malicious package under the
 same name to an alternate index.
 
@@ -2279,7 +2502,7 @@ are already installed.
 
 **Default value**: `[]`
 
-**Type**: `Vec<PackageName>`
+**Type**: `list[str]`
 
 **Example usage**:
 
@@ -2348,6 +2571,34 @@ included in the resolution. Equivalent to pip-compile's `--unsafe-package` optio
     ```toml
     [pip]
     no-emit-package = ["ruff"]
+    ```
+
+---
+
+#### [`no-extra`](#pip_no-extra) {: #pip_no-extra }
+<span id="no-extra"></span>
+
+Exclude the specified optional dependencies if `all-extras` is supplied.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    all-extras = true
+    no-extra = ["dev", "docs"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    all-extras = true
+    no-extra = ["dev", "docs"]
     ```
 
 ---
@@ -3025,7 +3276,7 @@ Unlike `--require-hashes`, `--verify-hashes` does not require that all requireme
 hashes; instead, it will limit itself to verifying the hashes of those requirements that do
 include them.
 
-**Default value**: `false`
+**Default value**: `true`
 
 **Type**: `bool`
 

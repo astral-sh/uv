@@ -13,9 +13,10 @@ use tracing::{instrument, warn};
 use walkdir::WalkDir;
 
 use uv_cache_info::CacheInfo;
-use uv_fs::{relative_to, Simplified};
+use uv_fs::{persist_with_retry_sync, relative_to, rename_with_retry_sync, Simplified};
 use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
+use uv_shell::escape_posix_for_single_quotes;
 use uv_trampoline_builder::windows_script_launcher;
 
 use crate::record::RecordEntry;
@@ -33,7 +34,7 @@ fn get_script_launcher(entry_point: &Script, shebang: &str) -> String {
     let import_name = entry_point.import_name();
 
     format!(
-        r##"{shebang}
+        r#"{shebang}
 # -*- coding: utf-8 -*-
 import re
 import sys
@@ -41,7 +42,7 @@ from {module} import {import_name}
 if __name__ == "__main__":
     sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
     sys.exit({function}())
-"##
+"#
     )
 }
 
@@ -122,10 +123,11 @@ fn format_shebang(executable: impl AsRef<Path>, os_name: &str, relocatable: bool
             } else {
                 ""
             };
-            // Like Python's `shlex.quote`:
-            // > Use single quotes, and put single quotes into double quotes
-            // > The string $'b is then quoted as '$'"'"'b'
-            let executable = format!("{}'{}'", prefix, executable.replace('\'', r#"'"'"'"#));
+            let executable = format!(
+                "{}'{}'",
+                prefix,
+                escape_posix_for_single_quotes(&executable)
+            );
             return format!("#!/bin/sh\n'''exec' {executable} \"$0\" \"$@\"\n' '''");
         }
     }
@@ -312,12 +314,14 @@ pub(crate) fn move_folder_recorded(
         let src = entry.path();
         // This is the base path for moving to the actual target for the data
         // e.g. for data it's without <..>.data/data/
-        let relative_to_data = src.strip_prefix(src_dir).expect("Prefix must no change");
+        let relative_to_data = src
+            .strip_prefix(src_dir)
+            .expect("walkdir prefix must not change");
         // This is the path stored in RECORD
         // e.g. for data it's with .data/data/
         let relative_to_site_packages = src
             .strip_prefix(site_packages)
-            .expect("Prefix must no change");
+            .expect("prefix must not change");
         let target = dest_dir.join(relative_to_data);
         if entry.file_type().is_dir() {
             fs::create_dir_all(&target)?;
@@ -420,16 +424,8 @@ fn install_script(
 
         let mut target = uv_fs::tempfile_in(&layout.scheme.scripts)?;
         let size_and_encoded_hash = copy_and_hash(&mut start.chain(script), &mut target)?;
-        target.persist(&script_absolute).map_err(|err| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "Failed to persist temporary file to {}: {}",
-                    path.user_display(),
-                    err.error
-                ),
-            )
-        })?;
+
+        persist_with_retry_sync(target, &script_absolute)?;
         fs::remove_file(&path)?;
 
         // Make the script executable. We just created the file, so we can set permissions directly.
@@ -463,7 +459,7 @@ fn install_script(
 
             if permissions.mode() & 0o111 == 0o111 {
                 // If the permissions are already executable, we don't need to change them.
-                fs::rename(&path, &script_absolute)?;
+                rename_with_retry_sync(&path, &script_absolute)?;
             } else {
                 // If we have to modify the permissions, copy the file, since we might not own it.
                 warn!(
@@ -484,7 +480,7 @@ fn install_script(
 
         #[cfg(not(unix))]
         {
-            fs::rename(&path, &script_absolute)?;
+            rename_with_retry_sync(&path, &script_absolute)?;
         }
 
         None
@@ -608,7 +604,7 @@ pub(crate) fn write_file_recorded(
     let hash = Sha256::new().chain_update(content.as_ref()).finalize();
     let encoded_hash = format!("sha256={}", BASE64URL_NOPAD.encode(&hash));
     record.push(RecordEntry {
-        path: relative_path.display().to_string(),
+        path: relative_path.portable_display().to_string(),
         hash: Some(encoded_hash),
         size: Some(content.as_ref().len() as u64),
     });
@@ -616,7 +612,7 @@ pub(crate) fn write_file_recorded(
 }
 
 /// Adds `INSTALLER`, `REQUESTED` and `direct_url.json` to the .dist-info dir
-pub(crate) fn extra_dist_info(
+pub(crate) fn write_installer_metadata(
     site_packages: &Path,
     dist_info_prefix: &str,
     requested: bool,
@@ -745,7 +741,8 @@ mod test {
     use crate::Error;
 
     use super::{
-        get_script_executable, parse_email_message_file, parse_wheel_file, read_record_file, Script,
+        get_script_executable, parse_email_message_file, parse_wheel_file, read_record_file,
+        write_installer_metadata, RecordEntry, Script,
     };
 
     #[test]
@@ -767,7 +764,7 @@ mod test {
             Wheel-Version: 1.0
             Generator: bdist_wheel (0.37.1)
             Root-Is-Purelib: false
-            Tag:        cp38-cp38-manylinux_2_17_x86_64    
+            Tag:        cp38-cp38-manylinux_2_17_x86_64
         "};
 
         let wheel = parse_email_message_file(&mut text.as_bytes(), "WHEEL").unwrap();
@@ -1019,5 +1016,37 @@ mod test {
         assert_eq!(script_path, dot_python_exe.to_path_buf());
 
         Ok(())
+    }
+
+    #[test]
+    fn test_write_installer_metadata() {
+        let temp_dir = assert_fs::TempDir::new().unwrap();
+        let site_packages = temp_dir.path();
+        let mut record: Vec<RecordEntry> = Vec::new();
+        temp_dir
+            .child("foo-0.1.0.dist-info")
+            .create_dir_all()
+            .unwrap();
+        write_installer_metadata(
+            site_packages,
+            "foo-0.1.0",
+            true,
+            None,
+            None,
+            Some("uv"),
+            &mut record,
+        )
+        .unwrap();
+        let expected = [
+            "foo-0.1.0.dist-info/REQUESTED",
+            "foo-0.1.0.dist-info/INSTALLER",
+        ]
+        .map(ToString::to_string)
+        .to_vec();
+        let actual = record
+            .into_iter()
+            .map(|entry| entry.path)
+            .collect::<Vec<String>>();
+        assert_eq!(expected, actual);
     }
 }

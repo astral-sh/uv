@@ -1,3 +1,9 @@
+---
+title: Using uv in GitLab CI/CD
+description: A guide to using uv in GitLab CI/CD, including installation, setting up Python,
+  installing dependencies, and more.
+---
+
 # Using uv in GitLab CI/CD
 
 ## Using the uv image
@@ -7,7 +13,7 @@ Select a variant that is suitable for your workflow.
 
 ```yaml title="gitlab-ci.yml"
 variables:
-  UV_VERSION: 0.4
+  UV_VERSION: 0.5
   PYTHON_VERSION: 3.12
   BASE_LAYER: bookworm-slim
 
@@ -20,6 +26,17 @@ uv:
   script:
     # your `uv` commands
 ```
+
+!!! note
+
+    If you are using a distroless image, you have to specify the entrypoint:
+    ```yaml
+    uv:
+      image:
+        name: ghcr.io/astral-sh/uv:$UV_VERSION
+        entrypoint: [""]
+      # ...
+    ```
 
 ## Caching
 
@@ -66,5 +83,5 @@ variables:
 
 To opt-out again, the `--no-system` flag can be used in any uv invocation.
 
-When persisting the cache, you may want to use `requirement.txt` or `pyproject.toml` as
+When persisting the cache, you may want to use `requirements.txt` or `pyproject.toml` as
 your cache key files instead of `uv.lock`.

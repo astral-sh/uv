@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use owo_colors::OwoColorize;
 use petgraph::visit::EdgeRef;
-use petgraph::Direction;
+use petgraph::{Directed, Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use uv_distribution_types::{DistributionMetadata, Name, SourceAnnotation, SourceAnnotations};
@@ -10,16 +10,16 @@ use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
 
 use crate::resolution::{RequirementsTxtDist, ResolutionGraphNode};
-use crate::{ResolutionGraph, ResolverMarkers};
+use crate::{ResolverEnvironment, ResolverOutput};
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.
 #[derive(Debug)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct DisplayResolutionGraph<'a> {
     /// The underlying graph.
-    resolution: &'a ResolutionGraph,
-    /// The marker environment, used to determine the markers that apply to each package.
-    marker_env: &'a ResolverMarkers,
+    resolution: &'a ResolverOutput,
+    /// The resolver marker environment, used to determine the markers that apply to each package.
+    env: &'a ResolverEnvironment,
     /// The packages to exclude from the output.
     no_emit_packages: &'a [PackageName],
     /// Whether to include hashes in the output.
@@ -44,21 +44,17 @@ enum DisplayResolutionGraphNode<'dist> {
     Dist(RequirementsTxtDist<'dist>),
 }
 
-impl DisplayResolutionGraphNode<'_> {
-    fn markers(&self) -> &MarkerTree {
-        match self {
-            DisplayResolutionGraphNode::Root => &MarkerTree::TRUE,
-            DisplayResolutionGraphNode::Dist(dist) => dist.markers,
-        }
-    }
-}
-
 impl<'a> DisplayResolutionGraph<'a> {
     /// Create a new [`DisplayResolutionGraph`] for the given graph.
+    ///
+    /// Note that this panics if any of the forks in the given resolver
+    /// output contain non-empty conflicting groups. That is, when using `uv
+    /// pip compile`, specifying conflicts is not supported because their
+    /// conditional logic cannot be encoded into a `requirements.txt`.
     #[allow(clippy::fn_params_excessive_bools)]
     pub fn new(
-        underlying: &'a ResolutionGraph,
-        marker_env: &'a ResolverMarkers,
+        underlying: &'a ResolverOutput,
+        env: &'a ResolverEnvironment,
         no_emit_packages: &'a [PackageName],
         show_hashes: bool,
         include_extras: bool,
@@ -67,9 +63,16 @@ impl<'a> DisplayResolutionGraph<'a> {
         include_index_annotation: bool,
         annotation_style: AnnotationStyle,
     ) -> DisplayResolutionGraph<'a> {
+        for fork_marker in &underlying.fork_markers {
+            assert!(
+                fork_marker.conflict().is_true(),
+                "found fork marker {fork_marker:?} with non-trivial conflicting marker, \
+                 cannot display resolver output with conflicts in requirements.txt format",
+            );
+        }
         Self {
             resolution: underlying,
-            marker_env,
+            env,
             no_emit_packages,
             show_hashes,
             include_extras,
@@ -89,7 +92,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             let mut sources = SourceAnnotations::default();
 
             for requirement in self.resolution.requirements.iter().filter(|requirement| {
-                requirement.evaluate_markers(self.marker_env.marker_environment(), &[])
+                requirement.evaluate_markers(self.env.marker_environment(), &[])
             }) {
                 if let Some(origin) = &requirement.origin {
                     sources.add(
@@ -104,7 +107,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 .constraints
                 .requirements()
                 .filter(|requirement| {
-                    requirement.evaluate_markers(self.marker_env.marker_environment(), &[])
+                    requirement.evaluate_markers(self.env.marker_environment(), &[])
                 })
             {
                 if let Some(origin) = &requirement.origin {
@@ -120,7 +123,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 .overrides
                 .requirements()
                 .filter(|requirement| {
-                    requirement.evaluate_markers(self.marker_env.marker_environment(), &[])
+                    requirement.evaluate_markers(self.env.marker_environment(), &[])
                 })
             {
                 if let Some(origin) = &requirement.origin {
@@ -143,7 +146,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         // We assign each package its propagated markers: In `requirements.txt`, we want a flat list
         // that for each package tells us if it should be installed on the current platform, without
         // looking at which packages depend on it.
-        let petgraph = self.resolution.petgraph.map(
+        let graph = self.resolution.graph.map(
             |_index, node| match node {
                 ResolutionGraphNode::Root => DisplayResolutionGraphNode::Root,
                 ResolutionGraphNode::Dist(dist) => {
@@ -156,15 +159,18 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             |_index, _edge| (),
         );
 
-        // Reduce the graph, such that all nodes for a single package are combined, regardless of
-        // the extras.
-        let petgraph = combine_extras(&petgraph);
+        // Reduce the graph, removing or combining extras for a given package.
+        let graph = if self.include_extras {
+            combine_extras(&graph)
+        } else {
+            strip_extras(&graph)
+        };
 
         // Collect all packages.
-        let mut nodes = petgraph
+        let mut nodes = graph
             .node_indices()
             .filter_map(|index| {
-                let dist = &petgraph[index];
+                let dist = &graph[index];
                 let name = dist.name();
                 if self.no_emit_packages.contains(name) {
                     return None;
@@ -181,11 +187,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         for (index, node) in nodes {
             // Display the node itself.
             let mut line = node
-                .to_requirements_txt(
-                    &self.resolution.requires_python,
-                    self.include_extras,
-                    self.include_markers,
-                )
+                .to_requirements_txt(&self.resolution.requires_python, self.include_markers)
                 .to_string();
 
             // Display the distribution hashes, if any.
@@ -207,9 +209,9 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             if self.include_annotations {
                 // Display all dependents (i.e., all packages that depend on the current package).
                 let dependents = {
-                    let mut dependents = petgraph
+                    let mut dependents = graph
                         .edges_directed(index, Direction::Incoming)
-                        .map(|edge| &petgraph[edge.source()])
+                        .map(|edge| &graph[edge.source()])
                         .map(uv_distribution_types::Name::name)
                         .collect::<Vec<_>>();
                     dependents.sort_unstable();
@@ -313,20 +315,27 @@ pub enum AnnotationStyle {
 }
 
 /// We don't need the edge markers anymore since we switched to propagated markers.
-type IntermediatePetGraph<'dist> =
-    petgraph::graph::Graph<DisplayResolutionGraphNode<'dist>, (), petgraph::Directed>;
+type IntermediatePetGraph<'dist> = Graph<DisplayResolutionGraphNode<'dist>, (), Directed>;
 
-type RequirementsTxtGraph<'dist> =
-    petgraph::graph::Graph<RequirementsTxtDist<'dist>, (), petgraph::Directed>;
+type RequirementsTxtGraph<'dist> = Graph<RequirementsTxtDist<'dist>, (), Directed>;
 
 /// Reduce the graph, such that all nodes for a single package are combined, regardless of
-/// the extras.
+/// the extras, as long as they have the same version and markers.
 ///
 /// For example, `flask` and `flask[dotenv]` should be reduced into a single `flask[dotenv]`
 /// node.
 ///
+/// If the extras have different markers, they'll be treated as separate nodes. For example,
+/// `flask[dotenv] ; sys_platform == "win32"` and `flask[async] ; sys_platform == "linux"`
+/// would _not_ be combined.
+///
 /// We also remove the root node, to simplify the graph structure.
 fn combine_extras<'dist>(graph: &IntermediatePetGraph<'dist>) -> RequirementsTxtGraph<'dist> {
+    /// Return the key for a node.
+    fn version_marker<'dist>(dist: &'dist RequirementsTxtDist) -> (&'dist PackageName, MarkerTree) {
+        (dist.name(), dist.markers)
+    }
+
     let mut next = RequirementsTxtGraph::with_capacity(graph.node_count(), graph.edge_count());
     let mut inverse = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
 
@@ -338,40 +347,68 @@ fn combine_extras<'dist>(graph: &IntermediatePetGraph<'dist>) -> RequirementsTxt
 
         // In the `requirements.txt` output, we want a flat installation list, so we need to use
         // the reachability markers instead of the edge markers.
-        // We use the markers of the base package: We know that each virtual extra package has an
-        // edge to the base package, so we know that base package markers are more general than the
-        // extra package markers (the extra package markers are a subset of the base package
-        // markers).
-        if let Some(index) = inverse.get(&dist.version_id()) {
-            let node: &mut RequirementsTxtDist = &mut next[*index];
-            node.extras.extend(dist.extras.iter().cloned());
-            node.extras.sort_unstable();
-            node.extras.dedup();
-        } else {
-            let version_id = dist.version_id();
-            let dist = dist.clone();
-            let index = next.add_node(dist);
-            inverse.insert(version_id, index);
+        match inverse.entry(version_marker(dist)) {
+            std::collections::hash_map::Entry::Occupied(entry) => {
+                let index = *entry.get();
+                let node: &mut RequirementsTxtDist = &mut next[index];
+                node.extras.extend(dist.extras.iter().cloned());
+                node.extras.sort_unstable();
+                node.extras.dedup();
+            }
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                let index = next.add_node(dist.clone());
+                entry.insert(index);
+            }
         }
     }
 
-    // Verify that the package markers are more general than the extra markers.
-    if cfg!(debug_assertions) {
-        for index in graph.node_indices() {
-            let DisplayResolutionGraphNode::Dist(dist) = &graph[index] else {
-                continue;
-            };
-            let combined_markers = next[inverse[&dist.version_id()]].markers.clone();
-            let mut package_markers = combined_markers.clone();
-            package_markers.or(graph[index].markers().clone());
-            assert_eq!(
-                package_markers,
-                combined_markers,
-                "{} {:?} {:?}",
-                dist.version_id(),
-                dist.extras,
-                dist.markers.try_to_string()
-            );
+    // Re-add the edges to the reduced graph.
+    for edge in graph.edge_indices() {
+        let (source, target) = graph.edge_endpoints(edge).unwrap();
+        let DisplayResolutionGraphNode::Dist(source_node) = &graph[source] else {
+            continue;
+        };
+        let DisplayResolutionGraphNode::Dist(target_node) = &graph[target] else {
+            continue;
+        };
+        let source = inverse[&version_marker(source_node)];
+        let target = inverse[&version_marker(target_node)];
+
+        next.update_edge(source, target, ());
+    }
+
+    next
+}
+
+/// Reduce the graph, such that all nodes for a single package are combined, with extras
+/// removed.
+///
+/// For example, `flask`, `flask[async]`, and `flask[dotenv]` should be reduced into a single
+/// `flask` node, with a conjunction of their markers.
+///
+/// We also remove the root node, to simplify the graph structure.
+fn strip_extras<'dist>(graph: &IntermediatePetGraph<'dist>) -> RequirementsTxtGraph<'dist> {
+    let mut next = RequirementsTxtGraph::with_capacity(graph.node_count(), graph.edge_count());
+    let mut inverse = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
+
+    // Re-add the nodes to the reduced graph.
+    for index in graph.node_indices() {
+        let DisplayResolutionGraphNode::Dist(dist) = &graph[index] else {
+            continue;
+        };
+
+        // In the `requirements.txt` output, we want a flat installation list, so we need to use
+        // the reachability markers instead of the edge markers.
+        match inverse.entry(dist.version_id()) {
+            std::collections::hash_map::Entry::Occupied(entry) => {
+                let index = *entry.get();
+                let node: &mut RequirementsTxtDist = &mut next[index];
+                node.extras.clear();
+            }
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                let index = next.add_node(dist.clone());
+                entry.insert(index);
+            }
         }
     }
 

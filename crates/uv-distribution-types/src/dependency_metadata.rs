@@ -91,7 +91,7 @@ pub struct StaticMetadata {
     #[cfg_attr(
         feature = "schemars",
         schemars(
-            with = "String",
+            with = "Option<String>",
             description = "PEP 440-style package version, e.g., `1.2.3`"
         )
     )]

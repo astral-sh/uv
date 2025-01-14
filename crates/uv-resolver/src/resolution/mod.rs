@@ -7,16 +7,16 @@ use uv_distribution_types::{
 };
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::MarkerTree;
 use uv_pypi_types::HashDigest;
 
 pub use crate::resolution::display::{AnnotationStyle, DisplayResolutionGraph};
-pub(crate) use crate::resolution::graph::ResolutionGraphNode;
-pub use crate::resolution::graph::{ConflictingDistributionError, ResolutionGraph};
+pub(crate) use crate::resolution::output::ResolutionGraphNode;
+pub use crate::resolution::output::{ConflictingDistributionError, ResolverOutput};
 pub(crate) use crate::resolution::requirements_txt::RequirementsTxtDist;
+use crate::universal_marker::UniversalMarker;
 
 mod display;
-mod graph;
+mod output;
 mod requirements_txt;
 
 /// A pinned package with its resolved distribution and metadata. The [`ResolvedDist`] refers to a
@@ -36,7 +36,7 @@ pub(crate) struct AnnotatedDist {
     /// That is, when doing a traversal over all of the distributions in a
     /// resolution, this marker corresponds to the disjunction of all paths to
     /// this distribution in the resolution graph.
-    pub(crate) marker: MarkerTree,
+    pub(crate) marker: UniversalMarker,
 }
 
 impl AnnotatedDist {
@@ -49,8 +49,8 @@ impl AnnotatedDist {
     /// Returns the [`IndexUrl`] of the distribution, if it is from a registry.
     pub(crate) fn index(&self) -> Option<&IndexUrl> {
         match &self.dist {
-            ResolvedDist::Installed(_) => None,
-            ResolvedDist::Installable(dist) => match dist {
+            ResolvedDist::Installed { .. } => None,
+            ResolvedDist::Installable { dist, .. } => match dist {
                 Dist::Built(dist) => match dist {
                     BuiltDist::Registry(dist) => Some(&dist.best_wheel().index),
                     BuiltDist::DirectUrl(_) => None,

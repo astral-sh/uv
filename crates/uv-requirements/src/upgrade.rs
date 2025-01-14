@@ -7,7 +7,7 @@ use uv_configuration::Upgrade;
 use uv_fs::CWD;
 use uv_git::ResolvedRepositoryReference;
 use uv_requirements_txt::RequirementsTxt;
-use uv_resolver::{Lock, Preference, PreferenceError};
+use uv_resolver::{Lock, LockError, Preference, PreferenceError};
 
 #[derive(Debug, Default)]
 pub struct LockedRequirements {
@@ -63,7 +63,16 @@ pub async fn read_requirements_txt(
 }
 
 /// Load the preferred requirements from an existing lockfile, applying the upgrade strategy.
-pub fn read_lock_requirements(lock: &Lock, upgrade: &Upgrade) -> LockedRequirements {
+pub fn read_lock_requirements(
+    lock: &Lock,
+    install_path: &Path,
+    upgrade: &Upgrade,
+) -> Result<LockedRequirements, LockError> {
+    // As an optimization, skip iterating over the lockfile is we're upgrading all packages anyway.
+    if upgrade.is_all() {
+        return Ok(LockedRequirements::default());
+    }
+
     let mut preferences = Vec::new();
     let mut git = Vec::new();
 
@@ -74,13 +83,13 @@ pub fn read_lock_requirements(lock: &Lock, upgrade: &Upgrade) -> LockedRequireme
         }
 
         // Map each entry in the lockfile to a preference.
-        preferences.push(Preference::from_lock(package));
+        preferences.push(Preference::from_lock(package, install_path)?);
 
         // Map each entry in the lockfile to a Git SHA.
-        if let Some(git_ref) = package.as_git_ref() {
+        if let Some(git_ref) = package.as_git_ref()? {
             git.push(git_ref);
         }
     }
 
-    LockedRequirements { preferences, git }
+    Ok(LockedRequirements { preferences, git })
 }

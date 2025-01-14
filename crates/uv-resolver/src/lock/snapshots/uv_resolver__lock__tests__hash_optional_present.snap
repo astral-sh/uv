@@ -1,11 +1,14 @@
 ---
-source: crates/uv-resolver/src/lock/tests.rs
+source: crates/uv-resolver/src/lock/mod.rs
 expression: result
 ---
 Ok(
     Lock {
         version: 1,
         fork_markers: [],
+        conflicts: Conflicts(
+            [],
+        ),
         supported_environments: [],
         requires_python: RequiresPython {
             specifiers: VersionSpecifiers(
@@ -30,6 +33,7 @@ Ok(
         options: ResolverOptions {
             resolution_mode: Highest,
             prerelease_mode: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             exclude_newer: None,
         },
         packages: [
@@ -71,13 +75,16 @@ Ok(
                             version: "4.3.0",
                             build_tag: None,
                             python_tag: [
-                                "py3",
+                                Python {
+                                    major: 3,
+                                    minor: None,
+                                },
                             ],
                             abi_tag: [
-                                "none",
+                                None,
                             ],
                             platform_tag: [
-                                "any",
+                                Any,
                             ],
                         },
                     },
@@ -110,6 +117,7 @@ Ok(
         manifest: ResolverManifest {
             members: {},
             requirements: {},
+            dependency_groups: {},
             constraints: {},
             overrides: {},
             dependency_metadata: {},

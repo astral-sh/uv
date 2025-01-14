@@ -12,10 +12,9 @@ use predicates::Predicate;
 use url::Url;
 
 use crate::common::{
-    copy_dir_all, download_to_disk, site_packages_path, uv_snapshot, venv_to_interpreter,
-    TestContext,
+    download_to_disk, site_packages_path, uv_snapshot, venv_to_interpreter, TestContext,
 };
-use uv_fs::Simplified;
+use uv_fs::{copy_dir_all, Simplified};
 use uv_static::EnvVars;
 
 fn check_command(venv: &Path, command: &str, temp_dir: &Path) {
@@ -361,7 +360,7 @@ fn pip_sync_empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Requirements file requirements.txt does not contain any dependencies
+    warning: Requirements file `requirements.txt` does not contain any dependencies
     No requirements found (hint: use `--allow-empty-requirements` to clear the environment)
     "###
     );
@@ -374,7 +373,7 @@ fn pip_sync_empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Requirements file requirements.txt does not contain any dependencies
+    warning: Requirements file `requirements.txt` does not contain any dependencies
     Resolved in [TIME]
     Audited in [TIME]
     "###
@@ -398,7 +397,7 @@ fn pip_sync_empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Requirements file requirements.txt does not contain any dependencies
+    warning: Requirements file `requirements.txt` does not contain any dependencies
     Resolved in [TIME]
     Uninstalled 1 package in [TIME]
      - iniconfig==2.0.0
@@ -1264,7 +1263,7 @@ fn mismatched_name() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
-          hint: The structure of foo was invalid:
+          hint: The structure of `foo` was invalid:
             The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
     "###
     );
@@ -1410,7 +1409,7 @@ fn install_url_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 19 files for source-distribution ([SIZE])
+    Removed 19 files ([SIZE])
     "###
     );
 
@@ -1505,7 +1504,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    No cache entries found for werkzeug
+    No cache entries found
     "###
     );
 
@@ -1605,7 +1604,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 20 files for source-distribution ([SIZE])
+    Removed 20 files ([SIZE])
     "###
     );
 
@@ -1702,7 +1701,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 19 files for source-distribution ([SIZE])
+    Removed 19 files ([SIZE])
     "###
     );
 
@@ -1787,13 +1786,10 @@ fn install_path_built_dist_cached() -> Result<()> {
 
     let filters = if cfg!(windows) {
         // We do not display sizes on Windows
-        [(
-            "Removed 1 file for tomli",
-            "Removed 1 file for tomli ([SIZE])",
-        )]
-        .into_iter()
-        .chain(context.filters())
-        .collect()
+        [("Removed 1 file", "Removed 1 file ([SIZE])")]
+            .into_iter()
+            .chain(context.filters())
+            .collect()
     } else {
         context.filters()
     };
@@ -1804,7 +1800,7 @@ fn install_path_built_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 11 files for tomli ([SIZE])
+    Removed 11 files ([SIZE])
     "###
     );
 
@@ -1838,7 +1834,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     requirements_txt.write_str("tqdm @ https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl")?;
 
     let filters = if cfg!(windows) {
-        [("warning: The package `tqdm` requires `colorama ; platform_system == 'Windows'`, but it's not installed\n", "")]
+        [("warning: The package `tqdm` requires `colorama ; sys_platform == 'win32'`, but it's not installed\n", "")]
             .into_iter()
             .chain(context.filters())
             .collect()
@@ -1892,7 +1888,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 43 files for tqdm ([SIZE])
+    Removed 43 files ([SIZE])
     "###
     );
 
@@ -2603,7 +2599,7 @@ fn sync_editable_and_local() -> Result<()> {
 #[test]
 fn incompatible_wheel() -> Result<()> {
     let context = TestContext::new("3.12");
-    let wheel = context.temp_dir.child("foo-1.2.3-not-compatible-wheel.whl");
+    let wheel = context.temp_dir.child("foo-1.2.3-py3-none-any.whl");
     wheel.touch()?;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -2620,7 +2616,7 @@ fn incompatible_wheel() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
-          hint: The structure of foo was invalid:
+          hint: The structure of `foo` was invalid:
             Failed to read from zip file
     "###
     );
@@ -3296,6 +3292,55 @@ fn compile() -> Result<()> {
     Ok(())
 }
 
+/// Re-install with bytecode compilation.
+#[test]
+fn recompile() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + markupsafe==2.1.3
+    "###
+    );
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--compile")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Bytecode compiled 3 files in [TIME]
+    "###
+    );
+
+    assert!(context
+        .site_packages()
+        .join("markupsafe")
+        .join("__pycache__")
+        .join("__init__.cpython-312.pyc")
+        .exists());
+
+    context.assert_command("import markupsafe").success();
+
+    Ok(())
+}
+
 /// Raise an error when an editable's `Requires-Python` constraint is not met.
 #[test]
 fn requires_python_editable() -> Result<()> {
@@ -3330,37 +3375,6 @@ requires-python = ">=3.13"
       × No solution found when resolving dependencies:
       ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
-    "###
-    );
-
-    Ok(())
-}
-
-/// Install packages from an index that "doesn't support" zip file streaming (by way of using
-/// data descriptors).
-#[test]
-fn no_stream() -> Result<()> {
-    let context = TestContext::new("3.12");
-
-    // Write to a requirements file.
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt
-        .write_str("hashb_foxglove_protocolbuffers_python==25.3.0.1.20240226043130+465630478360")?;
-
-    uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .arg("requirements.txt")
-        .arg("--index-url")
-        .arg("https://buf.build/gen/python"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + hashb-foxglove-protocolbuffers-python==25.3.0.1.20240226043130+465630478360
     "###
     );
 
@@ -3568,20 +3582,19 @@ fn require_hashes_wheel_no_binary() -> Result<()> {
         .arg(":all:")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download and build `anyio==4.0.0`
-      Caused by: Hash mismatch for `anyio==4.0.0`
+      × Failed to download and build `anyio==4.0.0`
+      ╰─▶ Hash mismatch for `anyio==4.0.0`
 
-    Expected:
-      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-    Computed:
-      sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+          Computed:
+            sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
     "###
     );
 
@@ -3662,20 +3675,19 @@ fn require_hashes_source_only_binary() -> Result<()> {
         .arg(":all:")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `anyio==4.0.0`
-      Caused by: Hash mismatch for `anyio==4.0.0`
+      × Failed to download `anyio==4.0.0`
+      ╰─▶ Hash mismatch for `anyio==4.0.0`
 
-    Expected:
-      sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+          Expected:
+            sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
 
-    Computed:
-      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "###
     );
 
@@ -3695,20 +3707,19 @@ fn require_hashes_wrong_digest() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `anyio==4.0.0`
-      Caused by: Hash mismatch for `anyio==4.0.0`
+      × Failed to download `anyio==4.0.0`
+      ╰─▶ Hash mismatch for `anyio==4.0.0`
 
-    Expected:
-      sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-    Computed:
-      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "###
     );
 
@@ -3728,20 +3739,19 @@ fn require_hashes_wrong_algorithm() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `anyio==4.0.0`
-      Caused by: Hash mismatch for `anyio==4.0.0`
+      × Failed to download `anyio==4.0.0`
+      ╰─▶ Hash mismatch for `anyio==4.0.0`
 
-    Expected:
-      sha512:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha512:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-    Computed:
-      sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
+          Computed:
+            sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
     "###
     );
 
@@ -3901,20 +3911,19 @@ fn require_hashes_wheel_url() -> Result<()> {
         .arg("--reinstall")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
-      Caused by: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      × Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      ╰─▶ Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
-    Expected:
-      sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-    Computed:
-      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "###
     );
 
@@ -3956,20 +3965,19 @@ fn require_hashes_wheel_url_mismatch() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
-      Caused by: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      × Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      ╰─▶ Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
-    Expected:
-      sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-    Computed:
-      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "###
     );
 
@@ -4065,20 +4073,19 @@ fn require_hashes_re_download() -> Result<()> {
         .arg("--reinstall")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `anyio==4.0.0`
-      Caused by: Hash mismatch for `anyio==4.0.0`
+      × Failed to download `anyio==4.0.0`
+      ╰─▶ Hash mismatch for `anyio==4.0.0`
 
-    Expected:
-      sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-    Computed:
-      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "###
     );
 
@@ -4157,20 +4164,19 @@ fn require_hashes_wheel_path_mismatch() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
-      Caused by: Hash mismatch for `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
+      × Failed to read `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
+      ╰─▶ Hash mismatch for `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
 
-    Expected:
-      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-    Computed:
-      sha256:a34996d4bd5abb2336e14ff0a2d22b92cfd0f0ed344e6883041ce01953276a13
+          Computed:
+            sha256:a34996d4bd5abb2336e14ff0a2d22b92cfd0f0ed344e6883041ce01953276a13
     "###
     );
 
@@ -4434,20 +4440,19 @@ fn require_hashes_repeated_hash() -> Result<()> {
         .arg("--require-hashes")
         .arg("--reinstall"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
-      Caused by: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      × Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      ╰─▶ Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
-    Expected:
-      md5:520d85e19168705cdf0223621b18831a
+          Expected:
+            md5:520d85e19168705cdf0223621b18831a
 
-    Computed:
-      md5:420d85e19168705cdf0223621b18831a
+          Computed:
+            md5:420d85e19168705cdf0223621b18831a
     "###
     );
 
@@ -4566,20 +4571,19 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
         .arg("--find-links")
         .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/no-hash/simple-html/example-a-961b4c22/index.html"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `example-a-961b4c22==1.0.0`
-      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
-    Expected:
-      sha256:123
+          Expected:
+            sha256:123
 
-    Computed:
-      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+          Computed:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "###
     );
 
@@ -4596,20 +4600,19 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
         .arg("--find-links")
         .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/no-hash/simple-html/example-a-961b4c22/index.html"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `example-a-961b4c22==1.0.0`
-      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
-    Expected:
-      sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
+          Expected:
+            sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
 
-    Computed:
-      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+          Computed:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "###
     );
 
@@ -4687,20 +4690,19 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
         .arg("--find-links")
         .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/invalid-hash/simple-html/example-a-961b4c22/index.html"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `example-a-961b4c22==1.0.0`
-      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
-    Expected:
-      sha256:123
+          Expected:
+            sha256:123
 
-    Computed:
-      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+          Computed:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "###
     );
 
@@ -4716,20 +4718,19 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
         .arg("--find-links")
         .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/invalid-hash/simple-html/example-a-961b4c22/index.html"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `example-a-961b4c22==1.0.0`
-      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
-    Expected:
-      sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea
+          Expected:
+            sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea
 
-    Computed:
-      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+          Computed:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "###
     );
 
@@ -4797,21 +4798,20 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
         .arg("--find-links")
         .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/invalid-hash/simple-html/example-a-961b4c22/index.html"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download and build `example-a-961b4c22==1.0.0`
-      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download and build `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
-    Expected:
-      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
-      sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee
+          Expected:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+            sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee
 
-    Computed:
-      sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
+          Computed:
+            sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
     "###
     );
 
@@ -4893,20 +4893,19 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
         .arg("--index-url")
         .arg("https://astral-test.github.io/astral-test-hash/invalid-hash/simple-html/"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `example-a-961b4c22==1.0.0`
-      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
-    Expected:
-      sha256:123
+          Expected:
+            sha256:123
 
-    Computed:
-      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+          Computed:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "###
     );
 
@@ -4923,20 +4922,19 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
         .arg("--index-url")
         .arg("https://astral-test.github.io/astral-test-hash/invalid-hash/simple-html/"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `example-a-961b4c22==1.0.0`
-      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
-    Expected:
-      sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea
+          Expected:
+            sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea
 
-    Computed:
-      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+          Computed:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "###
     );
 
@@ -5007,21 +5005,20 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
         .arg("--index-url")
         .arg("https://astral-test.github.io/astral-test-hash/invalid-hash/simple-html/"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download and build `example-a-961b4c22==1.0.0`
-      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download and build `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
-    Expected:
-      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
-      sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee
+          Expected:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+            sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee
 
-    Computed:
-      sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
+          Computed:
+            sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
     "###
     );
 
@@ -5095,20 +5092,19 @@ fn require_hashes_url_invalid() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
-      Caused by: Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
+      × Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
+      ╰─▶ Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
 
-    Expected:
-      sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+          Expected:
+            sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
 
-    Computed:
-      sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+          Computed:
+            sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
     "###
     );
 
@@ -5129,20 +5125,19 @@ fn require_hashes_url_ignore() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
-      Caused by: Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
+      × Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
+      ╰─▶ Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
 
-    Expected:
-      sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+          Expected:
+            sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
 
-    Computed:
-      sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+          Computed:
+            sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
     "###
     );
 
@@ -5180,13 +5175,16 @@ fn require_hashes_url_unnamed() -> Result<()> {
 /// Sync to a `--target` directory with a built distribution.
 #[test]
 fn target_built_distribution() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
 
     // Install `iniconfig` to the target directory.
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("iniconfig==2.0.0")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--target")
         .arg("target"), @r###"
@@ -5195,6 +5193,7 @@ fn target_built_distribution() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -5221,7 +5220,7 @@ fn target_built_distribution() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("iniconfig==1.1.1")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--target")
         .arg("target"), @r###"
@@ -5230,6 +5229,7 @@ fn target_built_distribution() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -5242,7 +5242,7 @@ fn target_built_distribution() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--target")
         .arg("target"), @r###"
@@ -5251,6 +5251,7 @@ fn target_built_distribution() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -5272,13 +5273,16 @@ fn target_built_distribution() -> Result<()> {
 /// Sync to a `--target` directory with a package that requires building from source.
 #[test]
 fn target_source_distribution() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
 
     // Install `iniconfig` to the target directory.
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("iniconfig==2.0.0")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--no-binary")
         .arg("iniconfig")
@@ -5289,6 +5293,7 @@ fn target_source_distribution() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -5321,13 +5326,16 @@ fn target_source_distribution() -> Result<()> {
 /// `--no-build-isolation`.
 #[test]
 fn target_no_build_isolation() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
 
     // Install `hatchling` into the current environment.
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flit_core")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -5344,7 +5352,7 @@ fn target_no_build_isolation() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("wheel")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--no-build-isolation")
         .arg("--no-binary")
@@ -5356,6 +5364,7 @@ fn target_no_build_isolation() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -5384,10 +5393,44 @@ fn target_no_build_isolation() -> Result<()> {
     Ok(())
 }
 
+/// Sync to a `--target` directory without a virtual environment.
+#[test]
+fn target_system() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    // Install `iniconfig` to the target directory.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("iniconfig==2.0.0")?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.in")
+        .arg("--target")
+        .arg("target"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    // Ensure that the package is present in the target directory.
+    assert!(context.temp_dir.child("target").child("iniconfig").is_dir());
+
+    Ok(())
+}
+
 /// Sync to a `--prefix` directory.
 #[test]
 fn prefix() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
 
     // Install `iniconfig` to the target directory.
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -5395,7 +5438,7 @@ fn prefix() -> Result<()> {
 
     let prefix = context.temp_dir.child("prefix");
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--prefix")
         .arg(prefix.path()), @r###"
@@ -5404,6 +5447,7 @@ fn prefix() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -5430,7 +5474,7 @@ fn prefix() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("iniconfig==1.1.1")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--prefix")
         .arg(prefix.path()), @r###"
@@ -5439,6 +5483,7 @@ fn prefix() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -5490,16 +5535,15 @@ fn incompatible_build_constraint() -> Result<()> {
         .arg("--build-constraint")
         .arg("build_constraints.txt"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download and build `requests==1.2.0`
-      Caused by: Failed to resolve requirements from `setup.py` build
-      Caused by: No solution found when resolving: `setuptools>=40.8.0`
-      Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -5602,6 +5646,87 @@ fn sync_seed() -> Result<()> {
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + requests==1.2.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Sanitize zip files during extraction.
+#[test]
+fn sanitize() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Install a zip file that includes a path that extends outside the parent.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("payload-package @ https://github.com/astral-sh/sanitize-wheel-test/raw/bc59283d5b4b136a191792e32baa51b477fdf65e/payload_package-0.1.0-py3-none-any.whl")?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + payload-package==0.1.0 (from https://github.com/astral-sh/sanitize-wheel-test/raw/bc59283d5b4b136a191792e32baa51b477fdf65e/payload_package-0.1.0-py3-none-any.whl)
+    "###
+    );
+
+    // There should be no `payload` file in the root.
+    if let Some(parent) = context.temp_dir.parent() {
+        assert!(!parent.join("payload").exists());
+    }
+
+    Ok(())
+}
+
+/// Allow semicolons attached to markers, as long as they're preceded by a space.
+#[test]
+fn semicolon_trailing_space() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl; python_version > '3.10'")?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+    "###
+    );
+
+    Ok(())
+}
+
+/// Treat a semicolon that's not whitespace-separated as a part of the URL.
+#[test]
+fn semicolon_no_space() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl;python_version > '3.10'")?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Couldn't parse requirement in `requirements.txt` at position 0
+      Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl;python_version%20%3E%20'3.10'`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
+    iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl;python_version > '3.10'
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     "###
     );
 
