@@ -1836,11 +1836,11 @@ where
     // seems fine. Also we still try to respect RUST_MIN_STACK if it's set, in case useful,
     // but don't let it ask for a smaller stack to avoid messy misconfiguration since we
     // know we use quite a bit of main stack space.
-    const DEFAULT_MAIN_STACK_SIZE: usize = 4 * 1024 * 1024;
     let main_stack_size = std::env::var(EnvVars::RUST_MIN_STACK)
-        .and_then(|t| s.parse::<usize>())
+        .ok()
+        .and_then(|var| var.parse::<usize>().ok())
         .unwrap_or(0)
-        .max(DEFAULT_MAIN_STACK_SIZE);
+        .max(4 * 1024 * 1024);
 
     let main2 = move || {
         let runtime = tokio::runtime::Builder::new_current_thread()
