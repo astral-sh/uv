@@ -17,8 +17,8 @@ use uv_cli::{
     AddArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
     PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
-    PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs, ToolDirArgs,
-    ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs,
+    PythonListFormat, PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs,
+    ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs,
 };
 use uv_client::Connectivity;
 use uv_configuration::{
@@ -738,6 +738,7 @@ pub(crate) struct PythonListSettings {
     pub(crate) all_arches: bool,
     pub(crate) all_versions: bool,
     pub(crate) show_urls: bool,
+    pub(crate) output_format: PythonListFormat,
 }
 
 impl PythonListSettings {
@@ -751,6 +752,7 @@ impl PythonListSettings {
             only_installed,
             only_downloads,
             show_urls,
+            output_format,
         } = args;
 
         let kinds = if only_installed {
@@ -767,6 +769,7 @@ impl PythonListSettings {
             all_arches,
             all_versions,
             show_urls,
+            output_format,
         }
     }
 }
