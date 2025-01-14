@@ -407,6 +407,9 @@ pub struct WheelTagLarge {
 
 impl Display for WheelTagLarge {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if let Some(build_tag) = &self.build_tag {
+            write!(f, "{build_tag}-")?;
+        }
         write!(
             f,
             "{}-{}-{}",

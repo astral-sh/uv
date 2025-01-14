@@ -1,6 +1,7 @@
 use std::num::ParseIntError;
 use std::str::FromStr;
-use std::sync::Arc;
+
+use uv_small_str::SmallString;
 
 #[derive(thiserror::Error, Debug)]
 pub enum BuildTagError {
@@ -33,7 +34,7 @@ pub enum BuildTagError {
     rkyv::Serialize,
 )]
 #[rkyv(derive(Debug))]
-pub struct BuildTag(u64, Option<Arc<str>>);
+pub struct BuildTag(u64, Option<SmallString>);
 
 impl FromStr for BuildTag {
     type Err = BuildTagError;
@@ -57,6 +58,18 @@ impl FromStr for BuildTag {
             None => (s, None),
         };
 
-        Ok(BuildTag(prefix.parse::<u64>()?, suffix.map(Arc::from)))
+        Ok(BuildTag(
+            prefix.parse::<u64>()?,
+            suffix.map(SmallString::from),
+        ))
+    }
+}
+
+impl std::fmt::Display for BuildTag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.1 {
+            Some(suffix) => write!(f, "{}{}", self.0, suffix),
+            None => write!(f, "{}", self.0),
+        }
     }
 }

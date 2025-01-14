@@ -5010,6 +5010,7 @@ dependencies = [
  "uv-normalize",
  "uv-pep440",
  "uv-platform-tags",
+ "uv-small-str",
 ]
 
 [[package]]
