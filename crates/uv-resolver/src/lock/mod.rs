@@ -2035,7 +2035,7 @@ impl Package {
                 });
                 let direct_dist = DirectUrlSourceDist {
                     name: self.id.name.clone(),
-                    location,
+                    location: Box::new(location),
                     subdirectory: subdirectory.clone(),
                     ext,
                     url: VerbatimUrl::from_url(url),
