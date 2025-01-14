@@ -98,7 +98,7 @@ The intended use is:
 - After the exe file content, write the path to the Python executable that the script uses to run
   the Python script as UTF-8 encoded string, followed by the path's length as a 32-bit little-endian
   integer.
-- Write the magic number `UVUV` in bytes.
+- Write the magic number 'UVSC' or 'UVPY' in bytes.
 - Finally, rename your Python script as `__main__.py`, compress it into a `.zip` file, and append
   this `.zip` file to the end of one of our prebuilt `.exe` files.
 
