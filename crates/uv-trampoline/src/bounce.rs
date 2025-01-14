@@ -10,7 +10,7 @@ use std::process::Command;
 use std::process::Stdio;
 use std::vec::Vec;
 
-use windows::core::s;
+use windows::core::w;
 use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::{
     Foundation::{CloseHandle, BOOL, HANDLE, INVALID_HANDLE_VALUE, TRUE},
@@ -18,16 +18,16 @@ use windows::Win32::{
         GetStdHandle, SetConsoleCtrlHandler, SetStdHandle, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
     },
     System::JobObjects::{
-        AssignProcessToJobObject, CreateJobObjectA, JobObjectExtendedLimitInformation,
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
         QueryInformationJobObject, SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
         JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK,
     },
     System::Threading::{
-        GetExitCodeProcess, GetStartupInfoA, WaitForInputIdle, WaitForSingleObject, INFINITE,
-        STARTUPINFOA,
+        GetExitCodeProcess, GetStartupInfoW, WaitForInputIdle, WaitForSingleObject, INFINITE,
+        STARTUPINFOW,
     },
     UI::WindowsAndMessaging::{
-        CreateWindowExA, DestroyWindow, GetMessageA, PeekMessageA, PostMessageA, HWND_MESSAGE, MSG,
+        CreateWindowExW, DestroyWindow, GetMessageW, PeekMessageW, PostMessageW, HWND_MESSAGE, MSG,
         PEEK_MESSAGE_REMOVE_TYPE, WINDOW_EX_STYLE, WINDOW_STYLE,
     },
 };
@@ -186,7 +186,7 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
 }
 
 fn make_job_object() -> HANDLE {
-    let job = unsafe { CreateJobObjectA(None, None) }
+    let job = unsafe { CreateJobObjectW(None, None) }
         .unwrap_or_else(|_| print_last_error_and_exit("Job creation failed"));
     let mut job_info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
     let mut retlen = 0u32;
@@ -224,7 +224,7 @@ fn make_job_object() -> HANDLE {
 // processes, by using the .lpReserved2 field. We want to close those file descriptors too.
 // The UCRT source code has details on the memory layout (see also initialize_inherited_file_handles_nolock):
 // https://github.com/huangqinjin/ucrt/blob/10.0.19041.0/lowio/ioinit.cpp#L190-L223
-fn close_handles(si: &STARTUPINFOA) {
+fn close_handles(si: &STARTUPINFOW) {
     // See distlib/PC/launcher.c::cleanup_standard_io()
     // Unlike cleanup_standard_io(), we don't close STD_ERROR_HANDLE to retain warn!
     for std_handle in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE] {
@@ -285,10 +285,10 @@ fn clear_app_starting_state(child_handle: HANDLE) {
     let mut msg = MSG::default();
     unsafe {
         // End the launcher's "app starting" cursor state.
-        PostMessageA(None, 0, WPARAM(0), LPARAM(0)).unwrap_or_else(|_| {
+        PostMessageW(None, 0, WPARAM(0), LPARAM(0)).unwrap_or_else(|_| {
             warn!("Failed to post a message to specified window");
         });
-        if GetMessageA(&mut msg, None, 0, 0) != TRUE {
+        if GetMessageW(&mut msg, None, 0, 0) != TRUE {
             warn!("Failed to retrieve posted window message");
         }
         // Proxy the child's input idle event.
@@ -298,10 +298,10 @@ fn clear_app_starting_state(child_handle: HANDLE) {
         // Signal the process input idle event by creating a window and pumping
         // sent messages. The window class isn't important, so just use the
         // system "STATIC" class.
-        if let Ok(hwnd) = CreateWindowExA(
+        if let Ok(hwnd) = CreateWindowExW(
             WINDOW_EX_STYLE(0),
-            s!("STATIC"),
-            s!("uv Python Trampoline"),
+            w!("STATIC"),
+            w!("uv Python Trampoline"),
             WINDOW_STYLE(0),
             0,
             0,
@@ -313,7 +313,7 @@ fn clear_app_starting_state(child_handle: HANDLE) {
             None,
         ) {
             // Process all sent messages and signal input idle.
-            let _ = PeekMessageA(&mut msg, Some(hwnd), 0, 0, PEEK_MESSAGE_REMOVE_TYPE(0));
+            let _ = PeekMessageW(&mut msg, Some(hwnd), 0, 0, PEEK_MESSAGE_REMOVE_TYPE(0));
             DestroyWindow(hwnd).unwrap_or_else(|_| {
                 print_last_error_and_exit("Failed to destroy temporary window");
             });
@@ -328,8 +328,8 @@ pub fn bounce(is_gui: bool) -> ! {
     let (kind, python_exe) = read_trampoline_metadata(launcher_exe.as_ref());
     let arguments = std::env::args_os().skip(1);
 
-    let mut si = STARTUPINFOA::default();
-    unsafe { GetStartupInfoA(&mut si) }
+    let mut si = STARTUPINFOW::default();
+    unsafe { GetStartupInfoW(&mut si) }
 
     // Only execute the trampoline again if it's a script, otherwise, just invoke Python.
     let mut child_process_info = Command::new(python_exe.as_os_str());
