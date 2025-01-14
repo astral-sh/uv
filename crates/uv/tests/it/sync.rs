@@ -1259,6 +1259,20 @@ fn sync_dev() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
+    // Using `--no-groups` should remove dev dependencies
+    uv_snapshot!(context.filters(), context.sync().arg("--no-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+     - anyio==4.3.0
+     - idna==3.6
+     - sniffio==1.3.1
+    "###);
+
     Ok(())
 }
 
@@ -1427,6 +1441,42 @@ fn sync_group() -> Result<()> {
     Audited 1 package in [TIME]
     "###);
 
+    uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + iniconfig==2.0.0
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + urllib3==2.2.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 8 packages in [TIME]
+     - anyio==4.3.0
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - idna==3.6
+     - iniconfig==2.0.0
+     - requests==2.31.0
+     - sniffio==1.3.1
+     - urllib3==2.2.1
+    "###);
+
     Ok(())
 }
 
@@ -1526,6 +1576,20 @@ fn sync_include_group() -> Result<()> {
     Resolved 6 packages in [TIME]
     Installed 1 package in [TIME]
      + typing-extensions==4.10.0
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Uninstalled 4 packages in [TIME]
+     - anyio==4.3.0
+     - idna==3.6
+     - iniconfig==2.0.0
+     - sniffio==1.3.1
     "###);
 
     Ok(())
@@ -1920,6 +1984,43 @@ fn sync_default_groups() -> Result<()> {
      - requests==2.31.0
      - sniffio==1.3.1
      - typing-extensions==4.10.0
+     - urllib3==2.2.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+     + urllib3==2.2.1
+    "###);
+
+    // Using `--no-groups` should exclude all groups
+    uv_snapshot!(context.filters(), context.sync().arg("--no-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 8 packages in [TIME]
+     - anyio==4.3.0
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - idna==3.6
+     - iniconfig==2.0.0
+     - requests==2.31.0
+     - sniffio==1.3.1
      - urllib3==2.2.1
     "###);
 
