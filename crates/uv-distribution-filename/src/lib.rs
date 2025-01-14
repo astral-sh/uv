@@ -7,7 +7,7 @@ pub use build_tag::{BuildTag, BuildTagError};
 pub use egg::{EggInfoFilename, EggInfoFilenameError};
 pub use extension::{DistExtension, ExtensionError, SourceDistExtension};
 pub use source_dist::{SourceDistFilename, SourceDistFilenameError};
-pub use wheel::{TagSet, WheelFilename, WheelFilenameError};
+pub use wheel::{TagSet, WheelTag, WheelFilename, WheelFilenameError};
 
 mod build_tag;
 mod egg;

@@ -1,0 +1,45 @@
+---
+source: crates/uv-distribution-filename/src/wheel.rs
+assertion_line: 494
+expression: "WheelFilename::from_str(\"foo-1.2.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl\")"
+---
+Ok(
+    WheelFilename {
+        name: PackageName(
+            "foo",
+        ),
+        version: "1.2.3",
+        tags: Large {
+            large: WheelTagLarge {
+                build_tag: None,
+                python_tag: [
+                    CPython {
+                        python_version: (
+                            3,
+                            11,
+                        ),
+                    },
+                ],
+                abi_tag: [
+                    CPython {
+                        gil_disabled: false,
+                        python_version: (
+                            3,
+                            11,
+                        ),
+                    },
+                ],
+                platform_tag: [
+                    Manylinux {
+                        major: 2,
+                        minor: 17,
+                        arch: X86_64,
+                    },
+                    Manylinux2014 {
+                        arch: X86_64,
+                    },
+                ],
+            },
+        },
+    },
+)

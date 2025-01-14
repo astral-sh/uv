@@ -724,7 +724,7 @@ impl IncompatibleWheel {
 /// supported platforms (rather than generating the supported tags from a given platform).
 pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
     let mut marker = MarkerTree::FALSE;
-    for platform_tag in &filename.platform_tag {
+    for platform_tag in filename.tags.platform_tags() {
         match platform_tag {
             PlatformTag::Any => {
                 return MarkerTree::TRUE;

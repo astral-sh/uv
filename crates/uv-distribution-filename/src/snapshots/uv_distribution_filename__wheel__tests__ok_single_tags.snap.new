@@ -1,0 +1,23 @@
+---
+source: crates/uv-distribution-filename/src/wheel.rs
+assertion_line: 489
+expression: "WheelFilename::from_str(\"foo-1.2.3-py3-none-any.whl\")"
+---
+Ok(
+    WheelFilename {
+        name: PackageName(
+            "foo",
+        ),
+        version: "1.2.3",
+        tags: Small {
+            small: WheelTagSmall {
+                python_tag: Python {
+                    major: 3,
+                    minor: None,
+                },
+                abi_tag: None,
+                platform_tag: Any,
+            },
+        },
+    },
+)
