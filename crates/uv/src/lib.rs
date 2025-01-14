@@ -1859,7 +1859,6 @@ where
     };
     let result = std::thread::Builder::new()
         .name("main2".to_owned())
-        // TODO(gankra): should this also respect RUST_MIN_STACK if set?
         .stack_size(main_stack_size)
         .spawn(main2)
         .expect("Tokio executor failed, was there a panic?")

@@ -82,19 +82,6 @@ cargo run -- venv
 cargo run -- pip install requests
 ```
 
-### Testing on Windows
-
-When testing debug builds on Windows, the stack can overflow resulting in a `STATUS_STACK_OVERFLOW`
-error code. This is due to a small main stack size limit on Windows that we encounter when running
-unoptimized builds — the release builds do not have this problem.
-[The `RUST_MIN_STACK` environment variable](https://doc.rust-lang.org/std/thread/#stack-size) can
-bypass this problem during testing for non-main threads, increasing it to 3MB (from 2MB) often
-helps, for example:
-
-```powershell
-$Env:RUST_MIN_STACK = '3145728'
-```
-
 ## Running inside a Docker container
 
 Source distributions can run arbitrary code on build and can make unwanted modifications to your

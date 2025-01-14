@@ -305,9 +305,6 @@ jobs:
 
       - name: "Smoke test"
         working-directory: ${{ env.UV_WORKSPACE }}
-        env:
-          # Avoid debug build stack overflows.
-          RUST_MIN_STACK: 3000000 # 3 megabyte, 1.5x the rust default on windows
         run: |
           Set-Alias -Name uv -Value ./target/debug/uv
           uv venv -v
@@ -316,9 +313,6 @@ jobs:
       - name: "Smoke test completion"
         working-directory: ${{ env.UV_WORKSPACE }}
         shell: powershell
-        env:
-          # Avoid debug build stack overflows.
-          RUST_MIN_STACK: 3000000 # 3 megabyte, 1.5x the rust default on windows
         run: |
           Set-Alias -Name uv -Value ./target/debug/uv
           Set-Alias -Name uvx -Value ./target/debug/uvx
@@ -744,9 +738,6 @@ jobs:
     needs: build-binary-windows
     name: "integration test | free-threaded on windows"
     runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      RUST_MIN_STACK: 3000000 # 3 megabyte, 1.5x the rust default on windows
 
     steps:
       - name: "Download binary"
@@ -908,9 +899,6 @@ jobs:
           & .venv\Scripts\python.exe --version
 
       - name: "Check install"
-        env:
-          # Avoid debug build stack overflows.
-          RUST_MIN_STACK: 3000000 # 3 megabyte, 1.5x the rust default on windows
         run: |
           .\uv.exe pip install anyio
 
@@ -1040,9 +1028,6 @@ jobs:
           & .venv\Scripts\python.exe --version
 
       - name: "Check install"
-        env:
-          # Avoid debug build stack overflows.
-          RUST_MIN_STACK: 3000000 # 3 megabyte, 1.5x the rust default on windows
         run: |
           .\uv.exe pip install anyio
 
@@ -1534,9 +1519,6 @@ jobs:
     needs: build-binary-windows
     name: "check system | python3.10 on windows"
     runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      RUST_MIN_STACK: 3000000 # 3 megabyte, 1.5x the rust default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -1560,9 +1542,6 @@ jobs:
     needs: build-binary-windows
     name: "check system | python3.10 on windows x86"
     runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      RUST_MIN_STACK: 3000000 # 3 megabyte, 1.5x the rust default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -1587,9 +1566,6 @@ jobs:
     needs: build-binary-windows
     name: "check system | python3.13 on windows"
     runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      RUST_MIN_STACK: 3000000 # 3 megabyte, 1.5x the rust default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -1615,9 +1591,6 @@ jobs:
     needs: build-binary-windows
     name: "check system | python3.12 via chocolatey"
     runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      RUST_MIN_STACK: 3000000 # 3 megabyte, 1.5x the rust default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -1750,9 +1723,6 @@ jobs:
 
       - name: "Validate global Python install"
         shell: bash -el {0}
-        env:
-          # Avoid debug build stack overflows.
-          RUST_MIN_STACK: 3000000 # 3 megabyte, 1.5x the rust default on windows
         run: python ./scripts/check_system_python.py --uv ./uv
 
   system-test-amazonlinux:
@@ -1790,8 +1760,6 @@ jobs:
     name: "check system | embedded python3.10 on windows"
     runs-on: windows-latest
     env:
-      # Avoid debug build stack overflows.
-      RUST_MIN_STACK: 3000000 # 3 megabyte, 1.5x the rust default on windows
     steps:
       - uses: actions/checkout@v4
 
