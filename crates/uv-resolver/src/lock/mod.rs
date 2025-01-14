@@ -73,6 +73,25 @@ static MAC_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'darwin'").unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
+static ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 =
+        MarkerTree::from_str("platform_machine == 'aarch64' or platform_machine == 'arm64'")
+            .unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 =
+        MarkerTree::from_str("platform_machine == 'x86_64' or platform_machine == 'amd64'")
+            .unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str(
+        "platform_machine == 'i686' or platform_machine == 'i386' or platform_machine == 'win32' or platform_machine == 'x86'",
+    )
+    .unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
 
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
@@ -272,28 +291,69 @@ impl Lock {
             // `(A ∩ (B ∩ C) = ∅) => ((A ∩ B = ∅) or (A ∩ C = ∅))`
             // a single disjointness check with the intersection is sufficient, so we have one
             // constant per platform.
-            let platform_tags = &wheel.filename.platform_tag;
+            let platform_tags = wheel.filename.platform_tags();
             if platform_tags
                 .iter()
-                .all(uv_platform_tags::PlatformTag::is_linux_compatible)
+                .all(uv_platform_tags::PlatformTag::is_linux)
             {
-                !graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS)
-            } else if platform_tags
+                if graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags
                 .iter()
-                .all(uv_platform_tags::PlatformTag::is_windows_compatible)
+                .all(uv_platform_tags::PlatformTag::is_windows)
             {
                 // TODO(charlie): This omits `win_ia64`, which is accepted by Warehouse.
-                !graph.graph[node_index]
+                if graph.graph[node_index]
                     .marker()
                     .is_disjoint(*WINDOWS_MARKERS)
-            } else if platform_tags
-                .iter()
-                .all(uv_platform_tags::PlatformTag::is_macos_compatible)
-            {
-                !graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS)
-            } else {
-                true
+                {
+                    return false;
+                }
             }
+
+            if platform_tags
+                .iter()
+                .all(uv_platform_tags::PlatformTag::is_macos)
+            {
+                if graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags
+                .iter()
+                .all(uv_platform_tags::PlatformTag::is_arm)
+            {
+                if graph.graph[node_index].marker().is_disjoint(*ARM_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags
+                .iter()
+                .all(uv_platform_tags::PlatformTag::is_x86_64)
+            {
+                if graph.graph[node_index]
+                    .marker()
+                    .is_disjoint(*X86_64_MARKERS)
+                {
+                    return false;
+                }
+            }
+
+            if platform_tags
+                .iter()
+                .all(uv_platform_tags::PlatformTag::is_x86)
+            {
+                if graph.graph[node_index].marker().is_disjoint(*X86_MARKERS) {
+                    return false;
+                }
+            }
+
+            true
         });
     }
 
@@ -2215,7 +2275,7 @@ impl Package {
             else {
                 continue;
             };
-            let build_tag = wheel.filename.build_tag.as_ref();
+            let build_tag = wheel.filename.build_tag();
             let wheel_priority = (tag_priority, build_tag);
             match best {
                 None => {

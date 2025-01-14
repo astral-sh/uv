@@ -10,7 +10,7 @@ use tracing::{debug, trace};
 use walkdir::WalkDir;
 use zip::{CompressionMethod, ZipWriter};
 
-use uv_distribution_filename::{TagSet, WheelFilename};
+use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
 use uv_globfilter::{parse_portable_glob, GlobDirFilter};
 use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
@@ -33,17 +33,16 @@ pub fn build_wheel(
     }
     crate::check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
 
-    let filename = WheelFilename {
-        name: pyproject_toml.name().clone(),
-        version: pyproject_toml.version().clone(),
-        build_tag: None,
-        python_tag: TagSet::from_slice(&[LanguageTag::Python {
+    let filename = WheelFilename::new(
+        pyproject_toml.name().clone(),
+        pyproject_toml.version().clone(),
+        LanguageTag::Python {
             major: 3,
             minor: None,
-        }]),
-        abi_tag: TagSet::from_buf([AbiTag::None]),
-        platform_tag: TagSet::from_buf([PlatformTag::Any]),
-    };
+        },
+        AbiTag::None,
+        PlatformTag::Any,
+    );
 
     let wheel_path = wheel_dir.join(filename.to_string());
     debug!("Writing wheel at {}", wheel_path.user_display());
@@ -71,17 +70,16 @@ pub fn list_wheel(
         warn_user_once!("{warning}");
     }
 
-    let filename = WheelFilename {
-        name: pyproject_toml.name().clone(),
-        version: pyproject_toml.version().clone(),
-        build_tag: None,
-        python_tag: TagSet::from_slice(&[LanguageTag::Python {
+    let filename = WheelFilename::new(
+        pyproject_toml.name().clone(),
+        pyproject_toml.version().clone(),
+        LanguageTag::Python {
             major: 3,
             minor: None,
-        }]),
-        abi_tag: TagSet::from_buf([AbiTag::None]),
-        platform_tag: TagSet::from_buf([PlatformTag::Any]),
-    };
+        },
+        AbiTag::None,
+        PlatformTag::Any,
+    );
 
     let mut files = FileList::new();
     let writer = ListWriter::new(&mut files);
@@ -253,17 +251,16 @@ pub fn build_editable(
 
     crate::check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
 
-    let filename = WheelFilename {
-        name: pyproject_toml.name().clone(),
-        version: pyproject_toml.version().clone(),
-        build_tag: None,
-        python_tag: TagSet::from_slice(&[LanguageTag::Python {
+    let filename = WheelFilename::new(
+        pyproject_toml.name().clone(),
+        pyproject_toml.version().clone(),
+        LanguageTag::Python {
             major: 3,
             minor: None,
-        }]),
-        abi_tag: TagSet::from_buf([AbiTag::None]),
-        platform_tag: TagSet::from_buf([PlatformTag::Any]),
-    };
+        },
+        AbiTag::None,
+        PlatformTag::Any,
+    );
 
     let wheel_path = wheel_dir.join(filename.to_string());
     debug!("Writing wheel at {}", wheel_path.user_display());
@@ -308,17 +305,16 @@ pub fn metadata(
         warn_user_once!("{warning}");
     }
 
-    let filename = WheelFilename {
-        name: pyproject_toml.name().clone(),
-        version: pyproject_toml.version().clone(),
-        build_tag: None,
-        python_tag: TagSet::from_slice(&[LanguageTag::Python {
+    let filename = WheelFilename::new(
+        pyproject_toml.name().clone(),
+        pyproject_toml.version().clone(),
+        LanguageTag::Python {
             major: 3,
             minor: None,
-        }]),
-        abi_tag: TagSet::from_buf([AbiTag::None]),
-        platform_tag: TagSet::from_buf([PlatformTag::Any]),
-    };
+        },
+        AbiTag::None,
+        PlatformTag::Any,
+    );
 
     debug!(
         "Writing metadata files to {}",
@@ -568,9 +564,9 @@ fn wheel_info(filename: &WheelFilename, uv_version: &str) -> String {
         ("Generator", format!("uv {uv_version}")),
         ("Root-Is-Purelib", "true".to_string()),
     ];
-    for python_tag in &filename.python_tag {
-        for abi_tag in &filename.abi_tag {
-            for platform_tag in &filename.platform_tag {
+    for python_tag in filename.python_tags() {
+        for abi_tag in filename.abi_tags() {
+            for platform_tag in filename.platform_tags() {
                 wheel_info.push(("Tag", format!("{python_tag}-{abi_tag}-{platform_tag}")));
             }
         }
@@ -765,29 +761,21 @@ mod test {
 
     #[test]
     fn test_wheel() {
-        let filename = WheelFilename {
-            name: PackageName::from_str("foo").unwrap(),
-            version: Version::from_str("1.2.3").unwrap(),
-            build_tag: None,
-            python_tag: TagSet::from_slice(&[
-                LanguageTag::Python {
-                    major: 2,
-                    minor: None,
-                },
-                LanguageTag::Python {
-                    major: 3,
-                    minor: None,
-                },
-            ]),
-            abi_tag: TagSet::from_buf([AbiTag::None]),
-            platform_tag: TagSet::from_buf([PlatformTag::Any]),
-        };
+        let filename = WheelFilename::new(
+            PackageName::from_str("foo").unwrap(),
+            Version::from_str("1.2.3").unwrap(),
+            LanguageTag::Python {
+                major: 3,
+                minor: None,
+            },
+            AbiTag::None,
+            PlatformTag::Any,
+        );
 
         assert_snapshot!(wheel_info(&filename, "1.0.0+test"), @r"
         Wheel-Version: 1.0
         Generator: uv 1.0.0+test
         Root-Is-Purelib: true
-        Tag: py2-none-any
         Tag: py3-none-any
     ");
     }

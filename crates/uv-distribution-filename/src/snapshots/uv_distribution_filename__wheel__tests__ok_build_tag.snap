@@ -8,23 +8,27 @@ Ok(
             "foo",
         ),
         version: "1.2.3",
-        build_tag: Some(
-            BuildTag(
-                202206090410,
-                None,
-            ),
-        ),
-        python_tag: [
-            Python {
-                major: 3,
-                minor: None,
+        tags: Large {
+            large: WheelTagLarge {
+                build_tag: Some(
+                    BuildTag(
+                        202206090410,
+                        None,
+                    ),
+                ),
+                python_tag: [
+                    Python {
+                        major: 3,
+                        minor: None,
+                    },
+                ],
+                abi_tag: [
+                    None,
+                ],
+                platform_tag: [
+                    Any,
+                ],
             },
-        ],
-        abi_tag: [
-            None,
-        ],
-        platform_tag: [
-            Any,
-        ],
+        },
     },
 )

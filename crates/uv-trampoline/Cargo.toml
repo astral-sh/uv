@@ -35,7 +35,7 @@ debug = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-windows = { version = "0.58.0", features = [
+windows = { version = "0.59.0", features = [
   "std",
   "Win32_Foundation",
   "Win32_Security",
@@ -47,16 +47,7 @@ windows = { version = "0.58.0", features = [
 ] }
 ufmt-write = "0.1.0"
 ufmt = { version = "0.2.0", features = ["std"] }
-dunce = { version = "1.0.4" }
+dunce = { version = "1.0.5" }
 
 [build-dependencies]
 embed-manifest = "1.4.0"
-
-[dev-dependencies]
-anyhow = { version = "1.0.80" }
-assert_cmd = { version = "2.0.14" }
-assert_fs = { version = "1.1.1" }
-fs-err = { version = "3.0.0" }
-thiserror = { version = "2.0.0" }
-which = { version = "7.0.0" }
-zip = { version = "0.6.6", default-features = false, features = ["deflate"] }

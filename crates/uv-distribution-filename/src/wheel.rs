@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
-use std::str::FromStr;
 
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
 
@@ -13,12 +13,6 @@ use uv_platform_tags::{
 };
 
 use crate::{BuildTag, BuildTagError};
-
-/// A [`SmallVec`] type for storing tags.
-///
-/// Wheels tend to include a single language, ABI, and platform tag, so we use a [`SmallVec`] with a
-/// capacity of 1 to optimize for this common case.
-pub type TagSet<T> = smallvec::SmallVec<[T; 1]>;
 
 #[derive(
     Debug,
@@ -36,10 +30,7 @@ pub type TagSet<T> = smallvec::SmallVec<[T; 1]>;
 pub struct WheelFilename {
     pub name: PackageName,
     pub version: Version,
-    pub build_tag: Option<BuildTag>,
-    pub python_tag: TagSet<LanguageTag>,
-    pub abi_tag: TagSet<AbiTag>,
-    pub platform_tag: TagSet<PlatformTag>,
+    tags: WheelTag,
 }
 
 impl FromStr for WheelFilename {
@@ -63,20 +54,41 @@ impl Display for WheelFilename {
             "{}-{}-{}.whl",
             self.name.as_dist_info_name(),
             self.version,
-            self.get_tag()
+            self.tags,
         )
     }
 }
 
 impl WheelFilename {
+    /// Create a [`WheelFilename`] from its components.
+    pub fn new(
+        name: PackageName,
+        version: Version,
+        python_tag: LanguageTag,
+        abi_tag: AbiTag,
+        platform_tag: PlatformTag,
+    ) -> Self {
+        Self {
+            name,
+            version,
+            tags: WheelTag::Small {
+                small: WheelTagSmall {
+                    python_tag,
+                    abi_tag,
+                    platform_tag,
+                },
+            },
+        }
+    }
+
     /// Returns `true` if the wheel is compatible with the given tags.
     pub fn is_compatible(&self, compatible_tags: &Tags) -> bool {
-        compatible_tags.is_compatible(&self.python_tag, &self.abi_tag, &self.platform_tag)
+        compatible_tags.is_compatible(self.python_tags(), self.abi_tags(), self.platform_tags())
     }
 
     /// Return the [`TagCompatibility`] of the wheel with the given tags
     pub fn compatibility(&self, compatible_tags: &Tags) -> TagCompatibility {
-        compatible_tags.compatibility(&self.python_tag, &self.abi_tag, &self.platform_tag)
+        compatible_tags.compatibility(self.python_tags(), self.abi_tags(), self.platform_tags())
     }
 
     /// The wheel filename without the extension.
@@ -85,43 +97,45 @@ impl WheelFilename {
             "{}-{}-{}",
             self.name.as_dist_info_name(),
             self.version,
-            self.get_tag()
+            self.tags
         )
+    }
+
+    /// Return the wheel's Python tags.
+    pub fn python_tags(&self) -> &[LanguageTag] {
+        match &self.tags {
+            WheelTag::Small { small } => std::slice::from_ref(&small.python_tag),
+            WheelTag::Large { large } => large.python_tag.as_slice(),
+        }
+    }
+
+    /// Return the wheel's ABI tags.
+    pub fn abi_tags(&self) -> &[AbiTag] {
+        match &self.tags {
+            WheelTag::Small { small } => std::slice::from_ref(&small.abi_tag),
+            WheelTag::Large { large } => large.abi_tag.as_slice(),
+        }
+    }
+
+    /// Return the wheel's platform tags.
+    pub fn platform_tags(&self) -> &[PlatformTag] {
+        match &self.tags {
+            WheelTag::Small { small } => std::slice::from_ref(&small.platform_tag),
+            WheelTag::Large { large } => large.platform_tag.as_slice(),
+        }
+    }
+
+    /// Return the wheel's build tag, if present.
+    pub fn build_tag(&self) -> Option<&BuildTag> {
+        match &self.tags {
+            WheelTag::Small { .. } => None,
+            WheelTag::Large { large } => large.build_tag.as_ref(),
+        }
     }
 
     /// Parse a wheel filename from the stem (e.g., `foo-1.2.3-py3-none-any`).
     pub fn from_stem(stem: &str) -> Result<Self, WheelFilenameError> {
         Self::parse(stem, stem)
-    }
-
-    /// Get the tag for this wheel.
-    fn get_tag(&self) -> String {
-        if let ([python_tag], [abi_tag], [platform_tag]) = (
-            self.python_tag.as_slice(),
-            self.abi_tag.as_slice(),
-            self.platform_tag.as_slice(),
-        ) {
-            format!("{python_tag}-{abi_tag}-{platform_tag}",)
-        } else {
-            format!(
-                "{}-{}-{}",
-                self.python_tag
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join("."),
-                self.abi_tag
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join("."),
-                self.platform_tag
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join("."),
-            )
-        }
     }
 
     /// Parse a wheel filename from the stem (e.g., `foo-1.2.3-py3-none-any`).
@@ -202,25 +216,58 @@ impl WheelFilename {
                     .map_err(|err| WheelFilenameError::InvalidBuildTag(filename.to_string(), err))
             })
             .transpose()?;
+
+        let tags = if build_tag.is_some()
+            || python_tag.contains('.')
+            || abi_tag.contains('.')
+            || platform_tag.contains('.')
+        {
+            WheelTag::Large {
+                large: Box::new(WheelTagLarge {
+                    build_tag,
+                    python_tag: python_tag
+                        .split('.')
+                        .map(LanguageTag::from_str)
+                        .collect::<Result<_, _>>()
+                        .map_err(|err| {
+                            WheelFilenameError::InvalidLanguageTag(filename.to_string(), err)
+                        })?,
+                    abi_tag: abi_tag
+                        .split('.')
+                        .map(AbiTag::from_str)
+                        .collect::<Result<_, _>>()
+                        .map_err(|err| {
+                            WheelFilenameError::InvalidAbiTag(filename.to_string(), err)
+                        })?,
+                    platform_tag: platform_tag
+                        .split('.')
+                        .map(PlatformTag::from_str)
+                        .collect::<Result<_, _>>()
+                        .map_err(|err| {
+                            WheelFilenameError::InvalidPlatformTag(filename.to_string(), err)
+                        })?,
+                }),
+            }
+        } else {
+            WheelTag::Small {
+                small: WheelTagSmall {
+                    python_tag: LanguageTag::from_str(python_tag).map_err(|err| {
+                        WheelFilenameError::InvalidLanguageTag(filename.to_string(), err)
+                    })?,
+                    abi_tag: AbiTag::from_str(abi_tag).map_err(|err| {
+                        WheelFilenameError::InvalidAbiTag(filename.to_string(), err)
+                    })?,
+                    platform_tag: PlatformTag::from_str(platform_tag).map_err(|err| {
+                        WheelFilenameError::InvalidPlatformTag(filename.to_string(), err)
+                    })?,
+                },
+            }
+        };
+
         Ok(Self {
             name,
             version,
-            build_tag,
-            python_tag: python_tag
-                .split('.')
-                .map(LanguageTag::from_str)
-                .collect::<Result<_, _>>()
-                .map_err(|err| WheelFilenameError::InvalidLanguageTag(filename.to_string(), err))?,
-            abi_tag: abi_tag
-                .split('.')
-                .map(AbiTag::from_str)
-                .collect::<Result<_, _>>()
-                .map_err(|err| WheelFilenameError::InvalidAbiTag(filename.to_string(), err))?,
-            platform_tag: platform_tag
-                .split('.')
-                .map(PlatformTag::from_str)
-                .collect::<Result<_, _>>()
-                .map_err(|err| WheelFilenameError::InvalidPlatformTag(filename.to_string(), err))?,
+            tags,
         })
     }
 }
@@ -267,6 +314,124 @@ impl Serialize for WheelFilename {
     }
 }
 
+/// A [`SmallVec`] type for storing tags.
+///
+/// Wheels tend to include a single language, ABI, and platform tag, so we use a [`SmallVec`] with a
+/// capacity of 1 to optimize for this common case.
+pub type TagSet<T> = smallvec::SmallVec<[T; 3]>;
+
+/// The portion of the wheel filename following the name and version: the optional build tag, along
+/// with the Python tag(s), ABI tag(s), and platform tag(s).
+///
+/// Most wheels consist of a single Python, ABI, and platform tag (and no build tag). We represent
+/// such wheels with [`WheelTagSmall`], a variant with a smaller memory footprint and (generally)
+/// zero allocations. The [`WheelTagLarge`] variant is used for wheels with multiple tags and/or a
+/// build tag.
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
+enum WheelTag {
+    Small { small: WheelTagSmall },
+    Large { large: Box<WheelTagLarge> },
+}
+
+impl Display for WheelTag {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Small { small } => write!(f, "{small}"),
+            Self::Large { large } => write!(f, "{large}"),
+        }
+    }
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
+#[allow(clippy::struct_field_names)]
+struct WheelTagSmall {
+    python_tag: LanguageTag,
+    abi_tag: AbiTag,
+    platform_tag: PlatformTag,
+}
+
+impl Display for WheelTagSmall {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}-{}-{}",
+            self.python_tag, self.abi_tag, self.platform_tag
+        )
+    }
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
+#[allow(clippy::struct_field_names)]
+pub struct WheelTagLarge {
+    build_tag: Option<BuildTag>,
+    python_tag: TagSet<LanguageTag>,
+    abi_tag: TagSet<AbiTag>,
+    platform_tag: TagSet<PlatformTag>,
+}
+
+impl Display for WheelTagLarge {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if let Some(build_tag) = &self.build_tag {
+            write!(f, "{build_tag}-")?;
+        }
+        write!(
+            f,
+            "{}-{}-{}",
+            self.python_tag
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join("."),
+            self.abi_tag
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join("."),
+            self.platform_tag
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join("."),
+        )
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum WheelFilenameError {
     #[error("The wheel filename \"{0}\" is invalid: {1}")]
@@ -283,6 +448,12 @@ pub enum WheelFilenameError {
     InvalidAbiTag(String, ParseAbiTagError),
     #[error("The wheel filename \"{0}\" has an invalid platform tag: {1}")]
     InvalidPlatformTag(String, ParsePlatformTagError),
+    #[error("The wheel filename \"{0}\" is missing a language tag")]
+    MissingLanguageTag(String),
+    #[error("The wheel filename \"{0}\" is missing an ABI tag")]
+    MissingAbiTag(String),
+    #[error("The wheel filename \"{0}\" is missing a platform tag")]
+    MissingPlatformTag(String),
 }
 
 #[cfg(test)]

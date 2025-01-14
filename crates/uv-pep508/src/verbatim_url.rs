@@ -1,4 +1,3 @@
-use regex::Regex;
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::fmt::Debug;
@@ -6,6 +5,9 @@ use std::hash::Hash;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
+
+use arcstr::ArcStr;
+use regex::Regex;
 use thiserror::Error;
 use url::{ParseError, Url};
 
@@ -19,7 +21,7 @@ pub struct VerbatimUrl {
     /// The parsed URL.
     url: Url,
     /// The URL as it was provided by the user.
-    given: Option<String>,
+    given: Option<ArcStr>,
 }
 
 impl Hash for VerbatimUrl {
@@ -112,9 +114,9 @@ impl VerbatimUrl {
 
     /// Set the verbatim representation of the URL.
     #[must_use]
-    pub fn with_given(self, given: impl Into<String>) -> Self {
+    pub fn with_given(self, given: impl AsRef<str>) -> Self {
         Self {
-            given: Some(given.into()),
+            given: Some(ArcStr::from(given.as_ref())),
             ..self
         }
     }
@@ -164,7 +166,7 @@ impl std::str::FromStr for VerbatimUrl {
     type Err = VerbatimUrlError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self::parse_url(s).map(|url| url.with_given(s.to_owned()))?)
+        Ok(Self::parse_url(s).map(|url| url.with_given(s))?)
     }
 }
 
@@ -232,21 +234,21 @@ impl Pep508Url for VerbatimUrl {
                         let path = normalize_url_path(path);
 
                         if let Some(working_dir) = working_dir {
-                            return Ok(VerbatimUrl::from_path(path.as_ref(), working_dir)?
-                                .with_given(url.to_string()));
+                            return Ok(
+                                VerbatimUrl::from_path(path.as_ref(), working_dir)?.with_given(url)
+                            );
                         }
 
-                        Ok(VerbatimUrl::from_absolute_path(path.as_ref())?
-                            .with_given(url.to_string()))
+                        Ok(VerbatimUrl::from_absolute_path(path.as_ref())?.with_given(url))
                     }
                     #[cfg(not(feature = "non-pep508-extensions"))]
-                    Ok(VerbatimUrl::parse_url(expanded)?.with_given(url.to_string()))
+                    Ok(VerbatimUrl::parse_url(expanded)?.with_given(url))
                 }
 
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
                 Some(_) => {
                     // Ex) `https://download.pytorch.org/whl/torch_stable.html`
-                    Ok(VerbatimUrl::parse_url(expanded.as_ref())?.with_given(url.to_string()))
+                    Ok(VerbatimUrl::parse_url(expanded.as_ref())?.with_given(url))
                 }
 
                 // Ex) `C:\Users\ferris\wheel-0.42.0.tar.gz`
@@ -255,11 +257,10 @@ impl Pep508Url for VerbatimUrl {
                     {
                         if let Some(working_dir) = working_dir {
                             return Ok(VerbatimUrl::from_path(expanded.as_ref(), working_dir)?
-                                .with_given(url.to_string()));
+                                .with_given(url));
                         }
 
-                        Ok(VerbatimUrl::from_absolute_path(expanded.as_ref())?
-                            .with_given(url.to_string()))
+                        Ok(VerbatimUrl::from_absolute_path(expanded.as_ref())?.with_given(url))
                     }
                     #[cfg(not(feature = "non-pep508-extensions"))]
                     Err(Self::Err::NotAUrl(expanded.to_string()))
@@ -270,11 +271,12 @@ impl Pep508Url for VerbatimUrl {
             #[cfg(feature = "non-pep508-extensions")]
             {
                 if let Some(working_dir) = working_dir {
-                    return Ok(VerbatimUrl::from_path(expanded.as_ref(), working_dir)?
-                        .with_given(url.to_string()));
+                    return Ok(
+                        VerbatimUrl::from_path(expanded.as_ref(), working_dir)?.with_given(url)
+                    );
                 }
 
-                Ok(VerbatimUrl::from_absolute_path(expanded.as_ref())?.with_given(url.to_string()))
+                Ok(VerbatimUrl::from_absolute_path(expanded.as_ref())?.with_given(url))
             }
 
             #[cfg(not(feature = "non-pep508-extensions"))]
