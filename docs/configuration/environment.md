@@ -485,9 +485,10 @@ for more.
 Use to set the stack size used by uv.
 
 The value is in bytes, and the default is typically 2MB (2097152).
-Increasing this value may help resolve stack overflows exclusive to debug builds,
-especially on Windows. 3MB (3145728) is often sufficient.
-This value only affects non-main threads.
+Unlike the normal `RUST_MIN_STACK` semantics, this can affect main thread
+stack size, because we actually spawn our own main2 thread to work around
+the fact that Windows' real main thread is only 1MB. That thread has size
+`max(RUST_MIN_STACK, 4MB)`.
 
 ### `SHELL`
 

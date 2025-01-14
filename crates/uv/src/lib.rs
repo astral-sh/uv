@@ -1833,7 +1833,15 @@ where
     //
     // To normalize this we just spawn a new thread called main2 with a size we can set
     // ourselves. 2MB is typically too small (especially for our debug builds), while 4MB
-    // seems fine.
+    // seems fine. Also we still try to respect RUST_MIN_STACK if it's set, in case useful,
+    // but don't let it ask for a smaller stack to avoid messy misconfiguration since we
+    // know we use quite a bit of main stack space.
+    const DEFAULT_MAIN_STACK_SIZE: usize = 4 * 1024 * 1024;
+    let main_stack_size = std::env::var(EnvVars::RUST_MIN_STACK)
+        .and_then(|t| s.parse::<usize>())
+        .unwrap_or(0)
+        .max(DEFAULT_MAIN_STACK_SIZE);
+
     let main2 = move || {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -1852,7 +1860,7 @@ where
     let result = std::thread::Builder::new()
         .name("main2".to_owned())
         // TODO(gankra): should this also respect RUST_MIN_STACK if set?
-        .stack_size(4 * 1024 * 1024)
+        .stack_size(main_stack_size)
         .spawn(main2)
         .expect("Tokio executor failed, was there a panic?")
         .join()
