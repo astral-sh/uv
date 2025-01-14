@@ -11818,7 +11818,7 @@ requires-python = ">3.8"
 /// If the package exists on the "extra" index, but at an incompatible version, the resolution
 /// should fail by default (even though a compatible version exists on the "primary" index).
 #[test]
-fn compile_index_url_first_match() -> Result<()> {
+fn compile_index_url_first_match_base() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -11838,6 +11838,40 @@ fn compile_index_url_first_match() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there is no version of jinja2==3.1.0 and you require jinja2==3.1.0, we can conclude that your requirements are unsatisfiable.
+
+          hint: `jinja2` was found on https://download.pytorch.org/whl/cpu, but not at the requested version (jinja2==3.1.0). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Install a package via `--extra-index-url`.
+///
+/// If the package exists on the "extra" index, but at an incompatible version, the resolution
+/// should fail by default (even though a compatible version exists on the "primary" index).
+#[test]
+fn compile_index_url_first_match_marker() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("jinja2==3.1.0 ; sys_platform == 'linux'")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--universal")
+        .arg("--index-url")
+        .arg("https://pypi.org/simple")
+        .arg("--extra-index-url")
+        .arg("https://download.pytorch.org/whl/cpu")
+        .arg("requirements.in")
+        .arg("--no-deps"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of jinja2{sys_platform == 'linux'}==3.1.0 and you require jinja2{sys_platform == 'linux'}==3.1.0, we can conclude that your requirements are unsatisfiable.
 
           hint: `jinja2` was found on https://download.pytorch.org/whl/cpu, but not at the requested version (jinja2==3.1.0). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
     "###

@@ -542,24 +542,16 @@ impl PubGrubReportFormatter<'_> {
     ) {
         match derivation_tree {
             DerivationTree::External(External::Custom(package, set, reason)) => {
-                if let PubGrubPackageInner::Package { name, .. } = &**package {
+                if let Some(name) = package.name_no_root() {
                     // Check for no versions due to pre-release options.
                     if options.flexibility == Flexibility::Configurable {
                         if !fork_urls.contains_key(name) {
-                            self.prerelease_available_hint(
-                                package,
-                                name,
-                                set,
-                                selector,
-                                env,
-                                output_hints,
-                            );
+                            self.prerelease_available_hint(name, set, selector, env, output_hints);
                         }
                     }
 
                     // Check for no versions due to no `--find-links` flat index.
                     Self::index_hints(
-                        package,
                         name,
                         set,
                         selector,
@@ -579,20 +571,19 @@ impl PubGrubReportFormatter<'_> {
                             // Check for unavailable versions due to `--no-build` or `--no-binary`.
                             IncompatibleDist::Wheel(IncompatibleWheel::NoBinary) => {
                                 output_hints.insert(PubGrubHint::NoBinary {
-                                    package: package.clone(),
+                                    package: name.clone(),
                                     option: options.build_options.no_binary().clone(),
                                 });
                             }
                             IncompatibleDist::Source(IncompatibleSource::NoBuild) => {
                                 output_hints.insert(PubGrubHint::NoBuild {
-                                    package: package.clone(),
+                                    package: name.clone(),
                                     option: options.build_options.no_build().clone(),
                                 });
                             }
                             // Check for unavailable versions due to incompatible tags.
                             IncompatibleDist::Wheel(IncompatibleWheel::Tag(tag)) => {
                                 if let Some(hint) = self.tag_hint(
-                                    package,
                                     name,
                                     set,
                                     *tag,
@@ -610,24 +601,16 @@ impl PubGrubReportFormatter<'_> {
                 }
             }
             DerivationTree::External(External::NoVersions(package, set)) => {
-                if let PubGrubPackageInner::Package { name, .. } = &**package {
+                if let Some(name) = package.name_no_root() {
                     // Check for no versions due to pre-release options.
                     if options.flexibility == Flexibility::Configurable {
                         if !fork_urls.contains_key(name) {
-                            self.prerelease_available_hint(
-                                package,
-                                name,
-                                set,
-                                selector,
-                                env,
-                                output_hints,
-                            );
+                            self.prerelease_available_hint(name, set, selector, env, output_hints);
                         }
                     }
 
                     // Check for no versions due to no `--find-links` flat index.
                     Self::index_hints(
-                        package,
                         name,
                         set,
                         selector,
@@ -656,8 +639,8 @@ impl PubGrubReportFormatter<'_> {
                         && !workspace_members.contains(package_name)
                     {
                         output_hints.insert(PubGrubHint::DependsOnWorkspacePackage {
-                            package: package.clone(),
-                            dependency: dependency.clone(),
+                            package: package_name.clone(),
+                            dependency: dependency_name.clone(),
                             workspace: self.is_workspace() && !self.is_single_project_workspace(),
                         });
                     }
@@ -678,13 +661,15 @@ impl PubGrubReportFormatter<'_> {
                     &**dependency,
                     PubGrubPackageInner::Python(PubGrubPython::Target)
                 ) {
-                    output_hints.insert(PubGrubHint::RequiresPython {
-                        source: self.python_requirement.source(),
-                        requires_python: self.python_requirement.target().clone(),
-                        package: package.clone(),
-                        package_set: package_set.clone(),
-                        package_requires_python: dependency_set.clone(),
-                    });
+                    if let Some(name) = package.name() {
+                        output_hints.insert(PubGrubHint::RequiresPython {
+                            source: self.python_requirement.source(),
+                            requires_python: self.python_requirement.target().clone(),
+                            name: name.clone(),
+                            package_set: package_set.clone(),
+                            package_requires_python: dependency_set.clone(),
+                        });
+                    }
                 }
             }
             DerivationTree::External(External::NotRoot(..)) => {}
@@ -729,7 +714,6 @@ impl PubGrubReportFormatter<'_> {
     /// Python version, ABI, or platform.
     fn tag_hint(
         &self,
-        package: &PubGrubPackage,
         name: &PackageName,
         set: &Range<Version>,
         tag: IncompatibleTag,
@@ -761,7 +745,7 @@ impl PubGrubReportFormatter<'_> {
                     None
                 } else {
                     Some(PubGrubHint::LanguageTags {
-                        package: package.clone(),
+                        package: name.clone(),
                         version: candidate.version().clone(),
                         tags,
                     })
@@ -785,7 +769,7 @@ impl PubGrubReportFormatter<'_> {
                     None
                 } else {
                     Some(PubGrubHint::AbiTags {
-                        package: package.clone(),
+                        package: name.clone(),
                         version: candidate.version().clone(),
                         tags,
                     })
@@ -811,7 +795,7 @@ impl PubGrubReportFormatter<'_> {
                     None
                 } else {
                     Some(PubGrubHint::PlatformTags {
-                        package: package.clone(),
+                        package: name.clone(),
                         version: candidate.version().clone(),
                         tags,
                     })
@@ -821,7 +805,6 @@ impl PubGrubReportFormatter<'_> {
     }
 
     fn index_hints(
-        package: &PubGrubPackage,
         name: &PackageName,
         set: &Range<Version>,
         selector: &CandidateSelector,
@@ -846,13 +829,13 @@ impl PubGrubReportFormatter<'_> {
             }
             Some(UnavailablePackage::InvalidMetadata(reason)) => {
                 hints.insert(PubGrubHint::InvalidPackageMetadata {
-                    package: package.clone(),
+                    package: name.clone(),
                     reason: reason.clone(),
                 });
             }
             Some(UnavailablePackage::InvalidStructure(reason)) => {
                 hints.insert(PubGrubHint::InvalidPackageStructure {
-                    package: package.clone(),
+                    package: name.clone(),
                     reason: reason.clone(),
                 });
             }
@@ -870,28 +853,28 @@ impl PubGrubReportFormatter<'_> {
                         }
                         MetadataUnavailable::InvalidMetadata(reason) => {
                             hints.insert(PubGrubHint::InvalidVersionMetadata {
-                                package: package.clone(),
+                                package: name.clone(),
                                 version: version.clone(),
                                 reason: reason.to_string(),
                             });
                         }
                         MetadataUnavailable::InconsistentMetadata(reason) => {
                             hints.insert(PubGrubHint::InconsistentVersionMetadata {
-                                package: package.clone(),
+                                package: name.clone(),
                                 version: version.clone(),
                                 reason: reason.to_string(),
                             });
                         }
                         MetadataUnavailable::InvalidStructure(reason) => {
                             hints.insert(PubGrubHint::InvalidVersionStructure {
-                                package: package.clone(),
+                                package: name.clone(),
                                 version: version.clone(),
                                 reason: reason.to_string(),
                             });
                         }
                         MetadataUnavailable::RequiresPython(requires_python, python_version) => {
                             hints.insert(PubGrubHint::IncompatibleBuildRequirement {
-                                package: package.clone(),
+                                package: name.clone(),
                                 version: version.clone(),
                                 requires_python: requires_python.clone(),
                                 python_version: python_version.clone(),
@@ -916,7 +899,7 @@ impl PubGrubReportFormatter<'_> {
                     .nth(1)
                 {
                     hints.insert(PubGrubHint::UncheckedIndex {
-                        package: package.clone(),
+                        name: name.clone(),
                         range: set.clone(),
                         found_index: found_index.clone(),
                         next_index: next_index.clone(),
@@ -948,7 +931,6 @@ impl PubGrubReportFormatter<'_> {
 
     fn prerelease_available_hint(
         &self,
-        package: &PubGrubPackage,
         name: &PackageName,
         set: &Range<Version>,
         selector: &CandidateSelector,
@@ -973,25 +955,21 @@ impl PubGrubReportFormatter<'_> {
             // A pre-release marker appeared in the version requirements.
             if selector.prerelease_strategy().allows(name, env) != AllowPrerelease::Yes {
                 hints.insert(PubGrubHint::PrereleaseRequested {
-                    package: package.clone(),
+                    name: name.clone(),
                     range: set.clone(),
                 });
             }
-        } else if let Some(version) = package
-            .name()
-            .and_then(|name| self.available_versions.get(name))
-            .and_then(|versions| {
-                versions
-                    .iter()
-                    .rev()
-                    .filter(|version| version.any_prerelease())
-                    .find(|version| set.contains(version))
-            })
-        {
+        } else if let Some(version) = self.available_versions.get(name).and_then(|versions| {
+            versions
+                .iter()
+                .rev()
+                .filter(|version| version.any_prerelease())
+                .find(|version| set.contains(version))
+        }) {
             // There are pre-release versions available for the package.
             if selector.prerelease_strategy().allows(name, env) != AllowPrerelease::Yes {
                 hints.insert(PubGrubHint::PrereleaseAvailable {
-                    package: package.clone(),
+                    package: name.clone(),
                     version: version.clone(),
                 });
             }
@@ -1005,14 +983,14 @@ pub(crate) enum PubGrubHint {
     /// for that package.
     ///
     PrereleaseAvailable {
-        package: PubGrubPackage,
+        package: PackageName,
         // excluded from `PartialEq` and `Hash`
         version: Version,
     },
     /// A requirement included a pre-release marker, but pre-releases weren't enabled for that
     /// package.
     PrereleaseRequested {
-        package: PubGrubPackage,
+        name: PackageName,
         // excluded from `PartialEq` and `Hash`
         range: Range<Version>,
     },
@@ -1023,19 +1001,19 @@ pub(crate) enum PubGrubHint {
     Offline,
     /// Metadata for a package could not be parsed.
     InvalidPackageMetadata {
-        package: PubGrubPackage,
+        package: PackageName,
         // excluded from `PartialEq` and `Hash`
         reason: String,
     },
     /// The structure of a package was invalid (e.g., multiple `.dist-info` directories).
     InvalidPackageStructure {
-        package: PubGrubPackage,
+        package: PackageName,
         // excluded from `PartialEq` and `Hash`
         reason: String,
     },
     /// Metadata for a package version could not be parsed.
     InvalidVersionMetadata {
-        package: PubGrubPackage,
+        package: PackageName,
         // excluded from `PartialEq` and `Hash`
         version: Version,
         // excluded from `PartialEq` and `Hash`
@@ -1044,7 +1022,7 @@ pub(crate) enum PubGrubHint {
     /// Metadata for a package version was inconsistent (e.g., the package name did not match that
     /// of the file).
     InconsistentVersionMetadata {
-        package: PubGrubPackage,
+        package: PackageName,
         // excluded from `PartialEq` and `Hash`
         version: Version,
         // excluded from `PartialEq` and `Hash`
@@ -1052,7 +1030,7 @@ pub(crate) enum PubGrubHint {
     },
     /// The structure of a package version was invalid (e.g., multiple `.dist-info` directories).
     InvalidVersionStructure {
-        package: PubGrubPackage,
+        package: PackageName,
         // excluded from `PartialEq` and `Hash`
         version: Version,
         // excluded from `PartialEq` and `Hash`
@@ -1061,7 +1039,7 @@ pub(crate) enum PubGrubHint {
     /// The source distribution has a `requires-python` requirement that is not met by the installed
     /// Python version (and static metadata is not available).
     IncompatibleBuildRequirement {
-        package: PubGrubPackage,
+        package: PackageName,
         // excluded from `PartialEq` and `Hash`
         version: Version,
         // excluded from `PartialEq` and `Hash`
@@ -1074,7 +1052,7 @@ pub(crate) enum PubGrubHint {
         source: PythonRequirementSource,
         requires_python: RequiresPython,
         // excluded from `PartialEq` and `Hash`
-        package: PubGrubPackage,
+        name: PackageName,
         // excluded from `PartialEq` and `Hash`
         package_set: Range<Version>,
         // excluded from `PartialEq` and `Hash`
@@ -1083,8 +1061,8 @@ pub(crate) enum PubGrubHint {
     /// A non-workspace package depends on a workspace package, which is likely shadowing a
     /// transitive dependency.
     DependsOnWorkspacePackage {
-        package: PubGrubPackage,
-        dependency: PubGrubPackage,
+        package: PackageName,
+        dependency: PackageName,
         workspace: bool,
     },
     /// A package depends on itself at an incompatible version.
@@ -1096,7 +1074,7 @@ pub(crate) enum PubGrubHint {
     /// subsequent index was not queried. As such, a compatible version may be available on
     /// one of the remaining indexes.
     UncheckedIndex {
-        package: PubGrubPackage,
+        name: PackageName,
         // excluded from `PartialEq` and `Hash`
         range: Range<Version>,
         // excluded from `PartialEq` and `Hash`
@@ -1106,13 +1084,13 @@ pub(crate) enum PubGrubHint {
     },
     /// No wheels are available for a package, and using source distributions was disabled.
     NoBuild {
-        package: PubGrubPackage,
+        package: PackageName,
         // excluded from `PartialEq` and `Hash`
         option: NoBuild,
     },
     /// No source distributions are available for a package, and using pre-built wheels was disabled.
     NoBinary {
-        package: PubGrubPackage,
+        package: PackageName,
         // excluded from `PartialEq` and `Hash`
         option: NoBinary,
     },
@@ -1122,7 +1100,7 @@ pub(crate) enum PubGrubHint {
     ForbiddenIndex { index: IndexUrl },
     /// No wheels are available for a package, and using source distributions was disabled.
     LanguageTags {
-        package: PubGrubPackage,
+        package: PackageName,
         // excluded from `PartialEq` and `Hash`
         version: Version,
         // excluded from `PartialEq` and `Hash`
@@ -1130,7 +1108,7 @@ pub(crate) enum PubGrubHint {
     },
     /// No wheels are available for a package, and using source distributions was disabled.
     AbiTags {
-        package: PubGrubPackage,
+        package: PackageName,
         // excluded from `PartialEq` and `Hash`
         version: Version,
         // excluded from `PartialEq` and `Hash`
@@ -1138,7 +1116,7 @@ pub(crate) enum PubGrubHint {
     },
     /// No wheels are available for a package, and using source distributions was disabled.
     PlatformTags {
-        package: PubGrubPackage,
+        package: PackageName,
         // excluded from `PartialEq` and `Hash`
         version: Version,
         // excluded from `PartialEq` and `Hash`
@@ -1152,38 +1130,38 @@ pub(crate) enum PubGrubHint {
 #[derive(PartialEq, Eq, Hash)]
 enum PubGrubHintCore {
     PrereleaseAvailable {
-        package: PubGrubPackage,
+        package: PackageName,
     },
     PrereleaseRequested {
-        package: PubGrubPackage,
+        package: PackageName,
     },
     NoIndex,
     Offline,
     InvalidPackageMetadata {
-        package: PubGrubPackage,
+        package: PackageName,
     },
     InvalidPackageStructure {
-        package: PubGrubPackage,
+        package: PackageName,
     },
     InvalidVersionMetadata {
-        package: PubGrubPackage,
+        package: PackageName,
     },
     InconsistentVersionMetadata {
-        package: PubGrubPackage,
+        package: PackageName,
     },
     InvalidVersionStructure {
-        package: PubGrubPackage,
+        package: PackageName,
     },
     IncompatibleBuildRequirement {
-        package: PubGrubPackage,
+        package: PackageName,
     },
     RequiresPython {
         source: PythonRequirementSource,
         requires_python: RequiresPython,
     },
     DependsOnWorkspacePackage {
-        package: PubGrubPackage,
-        dependency: PubGrubPackage,
+        package: PackageName,
+        dependency: PackageName,
         workspace: bool,
     },
     DependsOnItself {
@@ -1191,7 +1169,7 @@ enum PubGrubHintCore {
         workspace: bool,
     },
     UncheckedIndex {
-        package: PubGrubPackage,
+        package: PackageName,
     },
     UnauthorizedIndex {
         index: IndexUrl,
@@ -1200,19 +1178,19 @@ enum PubGrubHintCore {
         index: IndexUrl,
     },
     NoBuild {
-        package: PubGrubPackage,
+        package: PackageName,
     },
     NoBinary {
-        package: PubGrubPackage,
+        package: PackageName,
     },
     LanguageTags {
-        package: PubGrubPackage,
+        package: PackageName,
     },
     AbiTags {
-        package: PubGrubPackage,
+        package: PackageName,
     },
     PlatformTags {
-        package: PubGrubPackage,
+        package: PackageName,
     },
 }
 
@@ -1223,7 +1201,7 @@ impl From<PubGrubHint> for PubGrubHintCore {
             PubGrubHint::PrereleaseAvailable { package, .. } => {
                 Self::PrereleaseAvailable { package }
             }
-            PubGrubHint::PrereleaseRequested { package, .. } => {
+            PubGrubHint::PrereleaseRequested { name: package, .. } => {
                 Self::PrereleaseRequested { package }
             }
             PubGrubHint::NoIndex => Self::NoIndex,
@@ -1266,7 +1244,7 @@ impl From<PubGrubHint> for PubGrubHintCore {
             PubGrubHint::DependsOnItself { package, workspace } => {
                 Self::DependsOnItself { package, workspace }
             }
-            PubGrubHint::UncheckedIndex { package, .. } => Self::UncheckedIndex { package },
+            PubGrubHint::UncheckedIndex { name: package, .. } => Self::UncheckedIndex { package },
             PubGrubHint::UnauthorizedIndex { index } => Self::UnauthorizedIndex { index },
             PubGrubHint::ForbiddenIndex { index } => Self::ForbiddenIndex { index },
             PubGrubHint::NoBuild { package, .. } => Self::NoBuild { package },
@@ -1309,14 +1287,14 @@ impl std::fmt::Display for PubGrubHint {
                     "--prerelease=allow".green(),
                 )
             }
-            Self::PrereleaseRequested { package, range } => {
+            Self::PrereleaseRequested { name, range } => {
                 write!(
                     f,
                     "{}{} `{}` was requested with a pre-release marker (e.g., {}), but pre-releases weren't enabled (try: `{}`)",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    package.cyan(),
-                    PackageRange::compatibility(package, range, None).cyan(),
+                    name.cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
                     "--prerelease=allow".green(),
                 )
             }
@@ -1405,7 +1383,7 @@ impl std::fmt::Display for PubGrubHint {
             Self::RequiresPython {
                 source: PythonRequirementSource::RequiresPython,
                 requires_python,
-                package,
+                name,
                 package_set,
                 package_requires_python,
             } => {
@@ -1415,7 +1393,7 @@ impl std::fmt::Display for PubGrubHint {
                     "hint".bold().cyan(),
                     ":".bold(),
                     requires_python.cyan(),
-                    PackageRange::compatibility(package, package_set, None).cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None).cyan(),
                     package_requires_python.cyan(),
                     package_requires_python.cyan(),
                 )
@@ -1423,7 +1401,7 @@ impl std::fmt::Display for PubGrubHint {
             Self::RequiresPython {
                 source: PythonRequirementSource::PythonVersion,
                 requires_python,
-                package,
+                name,
                 package_set,
                 package_requires_python,
             } => {
@@ -1433,7 +1411,23 @@ impl std::fmt::Display for PubGrubHint {
                     "hint".bold().cyan(),
                     ":".bold(),
                     requires_python.cyan(),
-                    PackageRange::compatibility(package, package_set, None).cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None).cyan(),
+                    package_requires_python.cyan(),
+                )
+            }
+            Self::RequiresPython {
+                source: PythonRequirementSource::Interpreter,
+                requires_python: _,
+                name,
+                package_set,
+                package_requires_python,
+            } => {
+                write!(
+                    f,
+                    "{}{} The Python interpreter uses a Python version that is not supported by your dependencies (e.g., {} only supports {}). Consider passing a `--python-version` value to raise the minimum supported version.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None).cyan(),
                     package_requires_python.cyan(),
                 )
             }
@@ -1452,22 +1446,6 @@ impl std::fmt::Display for PubGrubHint {
                     format!("v{version}").cyan(),
                     requires_python.cyan(),
                     python_version.cyan(),
-                )
-            }
-            Self::RequiresPython {
-                source: PythonRequirementSource::Interpreter,
-                requires_python: _,
-                package,
-                package_set,
-                package_requires_python,
-            } => {
-                write!(
-                    f,
-                    "{}{} The Python interpreter uses a Python version that is not supported by your dependencies (e.g., {} only supports {}). Consider passing a `--python-version` value to raise the minimum supported version.",
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    PackageRange::compatibility(package, package_set, None).cyan(),
-                    package_requires_python.cyan(),
                 )
             }
             Self::DependsOnWorkspacePackage {
@@ -1511,7 +1489,7 @@ impl std::fmt::Display for PubGrubHint {
                 )
             }
             Self::UncheckedIndex {
-                package,
+                name,
                 range,
                 found_index,
                 next_index,
@@ -1521,9 +1499,9 @@ impl std::fmt::Display for PubGrubHint {
                     "{}{} `{}` was found on {}, but not at the requested version ({}). A compatible version may be available on a subsequent index (e.g., {}). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `{}` to consider all versions from all indexes, regardless of the order in which they were defined.",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    package.cyan(),
+                    name.cyan(),
                     found_index.cyan(),
-                    PackageRange::compatibility(package, range, None).cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
                     next_index.cyan(),
                     "--index-strategy unsafe-best-match".green(),
                 )
