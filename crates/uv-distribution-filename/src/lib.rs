@@ -7,7 +7,7 @@ pub use build_tag::{BuildTag, BuildTagError};
 pub use egg::{EggInfoFilename, EggInfoFilenameError};
 pub use extension::{DistExtension, ExtensionError, SourceDistExtension};
 pub use source_dist::{SourceDistFilename, SourceDistFilenameError};
-pub use wheel::{TagSet, WheelTag, WheelFilename, WheelFilenameError};
+pub use wheel::{TagSet, WheelFilename, WheelFilenameError};
 
 mod build_tag;
 mod egg;
@@ -99,6 +99,6 @@ mod tests {
 
     #[test]
     fn wheel_filename_size() {
-        assert_eq!(size_of::<WheelFilename>(), 128);
+        assert_eq!(size_of::<WheelFilename>(), 48);
     }
 }

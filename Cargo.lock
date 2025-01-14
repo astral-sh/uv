@@ -5001,7 +5001,6 @@ dependencies = [
 name = "uv-distribution-filename"
 version = "0.0.1"
 dependencies = [
- "either",
  "insta",
  "rkyv",
  "serde",

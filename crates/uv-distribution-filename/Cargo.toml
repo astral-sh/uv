@@ -20,7 +20,6 @@ uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-platform-tags = { workspace = true }
 
-either = { workspace = true }
 rkyv = { workspace = true, features = ["smallvec-1"] }
 serde = { workspace = true }
 smallvec = { workspace = true }

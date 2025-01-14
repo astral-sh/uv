@@ -168,9 +168,9 @@ fn benchmark_wheelname_tag_compatibility(c: &mut Criterion<WallTime>) {
 
 criterion_group!(
     uv_distribution_filename,
-    // benchmark_build_platform_tags,
+    benchmark_build_platform_tags,
     benchmark_wheelname_parsing,
     benchmark_wheelname_parsing_failure,
-    // benchmark_wheelname_tag_compatibility,
+    benchmark_wheelname_tag_compatibility,
 );
 criterion_main!(uv_distribution_filename);

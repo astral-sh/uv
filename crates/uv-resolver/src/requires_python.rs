@@ -380,12 +380,12 @@ impl RequiresPython {
     /// It is meant to filter out clearly unusable wheels with perfect specificity and acceptable
     /// sensitivity, we return `true` if the tags are unknown.
     pub fn matches_wheel_tag(&self, wheel: &WheelFilename) -> bool {
-        wheel.tags.abi_tags().iter().any(|abi_tag| {
+        wheel.abi_tags().iter().any(|abi_tag| {
             if *abi_tag == AbiTag::Abi3 {
                 // Universal tags are allowed.
                 true
             } else if *abi_tag == AbiTag::None {
-                wheel.tags.python_tags().iter().any(|python_tag| {
+                wheel.python_tags().iter().any(|python_tag| {
                     // Remove `py2-none-any` and `py27-none-any` and analogous `cp` and `pp` tags.
                     if matches!(
                         python_tag,

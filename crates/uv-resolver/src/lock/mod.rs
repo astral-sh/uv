@@ -272,7 +272,7 @@ impl Lock {
             // `(A ∩ (B ∩ C) = ∅) => ((A ∩ B = ∅) or (A ∩ C = ∅))`
             // a single disjointness check with the intersection is sufficient, so we have one
             // constant per platform.
-            let platform_tags = wheel.filename.tags.platform_tags();
+            let platform_tags = wheel.filename.platform_tags();
             if platform_tags
                 .iter()
                 .all(uv_platform_tags::PlatformTag::is_linux_compatible)
@@ -2215,7 +2215,7 @@ impl Package {
             else {
                 continue;
             };
-            let build_tag = wheel.filename.tags.build_tag();
+            let build_tag = wheel.filename.build_tag();
             let wheel_priority = (tag_priority, build_tag);
             match best {
                 None => {
