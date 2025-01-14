@@ -2,7 +2,7 @@ use std::fmt::Write;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Error, Result};
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use itertools::{Either, Itertools};
@@ -293,7 +293,7 @@ pub(crate) async fn install(
                 downloaded.push(installation);
             }
             Err(err) => {
-                errors.push((key, anyhow::Error::new(err)));
+                errors.push((key.clone(), anyhow::Error::new(err)));
             }
         }
     }
@@ -326,174 +326,19 @@ pub(crate) async fn install(
             .expect("We should have a bin directory with preview enabled")
             .as_path();
 
-        let targets = if (default || is_default_install)
-            && first_request.matches_installation(installation)
-        {
-            vec![
-                installation.key().executable_name_minor(),
-                installation.key().executable_name_major(),
-                installation.key().executable_name(),
-            ]
-        } else {
-            vec![installation.key().executable_name_minor()]
-        };
-
-        for target in targets {
-            let target = bin.join(target);
-            match installation.create_bin_link(&target) {
-                Ok(()) => {
-                    debug!(
-                        "Installed executable at `{}` for {}",
-                        target.simplified_display(),
-                        installation.key(),
-                    );
-                    changelog.installed.insert(installation.key().clone());
-                    changelog
-                        .installed_executables
-                        .entry(installation.key().clone())
-                        .or_default()
-                        .insert(target.clone());
-                }
-                Err(uv_python::managed::Error::LinkExecutable { from: _, to, err })
-                    if err.kind() == ErrorKind::AlreadyExists =>
-                {
-                    debug!(
-                        "Inspecting existing executable at `{}`",
-                        target.simplified_display()
-                    );
-
-                    // Figure out what installation it references, if any
-                    let existing = find_matching_bin_link(
-                        installations
-                            .iter()
-                            .copied()
-                            .chain(existing_installations.iter()),
-                        &target,
-                    );
-
-                    match existing {
-                        None => {
-                            // Determine if the link is valid, i.e., if it points to an existing
-                            // Python we don't manage. On Windows, we just assume it is valid because
-                            // symlinks are not common for Python interpreters.
-                            let valid_link = cfg!(windows)
-                                || target
-                                    .read_link()
-                                    .and_then(|target| target.try_exists())
-                                    .inspect_err(|err| {
-                                        debug!("Failed to inspect executable with error: {err}");
-                                    })
-                                    // If we can't verify the link, assume it is valid.
-                                    .unwrap_or(true);
-
-                            // There's an existing executable we don't manage, require `--force`
-                            if valid_link {
-                                if !force {
-                                    errors.push((
-                                        installation.key(),
-                                        anyhow::anyhow!(
-                                            "Executable already exists at `{}` but is not managed by uv; use `--force` to replace it",
-                                            to.simplified_display()
-                                        ),
-                                    ));
-                                    continue;
-                                }
-                                debug!(
-                                    "Replacing existing executable at `{}` due to `--force`",
-                                    target.simplified_display()
-                                );
-                            } else {
-                                debug!(
-                                    "Replacing broken symlink at `{}`",
-                                    target.simplified_display()
-                                );
-                            }
-                        }
-                        Some(existing) if existing == *installation => {
-                            // The existing link points to the same installation, so we're done unless
-                            // they requested we reinstall
-                            if !(reinstall || force) {
-                                debug!(
-                                    "Executable at `{}` is already for `{}`",
-                                    target.simplified_display(),
-                                    installation.key(),
-                                );
-                                continue;
-                            }
-                            debug!(
-                                "Replacing existing executable for `{}` at `{}`",
-                                installation.key(),
-                                target.simplified_display(),
-                            );
-                        }
-                        Some(existing) => {
-                            // The existing link points to a different installation, check if it
-                            // is reasonable to replace
-                            if force {
-                                debug!(
-                                    "Replacing existing executable for `{}` at `{}` with executable for `{}` due to `--force` flag",
-                                    existing.key(),
-                                    target.simplified_display(),
-                                    installation.key(),
-                                );
-                            } else {
-                                if installation.is_upgrade_of(existing) {
-                                    debug!(
-                                        "Replacing existing executable for `{}` at `{}` with executable for `{}` since it is an upgrade",
-                                        existing.key(),
-                                        target.simplified_display(),
-                                        installation.key(),
-                                    );
-                                } else if default {
-                                    debug!(
-                                        "Replacing existing executable for `{}` at `{}` with executable for `{}` since `--default` was requested`",
-                                        existing.key(),
-                                        target.simplified_display(),
-                                        installation.key(),
-                                    );
-                                } else {
-                                    debug!(
-                                        "Executable already exists for `{}` at `{}`. Use `--force` to replace it",
-                                        existing.key(),
-                                        to.simplified_display()
-                                    );
-                                    continue;
-                                }
-                            }
-                        }
-                    }
-
-                    // Replace the existing link
-                    fs_err::remove_file(&to)?;
-
-                    if let Some(existing) = existing {
-                        // Ensure we do not report installation of this executable for an existing
-                        // key if we undo it
-                        changelog
-                            .installed_executables
-                            .entry(existing.key().clone())
-                            .or_default()
-                            .remove(&target);
-                    }
-
-                    installation.create_bin_link(&target)?;
-                    debug!(
-                        "Updated executable at `{}` to {}",
-                        target.simplified_display(),
-                        installation.key(),
-                    );
-                    changelog.installed.insert(installation.key().clone());
-                    changelog
-                        .installed_executables
-                        .entry(installation.key().clone())
-                        .or_default()
-                        .insert(target.clone());
-                }
-                Err(err) => {
-                    errors.push((installation.key(), anyhow::Error::new(err)));
-                }
-            }
-        }
+        create_bin_links(
+            installation,
+            bin,
+            reinstall,
+            force,
+            default,
+            is_default_install,
+            first_request,
+            &existing_installations,
+            &installations,
+            &mut changelog,
+            &mut errors,
+        )?;
     }
 
     if changelog.installed.is_empty() && errors.is_empty() {
@@ -599,6 +444,191 @@ pub(crate) async fn install(
     }
 
     Ok(ExitStatus::Success)
+}
+
+/// Link the binaries of a managed Python installation to the bin directory.
+#[allow(clippy::fn_params_excessive_bools)]
+fn create_bin_links(
+    installation: &ManagedPythonInstallation,
+    bin: &Path,
+    reinstall: bool,
+    force: bool,
+    default: bool,
+    is_default_install: bool,
+    first_request: &InstallRequest,
+    existing_installations: &[ManagedPythonInstallation],
+    installations: &[&ManagedPythonInstallation],
+    changelog: &mut Changelog,
+    errors: &mut Vec<(PythonInstallationKey, Error)>,
+) -> Result<(), Error> {
+    let targets =
+        if (default || is_default_install) && first_request.matches_installation(installation) {
+            vec![
+                installation.key().executable_name_minor(),
+                installation.key().executable_name_major(),
+                installation.key().executable_name(),
+            ]
+        } else {
+            vec![installation.key().executable_name_minor()]
+        };
+
+    for target in targets {
+        let target = bin.join(target);
+        match installation.create_bin_link(&target) {
+            Ok(()) => {
+                debug!(
+                    "Installed executable at `{}` for {}",
+                    target.simplified_display(),
+                    installation.key(),
+                );
+                changelog.installed.insert(installation.key().clone());
+                changelog
+                    .installed_executables
+                    .entry(installation.key().clone())
+                    .or_default()
+                    .insert(target.clone());
+            }
+            Err(uv_python::managed::Error::LinkExecutable { from: _, to, err })
+                if err.kind() == ErrorKind::AlreadyExists =>
+            {
+                debug!(
+                    "Inspecting existing executable at `{}`",
+                    target.simplified_display()
+                );
+
+                //  Figure out what installation it references, if any
+                let existing = find_matching_bin_link(
+                    installations
+                        .iter()
+                        .copied()
+                        .chain(existing_installations.iter()),
+                    &target,
+                );
+
+                match existing {
+                    None => {
+                        // Determine if the link is valid, i.e., if it points to an existing
+                        // Python we don't manage. On Windows, we just assume it is valid because
+                        // symlinks are not common for Python interpreters.
+                        let valid_link = cfg!(windows)
+                            || target
+                                .read_link()
+                                .and_then(|target| target.try_exists())
+                                .inspect_err(|err| {
+                                    debug!("Failed to inspect executable with error: {err}");
+                                })
+                                // If we can't verify the link, assume it is valid.
+                                .unwrap_or(true);
+
+                        // There's an existing executable we don't manage, require `--force`
+                        if valid_link {
+                            if !force {
+                                errors.push((
+                                    installation.key().clone(),
+                                    anyhow::anyhow!(
+                                        "Executable already exists at `{}` but is not managed by uv; use `--force` to replace it",
+                                        to.simplified_display()
+                                    ),
+                                ));
+                                continue;
+                            }
+                            debug!(
+                                "Replacing existing executable at `{}` due to `--force`",
+                                target.simplified_display()
+                            );
+                        } else {
+                            debug!(
+                                "Replacing broken symlink at `{}`",
+                                target.simplified_display()
+                            );
+                        }
+                    }
+                    Some(existing) if existing == installation => {
+                        // The existing link points to the same installation, so we're done unless
+                        // they requested we reinstall
+                        if !(reinstall || force) {
+                            debug!(
+                                "Executable at `{}` is already for `{}`",
+                                target.simplified_display(),
+                                installation.key(),
+                            );
+                            continue;
+                        }
+                        debug!(
+                            "Replacing existing executable for `{}` at `{}`",
+                            installation.key(),
+                            target.simplified_display(),
+                        );
+                    }
+                    Some(existing) => {
+                        // The existing link points to a different installation, check if it
+                        // is reasonable to replace
+                        if force {
+                            debug!(
+                                "Replacing existing executable for `{}` at `{}` with executable for `{}` due to `--force` flag",
+                                existing.key(),
+                                target.simplified_display(),
+                                installation.key(),
+                            );
+                        } else {
+                            if installation.is_upgrade_of(existing) {
+                                debug!(
+                                    "Replacing existing executable for `{}` at `{}` with executable for `{}` since it is an upgrade",
+                                    existing.key(),
+                                    target.simplified_display(),
+                                    installation.key(),
+                                );
+                            } else if default {
+                                debug!(
+                                    "Replacing existing executable for `{}` at `{}` with executable for `{}` since `--default` was requested`",
+                                    existing.key(),
+                                    target.simplified_display(),
+                                    installation.key(),
+                                );
+                            } else {
+                                debug!(
+                                    "Executable already exists for `{}` at `{}`. Use `--force` to replace it",
+                                    existing.key(),
+                                    to.simplified_display()
+                                );
+                                continue;
+                            }
+                        }
+                    }
+                }
+
+                // Replace the existing link
+                fs_err::remove_file(&to)?;
+
+                if let Some(existing) = existing {
+                    // Ensure we do not report installation of this executable for an existing
+                    // key if we undo it
+                    changelog
+                        .installed_executables
+                        .entry(existing.key().clone())
+                        .or_default()
+                        .remove(&target);
+                }
+
+                installation.create_bin_link(&target)?;
+                debug!(
+                    "Updated executable at `{}` to {}",
+                    target.simplified_display(),
+                    installation.key(),
+                );
+                changelog.installed.insert(installation.key().clone());
+                changelog
+                    .installed_executables
+                    .entry(installation.key().clone())
+                    .or_default()
+                    .insert(target.clone());
+            }
+            Err(err) => {
+                errors.push((installation.key().clone(), anyhow::Error::new(err)));
+            }
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn format_executables(
