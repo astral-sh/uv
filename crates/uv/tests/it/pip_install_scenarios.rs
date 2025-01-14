@@ -4091,7 +4091,7 @@ fn no_sdist_no_wheels_with_matching_abi() {
       ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching Python ABI tag (e.g., `cp38`), we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
 
-          hint: Wheels are available for `package-a` (v1.0.0) with the following ABI tag: `graalpy310_graalpy240_310_native`
+          hint: While solving for CPython 3.8, found wheels for `package-a` (v1.0.0) with the following ABI tag: `graalpy310_graalpy240_310_native`
     "###);
 
     assert_not_installed(
@@ -4177,7 +4177,7 @@ fn no_sdist_no_wheels_with_matching_python() {
       ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching Python implementation tag (e.g., `cp38`), we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
 
-          hint: Wheels are available for `package-a` (v1.0.0) with the following Python tag: `graalpy310`
+          hint: While solving for CPython 3.8, found wheels for `package-a` (v1.0.0) with the following Python tag: `graalpy310`
     "###);
 
     assert_not_installed(

@@ -43,6 +43,26 @@ pub enum AbiTag {
     Pyston { implementation_version: (u8, u8) },
 }
 
+impl AbiTag {
+    /// Return a pretty string representation of the ABI tag.
+    pub fn pretty(self) -> Option<String> {
+        match self {
+            AbiTag::None => None,
+            AbiTag::Abi3 => None,
+            AbiTag::CPython { python_version, .. } => {
+                Some(format!("CPython {}.{}", python_version.0, python_version.1))
+            }
+            AbiTag::PyPy { python_version, .. } => {
+                Some(format!("PyPy {}.{}", python_version.0, python_version.1))
+            }
+            AbiTag::GraalPy { python_version, .. } => {
+                Some(format!("GraalPy {}.{}", python_version.0, python_version.1))
+            }
+            AbiTag::Pyston { .. } => Some("Pyston".to_string()),
+        }
+    }
+}
+
 impl std::fmt::Display for AbiTag {
     /// Format an [`AbiTag`] as a string.
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

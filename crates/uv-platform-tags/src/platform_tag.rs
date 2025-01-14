@@ -72,6 +72,33 @@ pub enum PlatformTag {
 }
 
 impl PlatformTag {
+    /// Return a pretty string representation of the language tag.
+    pub fn pretty(&self) -> Option<&'static str> {
+        match self {
+            PlatformTag::Any => None,
+            PlatformTag::Manylinux { .. } => Some("Linux"),
+            PlatformTag::Manylinux1 { .. } => Some("Linux"),
+            PlatformTag::Manylinux2010 { .. } => Some("Linux"),
+            PlatformTag::Manylinux2014 { .. } => Some("Linux"),
+            PlatformTag::Linux { .. } => Some("Linux"),
+            PlatformTag::Musllinux { .. } => Some("Linux"),
+            PlatformTag::Macos { .. } => Some("macOS"),
+            PlatformTag::Win32 => Some("Windows"),
+            PlatformTag::WinAmd64 => Some("Windows"),
+            PlatformTag::WinArm64 => Some("Windows"),
+            PlatformTag::Android { .. } => Some("Android"),
+            PlatformTag::FreeBsd { .. } => Some("FreeBSD"),
+            PlatformTag::NetBsd { .. } => Some("NetBSD"),
+            PlatformTag::OpenBsd { .. } => Some("OpenBSD"),
+            PlatformTag::Dragonfly { .. } => Some("DragonFly"),
+            PlatformTag::Haiku { .. } => Some("Haiku"),
+            PlatformTag::Illumos { .. } => Some("Illumos"),
+            PlatformTag::Solaris { .. } => Some("Solaris"),
+        }
+    }
+}
+
+impl PlatformTag {
     /// Returns `true` if the platform is manylinux-compatible.
     pub fn is_manylinux_compatible(&self) -> bool {
         matches!(
