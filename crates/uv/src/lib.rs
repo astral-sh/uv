@@ -1114,7 +1114,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.all_platforms,
                 args.all_arches,
                 args.show_urls,
-                args.format,
+                args.output_format,
                 globals.python_preference,
                 globals.python_downloads,
                 &cache,

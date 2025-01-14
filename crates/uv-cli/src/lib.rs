@@ -37,10 +37,10 @@ pub enum VersionFormat {
 
 #[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
 pub enum PythonListFormat {
-    /// Display the version as plain text.
+    /// Plain text (for humans).
     #[default]
     Text,
-    /// Display the version as JSON.
+    /// JSON (for computers).
     Json,
 }
 
@@ -1946,7 +1946,7 @@ pub struct PipListArgs {
     #[arg(long)]
     pub r#exclude: Vec<PackageName>,
 
-    /// Select the output format between: `columns` (default), `freeze`, or `json`.
+    /// Select the output format.
     #[arg(long, value_enum, default_value_t = ListFormat::default())]
     pub format: ListFormat,
 
@@ -4298,9 +4298,9 @@ pub struct PythonListArgs {
     #[arg(long)]
     pub show_urls: bool,
 
-    /// Select the output format between: `text` (default) or `json`.
+    /// Select the output format.
     #[arg(long, value_enum, default_value_t = PythonListFormat::default())]
-    pub format: PythonListFormat,
+    pub output_format: PythonListFormat,
 }
 
 #[derive(Args)]

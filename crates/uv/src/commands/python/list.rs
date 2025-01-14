@@ -57,7 +57,7 @@ pub(crate) async fn list(
     all_platforms: bool,
     all_arches: bool,
     show_urls: bool,
-    format: PythonListFormat,
+    output_format: PythonListFormat,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     cache: &Cache,
@@ -193,7 +193,7 @@ pub(crate) async fn list(
         include.push((key, uri));
     }
 
-    match format {
+    match output_format {
         PythonListFormat::Json => {
             let data = include
                 .iter()

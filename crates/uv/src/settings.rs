@@ -737,7 +737,7 @@ pub(crate) struct PythonListSettings {
     pub(crate) all_arches: bool,
     pub(crate) all_versions: bool,
     pub(crate) show_urls: bool,
-    pub(crate) format: PythonListFormat,
+    pub(crate) output_format: PythonListFormat,
 }
 
 impl PythonListSettings {
@@ -751,7 +751,7 @@ impl PythonListSettings {
             only_installed,
             only_downloads,
             show_urls,
-            format,
+            output_format,
         } = args;
 
         let kinds = if only_installed {
@@ -768,7 +768,7 @@ impl PythonListSettings {
             all_arches,
             all_versions,
             show_urls,
-            format,
+            output_format,
         }
     }
 }
