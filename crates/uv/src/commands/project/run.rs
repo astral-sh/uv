@@ -172,28 +172,19 @@ pub(crate) async fn run(
     let script_interpreter = if let Some(script) = script {
         match &script {
             Pep723Item::Script(script) => {
-                writeln!(
-                    printer.stderr(),
+                debug!(
                     "Reading inline script metadata from `{}`",
-                    script.path.user_display().cyan()
-                )?;
+                    script.path.user_display()
+                );
             }
             Pep723Item::Stdin(_) => {
                 if requirements_from_stdin {
                     bail!("Cannot read both requirements file and script from stdin");
                 }
-                writeln!(
-                    printer.stderr(),
-                    "Reading inline script metadata from `{}`",
-                    "stdin".cyan()
-                )?;
+                debug!("Reading inline script metadata from `{}`", "stdin");
             }
             Pep723Item::Remote(_) => {
-                writeln!(
-                    printer.stderr(),
-                    "Reading inline script metadata from {}",
-                    "remote URL".cyan()
-                )?;
+                debug!("Reading inline script metadata from `{}`", "remote URL");
             }
         }
 
