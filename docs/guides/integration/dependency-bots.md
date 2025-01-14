@@ -1,3 +1,8 @@
+---
+title: Using uv with dependency bots
+description: A guide to using uv with dependency bots like Renovate and Dependabot.
+---
+
 # Dependency bots
 
 It is considered best practice to regularly update dependencies, to avoid being exposed to

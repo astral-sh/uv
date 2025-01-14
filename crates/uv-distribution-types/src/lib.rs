@@ -250,7 +250,7 @@ pub struct DirectUrlBuiltDist {
     /// `https://example.org/packages/flask-3.0.0-py3-none-any.whl`
     pub filename: WheelFilename,
     /// The URL without the subdirectory fragment.
-    pub location: Url,
+    pub location: Box<Url>,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
@@ -291,7 +291,7 @@ pub struct DirectUrlSourceDist {
     /// like using e.g. `foo @ https://github.com/org/repo/archive/master.zip`
     pub name: PackageName,
     /// The URL without the subdirectory fragment.
-    pub location: Url,
+    pub location: Box<Url>,
     /// The subdirectory within the archive in which the source distribution is located.
     pub subdirectory: Option<PathBuf>,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
@@ -363,14 +363,14 @@ impl Dist {
 
                 Ok(Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
                     filename,
-                    location,
+                    location: Box::new(location),
                     url,
                 })))
             }
             DistExtension::Source(ext) => {
                 Ok(Self::Source(SourceDist::DirectUrl(DirectUrlSourceDist {
                     name,
-                    location,
+                    location: Box::new(location),
                     subdirectory,
                     ext,
                     url,
@@ -1343,10 +1343,10 @@ mod test {
     /// Ensure that we don't accidentally grow the `Dist` sizes.
     #[test]
     fn dist_size() {
-        assert!(size_of::<Dist>() <= 336, "{}", size_of::<Dist>());
-        assert!(size_of::<BuiltDist>() <= 336, "{}", size_of::<BuiltDist>());
+        assert!(size_of::<Dist>() <= 200, "{}", size_of::<Dist>());
+        assert!(size_of::<BuiltDist>() <= 200, "{}", size_of::<BuiltDist>());
         assert!(
-            size_of::<SourceDist>() <= 264,
+            size_of::<SourceDist>() <= 176,
             "{}",
             size_of::<SourceDist>()
         );

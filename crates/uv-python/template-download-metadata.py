@@ -98,7 +98,8 @@ def prepare_prerelease(prerelease: str) -> str:
     if not (match := PRERELEASE_PATTERN.match(prerelease)):
         raise ValueError(f"Invalid prerelease: {prerelease!r}")
     kind, number = match.groups()
-    return f"Some(Prerelease {{ kind: PrereleaseKind::{kind.capitalize()}, number: {number} }})"
+    kind_mapping = {"a": "Alpha", "b": "Beta", "rc": "Rc"}
+    return f"Some(Prerelease {{ kind: PrereleaseKind::{kind_mapping[kind]}, number: {number} }})"
 
 
 def prepare_value(value: dict) -> dict:

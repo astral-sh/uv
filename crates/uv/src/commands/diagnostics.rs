@@ -34,26 +34,37 @@ static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::ne
 pub(crate) struct OperationDiagnostic {
     /// The hint to display to the user upon resolution failure.
     pub(crate) hint: Option<String>,
+    /// Whether native TLS is enabled.
+    pub(crate) native_tls: bool,
     /// The context to display to the user upon resolution failure.
     pub(crate) context: Option<&'static str>,
 }
 
 impl OperationDiagnostic {
+    /// Create an [`OperationDiagnostic`] with the given native TLS setting.
+    #[must_use]
+    pub(crate) fn native_tls(native_tls: bool) -> Self {
+        Self {
+            native_tls,
+            ..Default::default()
+        }
+    }
+
     /// Set the hint to display to the user upon resolution failure.
     #[must_use]
-    pub(crate) fn with_hint(hint: String) -> Self {
+    pub(crate) fn with_hint(self, hint: String) -> Self {
         Self {
             hint: Some(hint),
-            ..Default::default()
+            ..self
         }
     }
 
     /// Set the context to display to the user upon resolution failure.
     #[must_use]
-    pub(crate) fn with_context(context: &'static str) -> Self {
+    pub(crate) fn with_context(self, context: &'static str) -> Self {
         Self {
             context: Some(context),
-            ..Default::default()
+            ..self
         }
     }
 
@@ -105,6 +116,12 @@ impl OperationDiagnostic {
                 } else {
                     Some(pip::operations::Error::Requirements(err))
                 }
+            }
+            pip::operations::Error::Resolve(uv_resolver::ResolveError::Client(err))
+                if !self.native_tls && err.is_ssl() =>
+            {
+                native_tls_hint(err);
+                None
             }
             err => Some(err),
         }
@@ -233,6 +250,41 @@ pub(crate) fn no_solution_hint(err: uv_resolver::NoSolutionError, help: String) 
 
     let header = err.header();
     let report = miette::Report::new(Error { header, err, help });
+    anstream::eprint!("{report:?}");
+}
+
+/// Render a [`uv_resolver::NoSolutionError`] with a help message.
+pub(crate) fn native_tls_hint(err: uv_client::Error) {
+    #[derive(Debug, miette::Diagnostic)]
+    #[diagnostic()]
+    struct Error {
+        /// The underlying error.
+        err: uv_client::Error,
+
+        /// The help message to display.
+        #[help]
+        help: String,
+    }
+
+    impl std::fmt::Display for Error {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self.err)
+        }
+    }
+
+    impl std::error::Error for Error {
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            self.err.source()
+        }
+    }
+
+    let report = miette::Report::new(Error {
+        err,
+        help: format!(
+            "Consider enabling use of system TLS certificates with the `{}` command-line flag",
+            "--native-tls".green()
+        ),
+    });
     anstream::eprint!("{report:?}");
 }
 

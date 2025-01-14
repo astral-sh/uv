@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::path::PathBuf;
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -19,6 +20,7 @@ pub(crate) fn pip_freeze(
     strict: bool,
     python: Option<&str>,
     system: bool,
+    paths: Option<Vec<PathBuf>>,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -31,49 +33,68 @@ pub(crate) fn pip_freeze(
 
     report_target_environment(&environment, cache, printer)?;
 
-    // Build the installed index.
-    let site_packages = SitePackages::from_environment(&environment)?;
-    for dist in site_packages
+    // Collect all the `site-packages` directories.
+    let site_packages = match paths {
+        Some(paths) => {
+            paths
+                .into_iter()
+                .filter_map(|path| {
+                    environment
+                        .clone()
+                        .with_target(uv_python::Target::from(path))
+                        // Drop invalid paths as per `pip freeze`.
+                        .ok()
+                })
+                .map(|environment| SitePackages::from_environment(&environment))
+                .collect::<Result<Vec<_>>>()?
+        }
+        None => vec![SitePackages::from_environment(&environment)?],
+    };
+
+    site_packages
         .iter()
+        .flat_map(uv_installer::SitePackages::iter)
         .filter(|dist| !(exclude_editable && dist.is_editable()))
         .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
-    {
-        match dist {
+        .map(|dist| match dist {
             InstalledDist::Registry(dist) => {
-                writeln!(printer.stdout(), "{}=={}", dist.name().bold(), dist.version)?;
+                format!("{}=={}", dist.name().bold(), dist.version)
             }
             InstalledDist::Url(dist) => {
                 if dist.editable {
-                    writeln!(printer.stdout(), "-e {}", dist.url)?;
+                    format!("-e {}", dist.url)
                 } else {
-                    writeln!(printer.stdout(), "{} @ {}", dist.name().bold(), dist.url)?;
+                    format!("{} @ {}", dist.name().bold(), dist.url)
                 }
             }
             InstalledDist::EggInfoFile(dist) => {
-                writeln!(printer.stdout(), "{}=={}", dist.name().bold(), dist.version)?;
+                format!("{}=={}", dist.name().bold(), dist.version)
             }
             InstalledDist::EggInfoDirectory(dist) => {
-                writeln!(printer.stdout(), "{}=={}", dist.name().bold(), dist.version)?;
+                format!("{}=={}", dist.name().bold(), dist.version)
             }
             InstalledDist::LegacyEditable(dist) => {
-                writeln!(printer.stdout(), "-e {}", dist.target.display())?;
+                format!("-e {}", dist.target.display())
             }
-        }
-    }
+        })
+        .dedup()
+        .try_for_each(|dist| writeln!(printer.stdout(), "{dist}"))?;
 
     // Validate that the environment is consistent.
     if strict {
         // Determine the markers to use for resolution.
         let markers = environment.interpreter().resolver_marker_environment();
 
-        for diagnostic in site_packages.diagnostics(&markers)? {
-            writeln!(
-                printer.stderr(),
-                "{}{} {}",
-                "warning".yellow().bold(),
-                ":".bold(),
-                diagnostic.message().bold()
-            )?;
+        for entry in site_packages {
+            for diagnostic in entry.diagnostics(&markers)? {
+                writeln!(
+                    printer.stderr(),
+                    "{}{} {}",
+                    "warning".yellow().bold(),
+                    ":".bold(),
+                    diagnostic.message().bold()
+                )?;
+            }
         }
     }
 

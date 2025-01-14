@@ -1,5 +1,13 @@
 //! Fetch and build source distributions from remote sources.
 
+// This is to squash warnings about `|r| r.into_git_reporter()`. Clippy wants
+// me to eta-reduce that and write it as
+// `<(dyn reporter::Reporter + 'static)>::into_git_reporter`
+// instead. But that's a monster. On the other hand, applying this suppression
+// instruction more granularly is annoying. So we just slap it on the module
+// for now. ---AG
+#![allow(clippy::redundant_closure_for_method_calls)]
+
 use std::borrow::Cow;
 use std::ops::Bound;
 use std::path::{Path, PathBuf};
@@ -9,7 +17,6 @@ use std::sync::Arc;
 use crate::distribution_database::ManagedClient;
 use crate::error::Error;
 use crate::metadata::{ArchiveMetadata, GitWorkspaceMember, Metadata};
-use crate::reporter::Facade;
 use crate::source::built_wheel_metadata::BuiltWheelMetadata;
 use crate::source::revision::Revision;
 use crate::{Reporter, RequiresDist};
@@ -1330,7 +1337,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 resource.git,
                 client.unmanaged.uncached_client(resource.url).clone(),
                 self.build_context.cache().bucket(CacheBucket::Git),
-                self.reporter.clone().map(Facade::from),
+                self.reporter
+                    .clone()
+                    .map(|reporter| reporter.into_git_reporter()),
             )
             .await?;
 
@@ -1427,7 +1436,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 resource.git,
                 client.unmanaged.uncached_client(resource.url).clone(),
                 self.build_context.cache().bucket(CacheBucket::Git),
-                self.reporter.clone().map(Facade::from),
+                self.reporter
+                    .clone()
+                    .map(|reporter| reporter.into_git_reporter()),
             )
             .await?;
 
@@ -1603,7 +1614,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         &source.git,
                         client.unmanaged.uncached_client(&source.url).clone(),
                         self.build_context.cache().bucket(CacheBucket::Git),
-                        self.reporter.clone().map(Facade::from),
+                        self.reporter
+                            .clone()
+                            .map(|reporter| reporter.into_git_reporter()),
                     )
                     .await?;
             }
@@ -1614,7 +1627,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         source.git,
                         client.unmanaged.uncached_client(source.url).clone(),
                         self.build_context.cache().bucket(CacheBucket::Git),
-                        self.reporter.clone().map(Facade::from),
+                        self.reporter
+                            .clone()
+                            .map(|reporter| reporter.into_git_reporter()),
                     )
                     .await?;
             }

@@ -29,10 +29,12 @@ uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 
 anyhow = { workspace = true }
+arcstr = { workspace = true }
 bitflags = { workspace = true }
 fs-err = { workspace = true }
 itertools = { workspace = true }
 jiff = { workspace = true }
+owo-colors = { workspace = true }
 petgraph = { workspace = true }
 rkyv = { workspace = true }
 rustc-hash = { workspace = true }

@@ -3,6 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::Path;
+use std::sync::Arc;
 
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
@@ -17,7 +18,7 @@ use uv_configuration::{
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
-    DependencyMetadata, Index, IndexLocations, NameRequirementSpecification,
+    DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
     UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
@@ -31,6 +32,7 @@ use uv_resolver::{
     FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, PythonRequirement, RequiresPython,
     ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
 };
+use uv_scripts::{Pep723ItemRef, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -38,7 +40,7 @@ use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceMember};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::LockTarget;
-use crate::commands::project::{ProjectError, ProjectInterpreter};
+use crate::commands::project::{ProjectError, ProjectInterpreter, ScriptInterpreter};
 use crate::commands::reporters::ResolverReporter;
 use crate::commands::{diagnostics, pip, ExitStatus};
 use crate::printer::Printer;
@@ -79,6 +81,7 @@ pub(crate) async fn lock(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
+    script: Option<Pep723Script>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
@@ -91,29 +94,52 @@ pub(crate) async fn lock(
     preview: PreviewMode,
 ) -> anyhow::Result<ExitStatus> {
     // Find the project requirements.
-    let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
+    let workspace;
+    let target = if let Some(script) = script.as_ref() {
+        LockTarget::Script(script)
+    } else {
+        workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
+        LockTarget::Workspace(&workspace)
+    };
 
     // Determine the lock mode.
     let interpreter;
     let mode = if frozen {
         LockMode::Frozen
     } else {
-        interpreter = ProjectInterpreter::discover(
-            &workspace,
-            project_dir,
-            python.as_deref().map(PythonRequest::parse),
-            python_preference,
-            python_downloads,
-            connectivity,
-            native_tls,
-            allow_insecure_host,
-            &install_mirrors,
-            no_config,
-            cache,
-            printer,
-        )
-        .await?
-        .into_interpreter();
+        interpreter = match target {
+            LockTarget::Workspace(workspace) => ProjectInterpreter::discover(
+                workspace,
+                project_dir,
+                python.as_deref().map(PythonRequest::parse),
+                python_preference,
+                python_downloads,
+                connectivity,
+                native_tls,
+                allow_insecure_host,
+                &install_mirrors,
+                no_config,
+                cache,
+                printer,
+            )
+            .await?
+            .into_interpreter(),
+            LockTarget::Script(script) => ScriptInterpreter::discover(
+                Pep723ItemRef::Script(script),
+                python.as_deref().map(PythonRequest::parse),
+                python_preference,
+                python_downloads,
+                connectivity,
+                native_tls,
+                allow_insecure_host,
+                &install_mirrors,
+                no_config,
+                cache,
+                printer,
+            )
+            .await?
+            .into_interpreter(),
+        };
 
         if locked {
             LockMode::Locked(&interpreter)
@@ -130,7 +156,7 @@ pub(crate) async fn lock(
     // Perform the lock operation.
     match do_safe_lock(
         mode,
-        (&workspace).into(),
+        target,
         settings.as_ref(),
         LowerBound::Warn,
         &state,
@@ -167,9 +193,11 @@ pub(crate) async fn lock(
 
             Ok(ExitStatus::Success)
         }
-        Err(ProjectError::Operation(err)) => diagnostics::OperationDiagnostic::default()
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
+        Err(ProjectError::Operation(err)) => {
+            diagnostics::OperationDiagnostic::native_tls(native_tls)
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+        }
         Err(err) => Err(err.into()),
     }
 }
@@ -472,7 +500,7 @@ async fn do_lock(
         .index_strategy(index_strategy)
         .build_options(build_options.clone())
         .build();
-    let hasher = HashStrategy::Generate;
+    let hasher = HashStrategy::Generate(HashGeneration::Url);
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
@@ -625,7 +653,7 @@ async fn do_lock(
             // Resolve the requirements.
             let resolution = pip::operations::resolve(
                 ExtrasResolver::new(&hasher, state.index(), database)
-                    .with_reporter(ResolverReporter::from(printer))
+                    .with_reporter(Arc::new(ResolverReporter::from(printer)))
                     .resolve(target.members_requirements())
                     .await
                     .map_err(|err| ProjectError::Operation(err.into()))?

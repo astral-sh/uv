@@ -17,8 +17,8 @@ use uv_configuration::{
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
-    DependencyMetadata, Index, IndexLocations, NameRequirementSpecification, Origin,
-    UnresolvedRequirementSpecification, Verbatim,
+    DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
+    Origin, UnresolvedRequirementSpecification, Verbatim,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::linker::LinkMode;
@@ -266,7 +266,7 @@ pub(crate) async fn pip_compile(
 
     // Generate, but don't enforce hashes for the requirements.
     let hasher = if generate_hashes {
-        HashStrategy::Generate
+        HashStrategy::Generate(HashGeneration::All)
     } else {
         HashStrategy::None
     };
@@ -401,7 +401,7 @@ pub(crate) async fn pip_compile(
     {
         Ok(resolution) => resolution,
         Err(err) => {
-            return diagnostics::OperationDiagnostic::default()
+            return diagnostics::OperationDiagnostic::native_tls(native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }

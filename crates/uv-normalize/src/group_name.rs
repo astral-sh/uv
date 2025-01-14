@@ -5,6 +5,8 @@ use std::sync::LazyLock;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use uv_small_str::SmallString;
+
 use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNameError};
 
 /// The normalized name of a dependency group.
@@ -12,9 +14,9 @@ use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNam
 /// See:
 /// - <https://peps.python.org/pep-0735/>
 /// - <https://packaging.python.org/en/latest/specifications/name-normalization/>
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub struct GroupName(String);
+pub struct GroupName(SmallString);
 
 impl GroupName {
     /// Create a validated, normalized group name.

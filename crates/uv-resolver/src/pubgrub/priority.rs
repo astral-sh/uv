@@ -1,14 +1,16 @@
-use pubgrub::Range;
-use rustc_hash::FxHashMap;
 use std::cmp::Reverse;
 use std::collections::hash_map::OccupiedEntry;
 
-use crate::fork_urls::ForkUrls;
+use pubgrub::Range;
+use rustc_hash::FxHashMap;
+
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
+use crate::fork_urls::ForkUrls;
 use crate::pubgrub::package::PubGrubPackage;
 use crate::pubgrub::PubGrubPackageInner;
+use crate::SentinelRange;
 
 /// A prioritization map to guide the PubGrub resolution process.
 ///
@@ -56,7 +58,9 @@ impl PubGrubPriorities {
                 // Compute the priority.
                 let priority = if urls.get(name).is_some() {
                     PubGrubPriority::DirectUrl(Reverse(index))
-                } else if version.as_singleton().is_some() {
+                } else if version.as_singleton().is_some()
+                    || SentinelRange::from(version).is_sentinel()
+                {
                     PubGrubPriority::Singleton(Reverse(index))
                 } else {
                     // Keep the conflict-causing packages to avoid loops where we seesaw between
@@ -79,7 +83,9 @@ impl PubGrubPriorities {
                 // Compute the priority.
                 let priority = if urls.get(name).is_some() {
                     PubGrubPriority::DirectUrl(Reverse(next))
-                } else if version.as_singleton().is_some() {
+                } else if version.as_singleton().is_some()
+                    || SentinelRange::from(version).is_sentinel()
+                {
                     PubGrubPriority::Singleton(Reverse(next))
                 } else {
                     PubGrubPriority::Unspecified(Reverse(next))
@@ -98,7 +104,7 @@ impl PubGrubPriorities {
             | PubGrubPriority::ConflictEarly(Reverse(index))
             | PubGrubPriority::Singleton(Reverse(index))
             | PubGrubPriority::DirectUrl(Reverse(index)) => Some(*index),
-            PubGrubPriority::Root => None,
+            PubGrubPriority::Proxy | PubGrubPriority::Root => None,
         }
     }
 
@@ -107,9 +113,9 @@ impl PubGrubPriorities {
         let package_priority = match &**package {
             PubGrubPackageInner::Root(_) => Some(PubGrubPriority::Root),
             PubGrubPackageInner::Python(_) => Some(PubGrubPriority::Root),
-            PubGrubPackageInner::Marker { name, .. } => self.package_priority.get(name).copied(),
-            PubGrubPackageInner::Extra { name, .. } => self.package_priority.get(name).copied(),
-            PubGrubPackageInner::Dev { name, .. } => self.package_priority.get(name).copied(),
+            PubGrubPackageInner::Marker { .. } => Some(PubGrubPriority::Proxy),
+            PubGrubPackageInner::Extra { .. } => Some(PubGrubPriority::Proxy),
+            PubGrubPackageInner::Dev { .. } => Some(PubGrubPriority::Proxy),
             PubGrubPackageInner::Package { name, .. } => self.package_priority.get(name).copied(),
         };
         let virtual_package_tiebreaker = self
@@ -137,10 +143,7 @@ impl PubGrubPriorities {
         };
         match self.package_priority.entry(name.clone()) {
             std::collections::hash_map::Entry::Occupied(mut entry) => {
-                if matches!(
-                    entry.get(),
-                    PubGrubPriority::ConflictEarly(_) | PubGrubPriority::Singleton(_)
-                ) {
+                if matches!(entry.get(), PubGrubPriority::ConflictEarly(_)) {
                     // Already in the right category
                     return false;
                 };
@@ -175,9 +178,7 @@ impl PubGrubPriorities {
                 // The ConflictEarly` match avoids infinite loops.
                 if matches!(
                     entry.get(),
-                    PubGrubPriority::ConflictLate(_)
-                        | PubGrubPriority::ConflictEarly(_)
-                        | PubGrubPriority::Singleton(_)
+                    PubGrubPriority::ConflictLate(_) | PubGrubPriority::ConflictEarly(_)
                 ) {
                     // Already in the right category
                     return false;
@@ -223,6 +224,13 @@ pub(crate) enum PubGrubPriority {
     /// distributions to URLs, see [`PubGrubPackage::from_package`] an
     /// [`ForkUrls`].
     DirectUrl(Reverse<usize>),
+
+    /// The package is a proxy package.
+    ///
+    /// We process proxy packages eagerly since each proxy package expands into two "regular"
+    /// [`PubGrubPackage`] packages, which gives us additional constraints while not affecting the
+    /// priorities (since the expanded dependencies are all linked to the same package name).
+    Proxy,
 
     /// The package is the root package.
     Root,

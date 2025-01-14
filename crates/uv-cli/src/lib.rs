@@ -35,6 +35,15 @@ pub enum VersionFormat {
     Json,
 }
 
+#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
+pub enum PythonListFormat {
+    /// Plain text (for humans).
+    #[default]
+    Text,
+    /// JSON (for computers).
+    Json,
+}
+
 #[derive(Debug, Default, Clone, clap::ValueEnum)]
 pub enum ListFormat {
     /// Display the list of packages in a human-readable table.
@@ -171,12 +180,13 @@ pub struct GlobalArgs {
     #[arg(global = true, long, hide = true, conflicts_with = "color")]
     pub no_color: bool,
 
-    /// Control colors in output.
+    /// Control the use of color in output.
+    ///
+    /// By default, uv will automatically detect support for colors when writing to a terminal.
     #[arg(
         global = true,
         long,
         value_enum,
-        default_value = "auto",
         conflicts_with = "no_color",
         value_name = "COLOR_CHOICE"
     )]
@@ -612,7 +622,8 @@ pub enum PipCommand {
     /// List, in tabular format, packages installed in an environment.
     #[command(
         after_help = "Use `uv help pip list` for more details.",
-        after_long_help = ""
+        after_long_help = "",
+        alias = "ls"
     )]
     List(PipListArgs),
     /// Show information about one or more installed packages.
@@ -1902,6 +1913,10 @@ pub struct PipFreezeArgs {
     )]
     pub python: Option<Maybe<String>>,
 
+    /// Restrict to the specified installation path for listing packages (can be used multiple times).
+    #[arg(long("path"), value_parser = parse_file_path)]
+    pub paths: Option<Vec<PathBuf>>,
+
     /// List packages in the system Python environment.
     ///
     /// Disables discovery of virtual environments.
@@ -1937,7 +1952,7 @@ pub struct PipListArgs {
     #[arg(long)]
     pub r#exclude: Vec<PackageName>,
 
-    /// Select the output format between: `columns` (default), `freeze`, or `json`.
+    /// Select the output format.
     #[arg(long, value_enum, default_value_t = ListFormat::default())]
     pub format: ListFormat,
 
@@ -3107,6 +3122,13 @@ pub struct LockArgs {
     #[arg(long, conflicts_with = "check_exists", conflicts_with = "check")]
     pub dry_run: bool,
 
+    /// Lock the specified Python script, rather than the current project.
+    ///
+    /// If provided, uv will lock the script (based on its inline metadata table, in adherence with
+    /// PEP 723) to a `.lock` file adjacent to the script itself.
+    #[arg(long)]
+    pub script: Option<PathBuf>,
+
     #[command(flatten)]
     pub resolver: ResolverArgs,
 
@@ -3248,7 +3270,12 @@ pub struct AddArgs {
     /// a new one will be created and added to the script. When executed via `uv run`,
     /// uv will create a temporary environment for the script with all inline
     /// dependencies installed.
-    #[arg(long, conflicts_with = "dev", conflicts_with = "optional")]
+    #[arg(
+        long,
+        conflicts_with = "dev",
+        conflicts_with = "optional",
+        conflicts_with = "package"
+    )]
     pub script: Option<PathBuf>,
 
     /// The Python interpreter to use for resolving and syncing.
@@ -3271,7 +3298,7 @@ pub struct AddArgs {
 pub struct RemoveArgs {
     /// The names of the dependencies to remove (e.g., `ruff`).
     #[arg(required = true)]
-    pub packages: Vec<PackageName>,
+    pub packages: Vec<Requirement<VerbatimParsedUrl>>,
 
     /// Remove the packages from the development dependency group.
     ///
@@ -3422,6 +3449,14 @@ pub struct TreeArgs {
 
     #[command(flatten)]
     pub resolver: ResolverArgs,
+
+    /// Show the dependency tree the specified PEP 723 Python script, rather than the current
+    /// project.
+    ///
+    /// If provided, uv will resolve the dependencies based on its inline metadata table, in
+    /// adherence with PEP 723.
+    #[arg(long)]
+    pub script: Option<PathBuf>,
 
     /// The Python version to use when filtering the tree.
     ///
@@ -3629,6 +3664,14 @@ pub struct ExportArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
+    /// Export the dependencies for the specified PEP 723 Python script, rather than the current
+    /// project.
+    ///
+    /// If provided, uv will resolve the dependencies based on its inline metadata table, in
+    /// adherence with PEP 723.
+    #[arg(long, conflicts_with_all = ["all_packages", "package", "no_emit_project", "no_emit_workspace"])]
+    pub script: Option<PathBuf>,
+
     /// The Python interpreter to use during resolution.
     ///
     /// A Python interpreter is required for building source distributions to
@@ -3716,6 +3759,7 @@ pub enum ToolCommand {
     #[command(alias = "update")]
     Upgrade(ToolUpgradeArgs),
     /// List installed tools.
+    #[command(alias = "ls")]
     List(ToolListArgs),
     /// Uninstall a tool.
     Uninstall(ToolUninstallArgs),
@@ -4195,6 +4239,7 @@ pub enum PythonCommand {
     /// Use `--all-versions` to view all available patch versions.
     ///
     /// Use `--only-installed` to omit available downloads.
+    #[command(alias = "ls")]
     List(PythonListArgs),
 
     /// Download and install Python versions.
@@ -4288,6 +4333,10 @@ pub struct PythonListArgs {
     /// By default, these display as `<download available>`.
     #[arg(long)]
     pub show_urls: bool,
+
+    /// Select the output format.
+    #[arg(long, value_enum, default_value_t = PythonListFormat::default())]
+    pub output_format: PythonListFormat,
 }
 
 #[derive(Args)]
@@ -4486,8 +4535,8 @@ pub struct GenerateShellCompletionArgs {
     pub quiet: bool,
     #[arg(long, short, action = clap::ArgAction::Count, conflicts_with = "quiet", hide = true)]
     pub verbose: u8,
-    #[arg(long, default_value = "auto", conflicts_with = "no_color", hide = true)]
-    pub color: ColorChoice,
+    #[arg(long, conflicts_with = "no_color", hide = true)]
+    pub color: Option<ColorChoice>,
     #[arg(long, hide = true)]
     pub native_tls: bool,
     #[arg(long, hide = true)]
@@ -4561,6 +4610,7 @@ pub struct IndexArgs {
         long,
         short,
         env = EnvVars::UV_FIND_LINKS,
+        value_delimiter = ',',
         value_parser = parse_find_links,
         help_heading = "Index options"
     )]

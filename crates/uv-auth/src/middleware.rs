@@ -741,7 +741,7 @@ mod tests {
         let mut netrc_file = NamedTempFile::new()?;
         writeln!(
             netrc_file,
-            r#"machine {} login {username} password {password}"#,
+            r"machine {} login {username} password {password}",
             base_url.host_str().unwrap()
         )?;
 
@@ -788,7 +788,7 @@ mod tests {
         let mut netrc_file = NamedTempFile::new()?;
         writeln!(
             netrc_file,
-            r#"machine example.com login {username} password {password}"#,
+            r"machine example.com login {username} password {password}",
         )?;
 
         let client = test_client_builder()
@@ -829,7 +829,7 @@ mod tests {
         let mut netrc_file = NamedTempFile::new()?;
         writeln!(
             netrc_file,
-            r#"machine {} login {username} password {password}"#,
+            r"machine {} login {username} password {password}",
             base_url.host_str().unwrap()
         )?;
 

@@ -73,6 +73,25 @@ static MAC_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'darwin'").unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
+static ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 =
+        MarkerTree::from_str("platform_machine == 'aarch64' or platform_machine == 'arm64'")
+            .unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 =
+        MarkerTree::from_str("platform_machine == 'x86_64' or platform_machine == 'amd64'")
+            .unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str(
+        "platform_machine == 'i686' or platform_machine == 'i386' or platform_machine == 'win32' or platform_machine == 'x86'",
+    )
+    .unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
 
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
@@ -265,18 +284,6 @@ impl Lock {
             .retain(|wheel| requires_python.matches_wheel_tag(&wheel.filename));
 
         // Filter by platform tags.
-
-        // See https://github.com/pypi/warehouse/blob/ccff64920db7965078cf1fdb50f028e640328887/warehouse/forklift/legacy.py#L100-L169
-        // for a list of relevant platforms.
-        let linux_tags = [
-            "manylinux1_",
-            "manylinux2010_",
-            "manylinux2014_",
-            "musllinux_",
-            "manylinux_",
-        ];
-        let windows_tags = ["win32", "win_arm64", "win_amd64", "win_ia64"];
-
         locked_dist.wheels.retain(|wheel| {
             // Naively, we'd check whether `platform_system == 'Linux'` is disjoint, or
             // `os_name == 'posix'` is disjoint, or `sys_platform == 'linux'` is disjoint (each on its
@@ -284,26 +291,69 @@ impl Lock {
             // `(A ∩ (B ∩ C) = ∅) => ((A ∩ B = ∅) or (A ∩ C = ∅))`
             // a single disjointness check with the intersection is sufficient, so we have one
             // constant per platform.
-            let platform_tags = &wheel.filename.platform_tag;
-            if platform_tags.iter().all(|tag| {
-                linux_tags.into_iter().any(|linux_tag| {
-                    // These two linux tags are allowed by warehouse.
-                    tag.starts_with(linux_tag) || tag == "linux_armv6l" || tag == "linux_armv7l"
-                })
-            }) {
-                !graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS)
-            } else if platform_tags
+            let platform_tags = wheel.filename.platform_tags();
+            if platform_tags
                 .iter()
-                .all(|tag| windows_tags.contains(&&**tag))
+                .all(uv_platform_tags::PlatformTag::is_linux)
             {
-                !graph.graph[node_index]
+                if graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags
+                .iter()
+                .all(uv_platform_tags::PlatformTag::is_windows)
+            {
+                // TODO(charlie): This omits `win_ia64`, which is accepted by Warehouse.
+                if graph.graph[node_index]
                     .marker()
                     .is_disjoint(*WINDOWS_MARKERS)
-            } else if platform_tags.iter().all(|tag| tag.starts_with("macosx_")) {
-                !graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS)
-            } else {
-                true
+                {
+                    return false;
+                }
             }
+
+            if platform_tags
+                .iter()
+                .all(uv_platform_tags::PlatformTag::is_macos)
+            {
+                if graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags
+                .iter()
+                .all(uv_platform_tags::PlatformTag::is_arm)
+            {
+                if graph.graph[node_index].marker().is_disjoint(*ARM_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags
+                .iter()
+                .all(uv_platform_tags::PlatformTag::is_x86_64)
+            {
+                if graph.graph[node_index]
+                    .marker()
+                    .is_disjoint(*X86_64_MARKERS)
+                {
+                    return false;
+                }
+            }
+
+            if platform_tags
+                .iter()
+                .all(uv_platform_tags::PlatformTag::is_x86)
+            {
+                if graph.graph[node_index].marker().is_disjoint(*X86_MARKERS) {
+                    return false;
+                }
+            }
+
+            true
         });
     }
 
@@ -953,7 +1003,7 @@ impl Lock {
                     .ok()
                     .flatten()
                     .map(|package| matches!(package.id.source, Source::Virtual(_)));
-                if actual.map_or(true, |actual| actual != expected) {
+                if actual != Some(expected) {
                     return Ok(SatisfiesResult::MismatchedSources(name.clone(), expected));
                 }
             }
@@ -973,7 +1023,7 @@ impl Lock {
                     .ok()
                     .flatten()
                     .map(|package| &package.id.version);
-                if actual.map_or(true, |actual| actual != expected) {
+                if actual != Some(expected) {
                     return Ok(SatisfiesResult::MismatchedVersion(
                         name.clone(),
                         expected.clone(),
@@ -1820,7 +1870,7 @@ impl Package {
                         });
                         let direct_dist = DirectUrlBuiltDist {
                             filename,
-                            location: url.clone(),
+                            location: Box::new(url.clone()),
                             url: VerbatimUrl::from_url(url),
                         };
                         let built_dist = BuiltDist::DirectUrl(direct_dist);
@@ -1985,7 +2035,7 @@ impl Package {
                 });
                 let direct_dist = DirectUrlSourceDist {
                     name: self.id.name.clone(),
-                    location,
+                    location: Box::new(location),
                     subdirectory: subdirectory.clone(),
                     ext,
                     url: VerbatimUrl::from_url(url),
@@ -2225,7 +2275,7 @@ impl Package {
             else {
                 continue;
             };
-            let build_tag = wheel.filename.build_tag.as_ref();
+            let build_tag = wheel.filename.build_tag();
             let wheel_priority = (tag_priority, build_tag);
             match best {
                 None => {

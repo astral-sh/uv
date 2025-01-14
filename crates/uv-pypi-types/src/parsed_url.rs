@@ -133,7 +133,7 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
         })
     }
 
-    fn with_given(self, given: impl Into<String>) -> Self {
+    fn with_given(self, given: impl AsRef<str>) -> Self {
         Self {
             verbatim: self.verbatim.with_given(given),
             ..self

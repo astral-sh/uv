@@ -2764,6 +2764,7 @@ fn init_app_build_backend_maturin() -> Result<()> {
             init, @r###"
         from foo._core import hello_from_bin
 
+
         def main() -> None:
             print(hello_from_bin())
         "###
@@ -2776,8 +2777,6 @@ fn init_app_build_backend_maturin() -> Result<()> {
     }, {
         assert_snapshot!(
             pyi_contents, @r###"
-        from __future__ import annotations
-
         def hello_from_bin() -> str: ...
         "###
         );
@@ -2894,6 +2893,7 @@ fn init_app_build_backend_scikit() -> Result<()> {
             init, @r###"
         from foo._core import hello_from_bin
 
+
         def main() -> None:
             print(hello_from_bin())
         "###
@@ -2906,8 +2906,6 @@ fn init_app_build_backend_scikit() -> Result<()> {
     }, {
         assert_snapshot!(
             pyi_contents, @r###"
-        from __future__ import annotations
-
         def hello_from_bin() -> str: ...
         "###
         );
@@ -3017,6 +3015,7 @@ fn init_lib_build_backend_maturin() -> Result<()> {
             init, @r###"
         from foo._core import hello_from_bin
 
+
         def hello() -> str:
             return hello_from_bin()
         "###
@@ -3029,8 +3028,6 @@ fn init_lib_build_backend_maturin() -> Result<()> {
     }, {
         assert_snapshot!(
             pyi_contents, @r###"
-        from __future__ import annotations
-
         def hello_from_bin() -> str: ...
         "###
         );
@@ -3144,6 +3141,7 @@ fn init_lib_build_backend_scikit() -> Result<()> {
             init, @r###"
         from foo._core import hello_from_bin
 
+
         def hello() -> str:
             return hello_from_bin()
         "###
@@ -3156,8 +3154,6 @@ fn init_lib_build_backend_scikit() -> Result<()> {
     }, {
         assert_snapshot!(
             pyi_contents, @r###"
-        from __future__ import annotations
-
         def hello_from_bin() -> str: ...
         "###
         );

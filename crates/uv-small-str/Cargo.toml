@@ -1,0 +1,22 @@
+[package]
+name = "uv-small-str"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+arcstr = { workspace = true }
+rkyv = { workspace = true }
+schemars = { workspace = true, optional = true }
+serde = { workspace = true }

@@ -82,11 +82,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
     /// Set the [`Reporter`] to use for the [`DistributionDatabase`].
     #[must_use]
-    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
-        let reporter = Arc::new(reporter);
+    pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
-            reporter: Some(reporter.clone()),
-            builder: self.builder.with_reporter(reporter),
+            builder: self.builder.with_reporter(reporter.clone()),
+            reporter: Some(reporter),
             ..self
         }
     }
@@ -405,22 +404,28 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
         }
 
-        // If hash generation is enabled, and the distribution isn't hosted on an index, get the
+        // If hash generation is enabled, and the distribution isn't hosted on a registry, get the
         // entire wheel to ensure that the hashes are included in the response. If the distribution
         // is hosted on an index, the hashes will be included in the simple metadata response.
         // For hash _validation_, callers are expected to enforce the policy when retrieving the
         // wheel.
+        //
+        // Historically, for `uv pip compile --universal`, we also generate hashes for
+        // registry-based distributions when the relevant registry doesn't provide them. This was
+        // motivated by `--find-links`. We continue that behavior (under `HashGeneration::All`) for
+        // backwards compatibility, but it's a little dubious, since we're only hashing _one_
+        // distribution here (as opposed to hashing all distributions for the version), and it may
+        // not even be a compatible distribution!
+        //
         // TODO(charlie): Request the hashes via a separate method, to reduce the coupling in this API.
-        if hashes.is_generate() {
-            if dist.file().map_or(true, |file| file.hashes.is_empty()) {
-                let wheel = self.get_wheel(dist, hashes).await?;
-                let metadata = wheel.metadata()?;
-                let hashes = wheel.hashes;
-                return Ok(ArchiveMetadata {
-                    metadata: Metadata::from_metadata23(metadata),
-                    hashes,
-                });
-            }
+        if hashes.is_generate(dist) {
+            let wheel = self.get_wheel(dist, hashes).await?;
+            let metadata = wheel.metadata()?;
+            let hashes = wheel.hashes;
+            return Ok(ArchiveMetadata {
+                metadata: Metadata::from_metadata23(metadata),
+                hashes,
+            });
         }
 
         let result = self

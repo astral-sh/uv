@@ -1,9 +1,9 @@
 use std::fmt::{Display, Formatter};
 
+use crate::resolver::{MetadataUnavailable, VersionFork};
 use uv_distribution_types::IncompatibleDist;
 use uv_pep440::{Version, VersionSpecifiers};
-
-use crate::resolver::{MetadataUnavailable, VersionFork};
+use uv_platform_tags::{AbiTag, Tags};
 
 /// The reason why a package or a version cannot be used.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -78,6 +78,23 @@ impl UnavailableVersion {
             UnavailableVersion::InvalidStructure => format!("have {self}"),
             UnavailableVersion::Offline => format!("need {self}"),
             UnavailableVersion::RequiresPython(..) => format!("require {self}"),
+        }
+    }
+
+    pub(crate) fn context_message(
+        &self,
+        tags: Option<&Tags>,
+        requires_python: Option<AbiTag>,
+    ) -> Option<String> {
+        match self {
+            UnavailableVersion::IncompatibleDist(invalid_dist) => {
+                invalid_dist.context_message(tags, requires_python)
+            }
+            UnavailableVersion::InvalidMetadata => None,
+            UnavailableVersion::InconsistentMetadata => None,
+            UnavailableVersion::InvalidStructure => None,
+            UnavailableVersion::Offline => None,
+            UnavailableVersion::RequiresPython(..) => None,
         }
     }
 }

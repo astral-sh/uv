@@ -1,3 +1,10 @@
+---
+title: Using uv with FastAPI
+description:
+  A guide to using uv with FastAPI to manage Python dependencies, run applications, and deploy with
+  Docker.
+---
+
 # Using uv with FastAPI
 
 [FastAPI](https://github.com/fastapi/fastapi) is a modern, high-performance Python web framework.

@@ -5870,6 +5870,7 @@ fn sync_build_tag() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + build-tag==1.0.0
     "###);

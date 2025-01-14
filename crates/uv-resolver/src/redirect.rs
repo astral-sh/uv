@@ -122,7 +122,7 @@ mod tests {
 
         // If there's a conflict after the `@`, discard the original representation.
         let verbatim = VerbatimUrl::parse_url("https://github.com/flask.git@main")?
-            .with_given("git+https://github.com/flask.git@${TAG}".to_string());
+            .with_given("git+https://github.com/flask.git@${TAG}");
         let redirect =
             Url::parse("https://github.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe")?;
 

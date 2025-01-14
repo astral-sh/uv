@@ -44,7 +44,7 @@ impl GitResolver {
         url: &GitUrl,
         client: ClientWithMiddleware,
         cache: PathBuf,
-        reporter: Option<impl Reporter + 'static>,
+        reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<GitSha, GitResolverError> {
         debug!("Resolving source distribution from Git: {url}");
 
@@ -88,7 +88,7 @@ impl GitResolver {
         url: &GitUrl,
         client: ClientWithMiddleware,
         cache: PathBuf,
-        reporter: Option<impl Reporter + 'static>,
+        reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Fetch, GitResolverError> {
         debug!("Fetching source distribution from Git: {url}");
 
@@ -138,7 +138,7 @@ impl GitResolver {
     /// For example, given a Git dependency with a reference to a branch or tag, return a URL
     /// with a precise reference to the current commit of that branch or tag.
     ///
-    /// This method takes into account various normalizations that are independent from the Git
+    /// This method takes into account various normalizations that are independent of the Git
     /// layer. For example: removing `#subdirectory=pkg_dir`-like fragments, and removing `git+`
     /// prefix kinds.
     ///

@@ -56,7 +56,8 @@ impl<'a> Planner<'a> {
         tags: &Tags,
     ) -> Result<Plan> {
         // Index all the already-downloaded wheels in the cache.
-        let mut registry_index = RegistryWheelIndex::new(cache, tags, index_locations, hasher);
+        let mut registry_index =
+            RegistryWheelIndex::new(cache, tags, index_locations, hasher, config_settings);
         let built_index = BuiltWheelIndex::new(cache, tags, hasher, config_settings);
 
         let mut cached = vec![];
@@ -66,11 +67,7 @@ impl<'a> Planner<'a> {
 
         for dist in self.resolution.distributions() {
             // Check if the package should be reinstalled.
-            let reinstall = match reinstall {
-                Reinstall::None => false,
-                Reinstall::All => true,
-                Reinstall::Packages(packages) => packages.contains(dist.name()),
-            };
+            let reinstall = reinstall.contains(dist.name());
 
             // Check if installation of a binary version of the package should be allowed.
             let no_binary = build_options.no_binary_package(dist.name());
@@ -252,7 +249,7 @@ impl<'a> Planner<'a> {
                         }
                         Some(&entry.dist)
                     }) {
-                        debug!("Requirement already cached: {distribution}");
+                        debug!("Registry requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));
                         continue;
                     }
@@ -355,12 +352,7 @@ impl<'a> Planner<'a> {
             // (2) the `--seed` argument was not passed to `uv venv`.
             let seed_packages = !venv.cfg().is_ok_and(|cfg| cfg.is_uv() && !cfg.is_seed());
             for dist_info in site_packages {
-                if seed_packages
-                    && matches!(
-                        dist_info.name().as_ref(),
-                        "pip" | "setuptools" | "wheel" | "uv"
-                    )
-                {
+                if seed_packages && is_seed_package(&dist_info, venv) {
                     debug!("Preserving seed package: {dist_info}");
                     continue;
                 }
@@ -376,6 +368,19 @@ impl<'a> Planner<'a> {
             reinstalls,
             extraneous,
         })
+    }
+}
+
+/// Returns `true` if the given distribution is a seed package.
+fn is_seed_package(dist_info: &InstalledDist, venv: &PythonEnvironment) -> bool {
+    if venv.interpreter().python_tuple() >= (3, 12) {
+        matches!(dist_info.name().as_ref(), "uv" | "pip")
+    } else {
+        // Include `setuptools` and `wheel` on Python <3.12.
+        matches!(
+            dist_info.name().as_ref(),
+            "pip" | "setuptools" | "wheel" | "uv"
+        )
     }
 }
 

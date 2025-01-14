@@ -6859,10 +6859,10 @@ dependencies = [
 
     // Write to a requirements file.
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str(&indoc::formatdoc! {r#"
+    requirements_in.write_str(&indoc::formatdoc! {r"
         -e {}
         -e {}
-    "#,
+    ",
         editable_dir1.path().display(),
         editable_dir2.path().display()
     })?;
@@ -7629,9 +7629,9 @@ fn universal_transitive_disjoint_locals() -> Result<()> {
         #   -r requirements.in
         #   torchvision
         #   triton
-    torchvision==0.15.1 ; platform_machine != 'x86_64' or sys_platform == 'darwin' or sys_platform == 'win32'
+    torchvision==0.15.1 ; platform_machine != 'x86_64' or sys_platform == 'darwin'
         # via -r requirements.in
-    torchvision==0.15.1+rocm5.4.2 ; platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'win32'
+    torchvision==0.15.1+rocm5.4.2 ; platform_machine == 'x86_64' and sys_platform != 'darwin'
         # via -r requirements.in
     triton==2.0.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'
         # via torch
@@ -8010,7 +8010,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         # via sympy
     networkx==3.2.1
         # via torch
-    pytorch-triton-rocm==2.3.0 ; (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    pytorch-triton-rocm==2.3.0 ; (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux')
         # via torch
     sympy==1.12
         # via torch
@@ -8021,9 +8021,9 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         #   -r requirements.in
         #   example
         #   triton
-    torch==2.3.0 ; (implementation_name != 'cpython' and platform_machine == 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform == 'darwin') or (implementation_name != 'cpython' and sys_platform == 'win32')
+    torch==2.3.0 ; (implementation_name != 'cpython' and platform_machine == 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform == 'darwin')
         # via -r requirements.in
-    torch==2.3.0+rocm6.0 ; (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    torch==2.3.0+rocm6.0 ; (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux')
         # via -r requirements.in
     triton==2.0.0 ; implementation_name == 'cpython' and platform_machine == 'x86_64' and sys_platform == 'linux'
         # via torch
@@ -8174,7 +8174,7 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
         # via sympy
     networkx==3.2.1
         # via torch
-    pytorch-triton-rocm==2.3.0 ; (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    pytorch-triton-rocm==2.3.0 ; (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux')
         # via torch
     sympy==1.12
         # via torch
@@ -8189,9 +8189,9 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
         #   -r requirements.in
         #   example
         #   triton
-    torch==2.3.0 ; (os_name != 'Linux' and platform_machine == 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform == 'darwin') or (os_name != 'Linux' and sys_platform == 'win32')
+    torch==2.3.0 ; (os_name != 'Linux' and platform_machine == 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform == 'darwin')
         # via -r requirements.in
-    torch==2.3.0+rocm6.0 ; (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    torch==2.3.0+rocm6.0 ; (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux')
         # via -r requirements.in
     triton==2.0.0 ; implementation_name == 'cpython' and os_name == 'Linux' and platform_machine == 'x86_64' and sys_platform == 'linux'
         # via torch
@@ -11818,7 +11818,7 @@ requires-python = ">3.8"
 /// If the package exists on the "extra" index, but at an incompatible version, the resolution
 /// should fail by default (even though a compatible version exists on the "primary" index).
 #[test]
-fn compile_index_url_first_match() -> Result<()> {
+fn compile_index_url_first_match_base() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -11838,6 +11838,40 @@ fn compile_index_url_first_match() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there is no version of jinja2==3.1.0 and you require jinja2==3.1.0, we can conclude that your requirements are unsatisfiable.
+
+          hint: `jinja2` was found on https://download.pytorch.org/whl/cpu, but not at the requested version (jinja2==3.1.0). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Install a package via `--extra-index-url`.
+///
+/// If the package exists on the "extra" index, but at an incompatible version, the resolution
+/// should fail by default (even though a compatible version exists on the "primary" index).
+#[test]
+fn compile_index_url_first_match_marker() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("jinja2==3.1.0 ; sys_platform == 'linux'")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--universal")
+        .arg("--index-url")
+        .arg("https://pypi.org/simple")
+        .arg("--extra-index-url")
+        .arg("https://download.pytorch.org/whl/cpu")
+        .arg("requirements.in")
+        .arg("--no-deps"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of jinja2{sys_platform == 'linux'}==3.1.0 and you require jinja2{sys_platform == 'linux'}==3.1.0, we can conclude that your requirements are unsatisfiable.
 
           hint: `jinja2` was found on https://download.pytorch.org/whl/cpu, but not at the requested version (jinja2==3.1.0). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
     "###
@@ -13270,7 +13304,9 @@ exceptiongroup==1.0.0rc8
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in -c constraints.txt --universal -p 3.10
     alembic==1.8.1
         # via -r requirements.in
-    astroid==2.13.5
+    astroid==2.13.5 ; python_full_version >= '3.11'
+        # via pylint
+    astroid==3.1.0 ; python_full_version < '3.11'
         # via pylint
     asttokens==2.4.1
         # via stack-data
@@ -13298,7 +13334,7 @@ exceptiongroup==1.0.0rc8
         # via pylint
     jedi==0.19.1
         # via ipython
-    lazy-object-proxy==1.10.0
+    lazy-object-proxy==1.10.0 ; python_full_version >= '3.11'
         # via astroid
     mako==1.3.2
         # via alembic
@@ -13322,7 +13358,9 @@ exceptiongroup==1.0.0rc8
         # via stack-data
     pygments==2.17.2
         # via ipython
-    pylint==2.15.8
+    pylint==2.15.8 ; python_full_version >= '3.11'
+        # via -r requirements.in
+    pylint==3.1.0 ; python_full_version < '3.11'
         # via -r requirements.in
     six==1.16.0
         # via asttokens
@@ -13344,11 +13382,11 @@ exceptiongroup==1.0.0rc8
         #   sqlalchemy
     wcwidth==0.2.13
         # via prompt-toolkit
-    wrapt==1.16.0
+    wrapt==1.16.0 ; python_full_version >= '3.11'
         # via astroid
 
     ----- stderr -----
-    Resolved 34 packages in [TIME]
+    Resolved 36 packages in [TIME]
     "###);
 
     Ok(())
@@ -13622,9 +13660,9 @@ fn unsupported_requires_python_dynamic_metadata() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies for split (python_full_version >= '3.10'):
-      ╰─▶ Because source-distribution{python_full_version >= '3.10'}==0.0.3 requires Python >=3.10 and you require source-distribution{python_full_version >= '3.10'}==0.0.3, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because source-distribution==0.0.3 requires Python >=3.10 and you require source-distribution{python_full_version >= '3.10'}==0.0.3, we can conclude that your requirements are unsatisfiable.
 
-          hint: The source distribution for `source-distribution{python_full_version >= '3.10'}` (v0.0.3) does not include static metadata. Generating metadata for this package requires Python >=3.10, but Python 3.8.[X] is installed.
+          hint: The source distribution for `source-distribution` (v0.0.3) does not include static metadata. Generating metadata for this package requires Python >=3.10, but Python 3.8.[X] is installed.
     "###);
 
     Ok(())
@@ -13940,25 +13978,12 @@ fn invalid_platform() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of open3d are available:
-              open3d==0.8.0.0
-              open3d==0.9.0.0
-              open3d==0.10.0.0
-              open3d==0.10.0.1
-              open3d==0.11.0
-              open3d==0.11.1
-              open3d==0.11.2
-              open3d==0.12.0
-              open3d==0.13.0
-              open3d==0.14.1
-              open3d==0.15.1
-              open3d==0.15.2
-              open3d==0.16.0
-              open3d==0.16.1
-              open3d==0.17.0
-              open3d==0.18.0
-          and open3d<=0.15.2 has no wheels with a matching Python ABI tag, we can conclude that open3d<=0.15.2 cannot be used.
-          And because open3d>=0.16.0 has no wheels with a matching platform tag and you require open3d, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only open3d<=0.18.0 is available and open3d<=0.15.2 has no wheels with a matching Python ABI tag (e.g., `cp310`), we can conclude that open3d<=0.15.2 cannot be used.
+          And because open3d>=0.16.0,<=0.18.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`) and you require open3d, we can conclude that your requirements are unsatisfiable.
+
+          hint: Wheels are available for `open3d` (v0.15.2) with the following ABI tags: `cp36m`, `cp37m`, `cp38`, `cp39`
+
+          hint: Wheels are available for `open3d` (v0.18.0) on the following platforms: `manylinux_2_27_aarch64`, `manylinux_2_27_x86_64`, `macosx_11_0_x86_64`, `macosx_13_0_arm64`, `win_amd64`
     "###);
 
     Ok(())

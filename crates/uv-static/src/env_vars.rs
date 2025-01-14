@@ -575,4 +575,7 @@ impl EnvVars {
 
     /// Skip writing `uv` installer metadata files (e.g., `INSTALLER`, `REQUESTED`, and `direct_url.json`) to site-packages `.dist-info` directories.
     pub const UV_NO_INSTALLER_METADATA: &'static str = "UV_NO_INSTALLER_METADATA";
+
+    /// Enables fetching files stored in Git LFS when installing a package from a Git repository.
+    pub const UV_GIT_LFS: &'static str = "UV_GIT_LFS";
 }
