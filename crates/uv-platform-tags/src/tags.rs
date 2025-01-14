@@ -10,7 +10,6 @@ use uv_small_str::SmallString;
 
 use crate::{AbiTag, Arch, LanguageTag, Os, Platform, PlatformError, PlatformTag};
 
-
 #[derive(Debug, thiserror::Error)]
 pub enum TagsError {
     #[error(transparent)]
