@@ -72,8 +72,8 @@ pub enum PlatformTag {
 }
 
 impl PlatformTag {
-    /// Returns `true` if the platform is manylinux-compatible.
-    pub fn is_manylinux_compatible(&self) -> bool {
+    /// Returns `true` if the platform is manylinux-only.
+    pub fn is_manylinux(&self) -> bool {
         matches!(
             self,
             Self::Manylinux { .. }
@@ -83,8 +83,8 @@ impl PlatformTag {
         )
     }
 
-    /// Returns `true` if the platform is Linux-compatible.
-    pub fn is_linux_compatible(&self) -> bool {
+    /// Returns `true` if the platform is Linux-only.
+    pub fn is_linux(&self) -> bool {
         matches!(
             self,
             Self::Manylinux { .. }
@@ -96,14 +96,105 @@ impl PlatformTag {
         )
     }
 
-    /// Returns `true` if the platform is macOS-compatible.
-    pub fn is_macos_compatible(&self) -> bool {
+    /// Returns `true` if the platform is macOS-only.
+    pub fn is_macos(&self) -> bool {
         matches!(self, Self::Macos { .. })
     }
 
-    /// Returns `true` if the platform is Windows-compatible.
-    pub fn is_windows_compatible(&self) -> bool {
+    /// Returns `true` if the platform is Windows-only.
+    pub fn is_windows(&self) -> bool {
         matches!(self, Self::Win32 | Self::WinAmd64 | Self::WinArm64)
+    }
+
+    /// Returns `true` if the tag is only applicable on ARM platforms.
+    pub fn is_arm(&self) -> bool {
+        matches!(
+            self,
+            Self::Manylinux {
+                arch: Arch::Aarch64,
+                ..
+            } | Self::Manylinux1 {
+                arch: Arch::Aarch64,
+                ..
+            } | Self::Manylinux2010 {
+                arch: Arch::Aarch64,
+                ..
+            } | Self::Manylinux2014 {
+                arch: Arch::Aarch64,
+                ..
+            } | Self::Linux {
+                arch: Arch::Aarch64,
+                ..
+            } | Self::Musllinux {
+                arch: Arch::Aarch64,
+                ..
+            } | Self::Macos {
+                binary_format: BinaryFormat::Arm64,
+                ..
+            } | Self::WinArm64
+                | Self::Android {
+                    arch: Arch::Aarch64,
+                    ..
+                }
+        )
+    }
+
+    /// Returns `true` if the tag is only applicable on `x86_64` platforms.
+    pub fn is_x86_64(&self) -> bool {
+        matches!(
+            self,
+            Self::Manylinux {
+                arch: Arch::X86_64,
+                ..
+            } | Self::Manylinux1 {
+                arch: Arch::X86_64,
+                ..
+            } | Self::Manylinux2010 {
+                arch: Arch::X86_64,
+                ..
+            } | Self::Manylinux2014 {
+                arch: Arch::X86_64,
+                ..
+            } | Self::Linux {
+                arch: Arch::X86_64,
+                ..
+            } | Self::Musllinux {
+                arch: Arch::X86_64,
+                ..
+            } | Self::Macos {
+                binary_format: BinaryFormat::X86_64,
+                ..
+            } | Self::WinAmd64
+        )
+    }
+
+    /// Returns `true` if the tag is only applicable on x86 platforms.
+    pub fn is_x86(&self) -> bool {
+        matches!(
+            self,
+            Self::Manylinux {
+                arch: Arch::X86,
+                ..
+            } | Self::Manylinux1 {
+                arch: Arch::X86,
+                ..
+            } | Self::Manylinux2010 {
+                arch: Arch::X86,
+                ..
+            } | Self::Manylinux2014 {
+                arch: Arch::X86,
+                ..
+            } | Self::Linux {
+                arch: Arch::X86,
+                ..
+            } | Self::Musllinux {
+                arch: Arch::X86,
+                ..
+            } | Self::Macos {
+                binary_format: BinaryFormat::I386,
+                ..
+            } | Self::Win32
+        )
     }
 }
 

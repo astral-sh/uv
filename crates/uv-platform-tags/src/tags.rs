@@ -123,7 +123,7 @@ impl Tags {
         let platform_tags = {
             let mut platform_tags = compatible_tags(platform)?;
             if matches!(platform.os(), Os::Manylinux { .. }) && !manylinux_compatible {
-                platform_tags.retain(|tag| !tag.is_manylinux_compatible());
+                platform_tags.retain(|tag| !tag.is_manylinux());
             }
             platform_tags
         };
