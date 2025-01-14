@@ -1,12 +1,18 @@
 use std::fmt::Formatter;
 use std::str::FromStr;
 
+use uv_small_str::SmallString;
+
 use crate::{Arch, BinaryFormat};
 
 /// A tag to represent the platform compatibility of a Python distribution.
 ///
 /// This is the third segment in the wheel filename, following the language and ABI tags. For
 /// example, in `cp39-none-manylinux_2_24_x86_64.whl`, the platform tag is `manylinux_2_24_x86_64`.
+///
+/// For simplicity (and to reduce struct size), the non-Linux, macOS, and Windows variants (like
+/// FreeBSD) store an opaque suffix, which combines the release (like `3.14`) and architecture (like
+/// `x86_64`) into a single string (like `3_14_x86_64`).
 #[derive(
     Debug,
     Clone,
@@ -50,19 +56,19 @@ pub enum PlatformTag {
     /// Ex) `android_21_x86_64`
     Android { api_level: u16, arch: Arch },
     /// Ex) `freebsd_12_x86_64`
-    FreeBsd { release: String, arch: Arch },
+    FreeBsd { release_arch: SmallString },
     /// Ex) `netbsd_9_x86_64`
-    NetBsd { release: String, arch: Arch },
+    NetBsd { release_arch: SmallString },
     /// Ex) `openbsd_6_x86_64`
-    OpenBsd { release: String, arch: Arch },
+    OpenBsd { release_arch: SmallString },
     /// Ex) `dragonfly_6_x86_64`
-    Dragonfly { release: String, arch: Arch },
+    Dragonfly { release_arch: SmallString },
     /// Ex) `haiku_1_x86_64`
-    Haiku { release: String, arch: Arch },
+    Haiku { release_arch: SmallString },
     /// Ex) `illumos_5_11_x86_64`
-    Illumos { release: String, arch: String },
+    Illumos { release_arch: SmallString },
     /// Ex) `solaris_11_4_x86_64`
-    Solaris { release: String, arch: String },
+    Solaris { release_arch: SmallString },
 }
 
 impl PlatformTag {
@@ -124,13 +130,13 @@ impl std::fmt::Display for PlatformTag {
             Self::WinAmd64 => write!(f, "win_amd64"),
             Self::WinArm64 => write!(f, "win_arm64"),
             Self::Android { api_level, arch } => write!(f, "android_{api_level}_{arch}"),
-            Self::FreeBsd { release, arch } => write!(f, "freebsd_{release}_{arch}"),
-            Self::NetBsd { release, arch } => write!(f, "netbsd_{release}_{arch}"),
-            Self::OpenBsd { release, arch } => write!(f, "openbsd_{release}_{arch}"),
-            Self::Dragonfly { release, arch } => write!(f, "dragonfly_{release}_{arch}"),
-            Self::Haiku { release, arch } => write!(f, "haiku_{release}_{arch}"),
-            Self::Illumos { release, arch } => write!(f, "illumos_{release}_{arch}"),
-            Self::Solaris { release, arch } => write!(f, "solaris_{release}_{arch}_64bit"),
+            Self::FreeBsd { release_arch } => write!(f, "freebsd_{release_arch}"),
+            Self::NetBsd { release_arch } => write!(f, "netbsd_{release_arch}"),
+            Self::OpenBsd { release_arch } => write!(f, "openbsd_{release_arch}"),
+            Self::Dragonfly { release_arch } => write!(f, "dragonfly_{release_arch}"),
+            Self::Haiku { release_arch } => write!(f, "haiku_{release_arch}"),
+            Self::Illumos { release_arch } => write!(f, "illumos_{release_arch}"),
+            Self::Solaris { release_arch } => write!(f, "solaris_{release_arch}_64bit"),
         }
     }
 }
@@ -386,20 +392,8 @@ impl FromStr for PlatformTag {
                 });
             }
 
-            // Try each known Arch value as a potential suffix
-            for arch in Arch::iter() {
-                if let Some(release) = rest.strip_suffix(arch.name()) {
-                    // Remove trailing underscore from release
-                    let release = release.strip_suffix('_').unwrap_or(release).to_string();
-                    if !release.is_empty() {
-                        return Ok(Self::FreeBsd { release, arch });
-                    }
-                }
-            }
-
-            return Err(ParsePlatformTagError::InvalidArch {
-                platform: "freebsd",
-                tag: s.to_string(),
+            return Ok(Self::FreeBsd {
+                release_arch: SmallString::from(rest),
             });
         }
 
@@ -412,20 +406,8 @@ impl FromStr for PlatformTag {
                 });
             }
 
-            // Try each known Arch value as a potential suffix
-            for arch in Arch::iter() {
-                if let Some(release) = rest.strip_suffix(arch.name()) {
-                    // Remove trailing underscore from release
-                    let release = release.strip_suffix('_').unwrap_or(release).to_string();
-                    if !release.is_empty() {
-                        return Ok(Self::NetBsd { release, arch });
-                    }
-                }
-            }
-
-            return Err(ParsePlatformTagError::InvalidArch {
-                platform: "netbsd",
-                tag: s.to_string(),
+            return Ok(Self::NetBsd {
+                release_arch: SmallString::from(rest),
             });
         }
 
@@ -438,20 +420,8 @@ impl FromStr for PlatformTag {
                 });
             }
 
-            // Try each known Arch value as a potential suffix
-            for arch in Arch::iter() {
-                if let Some(release) = rest.strip_suffix(arch.name()) {
-                    // Remove trailing underscore from release
-                    let release = release.strip_suffix('_').unwrap_or(release).to_string();
-                    if !release.is_empty() {
-                        return Ok(Self::OpenBsd { release, arch });
-                    }
-                }
-            }
-
-            return Err(ParsePlatformTagError::InvalidArch {
-                platform: "openbsd",
-                tag: s.to_string(),
+            return Ok(Self::OpenBsd {
+                release_arch: SmallString::from(rest),
             });
         }
 
@@ -464,20 +434,8 @@ impl FromStr for PlatformTag {
                 });
             }
 
-            // Try each known Arch value as a potential suffix
-            for arch in Arch::iter() {
-                if let Some(release) = rest.strip_suffix(arch.name()) {
-                    // Remove trailing underscore from release
-                    let release = release.strip_suffix('_').unwrap_or(release).to_string();
-                    if !release.is_empty() {
-                        return Ok(Self::Dragonfly { release, arch });
-                    }
-                }
-            }
-
-            return Err(ParsePlatformTagError::InvalidArch {
-                platform: "dragonfly",
-                tag: s.to_string(),
+            return Ok(Self::Dragonfly {
+                release_arch: SmallString::from(rest),
             });
         }
 
@@ -490,20 +448,8 @@ impl FromStr for PlatformTag {
                 });
             }
 
-            // Try each known Arch value as a potential suffix
-            for arch in Arch::iter() {
-                if let Some(release) = rest.strip_suffix(arch.name()) {
-                    // Remove trailing underscore from release
-                    let release = release.strip_suffix('_').unwrap_or(release).to_string();
-                    if !release.is_empty() {
-                        return Ok(Self::Haiku { release, arch });
-                    }
-                }
-            }
-
-            return Err(ParsePlatformTagError::InvalidArch {
-                platform: "haiku",
-                tag: s.to_string(),
+            return Ok(Self::Haiku {
+                release_arch: SmallString::from(rest),
             });
         }
 
@@ -516,23 +462,8 @@ impl FromStr for PlatformTag {
                 });
             }
 
-            // Try each known Arch value as a potential suffix
-            for arch in Arch::iter() {
-                if let Some(release) = rest.strip_suffix(arch.name()) {
-                    // Remove trailing underscore from release
-                    let release = release.strip_suffix('_').unwrap_or(release).to_string();
-                    if !release.is_empty() {
-                        return Ok(Self::Illumos {
-                            release,
-                            arch: arch.name().to_string(),
-                        });
-                    }
-                }
-            }
-
-            return Err(ParsePlatformTagError::InvalidArch {
-                platform: "illumos",
-                tag: s.to_string(),
+            return Ok(Self::Illumos {
+                release_arch: SmallString::from(rest),
             });
         }
 
@@ -545,19 +476,11 @@ impl FromStr for PlatformTag {
                 });
             }
 
-            // Try each known Arch value as a potential suffix
-            for arch in Arch::iter() {
-                if let Some(rest) = rest.strip_suffix("_64bit") {
-                    if let Some(rest) = rest.strip_suffix(&format!("_{}", arch.name())) {
-                        // Remove trailing underscore from release
-                        let release = rest.strip_suffix('_').unwrap_or(rest).to_string();
-                        if !release.is_empty() {
-                            return Ok(Self::Solaris {
-                                release,
-                                arch: arch.name().to_string(),
-                            });
-                        }
-                    }
+            if let Some(release_arch) = rest.strip_suffix("_64bit") {
+                if !release_arch.is_empty() {
+                    return Ok(Self::Solaris {
+                        release_arch: SmallString::from(release_arch),
+                    });
                 }
             }
 
@@ -810,50 +733,31 @@ mod tests {
     #[test]
     fn freebsd_platform() {
         let tag = PlatformTag::FreeBsd {
-            release: "13_14".to_string(),
-            arch: Arch::X86_64,
+            release_arch: "13_14_x86_64".into(),
         };
         assert_eq!(
             PlatformTag::from_str("freebsd_13_14_x86_64").as_ref(),
             Ok(&tag)
         );
         assert_eq!(tag.to_string(), "freebsd_13_14_x86_64");
-
-        assert_eq!(
-            PlatformTag::from_str("freebsd_13_14"),
-            Err(ParsePlatformTagError::InvalidArch {
-                platform: "freebsd",
-                tag: "freebsd_13_14".to_string()
-            })
-        );
     }
 
     #[test]
     fn illumos_platform() {
         let tag = PlatformTag::Illumos {
-            release: "5_11".to_string(),
-            arch: "x86_64".to_string(),
+            release_arch: "5_11_x86_64".into(),
         };
         assert_eq!(
             PlatformTag::from_str("illumos_5_11_x86_64").as_ref(),
             Ok(&tag)
         );
         assert_eq!(tag.to_string(), "illumos_5_11_x86_64");
-
-        assert_eq!(
-            PlatformTag::from_str("illumos_5_11"),
-            Err(ParsePlatformTagError::InvalidArch {
-                platform: "illumos",
-                tag: "illumos_5_11".to_string()
-            })
-        );
     }
 
     #[test]
     fn solaris_platform() {
         let tag = PlatformTag::Solaris {
-            release: "11_4".to_string(),
-            arch: "x86_64".to_string(),
+            release_arch: "11_4_x86_64".into(),
         };
         assert_eq!(
             PlatformTag::from_str("solaris_11_4_x86_64_64bit").as_ref(),

@@ -92,3 +92,13 @@ impl Display for DistFilename {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::WheelFilename;
+
+    #[test]
+    fn wheel_filename_size() {
+        assert_eq!(size_of::<WheelFilename>(), 128);
+    }
+}
