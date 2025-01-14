@@ -265,18 +265,6 @@ impl Lock {
             .retain(|wheel| requires_python.matches_wheel_tag(&wheel.filename));
 
         // Filter by platform tags.
-
-        // See https://github.com/pypi/warehouse/blob/ccff64920db7965078cf1fdb50f028e640328887/warehouse/forklift/legacy.py#L100-L169
-        // for a list of relevant platforms.
-        let linux_tags = [
-            "manylinux1_",
-            "manylinux2010_",
-            "manylinux2014_",
-            "musllinux_",
-            "manylinux_",
-        ];
-        let windows_tags = ["win32", "win_arm64", "win_amd64", "win_ia64"];
-
         locked_dist.wheels.retain(|wheel| {
             // Naively, we'd check whether `platform_system == 'Linux'` is disjoint, or
             // `os_name == 'posix'` is disjoint, or `sys_platform == 'linux'` is disjoint (each on its
@@ -285,21 +273,23 @@ impl Lock {
             // a single disjointness check with the intersection is sufficient, so we have one
             // constant per platform.
             let platform_tags = &wheel.filename.platform_tag;
-            if platform_tags.iter().all(|tag| {
-                linux_tags.into_iter().any(|linux_tag| {
-                    // These two linux tags are allowed by warehouse.
-                    tag.starts_with(linux_tag) || tag == "linux_armv6l" || tag == "linux_armv7l"
-                })
-            }) {
+            if platform_tags
+                .iter()
+                .all(uv_platform_tags::PlatformTag::is_linux_compatible)
+            {
                 !graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS)
             } else if platform_tags
                 .iter()
-                .all(|tag| windows_tags.contains(&&**tag))
+                .all(uv_platform_tags::PlatformTag::is_windows_compatible)
             {
+                // TODO(charlie): This omits `win_ia64`, which is accepted by Warehouse.
                 !graph.graph[node_index]
                     .marker()
                     .is_disjoint(*WINDOWS_MARKERS)
-            } else if platform_tags.iter().all(|tag| tag.starts_with("macosx_")) {
+            } else if platform_tags
+                .iter()
+                .all(uv_platform_tags::PlatformTag::is_macos_compatible)
+            {
                 !graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS)
             } else {
                 true

@@ -2599,7 +2599,7 @@ fn sync_editable_and_local() -> Result<()> {
 #[test]
 fn incompatible_wheel() -> Result<()> {
     let context = TestContext::new("3.12");
-    let wheel = context.temp_dir.child("foo-1.2.3-not-compatible-wheel.whl");
+    let wheel = context.temp_dir.child("foo-1.2.3-py3-none-any.whl");
     wheel.touch()?;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");

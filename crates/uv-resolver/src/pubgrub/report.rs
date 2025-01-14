@@ -1,26 +1,13 @@
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, BTreeSet};
+use std::ops::Bound;
+
 use indexmap::IndexSet;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Term};
 use rustc_hash::FxHashMap;
-use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet};
-use std::ops::Bound;
-use std::str::FromStr;
 
-use super::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
-use crate::candidate_selector::CandidateSelector;
-use crate::error::ErrorTree;
-use crate::fork_indexes::ForkIndexes;
-use crate::fork_urls::ForkUrls;
-use crate::prerelease::AllowPrerelease;
-use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
-use crate::resolver::{
-    MetadataUnavailable, UnavailablePackage, UnavailableReason, UnavailableVersion,
-};
-use crate::{
-    Flexibility, InMemoryIndex, Options, RequiresPython, ResolverEnvironment, VersionsResponse,
-};
 use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
 use uv_distribution_types::{
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, Index, IndexCapabilities,
@@ -28,7 +15,21 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, Tags};
+use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, Tags};
+
+use crate::candidate_selector::CandidateSelector;
+use crate::error::ErrorTree;
+use crate::fork_indexes::ForkIndexes;
+use crate::fork_urls::ForkUrls;
+use crate::prerelease::AllowPrerelease;
+use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
+use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
+use crate::resolver::{
+    MetadataUnavailable, UnavailablePackage, UnavailableReason, UnavailableVersion,
+};
+use crate::{
+    Flexibility, InMemoryIndex, Options, RequiresPython, ResolverEnvironment, VersionsResponse,
+};
 
 #[derive(Debug)]
 pub(crate) struct PubGrubReportFormatter<'a> {
@@ -755,11 +756,7 @@ impl PubGrubReportFormatter<'_> {
             IncompatibleTag::Invalid => None,
             IncompatibleTag::Python => {
                 // Return all available language tags.
-                let tags = prioritized
-                    .python_tags()
-                    .into_iter()
-                    .filter_map(|tag| LanguageTag::from_str(tag).ok())
-                    .collect::<BTreeSet<_>>();
+                let tags = prioritized.python_tags();
                 if tags.is_empty() {
                     None
                 } else {
@@ -774,7 +771,6 @@ impl PubGrubReportFormatter<'_> {
                 let tags = prioritized
                     .abi_tags()
                     .into_iter()
-                    .filter_map(|tag| AbiTag::from_str(tag).ok())
                     // Ignore `none`, which is universally compatible.
                     //
                     // As an example, `none` can appear here if we're solving for Python 3.13, and
@@ -809,7 +805,7 @@ impl PubGrubReportFormatter<'_> {
                 let tags = prioritized
                     .platform_tags(self.tags?)
                     .into_iter()
-                    .map(ToString::to_string)
+                    .cloned()
                     .collect::<Vec<_>>();
                 if tags.is_empty() {
                     None
@@ -1146,7 +1142,7 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         version: Version,
         // excluded from `PartialEq` and `Hash`
-        tags: Vec<String>,
+        tags: Vec<PlatformTag>,
     },
 }
 

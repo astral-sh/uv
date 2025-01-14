@@ -256,6 +256,10 @@ impl From<&uv_platform_tags::Arch> for Arch {
                 family: target_lexicon::Architecture::S390x,
                 variant: None,
             },
+            uv_platform_tags::Arch::Powerpc => Self {
+                family: target_lexicon::Architecture::Powerpc,
+                variant: None,
+            },
             uv_platform_tags::Arch::Powerpc64 => Self {
                 family: target_lexicon::Architecture::Powerpc64,
                 variant: None,

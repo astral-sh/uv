@@ -1,8 +1,10 @@
+use std::str::FromStr;
+
 use uv_bench::criterion::{
     criterion_group, criterion_main, measurement::WallTime, BenchmarkId, Criterion, Throughput,
 };
 use uv_distribution_filename::WheelFilename;
-use uv_platform_tags::Tags;
+use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag, Tags};
 
 /// A set of platform tags extracted from burntsushi's Archlinux workstation.
 /// We could just re-create these via `Tags::from_env`, but those might differ
@@ -73,9 +75,15 @@ const INVALID_WHEEL_NAMES: &[(&str, &str)] = &[
 /// extra processing. We thus expect construction to become slower, but we
 /// write a benchmark to ensure it is still "reasonable."
 fn benchmark_build_platform_tags(c: &mut Criterion<WallTime>) {
-    let tags: Vec<(String, String, String)> = PLATFORM_TAGS
+    let tags: Vec<(LanguageTag, AbiTag, PlatformTag)> = PLATFORM_TAGS
         .iter()
-        .map(|&(py, abi, plat)| (py.to_string(), abi.to_string(), plat.to_string()))
+        .map(|&(py, abi, plat)| {
+            (
+                LanguageTag::from_str(py).unwrap(),
+                AbiTag::from_str(abi).unwrap(),
+                PlatformTag::from_str(plat).unwrap(),
+            )
+        })
         .collect();
 
     let mut group = c.benchmark_group("build_platform_tags");
@@ -132,9 +140,15 @@ fn benchmark_wheelname_parsing_failure(c: &mut Criterion<WallTime>) {
 /// implementation did an exhaustive search over each of them for each tag in
 /// the wheel filename.
 fn benchmark_wheelname_tag_compatibility(c: &mut Criterion<WallTime>) {
-    let tags: Vec<(String, String, String)> = PLATFORM_TAGS
+    let tags: Vec<(LanguageTag, AbiTag, PlatformTag)> = PLATFORM_TAGS
         .iter()
-        .map(|&(py, abi, plat)| (py.to_string(), abi.to_string(), plat.to_string()))
+        .map(|&(py, abi, plat)| {
+            (
+                LanguageTag::from_str(py).unwrap(),
+                AbiTag::from_str(abi).unwrap(),
+                PlatformTag::from_str(plat).unwrap(),
+            )
+        })
         .collect();
     let tags = Tags::new(tags);
 

@@ -1,19 +1,23 @@
-use crate::metadata::{BuildBackendSettings, DEFAULT_EXCLUDES};
-use crate::{DirectoryWriter, Error, FileList, ListWriter, PyProjectToml};
+use std::io::{BufReader, Read, Write};
+use std::path::{Path, PathBuf};
+use std::{io, mem};
+
 use fs_err::File;
 use globset::{GlobSet, GlobSetBuilder};
 use itertools::Itertools;
 use sha2::{Digest, Sha256};
-use std::io::{BufReader, Read, Write};
-use std::path::{Path, PathBuf};
-use std::{io, mem};
 use tracing::{debug, trace};
-use uv_distribution_filename::WheelFilename;
-use uv_fs::Simplified;
-use uv_globfilter::{parse_portable_glob, GlobDirFilter};
-use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
 use zip::{CompressionMethod, ZipWriter};
+
+use uv_distribution_filename::{TagSet, WheelFilename};
+use uv_fs::Simplified;
+use uv_globfilter::{parse_portable_glob, GlobDirFilter};
+use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
+use uv_warnings::warn_user_once;
+
+use crate::metadata::{BuildBackendSettings, DEFAULT_EXCLUDES};
+use crate::{DirectoryWriter, Error, FileList, ListWriter, PyProjectToml};
 
 /// Build a wheel from the source tree and place it in the output directory.
 pub fn build_wheel(
@@ -33,9 +37,12 @@ pub fn build_wheel(
         name: pyproject_toml.name().clone(),
         version: pyproject_toml.version().clone(),
         build_tag: None,
-        python_tag: vec!["py3".to_string()],
-        abi_tag: vec!["none".to_string()],
-        platform_tag: vec!["any".to_string()],
+        python_tag: TagSet::from_slice(&[LanguageTag::Python {
+            major: 3,
+            minor: None,
+        }]),
+        abi_tag: TagSet::from_buf([AbiTag::None]),
+        platform_tag: TagSet::from_buf([PlatformTag::Any]),
     };
 
     let wheel_path = wheel_dir.join(filename.to_string());
@@ -68,9 +75,12 @@ pub fn list_wheel(
         name: pyproject_toml.name().clone(),
         version: pyproject_toml.version().clone(),
         build_tag: None,
-        python_tag: vec!["py3".to_string()],
-        abi_tag: vec!["none".to_string()],
-        platform_tag: vec!["any".to_string()],
+        python_tag: TagSet::from_slice(&[LanguageTag::Python {
+            major: 3,
+            minor: None,
+        }]),
+        abi_tag: TagSet::from_buf([AbiTag::None]),
+        platform_tag: TagSet::from_buf([PlatformTag::Any]),
     };
 
     let mut files = FileList::new();
@@ -247,9 +257,12 @@ pub fn build_editable(
         name: pyproject_toml.name().clone(),
         version: pyproject_toml.version().clone(),
         build_tag: None,
-        python_tag: vec!["py3".to_string()],
-        abi_tag: vec!["none".to_string()],
-        platform_tag: vec!["any".to_string()],
+        python_tag: TagSet::from_slice(&[LanguageTag::Python {
+            major: 3,
+            minor: None,
+        }]),
+        abi_tag: TagSet::from_buf([AbiTag::None]),
+        platform_tag: TagSet::from_buf([PlatformTag::Any]),
     };
 
     let wheel_path = wheel_dir.join(filename.to_string());
@@ -299,9 +312,12 @@ pub fn metadata(
         name: pyproject_toml.name().clone(),
         version: pyproject_toml.version().clone(),
         build_tag: None,
-        python_tag: vec!["py3".to_string()],
-        abi_tag: vec!["none".to_string()],
-        platform_tag: vec!["any".to_string()],
+        python_tag: TagSet::from_slice(&[LanguageTag::Python {
+            major: 3,
+            minor: None,
+        }]),
+        abi_tag: TagSet::from_buf([AbiTag::None]),
+        platform_tag: TagSet::from_buf([PlatformTag::Any]),
     };
 
     debug!(
@@ -744,6 +760,7 @@ mod test {
     use uv_fs::Simplified;
     use uv_normalize::PackageName;
     use uv_pep440::Version;
+    use uv_platform_tags::{AbiTag, PlatformTag};
     use walkdir::WalkDir;
 
     #[test]
@@ -752,9 +769,18 @@ mod test {
             name: PackageName::from_str("foo").unwrap(),
             version: Version::from_str("1.2.3").unwrap(),
             build_tag: None,
-            python_tag: vec!["py2".to_string(), "py3".to_string()],
-            abi_tag: vec!["none".to_string()],
-            platform_tag: vec!["any".to_string()],
+            python_tag: TagSet::from_slice(&[
+                LanguageTag::Python {
+                    major: 2,
+                    minor: None,
+                },
+                LanguageTag::Python {
+                    major: 3,
+                    minor: None,
+                },
+            ]),
+            abi_tag: TagSet::from_buf([AbiTag::None]),
+            platform_tag: TagSet::from_buf([PlatformTag::Any]),
         };
 
         assert_snapshot!(wheel_info(&filename, "1.0.0+test"), @r"
