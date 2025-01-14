@@ -2,7 +2,7 @@
 use std::ffi::{c_void, CString};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::mem::size_of;
+use std::mem::{size_of, size_of_val};
 use std::path::{Path, PathBuf};
 use std::vec::Vec;
 
@@ -119,6 +119,39 @@ fn push_quoted_path(path: &Path, command: &mut Vec<u8>) {
     command.extend(br#"""#);
 }
 
+/// Attempts to read the ZIP End of Central Directory (EOCD) from the end of the file and calculate
+/// the offset where the ZIP data begins in the file. If successful, returns `Some(offset)`.
+/// If an IO or parse error occurs, returns `None`.
+fn read_zip_part(file_handle: &mut File, file_size: u64) -> Option<u64> {
+    // Read the entire end of central directory (EOCD) of the ZIP file, which is 22 bytes long.
+    let mut eocd_buf: Vec<u8> = vec![0; 22];
+
+    file_handle
+        .seek(SeekFrom::Start(file_size - 22))
+        .ok()?;
+
+    file_handle.read_exact(&mut eocd_buf).ok()?;
+
+    // Check if the magic number 'PK\005\006' is at the start of the EOCD.
+    if !eocd_buf.starts_with(b"PK\x05\x06") {
+        return None;
+    }
+
+    // Size of the central directory (in bytes)
+    let cd_size = u32::from_le_bytes(eocd_buf[12..16].try_into().ok()?);
+
+    // Offset of the central directory (in bytes).
+    // In other words, the number of bytes in the ZIP file at which the central directory starts.
+    let cd_offset = u32::from_le_bytes(eocd_buf[16..20].try_into().ok()?);
+
+    // Calculate the position in the entire executable where the content of the ZIP file begins.
+    let end_of_cd = file_size - 22;
+    let start_of_cd = end_of_cd - cd_size as u64;
+    let start_of_zip = start_of_cd - cd_offset as u64;
+
+    Some(start_of_zip)
+}
+
 /// Reads the executable binary from the back to find:
 ///
 /// * The path to the Python executable
@@ -149,6 +182,15 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
     });
     let file_size = metadata.len();
 
+    // First, if the trampoline is a script (UVSC), parse the ZIP file at the end and skip it.
+    // If it is a Python proxy (UVPY), do nothing.
+    //
+    // If an error occurs while parsing the ZIP portion, just proceed as if it is a Python proxy (UVPY).
+    let zip_offset = read_zip_part(&mut file_handle, file_size).unwrap_or(file_size);
+
+    // From here on, both script (UVSC) and Python proxy (UVPY) share the logic:
+    // We check the magic number and read the Python path.
+
     // Start with a size of 1024 bytes which should be enough for most paths but avoids reading the
     // entire file.
     let mut buffer: Vec<u8> = Vec::new();
@@ -160,7 +202,7 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
         buffer.resize(bytes_to_read as usize, 0);
 
         file_handle
-            .seek(SeekFrom::Start(file_size - u64::from(bytes_to_read)))
+            .seek(SeekFrom::Start(zip_offset - u64::from(bytes_to_read)))
             .unwrap_or_else(|_| {
                 print_last_error_and_exit("Failed to set the file pointer to the end of the file");
             });
