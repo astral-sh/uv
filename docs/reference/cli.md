@@ -4571,16 +4571,6 @@ uv python list [OPTIONS]
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
-</dd><dt><code>--format</code> <i>format</i></dt><dd><p>Select the output format between: <code>text</code> (default) or <code>json</code></p>
-
-<p>[default: text]</p>
-<p>Possible values:</p>
-
-<ul>
-<li><code>text</code>:  Display the version as plain text</li>
-
-<li><code>json</code>:  Display the version as JSON</li>
-</ul>
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
@@ -4618,6 +4608,16 @@ uv python list [OPTIONS]
 
 <p>By default, available downloads for the current platform are shown.</p>
 
+</dd><dt><code>--output-format</code> <i>output-format</i></dt><dd><p>Select the output format</p>
+
+<p>[default: text]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>text</code>:  Plain text (for humans)</li>
+
+<li><code>json</code>:  JSON (for computers)</li>
+</ul>
 </dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
@@ -7152,7 +7152,7 @@ uv pip list [OPTIONS]
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
 <p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
-</dd><dt><code>--format</code> <i>format</i></dt><dd><p>Select the output format between: <code>columns</code> (default), <code>freeze</code>, or <code>json</code></p>
+</dd><dt><code>--format</code> <i>format</i></dt><dd><p>Select the output format</p>
 
 <p>[default: columns]</p>
 <p>Possible values:</p>
