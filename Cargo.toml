@@ -122,7 +122,7 @@ krata-tokio-tar = { version = "0.4.2" }
 mailparse = { version = "0.15.0" }
 md-5 = { version = "0.10.6" }
 memchr = { version = "2.7.4" }
-miette = { version = "7.2.0", features = ["fancy-no-backtrace"] }
+miette = { git = "https://github.com/unbyte/miette", rev = "fa570ff00893d03067d98201db5f64684071349d", features = ["fancy-no-backtrace"] }
 nanoid = { version = "0.4.0" }
 nix = { version = "0.29.0" }
 owo-colors = { version = "4.1.0" }

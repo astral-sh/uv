@@ -248,7 +248,7 @@ dependencies = [
  "camino",
  "image",
  "lazy_static",
- "miette",
+ "miette 7.2.0",
  "mime",
  "reqwest",
  "serde",
@@ -264,7 +264,7 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4de46920588aef95658797996130bacd542436aee090084646521260a74bda7d"
 dependencies = [
- "miette",
+ "miette 7.2.0",
  "thiserror 1.0.69",
  "tracing",
 ]
@@ -275,7 +275,7 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d888fac0b73e64cbdf36a743fc5a25af5ae955c357535cb420b389bf1e1a6c54"
 dependencies = [
- "miette",
+ "miette 7.2.0",
  "semver",
  "thiserror 1.0.69",
 ]
@@ -291,7 +291,7 @@ dependencies = [
  "axotag",
  "camino",
  "homedir",
- "miette",
+ "miette 7.2.0",
  "self-replace",
  "serde",
  "tempfile",
@@ -583,7 +583,7 @@ dependencies = [
  "anstyle",
  "clap_lex",
  "strsim",
- "terminal_size 0.4.1",
+ "terminal_size",
 ]
 
 [[package]]
@@ -2168,12 +2168,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4edc8853320c2a0dab800fbda86253c8938f6ea88510dc92c5f1ed20e794afc1"
 dependencies = [
  "cfg-if",
- "miette-derive",
+ "miette-derive 7.2.0",
+ "thiserror 1.0.69",
+ "unicode-width 0.1.14",
+]
+
+[[package]]
+name = "miette"
+version = "7.4.0"
+source = "git+https://github.com/unbyte/miette?rev=fa570ff00893d03067d98201db5f64684071349d#fa570ff00893d03067d98201db5f64684071349d"
+dependencies = [
+ "cfg-if",
+ "miette-derive 7.4.0",
  "owo-colors",
  "supports-color",
  "supports-hyperlinks",
  "supports-unicode",
- "terminal_size 0.3.0",
+ "terminal_size",
  "textwrap",
  "thiserror 1.0.69",
  "unicode-width 0.1.14",
@@ -2184,6 +2195,16 @@ name = "miette-derive"
 version = "7.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dcf09caffaac8068c346b6df2a7fc27a177fd20b39421a39ce0a211bde679a6c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "miette-derive"
+version = "7.4.0"
+source = "git+https://github.com/unbyte/miette?rev=fa570ff00893d03067d98201db5f64684071349d#fa570ff00893d03067d98201db5f64684071349d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3812,16 +3833,6 @@ dependencies = [
 
 [[package]]
 name = "terminal_size"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21bebf2b7c9e0a515f6e0f8c51dc0f8e4696391e6f1ff30379559f8365fb0df7"
-dependencies = [
- "rustix",
- "windows-sys 0.48.0",
-]
-
-[[package]]
-name = "terminal_size"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5352447f921fda68cf61b4101566c0bdb5104eff6804d0678e5227580ab6a4e9"
@@ -4515,7 +4526,7 @@ dependencies = [
  "insta",
  "itertools 0.14.0",
  "jiff",
- "miette",
+ "miette 7.4.0",
  "nix",
  "owo-colors",
  "petgraph",
