@@ -9,6 +9,7 @@ use std::sync::{Arc, LazyLock};
 
 use itertools::Itertools;
 use petgraph::graph::NodeIndex;
+use petgraph::matrix_graph::Nullable;
 use petgraph::visit::EdgeRef;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::Serializer;
@@ -1007,30 +1008,6 @@ impl Lock {
                     return Ok(SatisfiesResult::MismatchedSources(name.clone(), expected));
                 }
             }
-
-            // E.g., that the version has changed.
-            for (name, member) in packages {
-                let Some(expected) = member
-                    .pyproject_toml()
-                    .project
-                    .as_ref()
-                    .and_then(|project| project.version.as_ref())
-                else {
-                    continue;
-                };
-                let actual = self
-                    .find_by_name(name)
-                    .ok()
-                    .flatten()
-                    .map(|package| &package.id.version);
-                if actual != Some(expected) {
-                    return Ok(SatisfiesResult::MismatchedVersion(
-                        name.clone(),
-                        expected.clone(),
-                        actual.cloned(),
-                    ));
-                }
-            }
         }
 
         // Validate that the lockfile was generated with the same requirements.
@@ -1198,7 +1175,7 @@ impl Lock {
                         {
                             return Ok(SatisfiesResult::MissingRemoteIndex(
                                 &package.id.name,
-                                &package.id.version,
+                                &package.id.version.as_ref().unwrap(),
                                 url,
                             ));
                         }
@@ -1207,7 +1184,7 @@ impl Lock {
                         if locals.as_ref().is_some_and(|locals| !locals.contains(path)) {
                             return Ok(SatisfiesResult::MissingLocalIndex(
                                 &package.id.name,
-                                &package.id.version,
+                                &package.id.version.as_ref().unwrap(),
                                 path,
                             ));
                         }
@@ -1271,15 +1248,6 @@ impl Lock {
                 }
             };
 
-            // Validate the `version` metadata.
-            if metadata.version != package.id.version {
-                return Ok(SatisfiesResult::MismatchedVersion(
-                    package.id.name.clone(),
-                    package.id.version.clone(),
-                    Some(metadata.version.clone()),
-                ));
-            }
-
             // Validate the `requires-dist` metadata.
             {
                 let expected: BTreeSet<_> = metadata
@@ -1298,7 +1266,7 @@ impl Lock {
                 if expected != actual {
                     return Ok(SatisfiesResult::MismatchedPackageRequirements(
                         &package.id.name,
-                        &package.id.version,
+                        &package.id.version.as_ref().unwrap(),
                         expected,
                         actual,
                     ));
@@ -1341,7 +1309,7 @@ impl Lock {
                 if expected != actual {
                     return Ok(SatisfiesResult::MismatchedPackageDependencyGroups(
                         &package.id.name,
-                        &package.id.version,
+                        &package.id.version.as_ref().unwrap(),
                         expected,
                         actual,
                     ));
@@ -1953,7 +1921,7 @@ impl Package {
                 let install_path = absolute_path(workspace_root, path)?;
                 let path_dist = PathSourceDist {
                     name: self.id.name.clone(),
-                    version: Some(self.id.version.clone()),
+                    version: None,
                     url: verbatim_url(&install_path, &self.id)?,
                     install_path,
                     ext,
@@ -2049,7 +2017,7 @@ impl Package {
 
                 let file_url = sdist.url().ok_or_else(|| LockErrorKind::MissingUrl {
                     name: self.id.name.clone(),
-                    version: self.id.version.clone(),
+                    version: self.id.version.as_ref().unwrap().clone(),
                 })?;
                 let filename = sdist
                     .filename()
@@ -2077,7 +2045,8 @@ impl Package {
 
                 let reg_dist = RegistrySourceDist {
                     name: self.id.name.clone(),
-                    version: self.id.version.clone(),
+                    // We'd expect this to be here...
+                    version: self.id.version.as_ref().unwrap().clone(),
                     file,
                     ext,
                     index,
@@ -2092,7 +2061,7 @@ impl Package {
 
                 let file_path = sdist.path().ok_or_else(|| LockErrorKind::MissingPath {
                     name: self.id.name.clone(),
-                    version: self.id.version.clone(),
+                    version: self.id.version.as_ref().unwrap().clone(),
                 })?;
                 let file_url = Url::from_file_path(workspace_root.join(path).join(file_path))
                     .map_err(|()| LockErrorKind::PathToUrl)?;
@@ -2122,7 +2091,7 @@ impl Package {
 
                 let reg_dist = RegistrySourceDist {
                     name: self.id.name.clone(),
-                    version: self.id.version.clone(),
+                    version: self.id.version.as_ref().unwrap().clone(),
                     file,
                     ext,
                     index,
@@ -2302,8 +2271,8 @@ impl Package {
     }
 
     /// Returns the [`Version`] of the package.
-    pub fn version(&self) -> &Version {
-        &self.id.version
+    pub fn version(&self) -> Option<&Version> {
+        self.id.version.as_ref()
     }
 
     /// Return the fork markers for this package, if any.
@@ -2452,7 +2421,7 @@ impl PackageWire {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 pub(crate) struct PackageId {
     pub(crate) name: PackageName,
-    pub(crate) version: Version,
+    pub(crate) version: Option<Version>,
     source: Source,
 }
 
@@ -2461,12 +2430,13 @@ impl PackageId {
         annotated_dist: &AnnotatedDist,
         root: &Path,
     ) -> Result<PackageId, LockError> {
+        // For source directories, we omit the version.
         let name = annotated_dist.name.clone();
         let version = annotated_dist.version.clone();
         let source = Source::from_resolved_dist(&annotated_dist.dist, root)?;
         Ok(Self {
             name,
-            version,
+            version: None,
             source,
         })
     }
@@ -2489,7 +2459,11 @@ impl PackageId {
 
 impl Display for PackageId {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}=={} @ {}", self.name, self.version, self.source)
+        if let Some(version) = &self.version {
+            write!(f, "{}=={} @ {}", self.name, version, self.source)
+        } else {
+            write!(f, "{} @ {}", self.name, self.source)
+        }
     }
 }
 
@@ -2506,7 +2480,7 @@ impl PackageIdForDependency {
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<PackageId, LockError> {
         let unambiguous_package_id = unambiguous_package_ids.get(&self.name);
-        let version = self.version.map(Ok::<_, LockError>).unwrap_or_else(|| {
+        let version = self.version.map(Some).map(Ok::<_, LockError>).unwrap_or_else(|| {
             let Some(dist_id) = unambiguous_package_id else {
                 return Err(LockErrorKind::MissingDependencyVersion {
                     name: self.name.clone(),
@@ -2536,7 +2510,7 @@ impl From<PackageId> for PackageIdForDependency {
     fn from(id: PackageId) -> PackageIdForDependency {
         PackageIdForDependency {
             name: id.name,
-            version: Some(id.version),
+            version: id.version,
             source: Some(id.source),
         }
     }
@@ -3824,21 +3798,22 @@ impl Dependency {
 
 impl Display for Dependency {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if self.extra.is_empty() {
-            write!(
+        match (self.extra.is_empty(), self.package_id.version.as_ref()) {
+            (true, Some(version)) => write!(f, "{}=={}", self.package_id.name, version),
+            (true, None) => write!(f, "{}", self.package_id.name),
+            (false, Some(version)) => write!(
                 f,
-                "{}=={} @ {}",
-                self.package_id.name, self.package_id.version, self.package_id.source
-            )
-        } else {
-            write!(
-                f,
-                "{}[{}]=={} @ {}",
+                "{}[{}]=={}",
                 self.package_id.name,
                 self.extra.iter().join(","),
-                self.package_id.version,
-                self.package_id.source
-            )
+                version
+            ),
+            (false, None) => write!(
+                f,
+                "{}[{}]",
+                self.package_id.name,
+                self.extra.iter().join(",")
+            ),
         }
     }
 }
