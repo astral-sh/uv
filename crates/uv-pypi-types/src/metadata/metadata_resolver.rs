@@ -78,9 +78,8 @@ impl ResolutionMetadata {
         })
     }
 
-    /// Read the [`ResolutionMetadata`] from a source distribution's `PKG-INFO` file, if it uses Metadata 2.2
-    /// or later _and_ none of the required fields (`Requires-Python`, `Requires-Dist`, and
-    /// `Provides-Extra`) are marked as dynamic.
+    /// Read the [`ResolutionMetadata`] from a source distribution's `PKG-INFO` file, if it uses
+    /// Metadata 2.2 or later.
     pub fn parse_pkg_info(content: &[u8]) -> Result<Self, MetadataError> {
         let headers = Headers::parse(content)?;
 
@@ -94,17 +93,6 @@ impl ResolutionMetadata {
         let (major, minor) = metadata::parse_version(&metadata_version)?;
         if (major, minor) < (2, 2) || (major, minor) >= (3, 0) {
             return Err(MetadataError::UnsupportedMetadataVersion(metadata_version));
-        }
-
-        // If any of the fields we need are marked as dynamic, we can't use the `PKG-INFO` file.
-        let dynamic = headers.get_all_values("Dynamic").collect::<Vec<_>>();
-        for field in dynamic {
-            match field.as_str() {
-                "Requires-Python" => return Err(MetadataError::DynamicField("Requires-Python")),
-                "Requires-Dist" => return Err(MetadataError::DynamicField("Requires-Dist")),
-                "Provides-Extra" => return Err(MetadataError::DynamicField("Provides-Extra")),
-                _ => (),
-            }
         }
 
         // The `Name` and `Version` fields are required, and can't be dynamic.
