@@ -72,10 +72,6 @@ pub fn create_venv(
     )?;
 
     // Create the corresponding `PythonEnvironment`.
-    let interpreter = if system_site_packages {
-        Interpreter::query(virtualenv.executable, cache)?
-    } else {
-        interpreter.with_virtualenv(virtualenv)
-    };
+    let interpreter = Interpreter::query(virtualenv.executable, cache)?;
     Ok(PythonEnvironment::from_interpreter(interpreter))
 }
