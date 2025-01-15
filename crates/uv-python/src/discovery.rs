@@ -323,7 +323,7 @@ fn python_executables_from_installed<'a>(
                         }
                     })
                     .inspect(|installation| debug!("Found managed installation `{installation}`"))
-                    .map(|installation| (PythonSource::Managed, installation.executable())))
+                    .map(|installation| (PythonSource::Managed, installation.executable(false))))
             })
     })
     .flatten_ok();
