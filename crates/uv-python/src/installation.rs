@@ -165,6 +165,7 @@ impl PythonInstallation {
         installed.ensure_externally_managed()?;
         installed.ensure_sysconfig_patched()?;
         installed.ensure_canonical_executables()?;
+        installed.ensure_dylib_patched()?;
 
         Ok(Self {
             source: PythonSource::Managed,
