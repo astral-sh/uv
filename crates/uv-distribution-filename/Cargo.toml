@@ -21,12 +21,12 @@ uv-pep440 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-small-str = { workspace = true }
 
+memchr = { workspace = true }
 rkyv = { workspace = true, features = ["smallvec-1"] }
 serde = { workspace = true }
 smallvec = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
-memchr = "2.7.4"
 
 [dev-dependencies]
 insta = { version = "1.40.0" }

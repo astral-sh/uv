@@ -22,11 +22,6 @@ const PLATFORM_TAGS: &[(&str, &str, &str)] = include!("../inputs/platform_tags.r
 /// indicates whether the tags in the wheel filename are expected to be
 /// compatible with the tags in `PLATFORM_TAGS`.
 const WHEEL_NAMES: &[(&str, &str, bool)] = &[
-    (
-        "numpy-compatible",
-        "numpy-2.2.1-cp313-cp313-macosx_14_0_x86_64.whl",
-        true,
-    ),
     // This tests a case with a very short name that is *not* compatible
     // with PLATFORM_TAGS. It only uses one tag for each component (one
     // Python version, one ABI and one platform).
@@ -119,63 +114,6 @@ fn benchmark_wheelname_parsing(c: &mut Criterion<WallTime>) {
     group.finish();
 }
 
-fn benchmark_wheelname_parsing_fast(c: &mut Criterion<WallTime>) {
-    let mut group = c.benchmark_group("wheelname_parsing_fast");
-    for (name, filename, _) in WHEEL_NAMES.iter().copied() {
-        let len = u64::try_from(filename.len()).expect("length fits in u64");
-        group.throughput(Throughput::Bytes(len));
-        group.bench_function(BenchmarkId::from_parameter(name), |b| {
-            b.iter(|| {
-                WheelFilename::fast_from_str(filename).expect("valid wheel filename");
-            });
-        });
-    }
-    group.finish();
-}
-
-fn benchmark_wheelname_parsing_fastest(c: &mut Criterion<WallTime>) {
-    let mut group = c.benchmark_group("wheelname_parsing_fastest");
-    for (name, filename, _) in WHEEL_NAMES.iter().copied() {
-        let len = u64::try_from(filename.len()).expect("length fits in u64");
-        group.throughput(Throughput::Bytes(len));
-        group.bench_function(BenchmarkId::from_parameter(name), |b| {
-            b.iter(|| {
-                WheelFilename::fastest_from_str(filename).expect("valid wheel filename");
-            });
-        });
-    }
-    group.finish();
-}
-
-fn benchmark_wheelname_parsing_fastest_splitter(c: &mut Criterion<WallTime>) {
-    let mut group = c.benchmark_group("wheelname_parsing_fastest_splitter");
-    for (name, filename, _) in WHEEL_NAMES.iter().copied() {
-        let len = u64::try_from(filename.len()).expect("length fits in u64");
-        group.throughput(Throughput::Bytes(len));
-        group.bench_function(BenchmarkId::from_parameter(name), |b| {
-            b.iter(|| {
-                WheelFilename::fastest_splitter_from_str(filename).expect("valid wheel filename");
-            });
-        });
-    }
-    group.finish();
-}
-
-
-fn benchmark_wheelname_parsing_fast_splitter(c: &mut Criterion<WallTime>) {
-    let mut group = c.benchmark_group("wheelname_parsing_fast_splitter");
-    for (name, filename, _) in WHEEL_NAMES.iter().copied() {
-        let len = u64::try_from(filename.len()).expect("length fits in u64");
-        group.throughput(Throughput::Bytes(len));
-        group.bench_function(BenchmarkId::from_parameter(name), |b| {
-            b.iter(|| {
-                WheelFilename::fast_splitter_from_str(filename).expect("valid wheel filename");
-            });
-        });
-    }
-    group.finish();
-}
-
 /// Benchmarks `WheelFilename::from_str` when it fails. This routine is called
 /// on every filename in a package's metadata. A non-trivial portion of which
 /// are not wheel filenames. Ensuring that the error path is fast is thus
@@ -230,13 +168,9 @@ fn benchmark_wheelname_tag_compatibility(c: &mut Criterion<WallTime>) {
 
 criterion_group!(
     uv_distribution_filename,
-    // benchmark_build_platform_tags,
+    benchmark_build_platform_tags,
     benchmark_wheelname_parsing,
-    benchmark_wheelname_parsing_fast,
-    benchmark_wheelname_parsing_fastest,
-    benchmark_wheelname_parsing_fastest_splitter,
-    // benchmark_wheelname_parsing_fast_splitter,
-    // benchmark_wheelname_parsing_failure,
-    // benchmark_wheelname_tag_compatibility,
+    benchmark_wheelname_parsing_failure,
+    benchmark_wheelname_tag_compatibility,
 );
 criterion_main!(uv_distribution_filename);

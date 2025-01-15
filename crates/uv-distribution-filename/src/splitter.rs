@@ -1,3 +1,4 @@
+/// A simple splitter that uses `memchr` to find the next delimiter.
 pub(crate) struct MemchrSplitter<'a> {
     memchr: memchr::Memchr<'a>,
     haystack: &'a str,
@@ -19,6 +20,7 @@ impl<'a> Iterator for MemchrSplitter<'a> {
     type Item = &'a str;
 
     #[inline(always)]
+    #[allow(clippy::inline_always)]
     fn next(&mut self) -> Option<Self::Item> {
         match self.memchr.next() {
             Some(index) => {
@@ -37,10 +39,12 @@ impl<'a> Iterator for MemchrSplitter<'a> {
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        // We know we'll return at least one item if there's remaining text
+        // We know we'll return at least one item if there's remaining text.
         let min = usize::from(self.offset < self.haystack.len());
-        // Maximum possible splits is remaining length divided by 2 (minimum one char between delimiters)
+
+        // Maximum possible splits is remaining length divided by 2 (minimum one char between delimiters).
         let max = (self.haystack.len() - self.offset + 1) / 2 + min;
+
         (min, Some(max))
     }
 }

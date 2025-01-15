@@ -1,8 +1,8 @@
 use std::fmt::{Display, Formatter};
 
+use memchr::memchr;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::str::FromStr;
-use memchr::memchr;
 use thiserror::Error;
 use url::Url;
 
@@ -13,8 +13,8 @@ use uv_platform_tags::{
     PlatformTag, TagCompatibility, Tags,
 };
 
+use crate::splitter::MemchrSplitter;
 use crate::{BuildTag, BuildTagError};
-use crate::split::MemchrSplitter;
 
 #[derive(
     Debug,
@@ -141,496 +141,45 @@ impl WheelFilename {
     }
 
     /// Parse a wheel filename from the stem (e.g., `foo-1.2.3-py3-none-any`).
-    pub fn fast_from_str(filename: &str) -> Result<Self, WheelFilenameError> {
-        let stem = filename.strip_suffix(".whl").ok_or_else(|| {
-            WheelFilenameError::InvalidWheelFileName(
-                filename.to_string(),
-                "Must end with .whl".to_string(),
-            )
-        })?;
-        Self::fast_parse(stem, filename)
-    }
-
-    /// Parse a wheel filename from the stem (e.g., `foo-1.2.3-py3-none-any`).
-    pub fn fastest_from_str(filename: &str) -> Result<Self, WheelFilenameError> {
-        let stem = filename.strip_suffix(".whl").ok_or_else(|| {
-            WheelFilenameError::InvalidWheelFileName(
-                filename.to_string(),
-                "Must end with .whl".to_string(),
-            )
-        })?;
-        Self::fastest_parse(stem, filename)
-    }
-
-    /// Parse a wheel filename from the stem (e.g., `foo-1.2.3-py3-none-any`).
-    pub fn fastest_splitter_from_str(filename: &str) -> Result<Self, WheelFilenameError> {
-        let stem = filename.strip_suffix(".whl").ok_or_else(|| {
-            WheelFilenameError::InvalidWheelFileName(
-                filename.to_string(),
-                "Must end with .whl".to_string(),
-            )
-        })?;
-        Self::fastest_parse_splitter(stem, filename)
-    }
-
-
-    /// Parse a wheel filename from the stem (e.g., `foo-1.2.3-py3-none-any`).
-    pub fn fast_splitter_from_str(filename: &str) -> Result<Self, WheelFilenameError> {
-        let stem = filename.strip_suffix(".whl").ok_or_else(|| {
-            WheelFilenameError::InvalidWheelFileName(
-                filename.to_string(),
-                "Must end with .whl".to_string(),
-            )
-        })?;
-        Self::fast_parse_splitter(stem, filename)
-    }
-
-
-    /// Parse a wheel filename from the stem (e.g., `foo-1.2.3-py3-none-any`).
     ///
     /// The originating `filename` is used for high-fidelity error messages.
     fn parse(stem: &str, filename: &str) -> Result<Self, WheelFilenameError> {
         // The wheel filename should contain either five or six entries. If six, then the third
         // entry is the build tag. If five, then the third entry is the Python tag.
         // https://www.python.org/dev/peps/pep-0427/#file-name-convention
-        let mut parts = stem.split('-');
+        let mut splitter = memchr::Memchr::new(b'-', stem.as_bytes());
 
-        let name = parts
-            .next()
-            .expect("split always yields 1 or more elements");
-
-        let Some(version) = parts.next() else {
+        let Some(version) = splitter.next() else {
             return Err(WheelFilenameError::InvalidWheelFileName(
                 filename.to_string(),
                 "Must have a version".to_string(),
             ));
         };
 
-        let Some(build_tag_or_python_tag) = parts.next() else {
+        let Some(build_tag_or_python_tag) = splitter.next() else {
             return Err(WheelFilenameError::InvalidWheelFileName(
                 filename.to_string(),
                 "Must have a Python tag".to_string(),
             ));
         };
 
-        let Some(python_tag_or_abi_tag) = parts.next() else {
+        let Some(python_tag_or_abi_tag) = splitter.next() else {
             return Err(WheelFilenameError::InvalidWheelFileName(
                 filename.to_string(),
                 "Must have an ABI tag".to_string(),
             ));
         };
 
-        let Some(abi_tag_or_platform_tag) = parts.next() else {
+        let Some(abi_tag_or_platform_tag) = splitter.next() else {
             return Err(WheelFilenameError::InvalidWheelFileName(
                 filename.to_string(),
                 "Must have a platform tag".to_string(),
             ));
         };
 
-        let (name, version, build_tag, python_tag, abi_tag, platform_tag) =
-            if let Some(platform_tag) = parts.next() {
-                if parts.next().is_some() {
-                    return Err(WheelFilenameError::InvalidWheelFileName(
-                        filename.to_string(),
-                        "Must have 5 or 6 components, but has more".to_string(),
-                    ));
-                }
-                (
-                    name,
-                    version,
-                    Some(build_tag_or_python_tag),
-                    python_tag_or_abi_tag,
-                    abi_tag_or_platform_tag,
-                    platform_tag,
-                )
-            } else {
-                (
-                    name,
-                    version,
-                    None,
-                    build_tag_or_python_tag,
-                    python_tag_or_abi_tag,
-                    abi_tag_or_platform_tag,
-                )
-            };
-
-        let name = PackageName::from_str(name)
-            .map_err(|err| WheelFilenameError::InvalidPackageName(filename.to_string(), err))?;
-        let version = Version::from_str(version)
-            .map_err(|err| WheelFilenameError::InvalidVersion(filename.to_string(), err))?;
-        let build_tag = build_tag
-            .map(|build_tag| {
-                BuildTag::from_str(build_tag)
-                    .map_err(|err| WheelFilenameError::InvalidBuildTag(filename.to_string(), err))
-            })
-            .transpose()?;
-
-        let tags = if build_tag.is_some()
-            || python_tag.contains('.')
-            || abi_tag.contains('.')
-            || platform_tag.contains('.')
-        {
-            WheelTag::Large {
-                large: Box::new(WheelTagLarge {
-                    build_tag,
-                    python_tag: python_tag
-                        .split('.')
-                        .map(LanguageTag::from_str)
-                        .collect::<Result<_, _>>()
-                        .map_err(|err| {
-                            WheelFilenameError::InvalidLanguageTag(filename.to_string(), err)
-                        })?,
-                    abi_tag: abi_tag
-                        .split('.')
-                        .map(AbiTag::from_str)
-                        .collect::<Result<_, _>>()
-                        .map_err(|err| {
-                            WheelFilenameError::InvalidAbiTag(filename.to_string(), err)
-                        })?,
-                    platform_tag: platform_tag
-                        .split('.')
-                        .map(PlatformTag::from_str)
-                        .collect::<Result<_, _>>()
-                        .map_err(|err| {
-                            WheelFilenameError::InvalidPlatformTag(filename.to_string(), err)
-                        })?,
-                }),
-            }
-        } else {
-            WheelTag::Small {
-                small: WheelTagSmall {
-                    python_tag: LanguageTag::from_str(python_tag).map_err(|err| {
-                        WheelFilenameError::InvalidLanguageTag(filename.to_string(), err)
-                    })?,
-                    abi_tag: AbiTag::from_str(abi_tag).map_err(|err| {
-                        WheelFilenameError::InvalidAbiTag(filename.to_string(), err)
-                    })?,
-                    platform_tag: PlatformTag::from_str(platform_tag).map_err(|err| {
-                        WheelFilenameError::InvalidPlatformTag(filename.to_string(), err)
-                    })?,
-                },
-            }
-        };
-
-        Ok(Self {
-            name,
-            version,
-            tags,
-        })
-    }
-
-    /// Parse a wheel filename from the stem (e.g., `foo-1.2.3-py3-none-any`).
-    ///
-    /// The originating `filename` is used for high-fidelity error messages.
-    fn fast_parse(stem: &str, filename: &str) -> Result<Self, WheelFilenameError> {
-        // The wheel filename should contain either five or six entries. If six, then the third
-        // entry is the build tag. If five, then the third entry is the Python tag.
-        // https://www.python.org/dev/peps/pep-0427/#file-name-convention
-        let mut indexes = memchr::Memchr::new(b'-', stem.as_bytes());
-
-        let Some(next) = indexes.next() else {
-            return Err(WheelFilenameError::InvalidWheelFileName(
-                filename.to_string(),
-                "Must have a version".to_string(),
-            ));
-        };
-        let name = &stem[..next];
-        let prev = next;
-
-        let Some(next) = indexes.next() else {
-            return Err(WheelFilenameError::InvalidWheelFileName(
-                filename.to_string(),
-                "Must have a Python tag".to_string(),
-            ));
-        };
-        let version = &stem[prev + 1..next];
-        let prev = next;
-
-        let Some(next) = indexes.next() else {
-            return Err(WheelFilenameError::InvalidWheelFileName(
-                filename.to_string(),
-                "Must have an ABI tag".to_string(),
-            ));
-        };
-        let checkpoint1 = prev + 1;
-        let build_tag_or_python_tag = &stem[prev + 1..next];
-        let prev = next;
-
-        let Some(next) = indexes.next() else {
-            return Err(WheelFilenameError::InvalidWheelFileName(
-                filename.to_string(),
-                "Must have a platform tag".to_string(),
-            ));
-        };
-        let checkpoint2 = prev + 1;
-        let python_tag_or_abi_tag = &stem[prev + 1..next];
-        let prev = next;
-
-        let (name, version, build_tag, python_tag, abi_tag, platform_tag, multi) =
-            if let Some(next) = indexes.next() {
-                if indexes.next().is_some() {
-                    return Err(WheelFilenameError::InvalidWheelFileName(
-                        filename.to_string(),
-                        "Must have 5 or 6 components, but has more".to_string(),
-                    ));
-                }
-                let abi_tag = &stem[prev + 1..next];
-                let platform_tag = &stem[next + 1..];
-                let multi = memchr(b'.', stem[checkpoint2..].as_bytes()).is_some();
-                (
-                    name,
-                    version,
-                    Some(build_tag_or_python_tag),
-                    python_tag_or_abi_tag,
-                    abi_tag,
-                    platform_tag,
-                    multi
-                )
-            } else {
-                let multi = memchr(b'.', stem[checkpoint1..].as_bytes()).is_some();
-                let platform_tag = &stem[prev + 1..];
-                (
-                    name,
-                    version,
-                    None,
-                    build_tag_or_python_tag,
-                    python_tag_or_abi_tag,
-                    platform_tag,
-                    multi
-                )
-            };
-
-        let name = PackageName::from_str(name)
-            .map_err(|err| WheelFilenameError::InvalidPackageName(filename.to_string(), err))?;
-        let version = Version::from_str(version)
-            .map_err(|err| WheelFilenameError::InvalidVersion(filename.to_string(), err))?;
-        let build_tag = build_tag
-            .map(|build_tag| {
-                BuildTag::from_str(build_tag)
-                    .map_err(|err| WheelFilenameError::InvalidBuildTag(filename.to_string(), err))
-            })
-            .transpose()?;
-
-        let tags = if build_tag.is_some() || multi {
-            WheelTag::Large {
-                large: Box::new(WheelTagLarge {
-                    build_tag,
-                    python_tag: MemchrSplitter::split(python_tag, b'.')
-                        .map(LanguageTag::from_str)
-                        .collect::<Result<_, _>>()
-                        .map_err(|err| {
-                            WheelFilenameError::InvalidLanguageTag(filename.to_string(), err)
-                        })?,
-                    abi_tag: MemchrSplitter::split(abi_tag, b'.')
-                        .map(AbiTag::from_str)
-                        .collect::<Result<_, _>>()
-                        .map_err(|err| {
-                            WheelFilenameError::InvalidAbiTag(filename.to_string(), err)
-                        })?,
-                    platform_tag: MemchrSplitter::split(platform_tag, b'.')
-                        .map(PlatformTag::from_str)
-                        .collect::<Result<_, _>>()
-                        .map_err(|err| {
-                            WheelFilenameError::InvalidPlatformTag(filename.to_string(), err)
-                        })?,
-                }),
-            }
-        } else {
-            WheelTag::Small {
-                small: WheelTagSmall {
-                    python_tag: LanguageTag::from_str(python_tag).map_err(|err| {
-                        WheelFilenameError::InvalidLanguageTag(filename.to_string(), err)
-                    })?,
-                    abi_tag: AbiTag::from_str(abi_tag).map_err(|err| {
-                        WheelFilenameError::InvalidAbiTag(filename.to_string(), err)
-                    })?,
-                    platform_tag: PlatformTag::from_str(platform_tag).map_err(|err| {
-                        WheelFilenameError::InvalidPlatformTag(filename.to_string(), err)
-                    })?,
-                },
-            }
-        };
-
-        Ok(Self {
-            name,
-            version,
-            tags,
-        })
-    }
-
-    /// Parse a wheel filename from the stem (e.g., `foo-1.2.3-py3-none-any`).
-    ///
-    /// The originating `filename` is used for high-fidelity error messages.
-    fn fast_parse_splitter(stem: &str, filename: &str) -> Result<Self, WheelFilenameError> {
-        // The wheel filename should contain either five or six entries. If six, then the third
-        // entry is the build tag. If five, then the third entry is the Python tag.
-        // https://www.python.org/dev/peps/pep-0427/#file-name-convention
-        let mut parts = MemchrSplitter::split(stem, b'-');
-
-        let name = parts
-            .next()
-            .expect("split always yields 1 or more elements");
-
-        let Some(version) = parts.next() else {
-            return Err(WheelFilenameError::InvalidWheelFileName(
-                filename.to_string(),
-                "Must have a version".to_string(),
-            ));
-        };
-
-        let Some(build_tag_or_python_tag) = parts.next() else {
-            return Err(WheelFilenameError::InvalidWheelFileName(
-                filename.to_string(),
-                "Must have a Python tag".to_string(),
-            ));
-        };
-
-        let Some(python_tag_or_abi_tag) = parts.next() else {
-            return Err(WheelFilenameError::InvalidWheelFileName(
-                filename.to_string(),
-                "Must have an ABI tag".to_string(),
-            ));
-        };
-
-        let Some(abi_tag_or_platform_tag) = parts.next() else {
-            return Err(WheelFilenameError::InvalidWheelFileName(
-                filename.to_string(),
-                "Must have a platform tag".to_string(),
-            ));
-        };
-
-        let (name, version, build_tag, python_tag, abi_tag, platform_tag) =
-            if let Some(platform_tag) = parts.next() {
-                if parts.next().is_some() {
-                    return Err(WheelFilenameError::InvalidWheelFileName(
-                        filename.to_string(),
-                        "Must have 5 or 6 components, but has more".to_string(),
-                    ));
-                }
-                (
-                    name,
-                    version,
-                    Some(build_tag_or_python_tag),
-                    python_tag_or_abi_tag,
-                    abi_tag_or_platform_tag,
-                    platform_tag,
-                )
-            } else {
-                (
-                    name,
-                    version,
-                    None,
-                    build_tag_or_python_tag,
-                    python_tag_or_abi_tag,
-                    abi_tag_or_platform_tag,
-                )
-            };
-
-        let name = PackageName::from_str(name)
-            .map_err(|err| WheelFilenameError::InvalidPackageName(filename.to_string(), err))?;
-        let version = Version::from_str(version)
-            .map_err(|err| WheelFilenameError::InvalidVersion(filename.to_string(), err))?;
-        let build_tag = build_tag
-            .map(|build_tag| {
-                BuildTag::from_str(build_tag)
-                    .map_err(|err| WheelFilenameError::InvalidBuildTag(filename.to_string(), err))
-            })
-            .transpose()?;
-
-        let tags = if build_tag.is_some()
-            || python_tag.contains('.')
-            || abi_tag.contains('.')
-            || platform_tag.contains('.')
-        {
-            WheelTag::Large {
-                large: Box::new(WheelTagLarge {
-                    build_tag,
-                    python_tag: python_tag
-                        .split('.')
-                        .map(LanguageTag::from_str)
-                        .collect::<Result<_, _>>()
-                        .map_err(|err| {
-                            WheelFilenameError::InvalidLanguageTag(filename.to_string(), err)
-                        })?,
-                    abi_tag: abi_tag
-                        .split('.')
-                        .map(AbiTag::from_str)
-                        .collect::<Result<_, _>>()
-                        .map_err(|err| {
-                            WheelFilenameError::InvalidAbiTag(filename.to_string(), err)
-                        })?,
-                    platform_tag: platform_tag
-                        .split('.')
-                        .map(PlatformTag::from_str)
-                        .collect::<Result<_, _>>()
-                        .map_err(|err| {
-                            WheelFilenameError::InvalidPlatformTag(filename.to_string(), err)
-                        })?,
-                }),
-            }
-        } else {
-            WheelTag::Small {
-                small: WheelTagSmall {
-                    python_tag: LanguageTag::from_str(python_tag).map_err(|err| {
-                        WheelFilenameError::InvalidLanguageTag(filename.to_string(), err)
-                    })?,
-                    abi_tag: AbiTag::from_str(abi_tag).map_err(|err| {
-                        WheelFilenameError::InvalidAbiTag(filename.to_string(), err)
-                    })?,
-                    platform_tag: PlatformTag::from_str(platform_tag).map_err(|err| {
-                        WheelFilenameError::InvalidPlatformTag(filename.to_string(), err)
-                    })?,
-                },
-            }
-        };
-
-        Ok(Self {
-            name,
-            version,
-            tags,
-        })
-    }
-
-    /// Parse a wheel filename from the stem (e.g., `foo-1.2.3-py3-none-any`).
-    ///
-    /// The originating `filename` is used for high-fidelity error messages.
-    fn fastest_parse(stem: &str, filename: &str) -> Result<Self, WheelFilenameError> {
-        // The wheel filename should contain either five or six entries. If six, then the third
-        // entry is the build tag. If five, then the third entry is the Python tag.
-        // https://www.python.org/dev/peps/pep-0427/#file-name-convention
-        let mut indexes = memchr::Memchr::new(b'-', stem.as_bytes());
-
-        let Some(version) = indexes.next() else {
-            return Err(WheelFilenameError::InvalidWheelFileName(
-                filename.to_string(),
-                "Must have a version".to_string(),
-            ));
-        };
-
-        let Some(build_tag_or_python_tag) = indexes.next() else {
-            return Err(WheelFilenameError::InvalidWheelFileName(
-                filename.to_string(),
-                "Must have a Python tag".to_string(),
-            ));
-        };
-
-        let Some(python_tag_or_abi_tag) = indexes.next() else {
-            return Err(WheelFilenameError::InvalidWheelFileName(
-                filename.to_string(),
-                "Must have an ABI tag".to_string(),
-            ));
-        };
-
-        let Some(abi_tag_or_platform_tag) = indexes.next() else {
-            return Err(WheelFilenameError::InvalidWheelFileName(
-                filename.to_string(),
-                "Must have a platform tag".to_string(),
-            ));
-        };
-
-        let (name, version, build_tag, python_tag, abi_tag, platform_tag, is_multi) =
-            if let Some(platform_tag) = indexes.next() {
-                if indexes.next().is_some() {
+        let (name, version, build_tag, python_tag, abi_tag, platform_tag, is_large) =
+            if let Some(platform_tag) = splitter.next() {
+                if splitter.next().is_some() {
                     return Err(WheelFilenameError::InvalidWheelFileName(
                         filename.to_string(),
                         "Must have 5 or 6 components, but has more".to_string(),
@@ -643,6 +192,7 @@ impl WheelFilename {
                     &stem[python_tag_or_abi_tag + 1..abi_tag_or_platform_tag],
                     &stem[abi_tag_or_platform_tag + 1..platform_tag],
                     &stem[platform_tag + 1..],
+                    // Always take the slow path if a build tag is present.
                     true,
                 )
             } else {
@@ -653,6 +203,9 @@ impl WheelFilename {
                     &stem[build_tag_or_python_tag + 1..python_tag_or_abi_tag],
                     &stem[python_tag_or_abi_tag + 1..abi_tag_or_platform_tag],
                     &stem[abi_tag_or_platform_tag + 1..],
+                    // Determine whether any of the tag types contain a period, which would indicate
+                    // that at least one of the tag types includes multiple tags (which in turn
+                    // necessitates taking the slow path).
                     memchr(b'.', stem[build_tag_or_python_tag..].as_bytes()).is_some(),
                 )
             };
@@ -668,7 +221,7 @@ impl WheelFilename {
             })
             .transpose()?;
 
-        let tags = if is_multi {
+        let tags = if is_large {
             WheelTag::Large {
                 large: Box::new(WheelTagLarge {
                     build_tag,
@@ -702,166 +255,6 @@ impl WheelFilename {
                         WheelFilenameError::InvalidAbiTag(filename.to_string(), err)
                     })?,
                     platform_tag: PlatformTag::from_str(platform_tag).map_err(|err| {
-                        WheelFilenameError::InvalidPlatformTag(filename.to_string(), err)
-                    })?,
-                },
-            }
-        };
-
-        Ok(Self {
-            name,
-            version,
-            tags,
-        })
-    }
-
-    /// Parse a wheel filename from the stem (e.g., `foo-1.2.3-py3-none-any`).
-    ///
-    /// The originating `filename` is used for high-fidelity error messages.
-    fn fastest_parse_splitter(stem: &str, filename: &str) -> Result<Self, WheelFilenameError> {
-        // The wheel filename should contain either five or six entries. If six, then the third
-        // entry is the build tag. If five, then the third entry is the Python tag.
-        // https://www.python.org/dev/peps/pep-0427/#file-name-convention
-        let mut parts = MemchrSplitter::split(stem, b'-');
-
-        let name = parts
-            .next()
-            .expect("split always yields 1 or more elements");
-
-        let Some(version) = parts.next() else {
-            return Err(WheelFilenameError::InvalidWheelFileName(
-                filename.to_string(),
-                "Must have a version".to_string(),
-            ));
-        };
-
-        let Some(build_tag_or_python_tag) = parts.next() else {
-            return Err(WheelFilenameError::InvalidWheelFileName(
-                filename.to_string(),
-                "Must have a Python tag".to_string(),
-            ));
-        };
-
-        let Some(python_tag_or_abi_tag) = parts.next() else {
-            return Err(WheelFilenameError::InvalidWheelFileName(
-                filename.to_string(),
-                "Must have an ABI tag".to_string(),
-            ));
-        };
-
-        let Some(abi_tag_or_platform_tag) = parts.next() else {
-            return Err(WheelFilenameError::InvalidWheelFileName(
-                filename.to_string(),
-                "Must have a platform tag".to_string(),
-            ));
-        };
-
-        let (name, version, build_tag, python_tag, abi_tag, platform_tag) =
-            if let Some(platform_tag) = parts.next() {
-                if parts.next().is_some() {
-                    return Err(WheelFilenameError::InvalidWheelFileName(
-                        filename.to_string(),
-                        "Must have 5 or 6 components, but has more".to_string(),
-                    ));
-                }
-                (
-                    name,
-                    version,
-                    Some(build_tag_or_python_tag),
-                    python_tag_or_abi_tag,
-                    abi_tag_or_platform_tag,
-                    platform_tag,
-                )
-            } else {
-                (
-                    name,
-                    version,
-                    None,
-                    build_tag_or_python_tag,
-                    python_tag_or_abi_tag,
-                    abi_tag_or_platform_tag,
-                )
-            };
-
-        let name = PackageName::from_str(name)
-            .map_err(|err| WheelFilenameError::InvalidPackageName(filename.to_string(), err))?;
-        let version = Version::from_str(version)
-            .map_err(|err| WheelFilenameError::InvalidVersion(filename.to_string(), err))?;
-        let build_tag = build_tag
-            .map(|build_tag| {
-                BuildTag::from_str(build_tag)
-                    .map_err(|err| WheelFilenameError::InvalidBuildTag(filename.to_string(), err))
-            })
-            .transpose()?;
-
-        let mut python_tags = MemchrSplitter::split(python_tag, b'.');
-        let mut abi_tags = MemchrSplitter::split(abi_tag, b'.');
-        let mut platform_tags = MemchrSplitter::split(platform_tag, b'.');
-
-        // Extract the first tag of each type.
-        let Some(first_python_tag) = python_tags.next() else {
-            return Err(WheelFilenameError::MissingLanguageTag(filename.to_string()));
-        };
-        let Some(first_abi_tag) = abi_tags.next() else {
-            return Err(WheelFilenameError::MissingAbiTag(filename.to_string()));
-        };
-        let Some(first_platform_tag) = platform_tags.next() else {
-            return Err(WheelFilenameError::MissingPlatformTag(filename.to_string()));
-        };
-
-        // Extract the (optional) second tag of each type.
-        let second_python_tag = python_tags.next();
-        let second_abi_tag = abi_tags.next();
-        let second_platform_tag = platform_tags.next();
-
-        let tags = if build_tag.is_some()
-            || second_python_tag.is_some()
-            || second_abi_tag.is_some()
-            || second_platform_tag.is_some()
-        {
-            let python_tags = std::iter::once(first_python_tag)
-                .chain(second_python_tag)
-                .chain(python_tags);
-            let abi_tags = std::iter::once(first_abi_tag)
-                .chain(second_abi_tag)
-                .chain(abi_tags);
-            let platform_tags = std::iter::once(first_platform_tag)
-                .chain(second_platform_tag)
-                .chain(platform_tags);
-
-            WheelTag::Large {
-                large: Box::new(WheelTagLarge {
-                    build_tag,
-                    python_tag: python_tags
-                        .map(LanguageTag::from_str)
-                        .collect::<Result<_, _>>()
-                        .map_err(|err| {
-                            WheelFilenameError::InvalidLanguageTag(filename.to_string(), err)
-                        })?,
-                    abi_tag: abi_tags
-                        .map(AbiTag::from_str)
-                        .collect::<Result<_, _>>()
-                        .map_err(|err| {
-                            WheelFilenameError::InvalidAbiTag(filename.to_string(), err)
-                        })?,
-                    platform_tag: platform_tags
-                        .map(PlatformTag::from_str)
-                        .collect::<Result<_, _>>()
-                        .map_err(|err| {
-                            WheelFilenameError::InvalidPlatformTag(filename.to_string(), err)
-                        })?,
-                }),
-            }
-        } else {
-            WheelTag::Small {
-                small: WheelTagSmall {
-                    python_tag: LanguageTag::from_str(first_python_tag).map_err(|err| {
-                        WheelFilenameError::InvalidLanguageTag(filename.to_string(), err)
-                    })?,
-                    abi_tag: AbiTag::from_str(first_abi_tag).map_err(|err| {
-                        WheelFilenameError::InvalidAbiTag(filename.to_string(), err)
-                    })?,
-                    platform_tag: PlatformTag::from_str(first_platform_tag).map_err(|err| {
                         WheelFilenameError::InvalidPlatformTag(filename.to_string(), err)
                     })?,
                 },
