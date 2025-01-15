@@ -83,19 +83,24 @@ impl SourceDistExtension {
             _ => Err(ExtensionError::SourceDist),
         }
     }
+
+    /// Return the name for the extension.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Zip => "zip",
+            Self::TarGz => "tar.gz",
+            Self::TarBz2 => "tar.bz2",
+            Self::TarXz => "tar.xz",
+            Self::TarZst => "tar.zst",
+            Self::TarLzma => "tar.lzma",
+            Self::Tar => "tar",
+        }
+    }
 }
 
 impl Display for SourceDistExtension {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Zip => f.write_str("zip"),
-            Self::TarGz => f.write_str("tar.gz"),
-            Self::TarBz2 => f.write_str("tar.bz2"),
-            Self::TarXz => f.write_str("tar.xz"),
-            Self::TarZst => f.write_str("tar.zst"),
-            Self::TarLzma => f.write_str("tar.lzma"),
-            Self::Tar => f.write_str("tar"),
-        }
+        f.write_str(self.name())
     }
 }
 
