@@ -1759,7 +1759,6 @@ jobs:
     needs: build-binary-windows
     name: "check system | embedded python3.10 on windows"
     runs-on: windows-latest
-    env:
     steps:
       - uses: actions/checkout@v4
 
