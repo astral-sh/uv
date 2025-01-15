@@ -298,7 +298,11 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
         for Requirement { package, marker } in &self.nodes {
             match &package.id.source {
                 Source::Registry(_) => {
-                    let version = package.id.version.as_ref().expect("registry package without version");
+                    let version = package
+                        .id
+                        .version
+                        .as_ref()
+                        .expect("registry package without version");
                     write!(f, "{}=={}", package.id.name, version)?;
                 }
                 Source::Git(url, git) => {

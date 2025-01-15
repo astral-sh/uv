@@ -89,7 +89,9 @@ impl PyProjectToml {
 
     /// Returns `true` if the project uses a dynamic version.
     pub fn is_dynamic(&self) -> bool {
-        self.project.as_ref().is_some_and(|project| project.version.is_none())
+        self.project
+            .as_ref()
+            .is_some_and(|project| project.version.is_none())
     }
 
     /// Returns whether the project manifest contains any script table.

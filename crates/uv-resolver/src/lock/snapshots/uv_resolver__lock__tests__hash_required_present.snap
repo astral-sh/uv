@@ -42,7 +42,9 @@ Ok(
                     name: PackageName(
                         "anyio",
                     ),
-                    version: "4.3.0",
+                    version: Some(
+                        "4.3.0",
+                    ),
                     source: Path(
                         "file:///foo/bar",
                     ),
@@ -97,7 +99,9 @@ Ok(
                 name: PackageName(
                     "anyio",
                 ),
-                version: "4.3.0",
+                version: Some(
+                    "4.3.0",
+                ),
                 source: Path(
                     "file:///foo/bar",
                 ),

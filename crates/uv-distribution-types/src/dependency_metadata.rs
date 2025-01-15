@@ -51,6 +51,7 @@ impl DependencyMetadata {
                 requires_dist: metadata.requires_dist.clone(),
                 requires_python: metadata.requires_python.clone(),
                 provides_extras: metadata.provides_extras.clone(),
+                dynamic: false,
             })
         } else {
             // If no version was requested (i.e., it's a direct URL dependency), allow a single
@@ -70,6 +71,7 @@ impl DependencyMetadata {
                 requires_dist: metadata.requires_dist.clone(),
                 requires_python: metadata.requires_python.clone(),
                 provides_extras: metadata.provides_extras.clone(),
+                dynamic: false,
             })
         }
     }

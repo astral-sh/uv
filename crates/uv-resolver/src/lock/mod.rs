@@ -9,7 +9,6 @@ use std::sync::{Arc, LazyLock};
 
 use itertools::Itertools;
 use petgraph::graph::NodeIndex;
-use petgraph::matrix_graph::Nullable;
 use petgraph::visit::EdgeRef;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::Serializer;
@@ -1016,7 +1015,7 @@ impl Lock {
                     .find_by_name(name)
                     .ok()
                     .flatten()
-                    .map(|package| package.id.version.is_none());
+                    .map(Package::is_dynamic);
                 if actual != Some(expected) {
                     return Ok(SatisfiesResult::MismatchedDynamic(name.clone(), expected));
                 }
@@ -1187,22 +1186,23 @@ impl Lock {
                             .is_some_and(|remotes| !remotes.contains(url))
                         {
                             let name = &package.id.name;
-                            let version = &package.id.version.as_ref().expect("version for registry source");
-                            return Ok(SatisfiesResult::MissingRemoteIndex(
-                                name,
-                                version,
-                                url,
-                            ));
+                            let version = &package
+                                .id
+                                .version
+                                .as_ref()
+                                .expect("version for registry source");
+                            return Ok(SatisfiesResult::MissingRemoteIndex(name, version, url));
                         }
                     }
                     RegistrySource::Path(path) => {
                         if locals.as_ref().is_some_and(|locals| !locals.contains(path)) {
                             let name = &package.id.name;
-                            let version = &package.id.version.as_ref().expect("version for registry source");
-                            return Ok(SatisfiesResult::MissingLocalIndex(
-                                name, version,
-                                path,
-                            ));
+                            let version = &package
+                                .id
+                                .version
+                                .as_ref()
+                                .expect("version for registry source");
+                            return Ok(SatisfiesResult::MissingLocalIndex(name, version, path));
                         }
                     }
                 };
@@ -1226,6 +1226,9 @@ impl Lock {
             )?;
 
             // Fetch the metadata for the distribution.
+            //
+            // TODO(charlie): We don't need the version here, so we could avoid running a PEP 517
+            // build if only the version is dynamic.
             let metadata = {
                 let id = dist.version_id();
                 if let Some(archive) =
@@ -2034,7 +2037,11 @@ impl Package {
                 };
 
                 let name = &self.id.name;
-                let version = self.id.version.as_ref().expect("version for registry source");
+                let version = self
+                    .id
+                    .version
+                    .as_ref()
+                    .expect("version for registry source");
 
                 let file_url = sdist.url().ok_or_else(|| LockErrorKind::MissingUrl {
                     name: name.clone(),
@@ -2080,8 +2087,11 @@ impl Package {
                 };
 
                 let name = &self.id.name;
-                let version = self.id.version.as_ref().expect("version for registry source");
-
+                let version = self
+                    .id
+                    .version
+                    .as_ref()
+                    .expect("version for registry source");
 
                 let file_path = sdist.path().ok_or_else(|| LockErrorKind::MissingPath {
                     name: name.clone(),
@@ -2351,6 +2361,11 @@ impl Package {
             _ => Ok(None),
         }
     }
+
+    /// Returns `true` if the package is a dynamic source tree.
+    fn is_dynamic(&self) -> bool {
+        self.id.version.is_none()
+    }
 }
 
 /// Attempts to construct a `VerbatimUrl` from the given `Path`.
@@ -2454,13 +2469,23 @@ impl PackageId {
         annotated_dist: &AnnotatedDist,
         root: &Path,
     ) -> Result<PackageId, LockError> {
-        // For source directories, we omit the version.
-        let name = annotated_dist.name.clone();
-        let version = annotated_dist.version.clone();
+        // Identify the source of the package.
         let source = Source::from_resolved_dist(&annotated_dist.dist, root)?;
+        // Omit versions for dynamic source trees.
+        let version = if source.is_source_tree()
+            && annotated_dist
+                .metadata
+                .as_ref()
+                .is_some_and(|metadata| metadata.dynamic)
+        {
+            None
+        } else {
+            Some(annotated_dist.version.clone())
+        };
+        let name = annotated_dist.name.clone();
         Ok(Self {
             name,
-            version: Some(version),
+            version,
             source,
         })
     }
@@ -2506,15 +2531,17 @@ impl PackageIdForDependency {
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<PackageId, LockError> {
         let unambiguous_package_id = unambiguous_package_ids.get(&self.name);
-        let version = self.version.map(Some).map(Ok::<_, LockError>).unwrap_or_else(|| {
+        let version = if let Some(version) = self.version {
+            Some(version)
+        } else {
             let Some(dist_id) = unambiguous_package_id else {
                 return Err(LockErrorKind::MissingDependencyVersion {
                     name: self.name.clone(),
                 }
                 .into());
             };
-            Ok(dist_id.version.clone())
-        })?;
+            dist_id.version.clone()
+        };
         let source = self.source.map(Ok::<_, LockError>).unwrap_or_else(|| {
             let Some(package_id) = unambiguous_package_id else {
                 return Err(LockErrorKind::MissingDependencySource {
@@ -2739,6 +2766,14 @@ impl Source {
             Source::Virtual(..) => false,
             Source::Git(..) => false,
             Source::Registry(..) => false,
+        }
+    }
+
+    /// Returns `true` if the source is that of a source tree.
+    pub(crate) fn is_source_tree(&self) -> bool {
+        match self {
+            Source::Directory(..) | Source::Editable(..) | Source::Virtual(..) => true,
+            Source::Path(..) | Source::Git(..) | Source::Registry(..) | Source::Direct(..) => false,
         }
     }
 

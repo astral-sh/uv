@@ -29,6 +29,8 @@ pub struct ResolutionMetadata {
     pub requires_dist: Vec<Requirement<VerbatimParsedUrl>>,
     pub requires_python: Option<VersionSpecifiers>,
     pub provides_extras: Vec<ExtraName>,
+    /// Whether the version field is dynamic.
+    #[serde(default)]
     pub dynamic: bool,
 }
 
@@ -69,7 +71,9 @@ impl ResolutionMetadata {
                 }
             })
             .collect::<Vec<_>>();
-        let dynamic = headers.get_all_values("Dynamic").collect::<Vec<_>>();
+        let dynamic = headers
+            .get_all_values("Dynamic")
+            .any(|field| field == "Version");
 
         Ok(Self {
             name,
@@ -100,12 +104,13 @@ impl ResolutionMetadata {
         }
 
         // If any of the fields we need are marked as dynamic, we can't use the `PKG-INFO` file.
-        let dynamic = headers.get_all_values("Dynamic").collect::<Vec<_>>();
-        for field in &dynamic {
+        let mut dynamic = false;
+        for field in headers.get_all_values("Dynamic") {
             match field.as_str() {
                 "Requires-Python" => return Err(MetadataError::DynamicField("Requires-Python")),
                 "Requires-Dist" => return Err(MetadataError::DynamicField("Requires-Dist")),
                 "Provides-Extra" => return Err(MetadataError::DynamicField("Provides-Extra")),
+                "Version" => dynamic = true,
                 _ => (),
             }
         }

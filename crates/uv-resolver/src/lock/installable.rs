@@ -345,10 +345,7 @@ pub trait Installable<'lock> {
             build_options,
         )?;
         let version = package.version().cloned();
-        let dist = ResolvedDist::Installable {
-            dist,
-            version,
-        };
+        let dist = ResolvedDist::Installable { dist, version };
         let hashes = package.hashes();
         Ok(Node::Dist {
             dist,
@@ -365,10 +362,7 @@ pub trait Installable<'lock> {
             &BuildOptions::default(),
         )?;
         let version = package.version().cloned();
-        let dist = ResolvedDist::Installable {
-            dist,
-            version,
-        };
+        let dist = ResolvedDist::Installable { dist, version };
         let hashes = package.hashes();
         Ok(Node::Dist {
             dist,

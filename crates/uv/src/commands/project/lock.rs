@@ -1018,17 +1018,31 @@ impl ValidatedLock {
                 Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedPackageRequirements(name, version, expected, actual) => {
-                debug!(
-                    "Ignoring existing lockfile due to mismatched `requires-dist` for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
-                    expected, actual
-                );
+                if let Some(version) = version {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched requirements for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
+                        expected, actual
+                    );
+                } else {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched requirements for: `{name}`\n  Requested: {:?}\n  Existing: {:?}",
+                        expected, actual
+                    );
+                }
                 Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedPackageDependencyGroups(name, version, expected, actual) => {
-                debug!(
-                    "Ignoring existing lockfile due to mismatched dev dependencies for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
-                    expected, actual
-                );
+                if let Some(version) = version {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched dependency groups for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
+                        expected, actual
+                    );
+                } else {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched dependency groups for: `{name}`\n  Requested: {:?}\n  Existing: {:?}",
+                        expected, actual
+                    );
+                }
                 Ok(Self::Preferable(lock))
             }
         }
@@ -1061,9 +1075,7 @@ fn report_upgrades(
                 FxHashMap::with_capacity_and_hasher(existing_lock.packages().len(), FxBuildHasher),
                 |mut acc, package| {
                     if let Some(version) = package.version() {
-                        acc.entry(package.name())
-                            .or_default()
-                            .insert(version);
+                        acc.entry(package.name()).or_default().insert(version);
                     }
                     acc
                 },
@@ -1077,9 +1089,7 @@ fn report_upgrades(
             FxHashMap::with_capacity_and_hasher(new_lock.packages().len(), FxBuildHasher),
             |mut acc, package| {
                 if let Some(version) = package.version() {
-                    acc.entry(package.name())
-                        .or_default()
-                        .insert(version);
+                    acc.entry(package.name()).or_default().insert(version);
                 }
                 acc
             },
