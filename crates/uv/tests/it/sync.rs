@@ -1259,8 +1259,8 @@ fn sync_dev() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
-    // Using `--no-groups` should remove dev dependencies
-    uv_snapshot!(context.filters(), context.sync().arg("--no-groups"), @r###"
+    // Using `--no-default-groups` should remove dev dependencies
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1459,7 +1459,8 @@ fn sync_group() -> Result<()> {
      + urllib3==2.2.1
     "###);
 
-    uv_snapshot!(context.filters(), context.sync().arg("--no-groups"), @r###"
+    // Using `--no-default-groups` should exclude all groups
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1475,6 +1476,37 @@ fn sync_group() -> Result<()> {
      - requests==2.31.0
      - sniffio==1.3.1
      - urllib3==2.2.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + iniconfig==2.0.0
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + urllib3==2.2.1
+    "###);
+
+    // Using `--no-default-groups` with `--group foo` and `--group bar` should include those groups,
+    // excluding the remaining `dev` group.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups").arg("--group").arg("foo").arg("--group").arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - iniconfig==2.0.0
     "###);
 
     Ok(())
@@ -1578,7 +1610,7 @@ fn sync_include_group() -> Result<()> {
      + typing-extensions==4.10.0
     "###);
 
-    uv_snapshot!(context.filters(), context.sync().arg("--no-groups"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1590,6 +1622,30 @@ fn sync_include_group() -> Result<()> {
      - idna==3.6
      - iniconfig==2.0.0
      - sniffio==1.3.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups").arg("--group").arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Audited 5 packages in [TIME]
     "###);
 
     Ok(())
@@ -2005,8 +2061,8 @@ fn sync_default_groups() -> Result<()> {
      + urllib3==2.2.1
     "###);
 
-    // Using `--no-groups` should exclude all groups
-    uv_snapshot!(context.filters(), context.sync().arg("--no-groups"), @r###"
+    // Using `--no-default-groups` should exclude all groups
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2022,6 +2078,37 @@ fn sync_default_groups() -> Result<()> {
      - requests==2.31.0
      - sniffio==1.3.1
      - urllib3==2.2.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + iniconfig==2.0.0
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + urllib3==2.2.1
+    "###);
+
+    // Using `--no-default-groups` with `--group foo` and `--group bar` should include those groups,
+    // excluding the remaining `dev` group.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups").arg("--group").arg("foo").arg("--group").arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - iniconfig==2.0.0
     "###);
 
     Ok(())

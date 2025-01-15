@@ -65,6 +65,10 @@ pub enum GroupsSpecification {
         include: IncludeGroups,
         exclude: Vec<GroupName>,
     },
+    /// Explicitly include dependencies from the specified groups.
+    ///
+    /// If the list is empty, no group will be included.
+    IncludeExplicitly(Vec<GroupName>),
     /// Only include dependencies from the specified groups, exclude all other dependencies.
     ///
     /// The `include` list is guaranteed to omit groups in the `exclude` list (i.e., they have an
@@ -73,8 +77,6 @@ pub enum GroupsSpecification {
         include: Vec<GroupName>,
         exclude: Vec<GroupName>,
     },
-    /// Exclude dependencies from all groups.
-    Exclude,
 }
 
 impl GroupsSpecification {
@@ -88,7 +90,7 @@ impl GroupsSpecification {
 
     /// Returns `true` if the specification allows for production dependencies.
     pub fn prod(&self) -> bool {
-        matches!(self, Self::Include { .. } | Self::Exclude)
+        matches!(self, Self::Include { .. } | Self::IncludeExplicitly(_))
     }
 
     /// Returns `true` if the specification is limited to a select set of groups.
@@ -120,7 +122,11 @@ impl GroupsSpecification {
                 [group] => Some(Cow::Owned(format!("--only-group {group}"))),
                 [..] => Some(Cow::Borrowed("--only-group")),
             },
-            Self::Exclude => Some(Cow::Borrowed("--no-groups")),
+            Self::IncludeExplicitly(include) => match include.as_slice() {
+                [] => Some(Cow::Borrowed("--no-default-groups")),
+                [group] => Some(Cow::Owned(format!("--group {group}"))),
+                [..] => Some(Cow::Borrowed("--group")),
+            },
         }
     }
 
@@ -133,7 +139,7 @@ impl GroupsSpecification {
             GroupsSpecification::Only { include, exclude } => {
                 Either::Left(include.iter().chain(exclude.iter()))
             }
-            GroupsSpecification::Exclude => Either::Right(std::iter::empty()),
+            GroupsSpecification::IncludeExplicitly(include) => Either::Right(include.iter()),
         }
     }
 
@@ -145,7 +151,7 @@ impl GroupsSpecification {
                 include.contains(group) && !exclude.contains(group)
             }
             GroupsSpecification::Only { include, .. } => include.contains(group),
-            GroupsSpecification::Exclude => false,
+            GroupsSpecification::IncludeExplicitly(include) => include.contains(group),
         }
     }
 }
@@ -185,7 +191,7 @@ impl DevGroupsSpecification {
         only_dev: bool,
         mut group: Vec<GroupName>,
         no_group: Vec<GroupName>,
-        no_groups: bool,
+        no_default_groups: bool,
         mut only_group: Vec<GroupName>,
         all_groups: bool,
     ) -> Self {
@@ -199,8 +205,8 @@ impl DevGroupsSpecification {
             None
         };
 
-        let groups = if no_groups {
-            Some(GroupsSpecification::Exclude)
+        let groups = if no_default_groups {
+            Some(GroupsSpecification::IncludeExplicitly(group))
         } else if all_groups {
             Some(GroupsSpecification::Include {
                 include: IncludeGroups::All,
@@ -386,9 +392,10 @@ impl DevGroupsManifest {
                     };
                 }
 
-                // If `--no-groups` was provided, exclude all groups.
-                if matches!(self.spec.groups(), Some(GroupsSpecification::Exclude)) {
-                    return false;
+                // If `--no-default-groups` was provided, only include group if it's explicitly
+                // included with `--group <group>`.
+                if let Some(GroupsSpecification::IncludeExplicitly(include)) = self.spec.groups() {
+                    return include.contains(group);
                 }
 
                 // If `--no-group` was provided, exclude the group from the list of defaults.
