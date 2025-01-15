@@ -37,13 +37,13 @@ mod microsoft_store;
 pub mod platform;
 mod pointer_size;
 mod prefix;
-#[cfg(windows)]
-mod py_launcher;
 mod python_version;
 mod sysconfig;
 mod target;
 mod version_files;
 mod virtualenv;
+#[cfg(windows)]
+mod windows_registry;
 
 #[cfg(not(test))]
 pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {

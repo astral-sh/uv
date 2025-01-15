@@ -1,3 +1,5 @@
+//! PEP 514 interactions with the Windows registry.
+
 use crate::PythonVersion;
 use std::cmp::Ordering;
 use std::path::PathBuf;
