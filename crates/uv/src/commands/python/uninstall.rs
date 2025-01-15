@@ -7,9 +7,10 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, warn};
+
+use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
 use uv_python::managed::{python_executable_dir, ManagedPythonInstallations};
@@ -25,15 +26,15 @@ pub(crate) async fn uninstall(
     install_dir: Option<PathBuf>,
     targets: Vec<String>,
     all: bool,
-
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     let installations = ManagedPythonInstallations::from_settings(install_dir)?.init()?;
 
     let _lock = installations.lock().await?;
 
     // Perform the uninstallation.
-    do_uninstall(&installations, targets, all, printer).await?;
+    do_uninstall(&installations, targets, all, printer, preview).await?;
 
     // Clean up any empty directories.
     if uv_fs::directories(installations.root()).all(|path| uv_fs::is_temporary(&path)) {
@@ -62,6 +63,7 @@ async fn do_uninstall(
     targets: Vec<String>,
     all: bool,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
@@ -107,6 +109,28 @@ async fn do_uninstall(
             matching_installations.insert(installation.clone());
         }
         if !found {
+            // Clear any remnants in the registry
+            #[cfg(windows)]
+            if preview.is_enabled() {
+                let mut errors = Vec::new();
+                uv_python::windows_registry::uninstall_windows_registry(
+                    &installed_installations,
+                    all,
+                    &mut errors,
+                );
+                if !errors.is_empty() {
+                    for (key, err) in errors {
+                        writeln!(
+                            printer.stderr(),
+                            "Failed to uninstall {}: {}",
+                            key.green(),
+                            err.to_string().trim()
+                        )?;
+                    }
+                    return Ok(ExitStatus::Failure);
+                }
+            }
+
             if matches!(requests.as_slice(), [PythonRequest::Default]) {
                 writeln!(printer.stderr(), "No Python installations found")?;
                 return Ok(ExitStatus::Failure);
@@ -190,10 +214,19 @@ async fn do_uninstall(
     let mut errors = vec![];
     while let Some((key, result)) = tasks.next().await {
         if let Err(err) = result {
-            errors.push((key.clone(), err));
+            errors.push((key.clone(), anyhow::Error::new(err)));
         } else {
             uninstalled.push(key.clone());
         }
+    }
+
+    #[cfg(windows)]
+    if preview.is_enabled() {
+        uv_python::windows_registry::uninstall_windows_registry(
+            &installed_installations,
+            all,
+            &mut errors,
+        );
     }
 
     // Report on any uninstalled installations.

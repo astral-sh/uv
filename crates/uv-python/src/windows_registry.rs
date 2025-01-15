@@ -9,7 +9,10 @@ use std::str::FromStr;
 use target_lexicon::PointerWidth;
 use thiserror::Error;
 use tracing::debug;
+use uv_warnings::warn_user;
 use windows_registry::{Key, Value, CURRENT_USER, HSTRING, LOCAL_MACHINE};
+use windows_result::HRESULT;
+use windows_sys::Win32::Foundation::ERROR_FILE_NOT_FOUND;
 
 /// A Python interpreter found in the Windows registry through PEP 514 or from a known Microsoft
 /// Store path.
@@ -183,4 +186,50 @@ fn write_registry_entry(
         &Value::from(&HSTRING::from(installation.executable(true).as_os_str())),
     )?;
     Ok(())
+}
+
+/// Remove Python entries from the Windows Registry (PEP 514).
+pub fn uninstall_windows_registry(
+    installations: &[ManagedPythonInstallation],
+    all: bool,
+    errors: &mut Vec<(PythonInstallationKey, anyhow::Error)>,
+) {
+    // Windows returns this code when the registry key doesn't exist.
+    let error_not_found = HRESULT::from_win32(ERROR_FILE_NOT_FOUND);
+    let astral_key = format!("Software\\Python\\{COMPANY}");
+    if all {
+        if let Err(err) = CURRENT_USER.remove_tree(&astral_key) {
+            if err.code() == error_not_found {
+                debug!("No registry entries to remove, no registry key {astral_key}");
+            } else {
+                warn_user!("Failed to clear registry entries under {astral_key}: {err}");
+            }
+        }
+        return;
+    }
+
+    for installation in installations {
+        let python_tag = format!(
+            "{}{}",
+            installation.key().implementation().pretty(),
+            installation.key().version()
+        );
+
+        let python_entry = format!("{astral_key}\\{python_tag}");
+        if let Err(err) = CURRENT_USER.remove_tree(&python_entry) {
+            if err.code() == error_not_found {
+                debug!(
+                    "No registry entries to remove for {}, no registry key {}",
+                    installation.key(),
+                    python_entry
+                );
+            } else {
+                errors.push((
+                    installation.key().clone(),
+                    anyhow::Error::new(err)
+                        .context("Failed to clear registry entries under {astral_key}"),
+                ));
+            }
+        };
+    }
 }
