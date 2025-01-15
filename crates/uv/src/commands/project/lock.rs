@@ -193,9 +193,11 @@ pub(crate) async fn lock(
 
             Ok(ExitStatus::Success)
         }
-        Err(ProjectError::Operation(err)) => diagnostics::OperationDiagnostic::default()
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
+        Err(ProjectError::Operation(err)) => {
+            diagnostics::OperationDiagnostic::native_tls(native_tls)
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+        }
         Err(err) => Err(err.into()),
     }
 }
@@ -928,7 +930,7 @@ impl ValidatedLock {
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedSources(name, expected) => {
+            SatisfiesResult::MismatchedVirtual(name, expected) => {
                 if expected {
                     debug!(
                         "Ignoring existing lockfile due to mismatched source: `{name}` (expected: `virtual`)"
@@ -936,6 +938,18 @@ impl ValidatedLock {
                 } else {
                     debug!(
                         "Ignoring existing lockfile due to mismatched source: `{name}` (expected: `editable`)"
+                    );
+                }
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedDynamic(name, expected) => {
+                if expected {
+                    debug!(
+                        "Ignoring existing lockfile due to static version: `{name}` (expected a dynamic version)"
+                    );
+                } else {
+                    debug!(
+                        "Ignoring existing lockfile due to dynamic version: `{name}` (expected a static version)"
                     );
                 }
                 Ok(Self::Preferable(lock))
@@ -1004,17 +1018,31 @@ impl ValidatedLock {
                 Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedPackageRequirements(name, version, expected, actual) => {
-                debug!(
-                    "Ignoring existing lockfile due to mismatched `requires-dist` for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
-                    expected, actual
-                );
+                if let Some(version) = version {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched requirements for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
+                        expected, actual
+                    );
+                } else {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched requirements for: `{name}`\n  Requested: {:?}\n  Existing: {:?}",
+                        expected, actual
+                    );
+                }
                 Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedPackageDependencyGroups(name, version, expected, actual) => {
-                debug!(
-                    "Ignoring existing lockfile due to mismatched dev dependencies for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
-                    expected, actual
-                );
+                if let Some(version) = version {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched dependency groups for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
+                        expected, actual
+                    );
+                } else {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched dependency groups for: `{name}`\n  Requested: {:?}\n  Existing: {:?}",
+                        expected, actual
+                    );
+                }
                 Ok(Self::Preferable(lock))
             }
         }
@@ -1046,9 +1074,9 @@ fn report_upgrades(
             existing_lock.packages().iter().fold(
                 FxHashMap::with_capacity_and_hasher(existing_lock.packages().len(), FxBuildHasher),
                 |mut acc, package| {
-                    acc.entry(package.name())
-                        .or_default()
-                        .insert(package.version());
+                    if let Some(version) = package.version() {
+                        acc.entry(package.name()).or_default().insert(version);
+                    }
                     acc
                 },
             )
@@ -1060,9 +1088,9 @@ fn report_upgrades(
         new_lock.packages().iter().fold(
             FxHashMap::with_capacity_and_hasher(new_lock.packages().len(), FxBuildHasher),
             |mut acc, package| {
-                acc.entry(package.name())
-                    .or_default()
-                    .insert(package.version());
+                if let Some(version) = package.version() {
+                    acc.entry(package.name()).or_default().insert(version);
+                }
                 acc
             },
         );

@@ -73,6 +73,25 @@ static MAC_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'darwin'").unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
+static ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 =
+        MarkerTree::from_str("platform_machine == 'aarch64' or platform_machine == 'arm64'")
+            .unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 =
+        MarkerTree::from_str("platform_machine == 'x86_64' or platform_machine == 'amd64'")
+            .unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str(
+        "platform_machine == 'i686' or platform_machine == 'i386' or platform_machine == 'win32' or platform_machine == 'x86'",
+    )
+    .unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
 
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
@@ -272,28 +291,69 @@ impl Lock {
             // `(A ∩ (B ∩ C) = ∅) => ((A ∩ B = ∅) or (A ∩ C = ∅))`
             // a single disjointness check with the intersection is sufficient, so we have one
             // constant per platform.
-            let platform_tags = &wheel.filename.platform_tag;
+            let platform_tags = wheel.filename.platform_tags();
             if platform_tags
                 .iter()
-                .all(uv_platform_tags::PlatformTag::is_linux_compatible)
+                .all(uv_platform_tags::PlatformTag::is_linux)
             {
-                !graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS)
-            } else if platform_tags
+                if graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags
                 .iter()
-                .all(uv_platform_tags::PlatformTag::is_windows_compatible)
+                .all(uv_platform_tags::PlatformTag::is_windows)
             {
                 // TODO(charlie): This omits `win_ia64`, which is accepted by Warehouse.
-                !graph.graph[node_index]
+                if graph.graph[node_index]
                     .marker()
                     .is_disjoint(*WINDOWS_MARKERS)
-            } else if platform_tags
-                .iter()
-                .all(uv_platform_tags::PlatformTag::is_macos_compatible)
-            {
-                !graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS)
-            } else {
-                true
+                {
+                    return false;
+                }
             }
+
+            if platform_tags
+                .iter()
+                .all(uv_platform_tags::PlatformTag::is_macos)
+            {
+                if graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags
+                .iter()
+                .all(uv_platform_tags::PlatformTag::is_arm)
+            {
+                if graph.graph[node_index].marker().is_disjoint(*ARM_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags
+                .iter()
+                .all(uv_platform_tags::PlatformTag::is_x86_64)
+            {
+                if graph.graph[node_index]
+                    .marker()
+                    .is_disjoint(*X86_64_MARKERS)
+                {
+                    return false;
+                }
+            }
+
+            if platform_tags
+                .iter()
+                .all(uv_platform_tags::PlatformTag::is_x86)
+            {
+                if graph.graph[node_index].marker().is_disjoint(*X86_MARKERS) {
+                    return false;
+                }
+            }
+
+            true
         });
     }
 
@@ -944,31 +1004,20 @@ impl Lock {
                     .flatten()
                     .map(|package| matches!(package.id.source, Source::Virtual(_)));
                 if actual != Some(expected) {
-                    return Ok(SatisfiesResult::MismatchedSources(name.clone(), expected));
+                    return Ok(SatisfiesResult::MismatchedVirtual(name.clone(), expected));
                 }
             }
 
-            // E.g., that the version has changed.
+            // E.g., that they've switched from dynamic to non-dynamic or vice versa.
             for (name, member) in packages {
-                let Some(expected) = member
-                    .pyproject_toml()
-                    .project
-                    .as_ref()
-                    .and_then(|project| project.version.as_ref())
-                else {
-                    continue;
-                };
+                let expected = member.pyproject_toml().is_dynamic();
                 let actual = self
                     .find_by_name(name)
                     .ok()
                     .flatten()
-                    .map(|package| &package.id.version);
+                    .map(Package::is_dynamic);
                 if actual != Some(expected) {
-                    return Ok(SatisfiesResult::MismatchedVersion(
-                        name.clone(),
-                        expected.clone(),
-                        actual.cloned(),
-                    ));
+                    return Ok(SatisfiesResult::MismatchedDynamic(name.clone(), expected));
                 }
             }
         }
@@ -1136,20 +1185,24 @@ impl Lock {
                             .as_ref()
                             .is_some_and(|remotes| !remotes.contains(url))
                         {
-                            return Ok(SatisfiesResult::MissingRemoteIndex(
-                                &package.id.name,
-                                &package.id.version,
-                                url,
-                            ));
+                            let name = &package.id.name;
+                            let version = &package
+                                .id
+                                .version
+                                .as_ref()
+                                .expect("version for registry source");
+                            return Ok(SatisfiesResult::MissingRemoteIndex(name, version, url));
                         }
                     }
                     RegistrySource::Path(path) => {
                         if locals.as_ref().is_some_and(|locals| !locals.contains(path)) {
-                            return Ok(SatisfiesResult::MissingLocalIndex(
-                                &package.id.name,
-                                &package.id.version,
-                                path,
-                            ));
+                            let name = &package.id.name;
+                            let version = &package
+                                .id
+                                .version
+                                .as_ref()
+                                .expect("version for registry source");
+                            return Ok(SatisfiesResult::MissingLocalIndex(name, version, path));
                         }
                     }
                 };
@@ -1173,6 +1226,9 @@ impl Lock {
             )?;
 
             // Fetch the metadata for the distribution.
+            //
+            // TODO(charlie): We don't need the version here, so we could avoid running a PEP 517
+            // build if only the version is dynamic.
             let metadata = {
                 let id = dist.version_id();
                 if let Some(archive) =
@@ -1211,15 +1267,6 @@ impl Lock {
                 }
             };
 
-            // Validate the `version` metadata.
-            if metadata.version != package.id.version {
-                return Ok(SatisfiesResult::MismatchedVersion(
-                    package.id.name.clone(),
-                    package.id.version.clone(),
-                    Some(metadata.version.clone()),
-                ));
-            }
-
             // Validate the `requires-dist` metadata.
             {
                 let expected: BTreeSet<_> = metadata
@@ -1238,7 +1285,7 @@ impl Lock {
                 if expected != actual {
                     return Ok(SatisfiesResult::MismatchedPackageRequirements(
                         &package.id.name,
-                        &package.id.version,
+                        package.id.version.as_ref(),
                         expected,
                         actual,
                     ));
@@ -1281,7 +1328,7 @@ impl Lock {
                 if expected != actual {
                     return Ok(SatisfiesResult::MismatchedPackageDependencyGroups(
                         &package.id.name,
-                        &package.id.version,
+                        package.id.version.as_ref(),
                         expected,
                         actual,
                     ));
@@ -1346,8 +1393,10 @@ pub enum SatisfiesResult<'lock> {
     Satisfied,
     /// The lockfile uses a different set of workspace members.
     MismatchedMembers(BTreeSet<PackageName>, &'lock BTreeSet<PackageName>),
-    /// The lockfile uses a different set of sources for its workspace members.
-    MismatchedSources(PackageName, bool),
+    /// A workspace member switched from virtual to non-virtual or vice versa.
+    MismatchedVirtual(PackageName, bool),
+    /// A workspace member switched from dynamic to non-dynamic or vice versa.
+    MismatchedDynamic(PackageName, bool),
     /// The lockfile uses a different set of version for its workspace members.
     MismatchedVersion(PackageName, Version, Option<Version>),
     /// The lockfile uses a different set of requirements.
@@ -1372,14 +1421,14 @@ pub enum SatisfiesResult<'lock> {
     /// A package in the lockfile contains different `requires-dist` metadata than expected.
     MismatchedPackageRequirements(
         &'lock PackageName,
-        &'lock Version,
+        Option<&'lock Version>,
         BTreeSet<Requirement>,
         BTreeSet<Requirement>,
     ),
     /// A package in the lockfile contains different `dependency-group` metadata than expected.
     MismatchedPackageDependencyGroups(
         &'lock PackageName,
-        &'lock Version,
+        Option<&'lock Version>,
         BTreeMap<GroupName, BTreeSet<Requirement>>,
         BTreeMap<GroupName, BTreeSet<Requirement>>,
     ),
@@ -1893,7 +1942,7 @@ impl Package {
                 let install_path = absolute_path(workspace_root, path)?;
                 let path_dist = PathSourceDist {
                     name: self.id.name.clone(),
-                    version: Some(self.id.version.clone()),
+                    version: self.id.version.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
                     install_path,
                     ext,
@@ -1975,7 +2024,7 @@ impl Package {
                 });
                 let direct_dist = DirectUrlSourceDist {
                     name: self.id.name.clone(),
-                    location,
+                    location: Box::new(location),
                     subdirectory: subdirectory.clone(),
                     ext,
                     url: VerbatimUrl::from_url(url),
@@ -1987,9 +2036,16 @@ impl Package {
                     return Ok(None);
                 };
 
+                let name = &self.id.name;
+                let version = self
+                    .id
+                    .version
+                    .as_ref()
+                    .expect("version for registry source");
+
                 let file_url = sdist.url().ok_or_else(|| LockErrorKind::MissingUrl {
-                    name: self.id.name.clone(),
-                    version: self.id.version.clone(),
+                    name: name.clone(),
+                    version: version.clone(),
                 })?;
                 let filename = sdist
                     .filename()
@@ -2016,8 +2072,8 @@ impl Package {
                 ));
 
                 let reg_dist = RegistrySourceDist {
-                    name: self.id.name.clone(),
-                    version: self.id.version.clone(),
+                    name: name.clone(),
+                    version: version.clone(),
                     file,
                     ext,
                     index,
@@ -2030,9 +2086,16 @@ impl Package {
                     return Ok(None);
                 };
 
+                let name = &self.id.name;
+                let version = self
+                    .id
+                    .version
+                    .as_ref()
+                    .expect("version for registry source");
+
                 let file_path = sdist.path().ok_or_else(|| LockErrorKind::MissingPath {
-                    name: self.id.name.clone(),
-                    version: self.id.version.clone(),
+                    name: name.clone(),
+                    version: version.clone(),
                 })?;
                 let file_url = Url::from_file_path(workspace_root.join(path).join(file_path))
                     .map_err(|()| LockErrorKind::PathToUrl)?;
@@ -2061,8 +2124,8 @@ impl Package {
                 );
 
                 let reg_dist = RegistrySourceDist {
-                    name: self.id.name.clone(),
-                    version: self.id.version.clone(),
+                    name: name.clone(),
+                    version: version.clone(),
                     file,
                     ext,
                     index,
@@ -2215,7 +2278,7 @@ impl Package {
             else {
                 continue;
             };
-            let build_tag = wheel.filename.build_tag.as_ref();
+            let build_tag = wheel.filename.build_tag();
             let wheel_priority = (tag_priority, build_tag);
             match best {
                 None => {
@@ -2242,8 +2305,8 @@ impl Package {
     }
 
     /// Returns the [`Version`] of the package.
-    pub fn version(&self) -> &Version {
-        &self.id.version
+    pub fn version(&self) -> Option<&Version> {
+        self.id.version.as_ref()
     }
 
     /// Return the fork markers for this package, if any.
@@ -2297,6 +2360,11 @@ impl Package {
             })),
             _ => Ok(None),
         }
+    }
+
+    /// Returns `true` if the package is a dynamic source tree.
+    fn is_dynamic(&self) -> bool {
+        self.id.version.is_none()
     }
 }
 
@@ -2392,7 +2460,7 @@ impl PackageWire {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 pub(crate) struct PackageId {
     pub(crate) name: PackageName,
-    pub(crate) version: Version,
+    pub(crate) version: Option<Version>,
     source: Source,
 }
 
@@ -2401,9 +2469,20 @@ impl PackageId {
         annotated_dist: &AnnotatedDist,
         root: &Path,
     ) -> Result<PackageId, LockError> {
-        let name = annotated_dist.name.clone();
-        let version = annotated_dist.version.clone();
+        // Identify the source of the package.
         let source = Source::from_resolved_dist(&annotated_dist.dist, root)?;
+        // Omit versions for dynamic source trees.
+        let version = if source.is_source_tree()
+            && annotated_dist
+                .metadata
+                .as_ref()
+                .is_some_and(|metadata| metadata.dynamic)
+        {
+            None
+        } else {
+            Some(annotated_dist.version.clone())
+        };
+        let name = annotated_dist.name.clone();
         Ok(Self {
             name,
             version,
@@ -2421,7 +2500,9 @@ impl PackageId {
         let count = dist_count_by_name.and_then(|map| map.get(&self.name).copied());
         table.insert("name", value(self.name.to_string()));
         if count.map(|count| count > 1).unwrap_or(true) {
-            table.insert("version", value(self.version.to_string()));
+            if let Some(version) = &self.version {
+                table.insert("version", value(version.to_string()));
+            }
             self.source.to_toml(table);
         }
     }
@@ -2429,7 +2510,11 @@ impl PackageId {
 
 impl Display for PackageId {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}=={} @ {}", self.name, self.version, self.source)
+        if let Some(version) = &self.version {
+            write!(f, "{}=={} @ {}", self.name, version, self.source)
+        } else {
+            write!(f, "{} @ {}", self.name, self.source)
+        }
     }
 }
 
@@ -2446,15 +2531,17 @@ impl PackageIdForDependency {
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<PackageId, LockError> {
         let unambiguous_package_id = unambiguous_package_ids.get(&self.name);
-        let version = self.version.map(Ok::<_, LockError>).unwrap_or_else(|| {
+        let version = if let Some(version) = self.version {
+            Some(version)
+        } else {
             let Some(dist_id) = unambiguous_package_id else {
                 return Err(LockErrorKind::MissingDependencyVersion {
                     name: self.name.clone(),
                 }
                 .into());
             };
-            Ok(dist_id.version.clone())
-        })?;
+            dist_id.version.clone()
+        };
         let source = self.source.map(Ok::<_, LockError>).unwrap_or_else(|| {
             let Some(package_id) = unambiguous_package_id else {
                 return Err(LockErrorKind::MissingDependencySource {
@@ -2476,7 +2563,7 @@ impl From<PackageId> for PackageIdForDependency {
     fn from(id: PackageId) -> PackageIdForDependency {
         PackageIdForDependency {
             name: id.name,
-            version: Some(id.version),
+            version: id.version,
             source: Some(id.source),
         }
     }
@@ -2679,6 +2766,14 @@ impl Source {
             Source::Virtual(..) => false,
             Source::Git(..) => false,
             Source::Registry(..) => false,
+        }
+    }
+
+    /// Returns `true` if the source is that of a source tree.
+    pub(crate) fn is_source_tree(&self) -> bool {
+        match self {
+            Source::Directory(..) | Source::Editable(..) | Source::Virtual(..) => true,
+            Source::Path(..) | Source::Git(..) | Source::Registry(..) | Source::Direct(..) => false,
         }
     }
 
@@ -3764,21 +3859,22 @@ impl Dependency {
 
 impl Display for Dependency {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if self.extra.is_empty() {
-            write!(
+        match (self.extra.is_empty(), self.package_id.version.as_ref()) {
+            (true, Some(version)) => write!(f, "{}=={}", self.package_id.name, version),
+            (true, None) => write!(f, "{}", self.package_id.name),
+            (false, Some(version)) => write!(
                 f,
-                "{}=={} @ {}",
-                self.package_id.name, self.package_id.version, self.package_id.source
-            )
-        } else {
-            write!(
-                f,
-                "{}[{}]=={} @ {}",
+                "{}[{}]=={}",
                 self.package_id.name,
                 self.extra.iter().join(","),
-                self.package_id.version,
-                self.package_id.source
-            )
+                version
+            ),
+            (false, None) => write!(
+                f,
+                "{}[{}]",
+                self.package_id.name,
+                self.extra.iter().join(",")
+            ),
         }
     }
 }

@@ -35,6 +35,15 @@ pub enum VersionFormat {
     Json,
 }
 
+#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
+pub enum PythonListFormat {
+    /// Plain text (for humans).
+    #[default]
+    Text,
+    /// JSON (for computers).
+    Json,
+}
+
 #[derive(Debug, Default, Clone, clap::ValueEnum)]
 pub enum ListFormat {
     /// Display the list of packages in a human-readable table.
@@ -1943,7 +1952,7 @@ pub struct PipListArgs {
     #[arg(long)]
     pub r#exclude: Vec<PackageName>,
 
-    /// Select the output format between: `columns` (default), `freeze`, or `json`.
+    /// Select the output format.
     #[arg(long, value_enum, default_value_t = ListFormat::default())]
     pub format: ListFormat,
 
@@ -4324,6 +4333,10 @@ pub struct PythonListArgs {
     /// By default, these display as `<download available>`.
     #[arg(long)]
     pub show_urls: bool,
+
+    /// Select the output format.
+    #[arg(long, value_enum, default_value_t = PythonListFormat::default())]
+    pub output_format: PythonListFormat,
 }
 
 #[derive(Args)]

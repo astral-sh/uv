@@ -104,11 +104,6 @@ fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
         .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
         .current_dir(context.temp_dir.path());
 
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env(EnvVars::UV_STACK_SIZE, (4 * 1024 * 1024).to_string());
-    }
     let (snapshot, _) = common::run_and_format(
         &mut command,
         context.filters(),

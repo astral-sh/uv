@@ -162,7 +162,7 @@ pub(crate) async fn tree(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
+            return diagnostics::OperationDiagnostic::native_tls(native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
@@ -257,7 +257,7 @@ pub(crate) async fn tree(
                     continue;
                 };
                 reporter.on_fetch_version(package.name(), &version);
-                if version > *package.version() {
+                if package.version().is_some_and(|package| version > *package) {
                     map.insert(package.clone(), version);
                 }
             }

@@ -179,7 +179,6 @@ wheels = [
 
 [[package]]
 name = "black"
-version = "24.8.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },

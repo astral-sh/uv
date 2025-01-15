@@ -443,7 +443,7 @@ impl ResolverOutput {
             (
                 ResolvedDist::Installable {
                     dist,
-                    version: version.clone(),
+                    version: Some(version.clone()),
                 },
                 hashes,
                 Some(metadata),

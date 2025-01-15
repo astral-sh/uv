@@ -126,7 +126,7 @@ impl DerivationChain {
                             dist.name().clone(),
                             extra.clone(),
                             group.clone(),
-                            dist.version().clone(),
+                            dist.version().cloned(),
                             Ranges::empty(),
                         ));
                         let target = edge.source();
@@ -191,7 +191,7 @@ pub struct DerivationStep {
     /// The enabled dependency group of the package, if any.
     pub group: Option<GroupName>,
     /// The version of the package.
-    pub version: Version,
+    pub version: Option<Version>,
     /// The constraints applied to the subsequent package in the chain.
     pub range: Ranges<Version>,
 }
@@ -202,7 +202,7 @@ impl DerivationStep {
         name: PackageName,
         extra: Option<ExtraName>,
         group: Option<GroupName>,
-        version: Version,
+        version: Option<Version>,
         range: Ranges<Version>,
     ) -> Self {
         Self {

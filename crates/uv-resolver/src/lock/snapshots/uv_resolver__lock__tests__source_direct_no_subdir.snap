@@ -42,7 +42,9 @@ Ok(
                     name: PackageName(
                         "anyio",
                     ),
-                    version: "4.3.0",
+                    version: Some(
+                        "4.3.0",
+                    ),
                     source: Direct(
                         UrlString(
                             "https://burntsushi.net",
@@ -69,7 +71,9 @@ Ok(
                 name: PackageName(
                     "anyio",
                 ),
-                version: "4.3.0",
+                version: Some(
+                    "4.3.0",
+                ),
                 source: Direct(
                     UrlString(
                         "https://burntsushi.net",

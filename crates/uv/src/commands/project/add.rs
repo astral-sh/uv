@@ -632,7 +632,7 @@ pub(crate) async fn add(
                 let _ = snapshot.revert();
             }
             match err {
-                ProjectError::Operation(err) => diagnostics::OperationDiagnostic::with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()))
+                ProjectError::Operation(err) => diagnostics::OperationDiagnostic::native_tls(native_tls).with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()))
                     .report(err)
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
                 err => Err(err.into()),
@@ -690,7 +690,9 @@ async fn lock_and_sync(
             FxHashMap::with_capacity_and_hasher(lock.packages().len(), FxBuildHasher);
         for dist in lock.packages() {
             let name = dist.name();
-            let version = dist.version();
+            let Some(version) = dist.version() else {
+                continue;
+            };
             match minimum_version.entry(name) {
                 Entry::Vacant(entry) => {
                     entry.insert(version);

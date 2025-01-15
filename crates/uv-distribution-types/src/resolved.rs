@@ -15,8 +15,13 @@ use crate::{
 #[derive(Debug, Clone, Hash)]
 #[allow(clippy::large_enum_variant)]
 pub enum ResolvedDist {
-    Installed { dist: InstalledDist },
-    Installable { dist: Dist, version: Version },
+    Installed {
+        dist: InstalledDist,
+    },
+    Installable {
+        dist: Dist,
+        version: Option<Version>,
+    },
 }
 
 /// A variant of [`ResolvedDist`] with borrowed inner distributions.
@@ -76,11 +81,11 @@ impl ResolvedDist {
         }
     }
 
-    /// Returns the version of the distribution.
-    pub fn version(&self) -> &Version {
+    /// Returns the version of the distribution, if available.
+    pub fn version(&self) -> Option<&Version> {
         match self {
-            Self::Installable { version, .. } => version,
-            Self::Installed { dist } => dist.version(),
+            Self::Installable { version, dist } => dist.version().or(version.as_ref()),
+            Self::Installed { dist } => Some(dist.version()),
         }
     }
 }
@@ -99,7 +104,7 @@ impl ResolvedDistRef<'_> {
                 );
                 ResolvedDist::Installable {
                     dist: Dist::Source(SourceDist::Registry(source)),
-                    version: sdist.version.clone(),
+                    version: Some(sdist.version.clone()),
                 }
             }
             Self::InstallableRegistryBuiltDist {
@@ -115,7 +120,7 @@ impl ResolvedDistRef<'_> {
                 let built = prioritized.built_dist().expect("at least one wheel");
                 ResolvedDist::Installable {
                     dist: Dist::Built(BuiltDist::Registry(built)),
-                    version: wheel.filename.version.clone(),
+                    version: Some(wheel.filename.version.clone()),
                 }
             }
             Self::Installed { dist } => ResolvedDist::Installed {

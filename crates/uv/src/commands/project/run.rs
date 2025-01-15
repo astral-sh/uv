@@ -172,28 +172,19 @@ pub(crate) async fn run(
     let script_interpreter = if let Some(script) = script {
         match &script {
             Pep723Item::Script(script) => {
-                writeln!(
-                    printer.stderr(),
+                debug!(
                     "Reading inline script metadata from `{}`",
-                    script.path.user_display().cyan()
-                )?;
+                    script.path.user_display()
+                );
             }
             Pep723Item::Stdin(_) => {
                 if requirements_from_stdin {
                     bail!("Cannot read both requirements file and script from stdin");
                 }
-                writeln!(
-                    printer.stderr(),
-                    "Reading inline script metadata from `{}`",
-                    "stdin".cyan()
-                )?;
+                debug!("Reading inline script metadata from `{}`", "stdin");
             }
             Pep723Item::Remote(_) => {
-                writeln!(
-                    printer.stderr(),
-                    "Reading inline script metadata from {}",
-                    "remote URL".cyan()
-                )?;
+                debug!("Reading inline script metadata from `{}`", "remote URL");
             }
         }
 
@@ -284,7 +275,8 @@ pub(crate) async fn run(
             let environment = match result {
                 Ok(resolution) => resolution,
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::with_context("script")
+                    return diagnostics::OperationDiagnostic::native_tls(native_tls)
+                        .with_context("script")
                         .report(err)
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                 }
@@ -415,7 +407,8 @@ pub(crate) async fn run(
                 let environment = match result {
                     Ok(resolution) => resolution,
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::with_context("script")
+                        return diagnostics::OperationDiagnostic::native_tls(native_tls)
+                            .with_context("script")
                             .report(err)
                             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                     }
@@ -738,7 +731,7 @@ pub(crate) async fn run(
                 {
                     Ok(result) => result,
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::default()
+                        return diagnostics::OperationDiagnostic::native_tls(native_tls)
                             .report(err)
                             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                     }
@@ -819,7 +812,7 @@ pub(crate) async fn run(
                 {
                     Ok(()) => {}
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::default()
+                        return diagnostics::OperationDiagnostic::native_tls(native_tls)
                             .report(err)
                             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                     }
@@ -972,7 +965,8 @@ pub(crate) async fn run(
                 let environment = match result {
                     Ok(resolution) => resolution,
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::with_context("`--with`")
+                        return diagnostics::OperationDiagnostic::native_tls(native_tls)
+                            .with_context("`--with`")
                             .report(err)
                             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                     }

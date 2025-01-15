@@ -95,15 +95,18 @@ impl Preference {
     pub fn from_lock(
         package: &crate::lock::Package,
         install_path: &Path,
-    ) -> Result<Self, LockError> {
-        Ok(Self {
+    ) -> Result<Option<Self>, LockError> {
+        let Some(version) = package.version() else {
+            return Ok(None);
+        };
+        Ok(Some(Self {
             name: package.id.name.clone(),
-            version: package.id.version.clone(),
+            version: version.clone(),
             marker: MarkerTree::TRUE,
             index: package.index(install_path)?,
             fork_markers: package.fork_markers().to_vec(),
             hashes: Vec::new(),
-        })
+        }))
     }
 
     /// Return the [`PackageName`] of the package for this [`Preference`].

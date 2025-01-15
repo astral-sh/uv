@@ -13,6 +13,7 @@ mod build_tag;
 mod egg;
 mod extension;
 mod source_dist;
+mod splitter;
 mod wheel;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -99,6 +100,6 @@ mod tests {
 
     #[test]
     fn wheel_filename_size() {
-        assert_eq!(size_of::<WheelFilename>(), 128);
+        assert_eq!(size_of::<WheelFilename>(), 48);
     }
 }
