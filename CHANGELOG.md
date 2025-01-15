@@ -8,7 +8,7 @@
 - Omit dynamic versions from the lockfile ([#10622](https://github.com/astral-sh/uv/pull/10622))
 - Add support for `pip freeze --path` ([#10488](https://github.com/astral-sh/uv/pull/10488))
 - Reduce verbosity of inline-metadata message when using `uv run <script.py>` ([#10588](https://github.com/astral-sh/uv/pull/10588))
-- Add Git LFS support to `uv-git` crate ([#10335](https://github.com/astral-sh/uv/pull/10335))
+- Add opt-in Git LFS support ([#10335](https://github.com/astral-sh/uv/pull/10335))
 - Recommend `--native-tls` on SSL errors ([#10605](https://github.com/astral-sh/uv/pull/10605))
 - Show expected and available ABI tags in resolver errors ([#10527](https://github.com/astral-sh/uv/pull/10527))
 - Show target Python version in error messages ([#10582](https://github.com/astral-sh/uv/pull/10582))
@@ -20,7 +20,7 @@ The managed Python distributions have been updated, including:
 
 - Python 3.14 support on Windows
 - Python 3.14.0a4 support
-- RISCV64 Linux distributions
+- 64-bit RISC-V Linux support
 - Bundled `libedit` updated from 20210910-3.1 -> 20240808-3.1
 - Bundled `tcl/tk` updated from 8.6.12 -> 8.6.14 (for all Python versions on Unix, only for Python 3.14 on Windows)
 
