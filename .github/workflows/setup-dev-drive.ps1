@@ -1,7 +1,7 @@
 # This uses `D:` as the workspace instead of `C:`, as the performance is much
 # better. Previously, we created a ReFS Dev Drive, but this is actually faster.
 
-$Drive = "$($RUNNER_TEMP)"
+$Drive = "D:"
 $Tmp = "$($Drive)\uv-tmp"
 
 # Create the directory ahead of time in an attempt to avoid race-conditions
@@ -12,8 +12,8 @@ Write-Output `
 	"TMP=$($Tmp)" `
 	"TEMP=$($Tmp)" `
 	"UV_INTERNAL__TEST_DIR=$($Tmp)" `
-	"RUSTUP_HOME=$($Tm)\.rustup" `
-	"CARGO_HOME=$($Tm)\.cargo" `
-	"UV_WORKSPACE=$($Tm)\uv" `
+	"RUSTUP_HOME=$($Drive)/.rustup" `
+	"CARGO_HOME=$($Drive)/.cargo" `
+	"UV_WORKSPACE=$($Drive)/uv" `
 	>> $env:GITHUB_ENV
 
