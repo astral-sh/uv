@@ -1598,14 +1598,19 @@ impl std::fmt::Display for PubGrubHint {
                 tags,
                 best,
             } => {
-                if let Some(best) = best.and_then(LanguageTag::pretty) {
+                if let Some(best) = best {
                     let s = if tags.len() == 1 { "" } else { "s" };
+                    let best = if let Some(pretty) = best.pretty() {
+                        format!("{} (`{}`)", pretty.cyan(), best.cyan())
+                    } else {
+                        format!("{}", best.cyan())
+                    };
                     write!(
                         f,
-                        "{}{} While solving for {}, found wheels for `{}` ({}) with the following Python tag{s}: {}",
+                        "{}{} You require {}, but we only found wheels for `{}` ({}) with the following Python implementation tag{s}: {}",
                         "hint".bold().cyan(),
                         ":".bold(),
-                        best.cyan(),
+                        best,
                         package.cyan(),
                         format!("v{version}").cyan(),
                         tags.iter()
@@ -1616,7 +1621,7 @@ impl std::fmt::Display for PubGrubHint {
                     let s = if tags.len() == 1 { "" } else { "s" };
                     write!(
                         f,
-                        "{}{} Wheels are available for `{}` ({}) with the following Python tag{s}: {}",
+                        "{}{} Wheels are available for `{}` ({}) with the following Python implementation tag{s}: {}",
                         "hint".bold().cyan(),
                         ":".bold(),
                         package.cyan(),
@@ -1633,14 +1638,19 @@ impl std::fmt::Display for PubGrubHint {
                 tags,
                 best,
             } => {
-                if let Some(best) = best.and_then(AbiTag::pretty) {
+                if let Some(best) = best {
                     let s = if tags.len() == 1 { "" } else { "s" };
+                    let best = if let Some(pretty) = best.pretty() {
+                        format!("{} (`{}`)", pretty.cyan(), best.cyan())
+                    } else {
+                        format!("{}", best.cyan())
+                    };
                     write!(
                         f,
-                        "{}{} While solving for {}, found wheels for `{}` ({}) with the following ABI tag{s}: {}",
+                        "{}{} You require {}, but we only found wheels for `{}` ({}) with the following Python ABI tag{s}: {}",
                         "hint".bold().cyan(),
                         ":".bold(),
-                        best.cyan(),
+                        best,
                         package.cyan(),
                         format!("v{version}").cyan(),
                         tags.iter()
@@ -1651,7 +1661,7 @@ impl std::fmt::Display for PubGrubHint {
                     let s = if tags.len() == 1 { "" } else { "s" };
                     write!(
                         f,
-                        "{}{} Wheels are available for `{}` ({}) with the following ABI tag{s}: {}",
+                        "{}{} Wheels are available for `{}` ({}) with the following Python ABI tag{s}: {}",
                         "hint".bold().cyan(),
                         ":".bold(),
                         package.cyan(),
