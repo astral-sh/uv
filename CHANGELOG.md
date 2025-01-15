@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.20
+
+### Bug fixes
+
+- Avoid failing when deserializing unknown tags ([#10655](https://github.com/astral-sh/uv/pull/10655))
+
 ## 0.5.19
 
 ### Enhancements
