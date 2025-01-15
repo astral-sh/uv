@@ -233,7 +233,7 @@ criterion_group!(
     // benchmark_build_platform_tags,
     benchmark_wheelname_parsing,
     benchmark_wheelname_parsing_fast,
-    // benchmark_wheelname_parsing_fastest,
+    benchmark_wheelname_parsing_fastest,
     benchmark_wheelname_parsing_fastest_splitter,
     // benchmark_wheelname_parsing_fast_splitter,
     // benchmark_wheelname_parsing_failure,
