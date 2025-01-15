@@ -158,7 +158,7 @@ impl PyProjectToml {
     ///
     /// ```toml
     /// [build-system]
-    /// requires = ["uv>=0.4.15,<5"]
+    /// requires = ["uv>=0.5.9,<0.6"]
     /// build-backend = "uv"
     /// ```
     pub fn check_build_system(&self, uv_version: &str) -> Vec<String> {
@@ -996,7 +996,7 @@ mod tests {
             {payload}
 
             [build-system]
-            requires = ["uv>=0.4.15,<5"]
+            requires = ["uv>=0.5.9,<0.6"]
             build-backend = "uv"
         "#
         }
@@ -1079,7 +1079,7 @@ mod tests {
             foo-bar = "foo:bar"
 
             [build-system]
-            requires = ["uv>=0.4.15,<5"]
+            requires = ["uv>=0.5.9,<0.6"]
             build-backend = "uv"
         "#
         };
@@ -1273,7 +1273,7 @@ mod tests {
         let contents = extend_project("");
         let pyproject_toml = PyProjectToml::parse(&contents).unwrap();
         assert_snapshot!(
-            pyproject_toml.check_build_system("1.0.0+test").join("\n"),
+            pyproject_toml.check_build_system("0.5.9+test").join("\n"),
             @""
         );
     }
@@ -1291,8 +1291,8 @@ mod tests {
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
         assert_snapshot!(
-            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
-            @r###"`build_system.requires = ["uv"]` is missing an upper bound on the uv version such as `<0.5`. Without bounding the uv version, the source distribution will break when a future, breaking version of uv is released."###
+            pyproject_toml.check_build_system("0.5.9+test").join("\n"),
+            @r###"`build_system.requires = ["uv"]` is missing an upper bound on the uv version such as `<0.6`. Without bounding the uv version, the source distribution will break when a future, breaking version of uv is released."###
         );
     }
 
@@ -1304,12 +1304,12 @@ mod tests {
             version = "0.1.0"
 
             [build-system]
-            requires = ["uv>=0.4.15,<5", "wheel"]
+            requires = ["uv>=0.5.9,<5", "wheel"]
             build-backend = "uv"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
         assert_snapshot!(
-            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
+            pyproject_toml.check_build_system("0.5.9+test").join("\n"),
             @"Expected a single uv requirement in `build-system.requires`, found ``"
         );
     }
@@ -1327,7 +1327,7 @@ mod tests {
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
         assert_snapshot!(
-            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
+            pyproject_toml.check_build_system("0.5.9+test").join("\n"),
             @"Expected a single uv requirement in `build-system.requires`, found ``"
         );
     }
@@ -1340,12 +1340,12 @@ mod tests {
             version = "0.1.0"
 
             [build-system]
-            requires = ["uv>=0.4.15,<5"]
+            requires = ["uv>=0.5.9,<0.6"]
             build-backend = "setuptools"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
         assert_snapshot!(
-            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
+            pyproject_toml.check_build_system("0.5.9+test").join("\n"),
             @r###"The value for `build_system.build-backend` should be `"uv"`, not `"setuptools"`"###
         );
     }
