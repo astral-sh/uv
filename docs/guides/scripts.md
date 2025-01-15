@@ -1,8 +1,8 @@
 ---
-title: Run Scripts
+title: Running scripts
 description:
-  Run Python scripts quickly and manage dependencies efficiently using uv. Learn about inline
-  metadata and more.
+  A guide to using uv to run Python scripts, including support for inline dependency metadata,
+  reproducible scripts, and more.
 ---
 
 # Running scripts

@@ -1,6 +1,6 @@
 ---
 title: Publishing a package
-description: Guide to build and publish Python packages using uv
+description: A guide to using uv to build and publish Python packages to a package index, like PyPI.
 ---
 
 # Publishing a package

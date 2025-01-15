@@ -1,6 +1,8 @@
 ---
 title: Using tools
-description: Guide to run, install, and upgrade Python tools using uv.
+description:
+  A guide to using uv to run tools published as Python packages, including one-off invocations with
+  uvx, requesting specific tool versions, installing tools, upgrading tools, and more.
 ---
 
 # Using tools

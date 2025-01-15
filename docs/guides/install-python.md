@@ -1,8 +1,8 @@
 ---
-title: Installing and Managing Python
+title: Installing and managing Python
 description:
-  Guide to install specific Python versions, manage existing installations, and automate downloads
-  with uv.
+  A guide to using uv to install Python, including requesting specific versions, automatic
+  installation, viewing installed versions, and more.
 ---
 
 # Installing Python

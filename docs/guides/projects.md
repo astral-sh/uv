@@ -1,8 +1,8 @@
 ---
 title: Working on projects
 description:
-  Guide to create, manage, and build Python projects with uv, including dependencies and
-  distributions.
+  A guide to using uv to create and manage Python projects, including adding dependencies, running
+  commands, and building publishable distributions.
 ---
 
 # Working on projects
