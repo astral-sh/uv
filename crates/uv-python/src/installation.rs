@@ -5,7 +5,9 @@ use tracing::{debug, info};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
+use uv_fs::Simplified as _;
 use uv_pep440::{Prerelease, Version};
+use uv_warnings::warn_user;
 
 use crate::discovery::{
     find_best_python_installation, find_python_installation, EnvironmentPreference, PythonRequest,
@@ -165,7 +167,17 @@ impl PythonInstallation {
         installed.ensure_externally_managed()?;
         installed.ensure_sysconfig_patched()?;
         installed.ensure_canonical_executables()?;
-        installed.ensure_dylib_patched()?;
+        if let Err(e) = installed.ensure_dylib_patched() {
+            warn_user!(
+                "Failed to patch the install name of the dynamic library for {}. This may cause issues when building Python native extensions.",
+                installed.executable().simplified_display(),
+            );
+            debug!(
+                "Failed to patch the install name of the dynamic library for {}. This may cause issues when building Python native extensions.\n{}",
+                installed.executable().simplified_display(),
+                e
+            );
+        }
 
         Ok(Self {
             source: PythonSource::Managed,
