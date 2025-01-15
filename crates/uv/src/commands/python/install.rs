@@ -258,7 +258,7 @@ pub(crate) async fn install(
     for download in &downloads {
         tasks.push(async {
             (
-                download.key(),
+                *download,
                 download
                     .fetch_with_retry(
                         &client,
@@ -276,16 +276,16 @@ pub(crate) async fn install(
 
     let mut errors = vec![];
     let mut downloaded = Vec::with_capacity(downloads.len());
-    while let Some((key, result)) = tasks.next().await {
+    while let Some((download, result)) = tasks.next().await {
         match result {
-            Ok(download) => {
-                let path = match download {
+            Ok(download_result) => {
+                let path = match download_result {
                     // We should only encounter already-available during concurrent installs
                     DownloadResult::AlreadyAvailable(path) => path,
                     DownloadResult::Fetched(path) => path,
                 };
 
-                let installation = ManagedPythonInstallation::new(path)?;
+                let installation = ManagedPythonInstallation::new(path, download);
                 changelog.installed.insert(installation.key().clone());
                 if changelog.existing.contains(installation.key()) {
                     changelog.uninstalled.insert(installation.key().clone());
@@ -293,7 +293,7 @@ pub(crate) async fn install(
                 downloaded.push(installation);
             }
             Err(err) => {
-                errors.push((key.clone(), anyhow::Error::new(err)));
+                errors.push((download.key().clone(), anyhow::Error::new(err)));
             }
         }
     }
@@ -339,6 +339,13 @@ pub(crate) async fn install(
             &mut changelog,
             &mut errors,
         )?;
+
+        if preview.is_enabled() {
+            #[cfg(windows)]
+            {
+                uv_python::windows_registry::create_registry_entry(installation, &mut errors)?;
+            }
+        }
     }
 
     if changelog.installed.is_empty() && errors.is_empty() {
@@ -711,5 +718,5 @@ fn find_matching_bin_link<'a>(
         unreachable!("Only Windows and Unix are supported")
     };
 
-    installations.find(|installation| installation.executable() == target)
+    installations.find(|installation| installation.executable(false) == target)
 }
