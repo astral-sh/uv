@@ -134,7 +134,7 @@ ignored = [
 
 [features]
 default = ["python", "python-managed", "pypi", "git", "performance", "crates-io"]
-# Use better memory allocators, etc. — also turns-on self-update.
+# Use better memory allocators, etc.
 performance = [
     "performance-memory-allocator",
     "performance-flate2-backend",
