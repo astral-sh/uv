@@ -464,7 +464,7 @@ impl RequiresPython {
                     python_version: (2, ..),
                     ..
                 } | AbiTag::PyPy {
-                    python_version: (2, ..),
+                    python_version: None | Some((2, ..)),
                     ..
                 } | AbiTag::GraalPy {
                     python_version: (2, ..),
@@ -478,7 +478,7 @@ impl RequiresPython {
                 ..
             }
             | AbiTag::PyPy {
-                python_version: (3, minor),
+                python_version: Some((3, minor)),
                 ..
             }
             | AbiTag::GraalPy {
