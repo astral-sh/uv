@@ -97,9 +97,13 @@ impl Display for DistFilename {
 #[cfg(test)]
 mod tests {
     use crate::WheelFilename;
+    use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
 
     #[test]
     fn wheel_filename_size() {
-        assert_eq!(size_of::<WheelFilename>(), 48);
+        assert_eq!(size_of::<WheelFilename>(), 72);
+        assert_eq!(size_of::<LanguageTag>(), 16);
+        assert_eq!(size_of::<AbiTag>(), 16);
+        assert_eq!(size_of::<PlatformTag>(), 16);
     }
 }
