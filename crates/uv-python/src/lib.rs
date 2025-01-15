@@ -30,6 +30,7 @@ mod implementation;
 mod installation;
 mod interpreter;
 mod libc;
+pub mod macos_dylib;
 pub mod managed;
 #[cfg(windows)]
 mod microsoft_store;

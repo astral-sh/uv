@@ -312,6 +312,9 @@ pub(crate) async fn install(
         installation.ensure_externally_managed()?;
         installation.ensure_sysconfig_patched()?;
         installation.ensure_canonical_executables()?;
+        if let Err(e) = installation.ensure_dylib_patched() {
+            e.warn_user(installation);
+        }
 
         if preview.is_disabled() {
             debug!("Skipping installation of Python executables, use `--preview` to enable.");
