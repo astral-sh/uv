@@ -876,3 +876,43 @@ fn python_install_preview_broken_link() {
         );
     });
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+fn python_dylib_install_name_is_patched_on_install() {
+    use assert_cmd::assert::OutputAssertExt;
+
+    let context: TestContext = TestContext::new_with_versions(&[]).with_filtered_python_keys();
+
+    // Install the latest version
+    context
+        .python_install()
+        .arg("--preview")
+        .arg("3.13")
+        .assert()
+        .success();
+
+    let dylib = context
+        .temp_dir
+        .child("managed")
+        .child("cpython-3.13.1-macos-aarch64-none")
+        .child("lib")
+        .child(format!(
+            "{}python3.13{}",
+            std::env::consts::DLL_PREFIX,
+            std::env::consts::DLL_SUFFIX
+        ));
+
+    let mut cmd = std::process::Command::new("otool");
+    cmd.arg("-D").arg(dylib.as_ref());
+
+    uv_snapshot!(context.filters(), cmd, @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/lib/libpython3.13.dylib:
+    [TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/lib/libpython3.13.dylib
+
+    ----- stderr -----
+    "###);
+}
