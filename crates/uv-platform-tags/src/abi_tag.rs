@@ -32,7 +32,7 @@ pub enum AbiTag {
     },
     /// Ex) `pypy39_pp73`
     PyPy {
-        python_version: (u8, u8),
+        python_version: Option<(u8, u8)>,
         implementation_version: (u8, u8),
     },
     /// Ex) `graalpy310_graalpy240_310_native`
@@ -55,12 +55,20 @@ impl AbiTag {
             AbiTag::CPython { python_version, .. } => {
                 Some(format!("CPython {}.{}", python_version.0, python_version.1))
             }
-            AbiTag::PyPy { python_version, .. } => {
-                Some(format!("PyPy {}.{}", python_version.0, python_version.1))
-            }
-            AbiTag::GraalPy { python_version, .. } => {
-                Some(format!("GraalPy {}.{}", python_version.0, python_version.1))
-            }
+            AbiTag::PyPy {
+                implementation_version,
+                ..
+            } => Some(format!(
+                "PyPy {}.{}",
+                implementation_version.0, implementation_version.1
+            )),
+            AbiTag::GraalPy {
+                implementation_version,
+                ..
+            } => Some(format!(
+                "GraalPy {}.{}",
+                implementation_version.0, implementation_version.1
+            )),
             AbiTag::Pyston { .. } => Some("Pyston".to_string()),
             AbiTag::Unknown { .. } => None,
         }
@@ -88,10 +96,16 @@ impl std::fmt::Display for AbiTag {
                 }
             }
             Self::PyPy {
-                python_version: (py_major, py_minor),
+                python_version: Some((py_major, py_minor)),
                 implementation_version: (impl_major, impl_minor),
             } => {
                 write!(f, "pypy{py_major}{py_minor}_pp{impl_major}{impl_minor}")
+            }
+            Self::PyPy {
+                python_version: None,
+                implementation_version: (impl_major, impl_minor),
+            } => {
+                write!(f, "pypy_{impl_major}{impl_minor}")
             }
             Self::GraalPy {
                 python_version: (py_major, py_minor),
@@ -196,25 +210,34 @@ impl AbiTag {
                 python_version: (major, minor),
             })
         } else if let Some(rest) = s.strip_prefix("pypy") {
-            // Ex) `pypy39_pp73`
-            let (version_str, rest) =
-                rest.split_once('_')
-                    .ok_or_else(|| ParseAbiTagError::InvalidFormat {
-                        implementation: "PyPy",
-                        tag: s.to_string(),
-                    })?;
-            let (major, minor) = parse_python_version(version_str, "PyPy", s)?;
-            let rest = rest
-                .strip_prefix("pp")
-                .ok_or_else(|| ParseAbiTagError::InvalidFormat {
-                    implementation: "PyPy",
-                    tag: s.to_string(),
-                })?;
-            let (impl_major, impl_minor) = parse_impl_version(rest, "PyPy", s)?;
-            Ok(Self::PyPy {
-                python_version: (major, minor),
-                implementation_version: (impl_major, impl_minor),
-            })
+            if let Some(rest) = rest.strip_prefix('_') {
+                // Ex) `pypy_73`
+                let (impl_major, impl_minor) = parse_impl_version(rest, "PyPy", s)?;
+                Ok(Self::PyPy {
+                    python_version: None,
+                    implementation_version: (impl_major, impl_minor),
+                })
+            } else {
+                // Ex) `pypy39_pp73`
+                let (version_str, rest) =
+                    rest.split_once('_')
+                        .ok_or_else(|| ParseAbiTagError::InvalidFormat {
+                            implementation: "PyPy",
+                            tag: s.to_string(),
+                        })?;
+                let (major, minor) = parse_python_version(version_str, "PyPy", s)?;
+                let rest =
+                    rest.strip_prefix("pp")
+                        .ok_or_else(|| ParseAbiTagError::InvalidFormat {
+                            implementation: "PyPy",
+                            tag: s.to_string(),
+                        })?;
+                let (impl_major, impl_minor) = parse_impl_version(rest, "PyPy", s)?;
+                Ok(Self::PyPy {
+                    python_version: Some((major, minor)),
+                    implementation_version: (impl_major, impl_minor),
+                })
+            }
         } else if let Some(rest) = s.strip_prefix("graalpy") {
             // Ex) `graalpy310_graalpy240_310_native`
             let version_end = rest
@@ -377,11 +400,18 @@ mod tests {
     #[test]
     fn pypy_abi() {
         let tag = AbiTag::PyPy {
-            python_version: (3, 9),
+            python_version: Some((3, 9)),
             implementation_version: (7, 3),
         };
         assert_eq!(AbiTag::parse("pypy39_pp73").as_ref(), Ok(&tag));
         assert_eq!(tag.to_string(), "pypy39_pp73");
+
+        let tag = AbiTag::PyPy {
+            python_version: None,
+            implementation_version: (7, 3),
+        };
+        assert_eq!(AbiTag::parse("pypy_73").as_ref(), Ok(&tag));
+        assert_eq!(tag.to_string(), "pypy_73");
 
         assert_eq!(
             AbiTag::parse("pypy39"),
