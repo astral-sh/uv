@@ -13,6 +13,7 @@ mod build_tag;
 mod egg;
 mod extension;
 mod source_dist;
+mod splitter;
 mod wheel;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
