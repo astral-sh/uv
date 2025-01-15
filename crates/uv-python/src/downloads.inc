@@ -124,7 +124,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 4 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
-                family: target_lexicon::Architecture::Riscv64,
+                family: target_lexicon::Architecture::Riscv64(target_lexicon::Riscv64Architecture::Riscv64),
                 variant: None,
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -376,7 +376,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 4 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
-                family: target_lexicon::Architecture::Riscv64,
+                family: target_lexicon::Architecture::Riscv64(target_lexicon::Riscv64Architecture::Riscv64),
                 variant: None,
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -1024,7 +1024,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
-                family: target_lexicon::Architecture::Riscv64,
+                family: target_lexicon::Architecture::Riscv64(target_lexicon::Riscv64Architecture::Riscv64),
                 variant: None,
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -1348,7 +1348,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
-                family: target_lexicon::Architecture::Riscv64,
+                family: target_lexicon::Architecture::Riscv64(target_lexicon::Riscv64Architecture::Riscv64),
                 variant: None,
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -2752,7 +2752,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
-                family: target_lexicon::Architecture::Riscv64,
+                family: target_lexicon::Architecture::Riscv64(target_lexicon::Riscv64Architecture::Riscv64),
                 variant: None,
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -5416,7 +5416,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
-                family: target_lexicon::Architecture::Riscv64,
+                family: target_lexicon::Architecture::Riscv64(target_lexicon::Riscv64Architecture::Riscv64),
                 variant: None,
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -8260,7 +8260,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
-                family: target_lexicon::Architecture::Riscv64,
+                family: target_lexicon::Architecture::Riscv64(target_lexicon::Riscv64Architecture::Riscv64),
                 variant: None,
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -12202,7 +12202,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
-                family: target_lexicon::Architecture::Riscv64,
+                family: target_lexicon::Architecture::Riscv64(target_lexicon::Riscv64Architecture::Riscv64),
                 variant: None,
             },
             os: Os(target_lexicon::OperatingSystem::Linux),

@@ -73,6 +73,8 @@ def prepare_arch(arch: dict) -> tuple[str, str]:
             family = "Arm(target_lexicon::ArmArchitecture::Armv5te)"
         case "armv7":
             family = "Arm(target_lexicon::ArmArchitecture::Armv7)"
+        case "riscv64":
+            family = "Riscv64(target_lexicon::Riscv64Architecture::Riscv64)"
         case value:
             family = value.capitalize()
     variant = (
