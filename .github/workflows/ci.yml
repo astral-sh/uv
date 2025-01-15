@@ -517,7 +517,7 @@ jobs:
     needs: determine_changes
     timeout-minutes: 10
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on: github-windows-2025-x86_64-8
+    runs-on: windows-latest
     name: "build binary | windows"
     steps:
       - uses: actions/checkout@v4
