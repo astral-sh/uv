@@ -374,23 +374,17 @@ pub(crate) async fn install(
                     match existing {
                         None => {
                             // Determine if the link is valid, i.e., if it points to an existing
-                            // Python we don't manage.
-                            let valid_link = cfg!(unix)
-                                .then(|| {
-                                    target
-                                        .read_link()
-                                        .and_then(|target| target.try_exists())
-                                        .inspect_err(|err| {
-                                            debug!(
-                                                "Failed to inspect executable with error: {err}"
-                                            );
-                                        })
-                                        // If we can't verify the link, assume it is valid.
-                                        .unwrap_or(true)
-                                })
-                                // On Windows, we just assume it is valid because symlinks are not
-                                // common.
-                                .unwrap_or(true);
+                            // Python we don't manage. On Windows, we just assume it is valid because
+                            // symlinks are not common for Python interpreters.
+                            let valid_link = cfg!(windows)
+                                || target
+                                    .read_link()
+                                    .and_then(|target| target.try_exists())
+                                    .inspect_err(|err| {
+                                        debug!("Failed to inspect executable with error: {err}");
+                                    })
+                                    // If we can't verify the link, assume it is valid.
+                                    .unwrap_or(true);
 
                             // There's an existing executable we don't manage, require `--force`
                             if valid_link {
