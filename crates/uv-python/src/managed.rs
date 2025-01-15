@@ -628,7 +628,7 @@ impl ManagedPythonInstallation {
 }
 
 /// Generate a platform portion of a key from the environment.
-fn platform_key_from_env() -> Result<String, Error> {
+pub fn platform_key_from_env() -> Result<String, Error> {
     let os = Os::from_env();
     let arch = Arch::from_env();
     let libc = Libc::from_env()?;

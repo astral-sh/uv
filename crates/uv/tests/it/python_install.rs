@@ -881,6 +881,7 @@ fn python_install_preview_broken_link() {
 #[test]
 fn python_dylib_install_name_is_patched_on_install() {
     use assert_cmd::assert::OutputAssertExt;
+    use uv_python::managed::platform_key_from_env;
 
     let context: TestContext = TestContext::new_with_versions(&[]).with_filtered_python_keys();
 
@@ -888,14 +889,17 @@ fn python_dylib_install_name_is_patched_on_install() {
     context
         .python_install()
         .arg("--preview")
-        .arg("3.13")
+        .arg("3.13.1")
         .assert()
         .success();
 
     let dylib = context
         .temp_dir
         .child("managed")
-        .child("cpython-3.13.1-macos-aarch64-none")
+        .child(format!(
+            "cpython-3.13.1-{}",
+            platform_key_from_env().unwrap()
+        ))
         .child("lib")
         .child(format!(
             "{}python3.13{}",
