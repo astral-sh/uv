@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use std::process;
 use std::str::FromStr;
 
+use crate::commands::ToolRunCommand;
+use crate::commands::{pip::operations::Modifications, InitKind, InitProjectKind};
 use url::Url;
 
 use uv_cache::{CacheArgs, Refresh};
@@ -43,9 +45,6 @@ use uv_settings::{
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
-
-use crate::commands::ToolRunCommand;
-use crate::commands::{pip::operations::Modifications, InitKind, InitProjectKind};
 
 /// The default publish URL.
 const PYPI_PUBLISH_URL: &str = "https://upload.pypi.org/legacy/";
@@ -862,7 +861,6 @@ impl PythonUninstallSettings {
             targets,
             all,
         } = args;
-
         Self {
             install_dir,
             targets,
