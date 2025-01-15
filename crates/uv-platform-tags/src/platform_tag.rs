@@ -53,6 +53,8 @@ pub enum PlatformTag {
     WinAmd64,
     /// Ex) `win_arm64`
     WinArm64,
+    /// Ex) `win_ia64`
+    WinIa64,
     /// Ex) `android_21_x86_64`
     Android { api_level: u16, arch: Arch },
     /// Ex) `freebsd_12_x86_64`
@@ -88,6 +90,7 @@ impl PlatformTag {
             PlatformTag::Win32 => Some("Windows"),
             PlatformTag::WinAmd64 => Some("Windows"),
             PlatformTag::WinArm64 => Some("Windows"),
+            PlatformTag::WinIa64 => Some("Windows"),
             PlatformTag::Android { .. } => Some("Android"),
             PlatformTag::FreeBsd { .. } => Some("FreeBSD"),
             PlatformTag::NetBsd { .. } => Some("NetBSD"),
@@ -133,7 +136,10 @@ impl PlatformTag {
 
     /// Returns `true` if the platform is Windows-only.
     pub fn is_windows(&self) -> bool {
-        matches!(self, Self::Win32 | Self::WinAmd64 | Self::WinArm64)
+        matches!(
+            self,
+            Self::Win32 | Self::WinAmd64 | Self::WinArm64 | Self::WinIa64
+        )
     }
 
     /// Returns `true` if the tag is only applicable on ARM platforms.
@@ -250,6 +256,7 @@ impl std::fmt::Display for PlatformTag {
             Self::Win32 => write!(f, "win32"),
             Self::WinAmd64 => write!(f, "win_amd64"),
             Self::WinArm64 => write!(f, "win_arm64"),
+            Self::WinIa64 => write!(f, "win_ia64"),
             Self::Android { api_level, arch } => write!(f, "android_{api_level}_{arch}"),
             Self::FreeBsd { release_arch } => write!(f, "freebsd_{release_arch}"),
             Self::NetBsd { release_arch } => write!(f, "netbsd_{release_arch}"),
@@ -272,6 +279,7 @@ impl PlatformTag {
             "win32" => return Ok(Self::Win32),
             "win_amd64" => return Ok(Self::WinAmd64),
             "win_arm64" => return Ok(Self::WinArm64),
+            "win_ia64" => return Ok(Self::WinIa64),
             _ => {}
         }
 
