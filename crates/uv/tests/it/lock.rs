@@ -6758,7 +6758,7 @@ fn lock_requires_python_no_wheels() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because dearpygui==1.9.1 has no wheels with a matching Python version tag (e.g., `cp312`) and your project depends on dearpygui==1.9.1, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: Wheels are available for `dearpygui` (v1.9.1) with the following ABI tags: `cp37m`, `cp38`, `cp39`, `cp310`, `cp311`
+          hint: Wheels are available for `dearpygui` (v1.9.1) with the following Python ABI tags: `cp37m`, `cp38`, `cp39`, `cp310`, `cp311`
     "###);
 
     Ok(())

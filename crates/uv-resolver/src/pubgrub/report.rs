@@ -536,6 +536,7 @@ impl PubGrubReportFormatter<'_> {
         fork_urls: &ForkUrls,
         fork_indexes: &ForkIndexes,
         env: &ResolverEnvironment,
+        tags: Option<&Tags>,
         workspace_members: &BTreeSet<PackageName>,
         options: &Options,
         output_hints: &mut IndexSet<PubGrubHint>,
@@ -591,6 +592,7 @@ impl PubGrubReportFormatter<'_> {
                                     selector,
                                     fork_indexes,
                                     env,
+                                    tags,
                                 ) {
                                     output_hints.insert(hint);
                                 }
@@ -686,6 +688,7 @@ impl PubGrubReportFormatter<'_> {
                     fork_urls,
                     fork_indexes,
                     env,
+                    tags,
                     workspace_members,
                     options,
                     output_hints,
@@ -702,6 +705,7 @@ impl PubGrubReportFormatter<'_> {
                     fork_urls,
                     fork_indexes,
                     env,
+                    tags,
                     workspace_members,
                     options,
                     output_hints,
@@ -721,6 +725,7 @@ impl PubGrubReportFormatter<'_> {
         selector: &CandidateSelector,
         fork_indexes: &ForkIndexes,
         env: &ResolverEnvironment,
+        tags: Option<&Tags>,
     ) -> Option<PubGrubHint> {
         let response = if let Some(url) = fork_indexes.get(name) {
             index.explicit().get(&(name.clone(), url.clone()))
@@ -739,7 +744,7 @@ impl PubGrubReportFormatter<'_> {
         match tag {
             IncompatibleTag::Invalid => None,
             IncompatibleTag::Python => {
-                // Return all available language tags.
+                let best = tags.and_then(Tags::python_tag);
                 let tags = prioritized.python_tags();
                 if tags.is_empty() {
                     None
@@ -748,10 +753,12 @@ impl PubGrubReportFormatter<'_> {
                         package: name.clone(),
                         version: candidate.version().clone(),
                         tags,
+                        best,
                     })
                 }
             }
             IncompatibleTag::Abi | IncompatibleTag::AbiPythonVersion => {
+                let best = tags.and_then(Tags::abi_tag);
                 let tags = prioritized
                     .abi_tags()
                     .into_iter()
@@ -772,6 +779,7 @@ impl PubGrubReportFormatter<'_> {
                         package: name.clone(),
                         version: candidate.version().clone(),
                         tags,
+                        best,
                     })
                 }
             }
@@ -1105,6 +1113,8 @@ pub(crate) enum PubGrubHint {
         version: Version,
         // excluded from `PartialEq` and `Hash`
         tags: BTreeSet<LanguageTag>,
+        // excluded from `PartialEq` and `Hash`
+        best: Option<LanguageTag>,
     },
     /// No wheels are available for a package, and using source distributions was disabled.
     AbiTags {
@@ -1113,6 +1123,8 @@ pub(crate) enum PubGrubHint {
         version: Version,
         // excluded from `PartialEq` and `Hash`
         tags: BTreeSet<AbiTag>,
+        // excluded from `PartialEq` and `Hash`
+        best: Option<AbiTag>,
     },
     /// No wheels are available for a package, and using source distributions was disabled.
     PlatformTags {
@@ -1562,37 +1574,81 @@ impl std::fmt::Display for PubGrubHint {
                 package,
                 version,
                 tags,
+                best,
             } => {
-                let s = if tags.len() == 1 { "" } else { "s" };
-                write!(
-                    f,
-                    "{}{} Wheels are available for `{}` ({}) with the following Python tag{s}: {}",
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    package.cyan(),
-                    format!("v{version}").cyan(),
-                    tags.iter()
-                        .map(|tag| format!("`{}`", tag.cyan()))
-                        .join(", "),
-                )
+                if let Some(best) = best {
+                    let s = if tags.len() == 1 { "" } else { "s" };
+                    let best = if let Some(pretty) = best.pretty() {
+                        format!("{} (`{}`)", pretty.cyan(), best.cyan())
+                    } else {
+                        format!("{}", best.cyan())
+                    };
+                    write!(
+                        f,
+                        "{}{} You require {}, but we only found wheels for `{}` ({}) with the following Python implementation tag{s}: {}",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        best,
+                        package.cyan(),
+                        format!("v{version}").cyan(),
+                        tags.iter()
+                            .map(|tag| format!("`{}`", tag.cyan()))
+                            .join(", "),
+                    )
+                } else {
+                    let s = if tags.len() == 1 { "" } else { "s" };
+                    write!(
+                        f,
+                        "{}{} Wheels are available for `{}` ({}) with the following Python implementation tag{s}: {}",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        package.cyan(),
+                        format!("v{version}").cyan(),
+                        tags.iter()
+                            .map(|tag| format!("`{}`", tag.cyan()))
+                            .join(", "),
+                    )
+                }
             }
             Self::AbiTags {
                 package,
                 version,
                 tags,
+                best,
             } => {
-                let s = if tags.len() == 1 { "" } else { "s" };
-                write!(
-                    f,
-                    "{}{} Wheels are available for `{}` ({}) with the following ABI tag{s}: {}",
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    package.cyan(),
-                    format!("v{version}").cyan(),
-                    tags.iter()
-                        .map(|tag| format!("`{}`", tag.cyan()))
-                        .join(", "),
-                )
+                if let Some(best) = best {
+                    let s = if tags.len() == 1 { "" } else { "s" };
+                    let best = if let Some(pretty) = best.pretty() {
+                        format!("{} (`{}`)", pretty.cyan(), best.cyan())
+                    } else {
+                        format!("{}", best.cyan())
+                    };
+                    write!(
+                        f,
+                        "{}{} You require {}, but we only found wheels for `{}` ({}) with the following Python ABI tag{s}: {}",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        best,
+                        package.cyan(),
+                        format!("v{version}").cyan(),
+                        tags.iter()
+                            .map(|tag| format!("`{}`", tag.cyan()))
+                            .join(", "),
+                    )
+                } else {
+                    let s = if tags.len() == 1 { "" } else { "s" };
+                    write!(
+                        f,
+                        "{}{} Wheels are available for `{}` ({}) with the following Python ABI tag{s}: {}",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        package.cyan(),
+                        format!("v{version}").cyan(),
+                        tags.iter()
+                            .map(|tag| format!("`{}`", tag.cyan()))
+                            .join(", "),
+                    )
+                }
             }
             Self::PlatformTags {
                 package,
