@@ -1,13 +1,14 @@
 use std::fmt::Formatter;
 use std::str::FromStr;
 
+use uv_small_str::SmallString;
+
 /// A tag to represent the language and implementation of the Python interpreter.
 ///
 /// This is the first segment in the wheel filename. For example, in `cp39-none-manylinux_2_24_x86_64.whl`,
 /// the language tag is `cp39`.
 #[derive(
     Debug,
-    Copy,
     Clone,
     Eq,
     PartialEq,
@@ -32,11 +33,13 @@ pub enum LanguageTag {
     GraalPy { python_version: (u8, u8) },
     /// Ex) `pyston38`
     Pyston { python_version: (u8, u8) },
+    /// Ex) `ironpython27`
+    Unknown { tag: SmallString },
 }
 
 impl LanguageTag {
     /// Return a pretty string representation of the language tag.
-    pub fn pretty(self) -> Option<String> {
+    pub fn pretty(&self) -> Option<String> {
         match self {
             Self::None => None,
             Self::Python { major, minor } => {
@@ -58,6 +61,7 @@ impl LanguageTag {
             Self::Pyston {
                 python_version: (major, minor),
             } => Some(format!("Pyston {major}.{minor}")),
+            Self::Unknown { .. } => None,
         }
     }
 }
@@ -94,16 +98,15 @@ impl std::fmt::Display for LanguageTag {
             } => {
                 write!(f, "pyston{major}{minor}")
             }
+            Self::Unknown { tag } => write!(f, "{tag}"),
         }
     }
 }
 
-impl FromStr for LanguageTag {
-    type Err = ParseLanguageTagError;
-
+impl LanguageTag {
     /// Parse a [`LanguageTag`] from a string.
     #[allow(clippy::cast_possible_truncation)]
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn parse(s: &str) -> Result<Self, ParseLanguageTagError> {
         /// Parse a Python version from a string (e.g., convert `39` into `(3, 9)`).
         fn parse_python_version(
             version_str: &str,
@@ -206,6 +209,14 @@ impl FromStr for LanguageTag {
     }
 }
 
+impl FromStr for LanguageTag {
+    type Err = ParseLanguageTagError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(LanguageTag::parse(s).unwrap_or_else(|_| LanguageTag::Unknown { tag: s.into() }))
+    }
+}
+
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum ParseLanguageTagError {
     #[error("Unknown language tag format: {0}")]
@@ -234,14 +245,13 @@ pub enum ParseLanguageTagError {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
 
     use crate::language_tag::ParseLanguageTagError;
     use crate::LanguageTag;
 
     #[test]
     fn none() {
-        assert_eq!(LanguageTag::from_str("none"), Ok(LanguageTag::None));
+        assert_eq!(LanguageTag::parse("none"), Ok(LanguageTag::None));
         assert_eq!(LanguageTag::None.to_string(), "none");
     }
 
@@ -251,32 +261,32 @@ mod tests {
             major: 3,
             minor: None,
         };
-        assert_eq!(LanguageTag::from_str("py3"), Ok(tag));
+        assert_eq!(LanguageTag::parse("py3").as_ref(), Ok(&tag));
         assert_eq!(tag.to_string(), "py3");
 
         let tag = LanguageTag::Python {
             major: 3,
             minor: Some(9),
         };
-        assert_eq!(LanguageTag::from_str("py39"), Ok(tag));
+        assert_eq!(LanguageTag::parse("py39").as_ref(), Ok(&tag));
         assert_eq!(tag.to_string(), "py39");
 
         assert_eq!(
-            LanguageTag::from_str("py"),
+            LanguageTag::parse("py"),
             Err(ParseLanguageTagError::MissingMajorVersion {
                 implementation: "Python",
                 tag: "py".to_string()
             })
         );
         assert_eq!(
-            LanguageTag::from_str("pyX"),
+            LanguageTag::parse("pyX"),
             Err(ParseLanguageTagError::InvalidMajorVersion {
                 implementation: "Python",
                 tag: "pyX".to_string()
             })
         );
         assert_eq!(
-            LanguageTag::from_str("py3X"),
+            LanguageTag::parse("py3X"),
             Err(ParseLanguageTagError::InvalidMinorVersion {
                 implementation: "Python",
                 tag: "py3X".to_string()
@@ -289,25 +299,25 @@ mod tests {
         let tag = LanguageTag::CPython {
             python_version: (3, 9),
         };
-        assert_eq!(LanguageTag::from_str("cp39"), Ok(tag));
+        assert_eq!(LanguageTag::parse("cp39").as_ref(), Ok(&tag));
         assert_eq!(tag.to_string(), "cp39");
 
         assert_eq!(
-            LanguageTag::from_str("cp"),
+            LanguageTag::parse("cp"),
             Err(ParseLanguageTagError::MissingMajorVersion {
                 implementation: "CPython",
                 tag: "cp".to_string()
             })
         );
         assert_eq!(
-            LanguageTag::from_str("cpX"),
+            LanguageTag::parse("cpX"),
             Err(ParseLanguageTagError::InvalidMajorVersion {
                 implementation: "CPython",
                 tag: "cpX".to_string()
             })
         );
         assert_eq!(
-            LanguageTag::from_str("cp3X"),
+            LanguageTag::parse("cp3X"),
             Err(ParseLanguageTagError::InvalidMinorVersion {
                 implementation: "CPython",
                 tag: "cp3X".to_string()
@@ -320,25 +330,25 @@ mod tests {
         let tag = LanguageTag::PyPy {
             python_version: (3, 9),
         };
-        assert_eq!(LanguageTag::from_str("pp39"), Ok(tag));
+        assert_eq!(LanguageTag::parse("pp39").as_ref(), Ok(&tag));
         assert_eq!(tag.to_string(), "pp39");
 
         assert_eq!(
-            LanguageTag::from_str("pp"),
+            LanguageTag::parse("pp"),
             Err(ParseLanguageTagError::MissingMajorVersion {
                 implementation: "PyPy",
                 tag: "pp".to_string()
             })
         );
         assert_eq!(
-            LanguageTag::from_str("ppX"),
+            LanguageTag::parse("ppX"),
             Err(ParseLanguageTagError::InvalidMajorVersion {
                 implementation: "PyPy",
                 tag: "ppX".to_string()
             })
         );
         assert_eq!(
-            LanguageTag::from_str("pp3X"),
+            LanguageTag::parse("pp3X"),
             Err(ParseLanguageTagError::InvalidMinorVersion {
                 implementation: "PyPy",
                 tag: "pp3X".to_string()
@@ -351,25 +361,25 @@ mod tests {
         let tag = LanguageTag::GraalPy {
             python_version: (3, 10),
         };
-        assert_eq!(LanguageTag::from_str("graalpy310"), Ok(tag));
+        assert_eq!(LanguageTag::parse("graalpy310").as_ref(), Ok(&tag));
         assert_eq!(tag.to_string(), "graalpy310");
 
         assert_eq!(
-            LanguageTag::from_str("graalpy"),
+            LanguageTag::parse("graalpy"),
             Err(ParseLanguageTagError::MissingMajorVersion {
                 implementation: "GraalPy",
                 tag: "graalpy".to_string()
             })
         );
         assert_eq!(
-            LanguageTag::from_str("graalpyX"),
+            LanguageTag::parse("graalpyX"),
             Err(ParseLanguageTagError::InvalidMajorVersion {
                 implementation: "GraalPy",
                 tag: "graalpyX".to_string()
             })
         );
         assert_eq!(
-            LanguageTag::from_str("graalpy3X"),
+            LanguageTag::parse("graalpy3X"),
             Err(ParseLanguageTagError::InvalidMinorVersion {
                 implementation: "GraalPy",
                 tag: "graalpy3X".to_string()
@@ -382,25 +392,25 @@ mod tests {
         let tag = LanguageTag::Pyston {
             python_version: (3, 8),
         };
-        assert_eq!(LanguageTag::from_str("pyston38"), Ok(tag));
+        assert_eq!(LanguageTag::parse("pyston38").as_ref(), Ok(&tag));
         assert_eq!(tag.to_string(), "pyston38");
 
         assert_eq!(
-            LanguageTag::from_str("pyston"),
+            LanguageTag::parse("pyston"),
             Err(ParseLanguageTagError::MissingMajorVersion {
                 implementation: "Pyston",
                 tag: "pyston".to_string()
             })
         );
         assert_eq!(
-            LanguageTag::from_str("pystonX"),
+            LanguageTag::parse("pystonX"),
             Err(ParseLanguageTagError::InvalidMajorVersion {
                 implementation: "Pyston",
                 tag: "pystonX".to_string()
             })
         );
         assert_eq!(
-            LanguageTag::from_str("pyston3X"),
+            LanguageTag::parse("pyston3X"),
             Err(ParseLanguageTagError::InvalidMinorVersion {
                 implementation: "Pyston",
                 tag: "pyston3X".to_string()
@@ -411,11 +421,11 @@ mod tests {
     #[test]
     fn unknown_language() {
         assert_eq!(
-            LanguageTag::from_str("unknown"),
+            LanguageTag::parse("unknown"),
             Err(ParseLanguageTagError::UnknownFormat("unknown".to_string()))
         );
         assert_eq!(
-            LanguageTag::from_str(""),
+            LanguageTag::parse(""),
             Err(ParseLanguageTagError::UnknownFormat(String::new()))
         );
     }

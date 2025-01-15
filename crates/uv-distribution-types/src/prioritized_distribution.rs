@@ -523,20 +523,20 @@ impl PrioritizedDist {
     }
 
     /// Returns the set of all Python tags for the distribution.
-    pub fn python_tags(&self) -> BTreeSet<LanguageTag> {
+    pub fn python_tags(&self) -> BTreeSet<&LanguageTag> {
         self.0
             .wheels
             .iter()
-            .flat_map(|(wheel, _)| wheel.filename.python_tags().iter().copied())
+            .flat_map(|(wheel, _)| wheel.filename.python_tags().iter())
             .collect()
     }
 
     /// Returns the set of all ABI tags for the distribution.
-    pub fn abi_tags(&self) -> BTreeSet<AbiTag> {
+    pub fn abi_tags(&self) -> BTreeSet<&AbiTag> {
         self.0
             .wheels
             .iter()
-            .flat_map(|(wheel, _)| wheel.filename.abi_tags().iter().copied())
+            .flat_map(|(wheel, _)| wheel.filename.abi_tags().iter())
             .collect()
     }
 
@@ -547,7 +547,7 @@ impl PrioritizedDist {
         for (wheel, _) in &self.0.wheels {
             for wheel_py in wheel.filename.python_tags() {
                 for wheel_abi in wheel.filename.abi_tags() {
-                    if tags.is_compatible_abi(*wheel_py, *wheel_abi) {
+                    if tags.is_compatible_abi(wheel_py, wheel_abi) {
                         candidates.extend(wheel.filename.platform_tags().iter());
                     }
                 }
