@@ -930,7 +930,7 @@ impl ValidatedLock {
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedSources(name, expected) => {
+            SatisfiesResult::MismatchedVirtual(name, expected) => {
                 if expected {
                     debug!(
                         "Ignoring existing lockfile due to mismatched source: `{name}` (expected: `virtual`)"
@@ -938,6 +938,18 @@ impl ValidatedLock {
                 } else {
                     debug!(
                         "Ignoring existing lockfile due to mismatched source: `{name}` (expected: `editable`)"
+                    );
+                }
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedDynamic(name, expected) => {
+                if expected {
+                    debug!(
+                        "Ignoring existing lockfile due to static version: `{name}` (expected a dynamic version)"
+                    );
+                } else {
+                    debug!(
+                        "Ignoring existing lockfile due to dynamic version: `{name}` (expected a static version)"
                     );
                 }
                 Ok(Self::Preferable(lock))
@@ -1048,9 +1060,11 @@ fn report_upgrades(
             existing_lock.packages().iter().fold(
                 FxHashMap::with_capacity_and_hasher(existing_lock.packages().len(), FxBuildHasher),
                 |mut acc, package| {
-                    acc.entry(package.name())
-                        .or_default()
-                        .insert(package.version());
+                    if let Some(version) = package.version() {
+                        acc.entry(package.name())
+                            .or_default()
+                            .insert(version);
+                    }
                     acc
                 },
             )
@@ -1062,9 +1076,11 @@ fn report_upgrades(
         new_lock.packages().iter().fold(
             FxHashMap::with_capacity_and_hasher(new_lock.packages().len(), FxBuildHasher),
             |mut acc, package| {
-                acc.entry(package.name())
-                    .or_default()
-                    .insert(package.version());
+                if let Some(version) = package.version() {
+                    acc.entry(package.name())
+                        .or_default()
+                        .insert(version);
+                }
                 acc
             },
         );

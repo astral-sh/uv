@@ -29,6 +29,7 @@ pub struct ResolutionMetadata {
     pub requires_dist: Vec<Requirement<VerbatimParsedUrl>>,
     pub requires_python: Option<VersionSpecifiers>,
     pub provides_extras: Vec<ExtraName>,
+    pub dynamic: bool,
 }
 
 /// From <https://github.com/PyO3/python-pkginfo-rs/blob/d719988323a0cfea86d4737116d7917f30e819e2/src/metadata.rs#LL78C2-L91C26>
@@ -68,6 +69,7 @@ impl ResolutionMetadata {
                 }
             })
             .collect::<Vec<_>>();
+        let dynamic = headers.get_all_values("Dynamic").collect::<Vec<_>>();
 
         Ok(Self {
             name,
@@ -75,6 +77,7 @@ impl ResolutionMetadata {
             requires_dist,
             requires_python,
             provides_extras,
+            dynamic,
         })
     }
 
@@ -98,7 +101,7 @@ impl ResolutionMetadata {
 
         // If any of the fields we need are marked as dynamic, we can't use the `PKG-INFO` file.
         let dynamic = headers.get_all_values("Dynamic").collect::<Vec<_>>();
-        for field in dynamic {
+        for field in &dynamic {
             match field.as_str() {
                 "Requires-Python" => return Err(MetadataError::DynamicField("Requires-Python")),
                 "Requires-Dist" => return Err(MetadataError::DynamicField("Requires-Dist")),
@@ -148,6 +151,7 @@ impl ResolutionMetadata {
             requires_dist,
             requires_python,
             provides_extras,
+            dynamic,
         })
     }
 

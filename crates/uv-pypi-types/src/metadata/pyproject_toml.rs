@@ -30,7 +30,7 @@ pub(crate) fn parse_pyproject_toml(
 
     // If any of the fields we need were declared as dynamic, we can't use the `pyproject.toml` file.
     let dynamic = project.dynamic.unwrap_or_default();
-    for field in dynamic {
+    for field in &dynamic {
         match field.as_str() {
             "dependencies" => return Err(MetadataError::DynamicField("dependencies")),
             "optional-dependencies" => {
@@ -99,6 +99,7 @@ pub(crate) fn parse_pyproject_toml(
         requires_dist,
         requires_python,
         provides_extras,
+        dynamic,
     })
 }
 

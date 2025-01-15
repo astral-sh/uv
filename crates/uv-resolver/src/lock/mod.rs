@@ -1005,7 +1005,20 @@ impl Lock {
                     .flatten()
                     .map(|package| matches!(package.id.source, Source::Virtual(_)));
                 if actual != Some(expected) {
-                    return Ok(SatisfiesResult::MismatchedSources(name.clone(), expected));
+                    return Ok(SatisfiesResult::MismatchedVirtual(name.clone(), expected));
+                }
+            }
+
+            // E.g., that they've switched from dynamic to non-dynamic or vice versa.
+            for (name, member) in packages {
+                let expected = member.pyproject_toml().is_dynamic();
+                let actual = self
+                    .find_by_name(name)
+                    .ok()
+                    .flatten()
+                    .map(|package| package.id.version.is_none());
+                if actual != Some(expected) {
+                    return Ok(SatisfiesResult::MismatchedDynamic(name.clone(), expected));
                 }
             }
         }
@@ -1173,18 +1186,21 @@ impl Lock {
                             .as_ref()
                             .is_some_and(|remotes| !remotes.contains(url))
                         {
+                            let name = &package.id.name;
+                            let version = &package.id.version.as_ref().expect("version for registry source");
                             return Ok(SatisfiesResult::MissingRemoteIndex(
-                                &package.id.name,
-                                &package.id.version.as_ref().unwrap(),
+                                name,
+                                version,
                                 url,
                             ));
                         }
                     }
                     RegistrySource::Path(path) => {
                         if locals.as_ref().is_some_and(|locals| !locals.contains(path)) {
+                            let name = &package.id.name;
+                            let version = &package.id.version.as_ref().expect("version for registry source");
                             return Ok(SatisfiesResult::MissingLocalIndex(
-                                &package.id.name,
-                                &package.id.version.as_ref().unwrap(),
+                                name, version,
                                 path,
                             ));
                         }
@@ -1266,7 +1282,7 @@ impl Lock {
                 if expected != actual {
                     return Ok(SatisfiesResult::MismatchedPackageRequirements(
                         &package.id.name,
-                        &package.id.version.as_ref().unwrap(),
+                        package.id.version.as_ref(),
                         expected,
                         actual,
                     ));
@@ -1309,7 +1325,7 @@ impl Lock {
                 if expected != actual {
                     return Ok(SatisfiesResult::MismatchedPackageDependencyGroups(
                         &package.id.name,
-                        &package.id.version.as_ref().unwrap(),
+                        package.id.version.as_ref(),
                         expected,
                         actual,
                     ));
@@ -1374,8 +1390,10 @@ pub enum SatisfiesResult<'lock> {
     Satisfied,
     /// The lockfile uses a different set of workspace members.
     MismatchedMembers(BTreeSet<PackageName>, &'lock BTreeSet<PackageName>),
-    /// The lockfile uses a different set of sources for its workspace members.
-    MismatchedSources(PackageName, bool),
+    /// A workspace member switched from virtual to non-virtual or vice versa.
+    MismatchedVirtual(PackageName, bool),
+    /// A workspace member switched from dynamic to non-dynamic or vice versa.
+    MismatchedDynamic(PackageName, bool),
     /// The lockfile uses a different set of version for its workspace members.
     MismatchedVersion(PackageName, Version, Option<Version>),
     /// The lockfile uses a different set of requirements.
@@ -1400,14 +1418,14 @@ pub enum SatisfiesResult<'lock> {
     /// A package in the lockfile contains different `requires-dist` metadata than expected.
     MismatchedPackageRequirements(
         &'lock PackageName,
-        &'lock Version,
+        Option<&'lock Version>,
         BTreeSet<Requirement>,
         BTreeSet<Requirement>,
     ),
     /// A package in the lockfile contains different `dependency-group` metadata than expected.
     MismatchedPackageDependencyGroups(
         &'lock PackageName,
-        &'lock Version,
+        Option<&'lock Version>,
         BTreeMap<GroupName, BTreeSet<Requirement>>,
         BTreeMap<GroupName, BTreeSet<Requirement>>,
     ),
@@ -1921,7 +1939,7 @@ impl Package {
                 let install_path = absolute_path(workspace_root, path)?;
                 let path_dist = PathSourceDist {
                     name: self.id.name.clone(),
-                    version: None,
+                    version: self.id.version.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
                     install_path,
                     ext,
@@ -2015,9 +2033,12 @@ impl Package {
                     return Ok(None);
                 };
 
+                let name = &self.id.name;
+                let version = self.id.version.as_ref().expect("version for registry source");
+
                 let file_url = sdist.url().ok_or_else(|| LockErrorKind::MissingUrl {
-                    name: self.id.name.clone(),
-                    version: self.id.version.as_ref().unwrap().clone(),
+                    name: name.clone(),
+                    version: version.clone(),
                 })?;
                 let filename = sdist
                     .filename()
@@ -2044,9 +2065,8 @@ impl Package {
                 ));
 
                 let reg_dist = RegistrySourceDist {
-                    name: self.id.name.clone(),
-                    // We'd expect this to be here...
-                    version: self.id.version.as_ref().unwrap().clone(),
+                    name: name.clone(),
+                    version: version.clone(),
                     file,
                     ext,
                     index,
@@ -2059,9 +2079,13 @@ impl Package {
                     return Ok(None);
                 };
 
+                let name = &self.id.name;
+                let version = self.id.version.as_ref().expect("version for registry source");
+
+
                 let file_path = sdist.path().ok_or_else(|| LockErrorKind::MissingPath {
-                    name: self.id.name.clone(),
-                    version: self.id.version.as_ref().unwrap().clone(),
+                    name: name.clone(),
+                    version: version.clone(),
                 })?;
                 let file_url = Url::from_file_path(workspace_root.join(path).join(file_path))
                     .map_err(|()| LockErrorKind::PathToUrl)?;
@@ -2090,8 +2114,8 @@ impl Package {
                 );
 
                 let reg_dist = RegistrySourceDist {
-                    name: self.id.name.clone(),
-                    version: self.id.version.as_ref().unwrap().clone(),
+                    name: name.clone(),
+                    version: version.clone(),
                     file,
                     ext,
                     index,
@@ -2436,7 +2460,7 @@ impl PackageId {
         let source = Source::from_resolved_dist(&annotated_dist.dist, root)?;
         Ok(Self {
             name,
-            version: None,
+            version: Some(version),
             source,
         })
     }
@@ -2451,7 +2475,9 @@ impl PackageId {
         let count = dist_count_by_name.and_then(|map| map.get(&self.name).copied());
         table.insert("name", value(self.name.to_string()));
         if count.map(|count| count > 1).unwrap_or(true) {
-            table.insert("version", value(self.version.to_string()));
+            if let Some(version) = &self.version {
+                table.insert("version", value(version.to_string()));
+            }
             self.source.to_toml(table);
         }
     }

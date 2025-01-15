@@ -298,7 +298,8 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
         for Requirement { package, marker } in &self.nodes {
             match &package.id.source {
                 Source::Registry(_) => {
-                    write!(f, "{}=={}", package.id.name, package.id.version)?;
+                    let version = package.id.version.as_ref().expect("registry package without version");
+                    write!(f, "{}=={}", package.id.name, version)?;
                 }
                 Source::Git(url, git) => {
                     // Remove the fragment and query from the URL; they're already present in the
