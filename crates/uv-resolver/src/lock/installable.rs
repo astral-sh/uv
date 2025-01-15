@@ -344,11 +344,8 @@ pub trait Installable<'lock> {
             TagPolicy::Required(tags),
             build_options,
         )?;
-        let version = package.version().clone();
-        let dist = ResolvedDist::Installable {
-            dist,
-            version: Some(version),
-        };
+        let version = package.version().cloned();
+        let dist = ResolvedDist::Installable { dist, version };
         let hashes = package.hashes();
         Ok(Node::Dist {
             dist,
@@ -364,11 +361,8 @@ pub trait Installable<'lock> {
             TagPolicy::Preferred(tags),
             &BuildOptions::default(),
         )?;
-        let version = package.version().clone();
-        let dist = ResolvedDist::Installable {
-            dist,
-            version: Some(version),
-        };
+        let version = package.version().cloned();
+        let dist = ResolvedDist::Installable { dist, version };
         let hashes = package.hashes();
         Ok(Node::Dist {
             dist,

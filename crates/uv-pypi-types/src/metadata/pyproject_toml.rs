@@ -29,8 +29,8 @@ pub(crate) fn parse_pyproject_toml(
         .ok_or(MetadataError::FieldNotFound("project"))?;
 
     // If any of the fields we need were declared as dynamic, we can't use the `pyproject.toml` file.
-    let dynamic = project.dynamic.unwrap_or_default();
-    for field in dynamic {
+    let mut dynamic = false;
+    for field in project.dynamic.unwrap_or_default() {
         match field.as_str() {
             "dependencies" => return Err(MetadataError::DynamicField("dependencies")),
             "optional-dependencies" => {
@@ -39,8 +39,11 @@ pub(crate) fn parse_pyproject_toml(
             "requires-python" => return Err(MetadataError::DynamicField("requires-python")),
             // When building from a source distribution, the version is known from the filename and
             // fixed by it, so we can pretend it's static.
-            "version" if sdist_version.is_none() => {
-                return Err(MetadataError::DynamicField("version"))
+            "version" => {
+                if sdist_version.is_none() {
+                    return Err(MetadataError::DynamicField("version"));
+                }
+                dynamic = true;
             }
             _ => (),
         }
@@ -99,6 +102,7 @@ pub(crate) fn parse_pyproject_toml(
         requires_dist,
         requires_python,
         provides_extras,
+        dynamic,
     })
 }
 
