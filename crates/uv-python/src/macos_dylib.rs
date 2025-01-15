@@ -1,6 +1,9 @@
 use std::{io::ErrorKind, path::PathBuf};
 
 use uv_fs::Simplified as _;
+use uv_warnings::warn_user;
+
+use crate::managed::ManagedPythonInstallation;
 
 pub fn patch_dylib_install_name(dylib: PathBuf) -> Result<(), Error> {
     let output = match std::process::Command::new("install_name_tool")
@@ -41,4 +44,20 @@ For more information, see: https://developer.apple.com/xcode/")]
     MissingInstallNameTool,
     #[error("Failed to update the install name of the Python dynamic library located at `{}`", dylib.user_display())]
     RenameError { dylib: PathBuf, stderr: String },
+}
+
+impl Error {
+    /// Emit a user-friendly warning about the patching failure.
+    pub fn warn_user(&self, installation: &ManagedPythonInstallation) {
+        let error = if tracing::enabled!(tracing::Level::DEBUG) {
+            format!("\nUnderlying error: {self}")
+        } else {
+            String::new()
+        };
+        warn_user!(
+            "Failed to patch the install name of the dynamic library for {}. This may cause issues when building Python native extensions.{}",
+            installation.executable().simplified_display(),
+            error
+        );
+    }
 }

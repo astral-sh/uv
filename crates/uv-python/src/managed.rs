@@ -517,7 +517,7 @@ impl ManagedPythonInstallation {
     /// link to the correct location for the Python library.
     ///
     /// See <https://github.com/astral-sh/uv/issues/10598> for more information.
-    pub fn ensure_dylib_patched(&self) -> Result<(), Error> {
+    pub fn ensure_dylib_patched(&self) -> Result<(), macos_dylib::Error> {
         if cfg!(target_os = "macos") {
             if *self.implementation() == ImplementationName::CPython {
                 let dylib_path = self.python_dir().join("lib").join(format!(

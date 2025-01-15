@@ -313,15 +313,7 @@ pub(crate) async fn install(
         installation.ensure_sysconfig_patched()?;
         installation.ensure_canonical_executables()?;
         if let Err(e) = installation.ensure_dylib_patched() {
-            warn_user!(
-                "Failed to patch the install name of the dynamic library for {}. This may cause issues when building Python native extensions.",
-                installation.executable().simplified_display(),
-            );
-            debug!(
-                "Failed to patch the install name of the dynamic library for {}. This may cause issues when building Python native extensions.\n{}",
-                installation.executable().simplified_display(),
-                e
-            );
+            e.warn_user(installation);
         }
 
         if preview.is_disabled() {
