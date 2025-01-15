@@ -62,11 +62,13 @@ fn tool_install() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import patched_main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(patched_main())
         "###);
 
@@ -135,11 +137,13 @@ fn tool_install() {
         assert_snapshot!(fs_err::read_to_string(bin_dir.join("flask")).unwrap(), @r###"
         #![TEMP_DIR]/tools/flask/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from flask.cli import main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(main())
         "###);
     });
@@ -327,11 +331,13 @@ fn tool_install_version() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import patched_main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(patched_main())
         "###);
 
@@ -409,11 +415,13 @@ fn tool_install_editable() {
         assert_snapshot!(fs_err::read_to_string(&executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(main())
         "###);
 
@@ -705,11 +713,13 @@ fn tool_install_editable_from() {
         assert_snapshot!(fs_err::read_to_string(&executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(main())
         "###);
 
@@ -856,11 +866,13 @@ fn tool_install_already_installed() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import patched_main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(patched_main())
         "###);
     });
@@ -1218,11 +1230,13 @@ fn tool_install_force() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python3
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import patched_main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(patched_main())
         "###);
 
@@ -1545,11 +1559,13 @@ fn tool_install_unnamed_package() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import patched_main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(patched_main())
         "###);
 
@@ -1658,11 +1674,13 @@ fn tool_install_unnamed_from() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import patched_main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(patched_main())
         "###);
 
@@ -1747,11 +1765,13 @@ fn tool_install_unnamed_with() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import patched_main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(patched_main())
         "###);
 
@@ -2618,11 +2638,13 @@ fn tool_install_malformed_dist_info() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/babel/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from babel.messages.frontend import main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(main())
         "###);
 
@@ -2696,11 +2718,13 @@ fn tool_install_settings() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/flask/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from flask.cli import main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(main())
         "###);
 
