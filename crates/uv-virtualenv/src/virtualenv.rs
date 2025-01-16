@@ -23,6 +23,7 @@ use crate::{Error, Prompt};
 const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
     ("activate", include_str!("activator/activate")),
     ("activate.csh", include_str!("activator/activate.csh")),
+    ("activate.elv", include_str!("activator/activate.elv")),
     ("activate.fish", include_str!("activator/activate.fish")),
     ("activate.nu", include_str!("activator/activate.nu")),
     ("activate.ps1", include_str!("activator/activate.ps1")),
