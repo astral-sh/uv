@@ -5,15 +5,35 @@ $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 20GB |
 					Mount-VHD -Passthru |
 					Initialize-Disk -Passthru |
 					New-Partition -AssignDriveLetter -UseMaximumSize |
-					Format-Volume -FileSystem ReFS -Confirm:$false -Force
-
-Write-Output $Volume
+					Format-Volume -FileSystem ReFS -DevDrive -Confirm:$false -Force
 
 $Drive = "$($Volume.DriveLetter):"
+
+# Set the drive as trusted
+# See https://learn.microsoft.com/en-us/windows/dev-drive/#how-do-i-designate-a-dev-drive-as-trusted
+fsutil devdrv trust $Drive
+# Disable antivirus filtering on dev drives
+# See https://learn.microsoft.com/en-us/windows/dev-drive/#how-do-i-configure-additional-filters-on-dev-drive
+fsutil devdrv enable /disallowAv
+
+# Remount so the filtering takes effect
+Dismount-VHD -Path C:/uv_dev_drive.vhdx
+Mount-VHD -Path C:/uv_dev_drive.vhdx
+
+# Show some debug information
+Write-Output $Volume
+fsutil devdrv query $Drive
+
 $Tmp = "$($Drive)/uv-tmp"
 
 # Create the directory ahead of time in an attempt to avoid race-conditions
 New-Item $Tmp -ItemType Directory
+
+# Move Cargo to the dev drive
+New-Item -Path "$($Drive)/.cargo/bin" -ItemType Directory -Force
+Copy-Item -Path "C:/Users/runneradmin/.cargo/*" -Destination "E:/.cargo/" -Recurse -Force
+$env:PATH = "$($Drive)/.cargo/bin;" + $env:PATH
+Write-Output "PATH=$($Drive)/.cargo/bin;$env:PATH" >> $env:GITHUB_ENV
 
 Write-Output `
 	"DEV_DRIVE=$($Drive)" `
