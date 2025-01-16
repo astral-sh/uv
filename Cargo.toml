@@ -157,7 +157,10 @@ sha2 = { version = "0.10.8" }
 smallvec = { version = "1.13.2" }
 spdx = { version = "0.10.6" }
 syn = { version = "2.0.77" }
+# Platform information
 sys-info = { version = "0.9.1" }
+# Runtime information
+sysinfo = { version = "0.33.1", default-features = false, features = ["system"] }
 tar = { version = "0.4.43" }
 target-lexicon = { version = "0.13.0" }
 tempfile = { version = "3.14.0" }
