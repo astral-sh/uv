@@ -5,7 +5,7 @@ $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 20GB |
 					Mount-VHD -Passthru |
 					Initialize-Disk -Passthru |
 					New-Partition -AssignDriveLetter -UseMaximumSize |
-					Format-Volume -FileSystem ReFS -DevDrive -Confirm:$false -Force
+					Format-Volume -DevDrive -Confirm:$false -Force
 
 $Drive = "$($Volume.DriveLetter):"
 
