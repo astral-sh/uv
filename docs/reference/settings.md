@@ -131,7 +131,7 @@ By default, uv will resolve for all possible environments during a `uv lock` ope
 However, you can restrict the set of supported environments to improve performance and avoid
 unsatisfiable branches in the solution space.
 
-These environments will also respected when `uv pip compile` is invoked with the
+These environments will also be respected when `uv pip compile` is invoked with the
 `--universal` flag.
 
 **Default value**: `[]`
@@ -161,7 +161,7 @@ higher priority than any indexes specified via [`index_url`](#index-url) or
 [`extra_index_url`](#extra-index-url). uv will only consider the first index that contains
 a given package, unless an alternative [index strategy](#index-strategy) is specified.
 
-If an index is marked as `explicit = true`, it will be used exclusively for those
+If an index is marked as `explicit = true`, it will be used exclusively for the
 dependencies that select it explicitly via `[tool.uv.sources]`, as in:
 
 ```toml
