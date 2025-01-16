@@ -316,7 +316,7 @@ pub struct ToolUv {
     /// [`extra_index_url`](#extra-index-url). uv will only consider the first index that contains
     /// a given package, unless an alternative [index strategy](#index-strategy) is specified.
     ///
-    /// If an index is marked as `explicit = true`, it will be used exclusively for those
+    /// If an index is marked as `explicit = true`, it will be used exclusively for the
     /// dependencies that select it explicitly via `[tool.uv.sources]`, as in:
     ///
     /// ```toml
@@ -394,8 +394,8 @@ pub struct ToolUv {
     ///
     /// Use of this field is not recommend anymore. Instead, use the `dependency-groups.dev` field
     /// which is a standardized way to declare development dependencies. The contents of
-    /// `tool.uv.dev-dependencies` and `dependency-groups.dev` are combined to determine the the
-    /// final requirements of the `dev` dependency group.
+    /// `tool.uv.dev-dependencies` and `dependency-groups.dev` are combined to determine the final
+    /// requirements of the `dev` dependency group.
     #[cfg_attr(
         feature = "schemars",
         schemars(
@@ -473,7 +473,7 @@ pub struct ToolUv {
         value_type = "list[str]",
         example = r#"
             # Ensure that the grpcio version is always less than 1.65, if it's requested by a
-            # transitive dependency.
+            # direct or transitive dependency.
             constraint-dependencies = ["grpcio<1.65"]
         "#
     )]
@@ -485,7 +485,7 @@ pub struct ToolUv {
     /// However, you can restrict the set of supported environments to improve performance and avoid
     /// unsatisfiable branches in the solution space.
     ///
-    /// These environments will also respected when `uv pip compile` is invoked with the
+    /// These environments will also be respected when `uv pip compile` is invoked with the
     /// `--universal` flag.
     #[cfg_attr(
         feature = "schemars",

@@ -1847,7 +1847,7 @@ fn update_availability_range(
         let segment_range = Range::from_range_bounds((lower.clone(), upper.clone()));
 
         // Drop the segment if it's disjoint with the available range, e.g., if the segment is
-        // `foo>999`, and the the available versions are all `<10` it's useless to show.
+        // `foo>999`, and the available versions are all `<10` it's useless to show.
         if segment_range.is_disjoint(&available_range) {
             continue;
         }

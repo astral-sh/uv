@@ -2395,8 +2395,8 @@ pub struct VenvArgs {
     /// the directory name. If not provided (`uv venv`), the prompt is set to
     /// the current directory's name.
     ///
-    /// If "." is provided, the the current directory name will be used
-    /// regardless of whether a path was provided to `uv venv`.
+    /// If "." is provided, the current directory name will be used regardless
+    /// of whether a path was provided to `uv venv`.
     #[arg(long, verbatim_doc_comment)]
     pub prompt: Option<String>,
 

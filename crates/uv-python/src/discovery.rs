@@ -414,7 +414,7 @@ fn python_executables<'a>(
     })
     .flatten();
 
-    // Check if the the base conda environment is active
+    // Check if the base conda environment is active
     let from_base_conda_environment = iter::once_with(|| {
         conda_environment_from_env(CondaEnvironmentKind::Base)
             .into_iter()
