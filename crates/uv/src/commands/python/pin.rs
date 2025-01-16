@@ -203,8 +203,8 @@ fn warn_if_existing_pin_incompatible_with_project(
         }
     }
 
-    // If the there is not a version in the pinned request, attempt to resolve the pin into an interpreter
-    // to check for compatibility on the current system.
+    // If there is not a version in the pinned request, attempt to resolve the pin into an
+    // interpreter to check for compatibility on the current system.
     match PythonInstallation::find(
         pin,
         EnvironmentPreference::OnlySystem,

@@ -107,8 +107,8 @@ not appear in the project's published metadata.
 
 Use of this field is not recommend anymore. Instead, use the `dependency-groups.dev` field
 which is a standardized way to declare development dependencies. The contents of
-`tool.uv.dev-dependencies` and `dependency-groups.dev` are combined to determine the the
-final requirements of the `dev` dependency group.
+`tool.uv.dev-dependencies` and `dependency-groups.dev` are combined to determine the final
+requirements of the `dev` dependency group.
 
 **Default value**: `[]`
 

@@ -8035,7 +8035,7 @@ uv venv [OPTIONS] [PATH]
 
 <p>By default, the prompt is dependent on whether a path was provided to <code>uv venv</code>. If provided (e.g, <code>uv venv project</code>), the prompt is set to the directory name. If not provided (<code>uv venv</code>), the prompt is set to the current directory&#8217;s name.</p>
 
-<p>If &quot;.&quot; is provided, the the current directory name will be used regardless of whether a path was provided to <code>uv venv</code>.</p>
+<p>If &quot;.&quot; is provided, the current directory name will be used regardless of whether a path was provided to <code>uv venv</code>.</p>
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for the virtual environment.</p>
 
