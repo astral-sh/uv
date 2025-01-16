@@ -1,10 +1,9 @@
 use path
-use edit
 
-var venv-path = (path:join '{{ VIRTUAL_ENV_DIR }}' '{{ BIN_NAME }}')
+var venv-bin = (path:join '{{ VIRTUAL_ENV_DIR }}' '{{ BIN_NAME }}')
 
 var paths-bak = $paths
-set paths = [venv-path $@paths]
+set paths = [$venv-bin $@paths]
 
 set-env VIRTUAL_ENV '{{ VIRTUAL_ENV_DIR }}'
 set-env VIRTUAL_ENV_PROMPT '{{ VIRTUAL_PROMPT }}'
