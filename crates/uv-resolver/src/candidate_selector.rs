@@ -188,10 +188,9 @@ impl CandidateSelector {
             .filter(|(marker, _index, _version)| !env.included_by_marker(marker.pep508()));
         let preferences = preferences_match.chain(preferences_mismatch).filter_map(
             |(marker, source, version)| {
-                // If the package is mapped to an explicit index, only consider preferences that
-                // match the index.
+                // Ignore preferences that are associated with conflicting indexes.
                 index
-                    .map_or(true, |index| source == Some(index))
+                    .is_none_or(|index| source.is_none_or(|source| source == index))
                     .then_some((marker, version))
             },
         );
