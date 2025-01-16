@@ -12,11 +12,12 @@ $Drive = "$($Volume.DriveLetter):"
 # Set the drive as trusted
 # See https://learn.microsoft.com/en-us/windows/dev-drive/#how-do-i-designate-a-dev-drive-as-trusted
 fsutil devdrv trust $Drive
+
 # Disable antivirus filtering on dev drives
 # See https://learn.microsoft.com/en-us/windows/dev-drive/#how-do-i-configure-additional-filters-on-dev-drive
 fsutil devdrv enable /disallowAv
 
-# Remount so the filtering takes effect
+# Remount so the changes take effect
 Dismount-VHD -Path C:/uv_dev_drive.vhdx
 Mount-VHD -Path C:/uv_dev_drive.vhdx
 
@@ -24,6 +25,7 @@ Mount-VHD -Path C:/uv_dev_drive.vhdx
 Write-Output $Volume
 fsutil devdrv query $Drive
 
+# Configure a temporary directory
 $Tmp = "$($Drive)/uv-tmp"
 
 # Create the directory ahead of time in an attempt to avoid race-conditions
