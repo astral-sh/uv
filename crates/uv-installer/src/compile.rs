@@ -6,6 +6,7 @@ use std::time::Duration;
 use std::{io, panic};
 
 use async_channel::{Receiver, SendError};
+use sysinfo::{MemoryRefreshKind, RefreshKind, System};
 use tempfile::tempdir_in;
 use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -48,10 +49,19 @@ pub enum CompileError {
         #[source]
         err: Box<Self>,
     },
-    #[error("Bytecode timed out ({}s) compiling file: `{}`", elapsed.as_secs_f32(), source_file)]
+    #[error(
+        "Bytecode timed out ({}s) compiling file: `{}`. \
+        Total memory: {total_memory} bytes, used memory: {used_memory} bytes, \
+        total swap: {total_swap} bytes, used swap: {used_swap} bytes.",
+        elapsed.as_secs_f32(), source_file
+    )]
     CompileTimeout {
         elapsed: Duration,
         source_file: String,
+        total_memory: u64,
+        used_memory: u64,
+        total_swap: u64,
+        used_swap: u64,
     },
     #[error("Python startup timed out ({}s)", _0.as_secs_f32())]
     StartupTimeout(Duration),
@@ -361,9 +371,18 @@ async fn worker_main_loop(
         // should ever take.
         tokio::time::timeout(COMPILE_TIMEOUT, python_handle)
             .await
-            .map_err(|_| CompileError::CompileTimeout {
-                elapsed: COMPILE_TIMEOUT,
-                source_file: source_file.clone(),
+            .map_err(|_| {
+                let sys = System::new_with_specifics(
+                    RefreshKind::default().with_memory(MemoryRefreshKind::everything()),
+                );
+                CompileError::CompileTimeout {
+                    elapsed: COMPILE_TIMEOUT,
+                    source_file: source_file.clone(),
+                    total_memory: sys.total_memory(),
+                    used_memory: sys.used_memory(),
+                    total_swap: sys.total_swap(),
+                    used_swap: sys.used_swap(),
+                }
             })??;
 
         // This is a sanity check, if we don't get the path back something has gone wrong, e.g.

@@ -41,6 +41,7 @@ futures = { workspace = true }
 rayon = { workspace = true }
 rustc-hash = { workspace = true }
 same-file = { workspace = true }
+sysinfo = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
