@@ -49,8 +49,16 @@ impl FilesystemOptions {
                 validate_uv_toml(&file, &options)?;
                 Ok(Some(Self(options)))
             }
-            Err(Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(Error::Io(err)) if err.kind() == std::io::ErrorKind::NotADirectory => Ok(None),
+            Err(Error::Io(err))
+                if matches!(
+                    err.kind(),
+                    std::io::ErrorKind::NotFound
+                        | std::io::ErrorKind::NotADirectory
+                        | std::io::ErrorKind::PermissionDenied
+                ) =>
+            {
+                Ok(None)
+            }
             Err(err) => Err(err),
         }
     }
@@ -310,6 +318,8 @@ mod test {
     #[test]
     #[cfg(not(windows))]
     fn test_locate_system_config_xdg() -> Result<(), FixtureError> {
+        use std::os::unix::fs::PermissionsExt;
+
         // Write a `uv.toml` to a temporary directory.
         let context = assert_fs::TempDir::new()?;
         context.child("uv").child("uv.toml").write_str(indoc! {
@@ -345,6 +355,20 @@ mod test {
             ))
             .unwrap(),
             first_config.path()
+        );
+
+        // Try a permissions error
+        let second = context.child("second");
+        let second_config = first.child("uv").child("uv.toml");
+        second_config.write_str("")?;
+        second_config
+            .metadata()
+            .unwrap()
+            .permissions()
+            .set_mode(0o000);
+        assert_eq!(
+            locate_system_config_xdg(Some(second.to_str().unwrap())),
+            None
         );
 
         Ok(())
