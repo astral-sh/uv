@@ -473,7 +473,7 @@ pub struct ToolUv {
         value_type = "list[str]",
         example = r#"
             # Ensure that the grpcio version is always less than 1.65, if it's requested by a
-            # transitive dependency.
+            # direct or transitive dependency.
             constraint-dependencies = ["grpcio<1.65"]
         "#
     )]
