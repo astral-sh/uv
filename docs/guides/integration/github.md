@@ -1,3 +1,10 @@
+---
+title: Using uv in GitHub Actions
+description:
+  A guide to using uv in GitHub Actions, including installation, setting up Python, installing
+  dependencies, and more.
+---
+
 # Using uv in GitHub Actions
 
 ## Installation
@@ -40,7 +47,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           # Install a specific version of uv.
-          version: "0.5.13"
+          version: "0.5.20"
 ```
 
 ## Setting up Python
@@ -181,9 +188,6 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
-
-      - name: Set up Python
-        run: uv python install
 
       - name: Install the project
         run: uv sync --all-extras --dev

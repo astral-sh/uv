@@ -1,12 +1,17 @@
-use crate::{BuiltDist, Dist, DistRef, Edge, Name, Node, Resolution, ResolvedDist, SourceDist};
+use std::collections::VecDeque;
+use std::fmt::{Debug, Display, Formatter};
+
 use petgraph::prelude::EdgeRef;
 use petgraph::Direction;
 use rustc_hash::FxHashSet;
-use std::collections::VecDeque;
-use std::fmt::{Debug, Display, Formatter};
+use version_ranges::Ranges;
+
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use version_ranges::Ranges;
+
+use crate::{
+    BuiltDist, Dist, DistRef, Edge, Name, Node, RequestedDist, Resolution, ResolvedDist, SourceDist,
+};
 
 /// Inspect whether an error type is a build error.
 pub trait IsBuildBackendError: std::error::Error + Send + Sync + 'static {
@@ -25,7 +30,14 @@ pub enum DistErrorKind {
 }
 
 impl DistErrorKind {
-    pub fn from_dist_and_err(dist: &Dist, err: &impl IsBuildBackendError) -> Self {
+    pub fn from_requested_dist(dist: &RequestedDist, err: &impl IsBuildBackendError) -> Self {
+        match dist {
+            RequestedDist::Installed(_) => DistErrorKind::Read,
+            RequestedDist::Installable(dist) => Self::from_dist(dist, err),
+        }
+    }
+
+    pub fn from_dist(dist: &Dist, err: &impl IsBuildBackendError) -> Self {
         if err.is_build_backend_error() {
             DistErrorKind::BuildBackend
         } else {
@@ -114,7 +126,7 @@ impl DerivationChain {
                             dist.name().clone(),
                             extra.clone(),
                             group.clone(),
-                            dist.version().clone(),
+                            dist.version().cloned(),
                             Ranges::empty(),
                         ));
                         let target = edge.source();
@@ -179,7 +191,7 @@ pub struct DerivationStep {
     /// The enabled dependency group of the package, if any.
     pub group: Option<GroupName>,
     /// The version of the package.
-    pub version: Version,
+    pub version: Option<Version>,
     /// The constraints applied to the subsequent package in the chain.
     pub range: Ranges<Version>,
 }
@@ -190,7 +202,7 @@ impl DerivationStep {
         name: PackageName,
         extra: Option<ExtraName>,
         group: Option<GroupName>,
-        version: Version,
+        version: Option<Version>,
         range: Ranges<Version>,
     ) -> Self {
         Self {

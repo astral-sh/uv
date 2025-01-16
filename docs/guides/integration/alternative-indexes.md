@@ -1,3 +1,10 @@
+---
+title: Using alternative package indexes
+description:
+  A guide to using alternative package indexes with uv, including Azure Artifacts, Google Artifact
+  Registry, AWS CodeArtifact, and more.
+---
+
 # Using alternative package indexes
 
 While uv uses the official Python Package Index (PyPI) by default, it also supports alternative

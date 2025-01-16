@@ -414,7 +414,7 @@ fn python_executables<'a>(
     })
     .flatten();
 
-    // Check if the the base conda environment is active
+    // Check if the base conda environment is active
     let from_base_conda_environment = iter::once_with(|| {
         conda_environment_from_env(CondaEnvironmentKind::Base)
             .into_iter()
@@ -1154,7 +1154,7 @@ pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
             component.starts_with("python")
                 && std::path::Path::new(component)
                     .extension()
-                    .map_or(false, |ext| ext.eq_ignore_ascii_case("exe"))
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
         })
     {
         return false;
@@ -2220,7 +2220,7 @@ impl FromStr for VersionRequest {
         };
 
         // Cast the release components into u8s since that's what we use in `VersionRequest`
-        let Ok(release) = try_into_u8_slice(version.release()) else {
+        let Ok(release) = try_into_u8_slice(&version.release()) else {
             return Err(Error::InvalidVersionRequest(s.to_string()));
         };
 

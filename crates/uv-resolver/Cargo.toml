@@ -38,7 +38,7 @@ uv-types = { workspace = true }
 uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
-anyhow = { workspace = true }
+arcstr = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
 dashmap = { workspace = true }
 either = { workspace = true }
@@ -67,3 +67,6 @@ url = { workspace = true }
 [dev-dependencies]
 insta = { version = "1.40.0" }
 toml = { workspace = true }
+
+[features]
+tracing-durations-export = []

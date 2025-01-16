@@ -41,10 +41,6 @@ bird-feeder = { workspace = true }
 [tool.uv.workspace]
 members = ["packages/*"]
 exclude = ["packages/seeds"]
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
 ```
 
 Every directory included by the `members` globs (and not excluded by the `exclude` globs) must

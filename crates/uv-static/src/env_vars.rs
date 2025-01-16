@@ -249,9 +249,6 @@ impl EnvVars {
     /// Use to disable line wrapping for diagnostics.
     pub const UV_NO_WRAP: &'static str = "UV_NO_WRAP";
 
-    /// Use to increase the stack size used by uv in debug builds on Windows.
-    pub const UV_STACK_SIZE: &'static str = "UV_STACK_SIZE";
-
     /// Generates the environment variable key for the HTTP Basic authentication username.
     #[attr_env_var_pattern("UV_INDEX_{name}_USERNAME")]
     pub fn index_username(name: &str) -> String {
@@ -505,6 +502,15 @@ impl EnvVars {
     /// for more.
     pub const RUST_LOG: &'static str = "RUST_LOG";
 
+    /// Use to set the stack size used by uv.
+    ///
+    /// The value is in bytes, and the default is typically 2MB (2097152).
+    /// Unlike the normal `RUST_MIN_STACK` semantics, this can affect main thread
+    /// stack size, because we actually spawn our own main2 thread to work around
+    /// the fact that Windows' real main thread is only 1MB. That thread has size
+    /// `max(RUST_MIN_STACK, 4MB)`.
+    pub const RUST_MIN_STACK: &'static str = "RUST_MIN_STACK";
+
     /// The directory containing the `Cargo.toml` manifest for a package.
     #[attr_hidden]
     pub const CARGO_MANIFEST_DIR: &'static str = "CARGO_MANIFEST_DIR";
@@ -575,4 +581,7 @@ impl EnvVars {
 
     /// Skip writing `uv` installer metadata files (e.g., `INSTALLER`, `REQUESTED`, and `direct_url.json`) to site-packages `.dist-info` directories.
     pub const UV_NO_INSTALLER_METADATA: &'static str = "UV_NO_INSTALLER_METADATA";
+
+    /// Enables fetching files stored in Git LFS when installing a package from a Git repository.
+    pub const UV_GIT_LFS: &'static str = "UV_GIT_LFS";
 }

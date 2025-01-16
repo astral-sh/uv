@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -142,6 +143,9 @@ pub(crate) enum ProjectError {
     #[error("Group `{0}` is not defined in any project's `dependency-group` table")]
     MissingGroupWorkspace(GroupName),
 
+    #[error("PEP 723 scripts do not support dependency groups, but group `{0}` was specified")]
+    MissingGroupScript(GroupName),
+
     #[error("Default group `{0}` (from `tool.uv.default-groups`) is not defined in the project's `dependency-group` table")]
     MissingDefaultGroup(GroupName),
 
@@ -165,6 +169,9 @@ pub(crate) enum ProjectError {
 
     #[error("Failed to update `pyproject.toml`")]
     PyprojectTomlUpdate,
+
+    #[error("Failed to parse PEP 723 script metadata")]
+    Pep723ScriptTomlParse(#[source] toml::de::Error),
 
     #[error(transparent)]
     DependencyGroup(#[from] DependencyGroupError),
@@ -271,7 +278,7 @@ impl std::fmt::Display for ConflictError {
                     self.conflicts
                         .iter()
                         .map(|conflict| match conflict {
-                            ConflictPackage::Group(ref group) if self.dev.default(group) =>
+                            ConflictPackage::Group(ref group) if self.dev.is_default(group) =>
                                 format!("`{group}` (enabled by default)"),
                             ConflictPackage::Group(ref group) => format!("`{group}`"),
                             ConflictPackage::Extra(..) => unreachable!(),
@@ -290,7 +297,7 @@ impl std::fmt::Display for ConflictError {
                         .map(|(i, conflict)| {
                             let conflict = match conflict {
                                 ConflictPackage::Extra(ref extra) => format!("extra `{extra}`"),
-                                ConflictPackage::Group(ref group) if self.dev.default(group) => {
+                                ConflictPackage::Group(ref group) if self.dev.is_default(group) => {
                                     format!("group `{group}` (enabled by default)")
                                 }
                                 ConflictPackage::Group(ref group) => format!("group `{group}`"),
@@ -1077,7 +1084,7 @@ pub(crate) async fn resolve_names(
             state.index(),
             DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
         )
-        .with_reporter(ResolverReporter::from(printer))
+        .with_reporter(Arc::new(ResolverReporter::from(printer)))
         .resolve(unnamed.into_iter())
         .await?,
     );
@@ -1085,7 +1092,7 @@ pub(crate) async fn resolve_names(
     Ok(requirements)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct EnvironmentSpecification<'lock> {
     /// The requirements to include in the environment.
     requirements: RequirementsSpecification,
@@ -1110,7 +1117,7 @@ impl<'lock> EnvironmentSpecification<'lock> {
 }
 
 /// Run dependency resolution for an interpreter, returning the [`ResolverOutput`].
-pub(crate) async fn resolve_environment<'a>(
+pub(crate) async fn resolve_environment(
     spec: EnvironmentSpecification<'_>,
     interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,
@@ -1726,6 +1733,8 @@ pub(crate) enum DependencyGroupsTarget<'env> {
     Workspace(&'env Workspace),
     /// The dependency groups must be defined in the target project.
     Project(&'env ProjectWorkspace),
+    /// The dependency groups must be defined in the target script.
+    Script,
 }
 
 impl DependencyGroupsTarget<'_> {
@@ -1755,6 +1764,9 @@ impl DependencyGroupsTarget<'_> {
                     {
                         return Err(ProjectError::MissingGroupProject(group.clone()));
                     }
+                }
+                Self::Script => {
+                    return Err(ProjectError::MissingGroupScript(group.clone()));
                 }
             }
         }

@@ -51,7 +51,14 @@ pub(crate) async fn list(
         let version = match installed_tools.version(&name, cache) {
             Ok(version) => version,
             Err(e) => {
-                writeln!(printer.stderr(), "{e}")?;
+                if let uv_tool::Error::EnvironmentError(e) = e {
+                    warn_user!(
+                        "{e} (run `{}` to reinstall)",
+                        format!("uv tool install {name} --reinstall").green()
+                    );
+                } else {
+                    writeln!(printer.stderr(), "{e}")?;
+                }
                 continue;
             }
         };

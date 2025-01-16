@@ -88,6 +88,8 @@ enum RequirementsTxtStatement {
     NoBinary(NoBinary),
     /// `--only-binary`
     OnlyBinary(NoBuild),
+    /// An unsupported option (e.g., `--trusted-host`).
+    UnsupportedOption(UnsupportedOption),
 }
 
 /// A [Requirement] with additional metadata from the `requirements.txt`, currently only hashes but in
@@ -384,6 +386,28 @@ impl RequirementsTxt {
                 RequirementsTxtStatement::OnlyBinary(only_binary) => {
                     data.only_binary.extend(only_binary);
                 }
+                RequirementsTxtStatement::UnsupportedOption(flag) => {
+                    if requirements_txt == Path::new("-") {
+                        if flag.cli() {
+                            uv_warnings::warn_user!("Ignoring unsupported option from stdin: `{flag}` (hint: pass `{flag}` on the command line instead)", flag = flag.green());
+                        } else {
+                            uv_warnings::warn_user!(
+                                "Ignoring unsupported option from stdin: `{flag}`",
+                                flag = flag.green()
+                            );
+                        }
+                    } else {
+                        if flag.cli() {
+                            uv_warnings::warn_user!("Ignoring unsupported option in `{path}`: `{flag}` (hint: pass `{flag}` on the command line instead)", path = requirements_txt.user_display().cyan(), flag = flag.green());
+                        } else {
+                            uv_warnings::warn_user!(
+                                "Ignoring unsupported option in `{path}`: `{flag}`",
+                                path = requirements_txt.user_display().cyan(),
+                                flag = flag.green()
+                            );
+                        }
+                    }
+                }
             }
         }
         Ok(data)
@@ -416,10 +440,70 @@ impl RequirementsTxt {
     }
 }
 
-/// Parse a single entry, that is a requirement, an inclusion or a comment line
+/// An unsupported option (e.g., `--trusted-host`).
 ///
-/// Consumes all preceding trivia (whitespace and comments). If it returns None, we've reached
-/// the end of file
+/// See: <https://pip.pypa.io/en/stable/reference/requirements-file-format/#global-options>
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UnsupportedOption {
+    PreferBinary,
+    RequireHashes,
+    Pre,
+    TrustedHost,
+    UseFeature,
+}
+
+impl UnsupportedOption {
+    /// The name of the unsupported option.
+    fn name(self) -> &'static str {
+        match self {
+            UnsupportedOption::PreferBinary => "--prefer-binary",
+            UnsupportedOption::RequireHashes => "--require-hashes",
+            UnsupportedOption::Pre => "--pre",
+            UnsupportedOption::TrustedHost => "--trusted-host",
+            UnsupportedOption::UseFeature => "--use-feature",
+        }
+    }
+
+    /// Returns `true` if the option is supported on the CLI.
+    fn cli(self) -> bool {
+        match self {
+            UnsupportedOption::PreferBinary => false,
+            UnsupportedOption::RequireHashes => true,
+            UnsupportedOption::Pre => true,
+            UnsupportedOption::TrustedHost => true,
+            UnsupportedOption::UseFeature => false,
+        }
+    }
+
+    /// Returns an iterator over all unsupported options.
+    fn iter() -> impl Iterator<Item = UnsupportedOption> {
+        [
+            UnsupportedOption::PreferBinary,
+            UnsupportedOption::RequireHashes,
+            UnsupportedOption::Pre,
+            UnsupportedOption::TrustedHost,
+            UnsupportedOption::UseFeature,
+        ]
+        .iter()
+        .copied()
+    }
+}
+
+impl Display for UnsupportedOption {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
+/// Returns `true` if the character is a newline or a comment character.
+const fn is_terminal(c: char) -> bool {
+    matches!(c, '\n' | '\r' | '#')
+}
+
+/// Parse a single entry, that is a requirement, an inclusion or a comment line.
+///
+/// Consumes all preceding trivia (whitespace and comments). If it returns `None`, we've reached
+/// the end of file.
 fn parse_entry(
     s: &mut Scanner,
     content: &str,
@@ -436,7 +520,7 @@ fn parse_entry(
 
     let start = s.cursor();
     Ok(Some(if s.eat_if("-r") || s.eat_if("--requirement") {
-        let requirements_file = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
+        let requirements_file = parse_value(content, s, |c: char| !is_terminal(c))?;
         let end = s.cursor();
         RequirementsTxtStatement::Requirements {
             filename: requirements_file.to_string(),
@@ -444,7 +528,7 @@ fn parse_entry(
             end,
         }
     } else if s.eat_if("-c") || s.eat_if("--constraint") {
-        let constraints_file = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
+        let constraints_file = parse_value(content, s, |c: char| !is_terminal(c))?;
         let end = s.cursor();
         RequirementsTxtStatement::Constraint {
             filename: constraints_file.to_string(),
@@ -475,7 +559,7 @@ fn parse_entry(
             hashes,
         })
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
-        let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
+        let given = parse_value(content, s, |c: char| !is_terminal(c))?;
         let expanded = expand_env_vars(given);
         let url = if let Some(path) = std::path::absolute(expanded.as_ref())
             .ok()
@@ -501,7 +585,7 @@ fn parse_entry(
         };
         RequirementsTxtStatement::IndexUrl(url.with_given(given))
     } else if s.eat_if("--extra-index-url") {
-        let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
+        let given = parse_value(content, s, |c: char| !is_terminal(c))?;
         let expanded = expand_env_vars(given);
         let url = if let Some(path) = std::path::absolute(expanded.as_ref())
             .ok()
@@ -529,7 +613,7 @@ fn parse_entry(
     } else if s.eat_if("--no-index") {
         RequirementsTxtStatement::NoIndex
     } else if s.eat_if("--find-links") || s.eat_if("-f") {
-        let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
+        let given = parse_value(content, s, |c: char| !is_terminal(c))?;
         let expanded = expand_env_vars(given);
         let url = if let Some(path) = std::path::absolute(expanded.as_ref())
             .ok()
@@ -555,7 +639,7 @@ fn parse_entry(
         };
         RequirementsTxtStatement::FindLinks(url.with_given(given))
     } else if s.eat_if("--no-binary") {
-        let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
+        let given = parse_value(content, s, |c: char| !is_terminal(c))?;
         let specifier = PackageNameSpecifier::from_str(given).map_err(|err| {
             RequirementsTxtParserError::NoBinary {
                 source: err,
@@ -566,7 +650,7 @@ fn parse_entry(
         })?;
         RequirementsTxtStatement::NoBinary(NoBinary::from_pip_arg(specifier))
     } else if s.eat_if("--only-binary") {
-        let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
+        let given = parse_value(content, s, |c: char| !is_terminal(c))?;
         let specifier = PackageNameSpecifier::from_str(given).map_err(|err| {
             RequirementsTxtParserError::NoBinary {
                 source: err,
@@ -590,14 +674,20 @@ fn parse_entry(
             hashes,
         })
     } else if let Some(char) = s.peek() {
-        let (line, column) = calculate_row_column(content, s.cursor());
-        return Err(RequirementsTxtParserError::Parser {
-            message: format!(
-                "Unexpected '{char}', expected '-c', '-e', '-r' or the start of a requirement"
-            ),
-            line,
-            column,
-        });
+        // Identify an unsupported option, like `--trusted-host`.
+        if let Some(option) = UnsupportedOption::iter().find(|option| s.eat_if(option.name())) {
+            s.eat_while(|c: char| !is_terminal(c));
+            RequirementsTxtStatement::UnsupportedOption(option)
+        } else {
+            let (line, column) = calculate_row_column(content, s.cursor());
+            return Err(RequirementsTxtParserError::Parser {
+                message: format!(
+                    "Unexpected '{char}', expected '-c', '-e', '-r' or the start of a requirement"
+                ),
+                line,
+                column,
+            });
+        }
     } else {
         // EOF
         return Ok(None);

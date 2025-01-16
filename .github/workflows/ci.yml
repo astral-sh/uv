@@ -116,13 +116,12 @@ jobs:
     timeout-minutes: 15
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: "windows-latest-xlarge"
+    runs-on: github-windows-2025-x86_64-16
     name: "cargo clippy | windows"
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create Dev Drive using ReFS
+      - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
@@ -173,8 +172,7 @@ jobs:
     timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: "depot-ubuntu-22.04-16"
+    runs-on: depot-ubuntu-22.04-16
     name: "cargo test | ubuntu"
     steps:
       - uses: actions/checkout@v4
@@ -219,8 +217,7 @@ jobs:
     timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: "macos-latest-xlarge"
+    runs-on: macos-latest-xlarge # github-macos-14-aarch64-6
     name: "cargo test | macos"
     steps:
       - uses: actions/checkout@v4
@@ -258,13 +255,12 @@ jobs:
     timeout-minutes: 15
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: "windows-latest-xlarge"
+    runs-on: github-windows-2025-x86_64-16
     name: "cargo test | windows"
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create Dev Drive using ReFS
+      - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
@@ -309,9 +305,6 @@ jobs:
 
       - name: "Smoke test"
         working-directory: ${{ env.UV_WORKSPACE }}
-        env:
-          # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: |
           Set-Alias -Name uv -Value ./target/debug/uv
           uv venv -v
@@ -320,9 +313,6 @@ jobs:
       - name: "Smoke test completion"
         working-directory: ${{ env.UV_WORKSPACE }}
         shell: powershell
-        env:
-          # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: |
           Set-Alias -Name uv -Value ./target/debug/uv
           Set-Alias -Name uvx -Value ./target/debug/uvx
@@ -334,7 +324,7 @@ jobs:
     timeout-minutes: 15
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on: windows-latest-xlarge
+    runs-on: github-windows-2025-x86_64-16
     name: "check windows trampoline | ${{ matrix.target-arch }}"
     strategy:
       fail-fast: false
@@ -343,7 +333,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create Dev Drive using ReFS
+      - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
@@ -456,8 +446,7 @@ jobs:
     timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: ubuntu-latest-large
+    runs-on: github-ubuntu-24.04-x86_64-8
     name: "build binary | linux"
     steps:
       - uses: actions/checkout@v4
@@ -484,8 +473,7 @@ jobs:
     timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: macos-14
+    runs-on: macos-14 # github-macos-14-aarch64-3
     name: "build binary | macos aarch64"
     steps:
       - uses: actions/checkout@v4
@@ -507,8 +495,7 @@ jobs:
     timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: macos-latest-large # Intel runner on GitHub
+    runs-on: macos-latest-large # github-macos-14-x86_64-12
     name: "build binary | macos x86_64"
     steps:
       - uses: actions/checkout@v4
@@ -530,13 +517,12 @@ jobs:
     needs: determine_changes
     timeout-minutes: 10
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: windows-latest-large
+    runs-on: github-windows-2025-x86_64-8
     name: "build binary | windows"
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create Dev Drive using ReFS
+      - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
@@ -563,8 +549,7 @@ jobs:
     name: "cargo build (msrv)"
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: ubuntu-latest-large
+    runs-on: github-ubuntu-24.04-x86_64-8
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -585,8 +570,7 @@ jobs:
     needs: determine_changes
     timeout-minutes: 10
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: ubuntu-latest
+    runs-on: ubuntu-latest
     name: "build binary | freebsd"
 
     steps:
@@ -754,9 +738,6 @@ jobs:
     needs: build-binary-windows
     name: "integration test | free-threaded on windows"
     runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
 
     steps:
       - name: "Download binary"
@@ -918,9 +899,6 @@ jobs:
           & .venv\Scripts\python.exe --version
 
       - name: "Check install"
-        env:
-          # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: |
           .\uv.exe pip install anyio
 
@@ -1050,9 +1028,6 @@ jobs:
           & .venv\Scripts\python.exe --version
 
       - name: "Check install"
-        env:
-          # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: |
           .\uv.exe pip install anyio
 
@@ -1220,7 +1195,7 @@ jobs:
     timeout-minutes: 10
     needs: build-binary-macos-aarch64
     name: "check cache | macos aarch64"
-    runs-on: macos-14
+    runs-on: macos-14 # github-macos-14-aarch64-3
     steps:
       - uses: actions/checkout@v4
 
@@ -1468,7 +1443,7 @@ jobs:
     timeout-minutes: 10
     needs: build-binary-macos-aarch64
     name: "check system | python on macos aarch64"
-    runs-on: macos-14
+    runs-on: macos-14 # github-macos-14-aarch64-3
     steps:
       - uses: actions/checkout@v4
 
@@ -1492,7 +1467,7 @@ jobs:
     timeout-minutes: 10
     needs: build-binary-macos-aarch64
     name: "check system | homebrew python on macos aarch64"
-    runs-on: macos-14
+    runs-on: macos-14 # github-macos-14-aarch64-3
     steps:
       - uses: actions/checkout@v4
 
@@ -1517,7 +1492,7 @@ jobs:
     timeout-minutes: 10
     needs: build-binary-macos-x86_64
     name: "check system | python on macos x86_64"
-    runs-on: macos-13
+    runs-on: macos-13 # github-macos-13-x86_64-4
     steps:
       - uses: actions/checkout@v4
 
@@ -1544,9 +1519,6 @@ jobs:
     needs: build-binary-windows
     name: "check system | python3.10 on windows"
     runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -1570,9 +1542,6 @@ jobs:
     needs: build-binary-windows
     name: "check system | python3.10 on windows x86"
     runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -1597,9 +1566,6 @@ jobs:
     needs: build-binary-windows
     name: "check system | python3.13 on windows"
     runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -1625,9 +1591,6 @@ jobs:
     needs: build-binary-windows
     name: "check system | python3.12 via chocolatey"
     runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -1760,9 +1723,6 @@ jobs:
 
       - name: "Validate global Python install"
         shell: bash -el {0}
-        env:
-          # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: python ./scripts/check_system_python.py --uv ./uv
 
   system-test-amazonlinux:
@@ -1799,9 +1759,6 @@ jobs:
     needs: build-binary-windows
     name: "check system | embedded python3.10 on windows"
     runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
     steps:
       - uses: actions/checkout@v4
 

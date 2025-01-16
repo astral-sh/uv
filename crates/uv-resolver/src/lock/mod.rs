@@ -73,6 +73,25 @@ static MAC_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'darwin'").unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
+static ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 =
+        MarkerTree::from_str("platform_machine == 'aarch64' or platform_machine == 'arm64'")
+            .unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 =
+        MarkerTree::from_str("platform_machine == 'x86_64' or platform_machine == 'amd64'")
+            .unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str(
+        "platform_machine == 'i686' or platform_machine == 'i386' or platform_machine == 'win32' or platform_machine == 'x86'",
+    )
+    .unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
 
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
@@ -265,18 +284,6 @@ impl Lock {
             .retain(|wheel| requires_python.matches_wheel_tag(&wheel.filename));
 
         // Filter by platform tags.
-
-        // See https://github.com/pypi/warehouse/blob/ccff64920db7965078cf1fdb50f028e640328887/warehouse/forklift/legacy.py#L100-L169
-        // for a list of relevant platforms.
-        let linux_tags = [
-            "manylinux1_",
-            "manylinux2010_",
-            "manylinux2014_",
-            "musllinux_",
-            "manylinux_",
-        ];
-        let windows_tags = ["win32", "win_arm64", "win_amd64", "win_ia64"];
-
         locked_dist.wheels.retain(|wheel| {
             // Naively, we'd check whether `platform_system == 'Linux'` is disjoint, or
             // `os_name == 'posix'` is disjoint, or `sys_platform == 'linux'` is disjoint (each on its
@@ -284,26 +291,69 @@ impl Lock {
             // `(A ∩ (B ∩ C) = ∅) => ((A ∩ B = ∅) or (A ∩ C = ∅))`
             // a single disjointness check with the intersection is sufficient, so we have one
             // constant per platform.
-            let platform_tags = &wheel.filename.platform_tag;
-            if platform_tags.iter().all(|tag| {
-                linux_tags.into_iter().any(|linux_tag| {
-                    // These two linux tags are allowed by warehouse.
-                    tag.starts_with(linux_tag) || tag == "linux_armv6l" || tag == "linux_armv7l"
-                })
-            }) {
-                !graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS)
-            } else if platform_tags
+            let platform_tags = wheel.filename.platform_tags();
+            if platform_tags
                 .iter()
-                .all(|tag| windows_tags.contains(&&**tag))
+                .all(uv_platform_tags::PlatformTag::is_linux)
             {
-                !graph.graph[node_index]
+                if graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags
+                .iter()
+                .all(uv_platform_tags::PlatformTag::is_windows)
+            {
+                // TODO(charlie): This omits `win_ia64`, which is accepted by Warehouse.
+                if graph.graph[node_index]
                     .marker()
                     .is_disjoint(*WINDOWS_MARKERS)
-            } else if platform_tags.iter().all(|tag| tag.starts_with("macosx_")) {
-                !graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS)
-            } else {
-                true
+                {
+                    return false;
+                }
             }
+
+            if platform_tags
+                .iter()
+                .all(uv_platform_tags::PlatformTag::is_macos)
+            {
+                if graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags
+                .iter()
+                .all(uv_platform_tags::PlatformTag::is_arm)
+            {
+                if graph.graph[node_index].marker().is_disjoint(*ARM_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags
+                .iter()
+                .all(uv_platform_tags::PlatformTag::is_x86_64)
+            {
+                if graph.graph[node_index]
+                    .marker()
+                    .is_disjoint(*X86_64_MARKERS)
+                {
+                    return false;
+                }
+            }
+
+            if platform_tags
+                .iter()
+                .all(uv_platform_tags::PlatformTag::is_x86)
+            {
+                if graph.graph[node_index].marker().is_disjoint(*X86_MARKERS) {
+                    return false;
+                }
+            }
+
+            true
         });
     }
 
@@ -953,32 +1003,21 @@ impl Lock {
                     .ok()
                     .flatten()
                     .map(|package| matches!(package.id.source, Source::Virtual(_)));
-                if actual.map_or(true, |actual| actual != expected) {
-                    return Ok(SatisfiesResult::MismatchedSources(name.clone(), expected));
+                if actual != Some(expected) {
+                    return Ok(SatisfiesResult::MismatchedVirtual(name.clone(), expected));
                 }
             }
 
-            // E.g., that the version has changed.
+            // E.g., that they've switched from dynamic to non-dynamic or vice versa.
             for (name, member) in packages {
-                let Some(expected) = member
-                    .pyproject_toml()
-                    .project
-                    .as_ref()
-                    .and_then(|project| project.version.as_ref())
-                else {
-                    continue;
-                };
+                let expected = member.pyproject_toml().is_dynamic();
                 let actual = self
                     .find_by_name(name)
                     .ok()
                     .flatten()
-                    .map(|package| &package.id.version);
-                if actual.map_or(true, |actual| actual != expected) {
-                    return Ok(SatisfiesResult::MismatchedVersion(
-                        name.clone(),
-                        expected.clone(),
-                        actual.cloned(),
-                    ));
+                    .map(Package::is_dynamic);
+                if actual != Some(expected) {
+                    return Ok(SatisfiesResult::MismatchedDynamic(name.clone(), expected));
                 }
             }
         }
@@ -1098,7 +1137,7 @@ impl Lock {
                 .into_iter()
                 .filter_map(|index| match index.url() {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                        Some(UrlString::from(index.url().redacted()))
+                        Some(UrlString::from(index.url().redacted().as_ref()))
                     }
                     IndexUrl::Path(_) => None,
                 })
@@ -1146,20 +1185,24 @@ impl Lock {
                             .as_ref()
                             .is_some_and(|remotes| !remotes.contains(url))
                         {
-                            return Ok(SatisfiesResult::MissingRemoteIndex(
-                                &package.id.name,
-                                &package.id.version,
-                                url,
-                            ));
+                            let name = &package.id.name;
+                            let version = &package
+                                .id
+                                .version
+                                .as_ref()
+                                .expect("version for registry source");
+                            return Ok(SatisfiesResult::MissingRemoteIndex(name, version, url));
                         }
                     }
                     RegistrySource::Path(path) => {
                         if locals.as_ref().is_some_and(|locals| !locals.contains(path)) {
-                            return Ok(SatisfiesResult::MissingLocalIndex(
-                                &package.id.name,
-                                &package.id.version,
-                                path,
-                            ));
+                            let name = &package.id.name;
+                            let version = &package
+                                .id
+                                .version
+                                .as_ref()
+                                .expect("version for registry source");
+                            return Ok(SatisfiesResult::MissingLocalIndex(name, version, path));
                         }
                     }
                 };
@@ -1183,6 +1226,9 @@ impl Lock {
             )?;
 
             // Fetch the metadata for the distribution.
+            //
+            // TODO(charlie): We don't need the version here, so we could avoid running a PEP 517
+            // build if only the version is dynamic.
             let metadata = {
                 let id = dist.version_id();
                 if let Some(archive) =
@@ -1221,15 +1267,6 @@ impl Lock {
                 }
             };
 
-            // Validate the `version` metadata.
-            if metadata.version != package.id.version {
-                return Ok(SatisfiesResult::MismatchedVersion(
-                    package.id.name.clone(),
-                    package.id.version.clone(),
-                    Some(metadata.version.clone()),
-                ));
-            }
-
             // Validate the `requires-dist` metadata.
             {
                 let expected: BTreeSet<_> = metadata
@@ -1248,7 +1285,7 @@ impl Lock {
                 if expected != actual {
                     return Ok(SatisfiesResult::MismatchedPackageRequirements(
                         &package.id.name,
-                        &package.id.version,
+                        package.id.version.as_ref(),
                         expected,
                         actual,
                     ));
@@ -1291,7 +1328,7 @@ impl Lock {
                 if expected != actual {
                     return Ok(SatisfiesResult::MismatchedPackageDependencyGroups(
                         &package.id.name,
-                        &package.id.version,
+                        package.id.version.as_ref(),
                         expected,
                         actual,
                     ));
@@ -1356,8 +1393,10 @@ pub enum SatisfiesResult<'lock> {
     Satisfied,
     /// The lockfile uses a different set of workspace members.
     MismatchedMembers(BTreeSet<PackageName>, &'lock BTreeSet<PackageName>),
-    /// The lockfile uses a different set of sources for its workspace members.
-    MismatchedSources(PackageName, bool),
+    /// A workspace member switched from virtual to non-virtual or vice versa.
+    MismatchedVirtual(PackageName, bool),
+    /// A workspace member switched from dynamic to non-dynamic or vice versa.
+    MismatchedDynamic(PackageName, bool),
     /// The lockfile uses a different set of version for its workspace members.
     MismatchedVersion(PackageName, Version, Option<Version>),
     /// The lockfile uses a different set of requirements.
@@ -1382,14 +1421,14 @@ pub enum SatisfiesResult<'lock> {
     /// A package in the lockfile contains different `requires-dist` metadata than expected.
     MismatchedPackageRequirements(
         &'lock PackageName,
-        &'lock Version,
+        Option<&'lock Version>,
         BTreeSet<Requirement>,
         BTreeSet<Requirement>,
     ),
     /// A package in the lockfile contains different `dependency-group` metadata than expected.
     MismatchedPackageDependencyGroups(
         &'lock PackageName,
-        &'lock Version,
+        Option<&'lock Version>,
         BTreeMap<GroupName, BTreeSet<Requirement>>,
         BTreeMap<GroupName, BTreeSet<Requirement>>,
     ),
@@ -1814,13 +1853,13 @@ impl Package {
                         let filename: WheelFilename =
                             self.wheels[best_wheel_index].filename.clone();
                         let url = Url::from(ParsedArchiveUrl {
-                            url: url.to_url(),
+                            url: url.to_url().map_err(LockErrorKind::InvalidUrl)?,
                             subdirectory: direct.subdirectory.clone(),
                             ext: DistExtension::Wheel,
                         });
                         let direct_dist = DirectUrlBuiltDist {
                             filename,
-                            location: url.clone(),
+                            location: Box::new(url.clone()),
                             url: VerbatimUrl::from_url(url),
                         };
                         let built_dist = BuiltDist::DirectUrl(direct_dist);
@@ -1903,7 +1942,7 @@ impl Package {
                 let install_path = absolute_path(workspace_root, path)?;
                 let path_dist = PathSourceDist {
                     name: self.id.name.clone(),
-                    version: Some(self.id.version.clone()),
+                    version: self.id.version.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
                     install_path,
                     ext,
@@ -1946,7 +1985,7 @@ impl Package {
             Source::Git(url, git) => {
                 // Remove the fragment and query from the URL; they're already present in the
                 // `GitSource`.
-                let mut url = url.to_url();
+                let mut url = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
                 url.set_fragment(None);
                 url.set_query(None);
 
@@ -1976,7 +2015,7 @@ impl Package {
                 let DistExtension::Source(ext) = DistExtension::from_path(url.as_ref())? else {
                     return Ok(None);
                 };
-                let location = url.to_url();
+                let location = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
                 let subdirectory = direct.subdirectory.as_ref().map(PathBuf::from);
                 let url = Url::from(ParsedArchiveUrl {
                     url: location.clone(),
@@ -1985,7 +2024,7 @@ impl Package {
                 });
                 let direct_dist = DirectUrlSourceDist {
                     name: self.id.name.clone(),
-                    location,
+                    location: Box::new(location),
                     subdirectory: subdirectory.clone(),
                     ext,
                     url: VerbatimUrl::from_url(url),
@@ -1997,9 +2036,16 @@ impl Package {
                     return Ok(None);
                 };
 
+                let name = &self.id.name;
+                let version = self
+                    .id
+                    .version
+                    .as_ref()
+                    .expect("version for registry source");
+
                 let file_url = sdist.url().ok_or_else(|| LockErrorKind::MissingUrl {
-                    name: self.id.name.clone(),
-                    version: self.id.version.clone(),
+                    name: name.clone(),
+                    version: version.clone(),
                 })?;
                 let filename = sdist
                     .filename()
@@ -2020,11 +2066,14 @@ impl Package {
                     url: FileLocation::AbsoluteUrl(file_url.clone()),
                     yanked: None,
                 });
-                let index = IndexUrl::from(VerbatimUrl::from_url(url.to_url()));
+
+                let index = IndexUrl::from(VerbatimUrl::from_url(
+                    url.to_url().map_err(LockErrorKind::InvalidUrl)?,
+                ));
 
                 let reg_dist = RegistrySourceDist {
-                    name: self.id.name.clone(),
-                    version: self.id.version.clone(),
+                    name: name.clone(),
+                    version: version.clone(),
                     file,
                     ext,
                     index,
@@ -2037,9 +2086,16 @@ impl Package {
                     return Ok(None);
                 };
 
+                let name = &self.id.name;
+                let version = self
+                    .id
+                    .version
+                    .as_ref()
+                    .expect("version for registry source");
+
                 let file_path = sdist.path().ok_or_else(|| LockErrorKind::MissingPath {
-                    name: self.id.name.clone(),
-                    version: self.id.version.clone(),
+                    name: name.clone(),
+                    version: version.clone(),
                 })?;
                 let file_url = Url::from_file_path(workspace_root.join(path).join(file_path))
                     .map_err(|()| LockErrorKind::PathToUrl)?;
@@ -2068,8 +2124,8 @@ impl Package {
                 );
 
                 let reg_dist = RegistrySourceDist {
-                    name: self.id.name.clone(),
-                    version: self.id.version.clone(),
+                    name: name.clone(),
+                    version: version.clone(),
                     file,
                     ext,
                     index,
@@ -2222,7 +2278,7 @@ impl Package {
             else {
                 continue;
             };
-            let build_tag = wheel.filename.build_tag.as_ref();
+            let build_tag = wheel.filename.build_tag();
             let wheel_priority = (tag_priority, build_tag);
             match best {
                 None => {
@@ -2249,8 +2305,8 @@ impl Package {
     }
 
     /// Returns the [`Version`] of the package.
-    pub fn version(&self) -> &Version {
-        &self.id.version
+    pub fn version(&self) -> Option<&Version> {
+        self.id.version.as_ref()
     }
 
     /// Return the fork markers for this package, if any.
@@ -2262,7 +2318,9 @@ impl Package {
     pub fn index(&self, root: &Path) -> Result<Option<IndexUrl>, LockError> {
         match &self.id.source {
             Source::Registry(RegistrySource::Url(url)) => {
-                let index = IndexUrl::from(VerbatimUrl::from_url(url.to_url()));
+                let index = IndexUrl::from(VerbatimUrl::from_url(
+                    url.to_url().map_err(LockErrorKind::InvalidUrl)?,
+                ));
                 Ok(Some(index))
             }
             Source::Registry(RegistrySource::Path(path)) => {
@@ -2291,17 +2349,22 @@ impl Package {
     }
 
     /// Returns the [`ResolvedRepositoryReference`] for the package, if it is a Git source.
-    pub fn as_git_ref(&self) -> Option<ResolvedRepositoryReference> {
+    pub fn as_git_ref(&self) -> Result<Option<ResolvedRepositoryReference>, LockError> {
         match &self.id.source {
-            Source::Git(url, git) => Some(ResolvedRepositoryReference {
+            Source::Git(url, git) => Ok(Some(ResolvedRepositoryReference {
                 reference: RepositoryReference {
-                    url: RepositoryUrl::new(&url.to_url()),
+                    url: RepositoryUrl::new(&url.to_url().map_err(LockErrorKind::InvalidUrl)?),
                     reference: GitReference::from(git.kind.clone()),
                 },
                 sha: git.precise,
-            }),
-            _ => None,
+            })),
+            _ => Ok(None),
         }
+    }
+
+    /// Returns `true` if the package is a dynamic source tree.
+    fn is_dynamic(&self) -> bool {
+        self.id.version.is_none()
     }
 }
 
@@ -2397,7 +2460,7 @@ impl PackageWire {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 pub(crate) struct PackageId {
     pub(crate) name: PackageName,
-    pub(crate) version: Version,
+    pub(crate) version: Option<Version>,
     source: Source,
 }
 
@@ -2406,9 +2469,20 @@ impl PackageId {
         annotated_dist: &AnnotatedDist,
         root: &Path,
     ) -> Result<PackageId, LockError> {
-        let name = annotated_dist.name.clone();
-        let version = annotated_dist.version.clone();
+        // Identify the source of the package.
         let source = Source::from_resolved_dist(&annotated_dist.dist, root)?;
+        // Omit versions for dynamic source trees.
+        let version = if source.is_source_tree()
+            && annotated_dist
+                .metadata
+                .as_ref()
+                .is_some_and(|metadata| metadata.dynamic)
+        {
+            None
+        } else {
+            Some(annotated_dist.version.clone())
+        };
+        let name = annotated_dist.name.clone();
         Ok(Self {
             name,
             version,
@@ -2426,7 +2500,9 @@ impl PackageId {
         let count = dist_count_by_name.and_then(|map| map.get(&self.name).copied());
         table.insert("name", value(self.name.to_string()));
         if count.map(|count| count > 1).unwrap_or(true) {
-            table.insert("version", value(self.version.to_string()));
+            if let Some(version) = &self.version {
+                table.insert("version", value(version.to_string()));
+            }
             self.source.to_toml(table);
         }
     }
@@ -2434,7 +2510,11 @@ impl PackageId {
 
 impl Display for PackageId {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}=={} @ {}", self.name, self.version, self.source)
+        if let Some(version) = &self.version {
+            write!(f, "{}=={} @ {}", self.name, version, self.source)
+        } else {
+            write!(f, "{} @ {}", self.name, self.source)
+        }
     }
 }
 
@@ -2451,15 +2531,17 @@ impl PackageIdForDependency {
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<PackageId, LockError> {
         let unambiguous_package_id = unambiguous_package_ids.get(&self.name);
-        let version = self.version.map(Ok::<_, LockError>).unwrap_or_else(|| {
+        let version = if let Some(version) = self.version {
+            Some(version)
+        } else {
             let Some(dist_id) = unambiguous_package_id else {
                 return Err(LockErrorKind::MissingDependencyVersion {
                     name: self.name.clone(),
                 }
                 .into());
             };
-            Ok(dist_id.version.clone())
-        })?;
+            dist_id.version.clone()
+        };
         let source = self.source.map(Ok::<_, LockError>).unwrap_or_else(|| {
             let Some(package_id) = unambiguous_package_id else {
                 return Err(LockErrorKind::MissingDependencySource {
@@ -2481,7 +2563,7 @@ impl From<PackageId> for PackageIdForDependency {
     fn from(id: PackageId) -> PackageIdForDependency {
         PackageIdForDependency {
             name: id.name,
-            version: Some(id.version),
+            version: id.version,
             source: Some(id.source),
         }
     }
@@ -2684,6 +2766,14 @@ impl Source {
             Source::Virtual(..) => false,
             Source::Git(..) => false,
             Source::Registry(..) => false,
+        }
+    }
+
+    /// Returns `true` if the source is that of a source tree.
+    pub(crate) fn is_source_tree(&self) -> bool {
+        match self {
+            Source::Directory(..) | Source::Editable(..) | Source::Virtual(..) => true,
+            Source::Path(..) | Source::Git(..) | Source::Registry(..) | Source::Direct(..) => false,
         }
     }
 
@@ -3138,7 +3228,7 @@ impl SourceDist {
         match &reg_dist.index {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                 let url = normalize_file_location(&reg_dist.file.url)
-                    .map_err(LockErrorKind::InvalidFileUrl)
+                    .map_err(LockErrorKind::InvalidUrl)
                     .map_err(LockError::from)?;
                 let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
                 let size = reg_dist.file.size;
@@ -3153,7 +3243,7 @@ impl SourceDist {
                     .file
                     .url
                     .to_url()
-                    .map_err(LockErrorKind::InvalidFileUrl)?
+                    .map_err(LockErrorKind::InvalidUrl)?
                     .to_file_path()
                     .map_err(|()| LockErrorKind::UrlToPath)?;
                 let path = relative_to(&reg_dist_path, index_path)
@@ -3444,7 +3534,7 @@ impl Wheel {
         match &wheel.index {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                 let url = normalize_file_location(&wheel.file.url)
-                    .map_err(LockErrorKind::InvalidFileUrl)
+                    .map_err(LockErrorKind::InvalidUrl)
                     .map_err(LockError::from)?;
                 let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
                 let size = wheel.file.size;
@@ -3461,7 +3551,7 @@ impl Wheel {
                     .file
                     .url
                     .to_url()
-                    .map_err(LockErrorKind::InvalidFileUrl)?
+                    .map_err(LockErrorKind::InvalidUrl)?
                     .to_file_path()
                     .map_err(|()| LockErrorKind::UrlToPath)?;
                 let path = relative_to(&wheel_path, index_path)
@@ -3507,7 +3597,7 @@ impl Wheel {
         let filename: WheelFilename = self.filename.clone();
 
         match source {
-            RegistrySource::Url(index_url) => {
+            RegistrySource::Url(url) => {
                 let file_url = match &self.url {
                     WheelWireSource::Url { url } => url,
                     WheelWireSource::Path { .. } | WheelWireSource::Filename { .. } => {
@@ -3528,7 +3618,9 @@ impl Wheel {
                     url: FileLocation::AbsoluteUrl(file_url.clone()),
                     yanked: None,
                 });
-                let index = IndexUrl::from(VerbatimUrl::from_url(index_url.to_url()));
+                let index = IndexUrl::from(VerbatimUrl::from_url(
+                    url.to_url().map_err(LockErrorKind::InvalidUrl)?,
+                ));
                 Ok(RegistryBuiltWheel {
                     filename,
                     file,
@@ -3767,21 +3859,22 @@ impl Dependency {
 
 impl Display for Dependency {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if self.extra.is_empty() {
-            write!(
+        match (self.extra.is_empty(), self.package_id.version.as_ref()) {
+            (true, Some(version)) => write!(f, "{}=={}", self.package_id.name, version),
+            (true, None) => write!(f, "{}", self.package_id.name),
+            (false, Some(version)) => write!(
                 f,
-                "{}=={} @ {}",
-                self.package_id.name, self.package_id.version, self.package_id.source
-            )
-        } else {
-            write!(
-                f,
-                "{}[{}]=={} @ {}",
+                "{}[{}]=={}",
                 self.package_id.name,
                 self.extra.iter().join(","),
-                self.package_id.version,
-                self.package_id.source
-            )
+                version
+            ),
+            (false, None) => write!(
+                f,
+                "{}[{}]",
+                self.package_id.name,
+                self.extra.iter().join(",")
+            ),
         }
     }
 }
@@ -3862,15 +3955,14 @@ impl<'de> serde::Deserialize<'de> for Hash {
 /// Convert a [`FileLocation`] into a normalized [`UrlString`].
 fn normalize_file_location(location: &FileLocation) -> Result<UrlString, ToUrlError> {
     match location {
-        FileLocation::AbsoluteUrl(ref absolute) => Ok(absolute.as_base_url()),
+        FileLocation::AbsoluteUrl(ref absolute) => Ok(absolute.without_fragment()),
         FileLocation::RelativeUrl(_, _) => Ok(normalize_url(location.to_url()?)),
     }
 }
 
-/// Convert a [`Url`] into a normalized [`UrlString`].
+/// Convert a [`Url`] into a normalized [`UrlString`] by removing the fragment.
 fn normalize_url(mut url: Url) -> UrlString {
     url.set_fragment(None);
-    url.set_query(None);
     UrlString::from(url)
 }
 
@@ -3995,9 +4087,8 @@ fn normalize_requirement(requirement: Requirement, root: &Path) -> Result<Requir
             // Redact the credentials.
             redact_credentials(&mut location);
 
-            // Remove the fragment and query from the URL; they're already present in the source.
+            // Remove the fragment from the URL; it's already present in the source.
             location.set_fragment(None);
-            location.set_query(None);
 
             // Reconstruct the PEP 508 URL from the underlying data.
             let url = Url::from(ParsedArchiveUrl {
@@ -4096,11 +4187,11 @@ enum LockErrorKind {
     },
     /// An error that occurs when the URL to a file for a wheel or
     /// source dist could not be converted to a structured `url::Url`.
-    #[error("Failed to parse wheel or source distribution URL")]
-    InvalidFileUrl(
+    #[error(transparent)]
+    InvalidUrl(
         /// The underlying error that occurred. This includes the
         /// errant URL in its error message.
-        #[source]
+        #[from]
         ToUrlError,
     ),
     /// An error that occurs when the extension can't be determined

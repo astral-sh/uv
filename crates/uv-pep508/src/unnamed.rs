@@ -29,7 +29,7 @@ pub trait UnnamedRequirementUrl: Pep508Url {
 
     /// Set the verbatim representation of the URL.
     #[must_use]
-    fn with_given(self, given: impl Into<String>) -> Self;
+    fn with_given(self, given: impl AsRef<str>) -> Self;
 
     /// Return the original string as given by the user, if available.
     fn given(&self) -> Option<&str>;
@@ -51,7 +51,7 @@ impl UnnamedRequirementUrl for VerbatimUrl {
         Ok(Self::parse_url(given)?)
     }
 
-    fn with_given(self, given: impl Into<String>) -> Self {
+    fn with_given(self, given: impl AsRef<str>) -> Self {
         self.with_given(given)
     }
 
@@ -176,12 +176,12 @@ fn parse_unnamed_requirement<Url: UnnamedRequirementUrl>(
     if let Some((pos, char)) = cursor.next() {
         let message = if char == '#' {
             format!(
-                r#"Expected end of input or `;`, found `{char}`; comments must be preceded by a leading space"#
+                r"Expected end of input or `;`, found `{char}`; comments must be preceded by a leading space"
             )
         } else if marker.is_none() {
-            format!(r#"Expected end of input or `;`, found `{char}`"#)
+            format!(r"Expected end of input or `;`, found `{char}`")
         } else {
-            format!(r#"Expected end of input, found `{char}`"#)
+            format!(r"Expected end of input, found `{char}`")
         };
         return Err(Pep508Error {
             message: Pep508ErrorSource::String(message),
@@ -258,7 +258,7 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
                             len,
                             input: cursor.to_string(),
                         })?
-                        .with_given(url.to_string());
+                        .with_given(url);
                     return Ok((url, extras));
                 }
 
@@ -269,7 +269,7 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
                         len,
                         input: cursor.to_string(),
                     })?
-                    .with_given(url.to_string());
+                    .with_given(url);
                 Ok((url, extras))
             }
             // Ex) `https://download.pytorch.org/whl/torch_stable.html`
@@ -282,7 +282,7 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
                         len,
                         input: cursor.to_string(),
                     })?
-                    .with_given(url.to_string());
+                    .with_given(url);
                 Ok((url, extras))
             }
 
@@ -296,7 +296,7 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
                             len,
                             input: cursor.to_string(),
                         })?
-                        .with_given(url.to_string());
+                        .with_given(url);
                     return Ok((url, extras));
                 }
 
@@ -307,7 +307,7 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
                         len,
                         input: cursor.to_string(),
                     })?
-                    .with_given(url.to_string());
+                    .with_given(url);
                 Ok((url, extras))
             }
         }
@@ -321,7 +321,7 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
                     len,
                     input: cursor.to_string(),
                 })?
-                .with_given(url.to_string());
+                .with_given(url);
             return Ok((url, extras));
         }
 
@@ -332,7 +332,7 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
                 len,
                 input: cursor.to_string(),
             })?
-            .with_given(url.to_string());
+            .with_given(url);
         Ok((url, extras))
     }
 }

@@ -1,6 +1,9 @@
-use pubgrub::Range;
 use std::collections::btree_map::{BTreeMap, Entry};
+use std::collections::Bound;
+use std::ops::RangeBounds;
 use std::sync::OnceLock;
+
+use pubgrub::Ranges;
 use tracing::instrument;
 
 use uv_client::{OwnedArchive, SimpleMetadata, VersionFiles};
@@ -112,23 +115,9 @@ impl VersionMap {
 
     /// Return the [`DistFile`] for the given version, if any.
     pub(crate) fn get(&self, version: &Version) -> Option<&PrioritizedDist> {
-        self.get_with_version(version).map(|(_version, dist)| dist)
-    }
-
-    /// Return the [`DistFile`] and the `Version` from the map for the given
-    /// version, if any.
-    ///
-    /// This is useful when you depend on access to the specific `Version`
-    /// stored in this map. For example, the versions `1.2.0` and `1.2` are
-    /// semantically equivalent, but when converted to strings, they are
-    /// distinct.
-    pub(crate) fn get_with_version(
-        &self,
-        version: &Version,
-    ) -> Option<(&Version, &PrioritizedDist)> {
         match self.inner {
-            VersionMapInner::Eager(ref eager) => eager.map.get_key_value(version),
-            VersionMapInner::Lazy(ref lazy) => lazy.get_with_version(version),
+            VersionMapInner::Eager(ref eager) => eager.map.get(version),
+            VersionMapInner::Lazy(ref lazy) => lazy.get(version),
         }
     }
 
@@ -156,8 +145,8 @@ impl VersionMap {
     /// for each version.
     pub(crate) fn iter(
         &self,
-        range: &Range<Version>,
-    ) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle)> + ExactSizeIterator {
+        range: &Ranges<Version>,
+    ) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle)> {
         // Performance optimization: If we only have a single version, return that version directly.
         if let Some(version) = range.as_singleton() {
             either::Either::Left(match self.inner {
@@ -185,20 +174,24 @@ impl VersionMap {
         } else {
             either::Either::Right(match self.inner {
                 VersionMapInner::Eager(ref eager) => {
-                    either::Either::Left(eager.map.iter().map(|(version, dist)| {
-                        let version_map_dist = VersionMapDistHandle {
-                            inner: VersionMapDistHandleInner::Eager(dist),
-                        };
-                        (version, version_map_dist)
-                    }))
+                    either::Either::Left(eager.map.range(BoundingRange::from(range)).map(
+                        |(version, dist)| {
+                            let version_map_dist = VersionMapDistHandle {
+                                inner: VersionMapDistHandleInner::Eager(dist),
+                            };
+                            (version, version_map_dist)
+                        },
+                    ))
                 }
                 VersionMapInner::Lazy(ref lazy) => {
-                    either::Either::Right(lazy.map.iter().map(|(version, dist)| {
-                        let version_map_dist = VersionMapDistHandle {
-                            inner: VersionMapDistHandleInner::Lazy { lazy, dist },
-                        };
-                        (version, version_map_dist)
-                    }))
+                    either::Either::Right(lazy.map.range(BoundingRange::from(range)).map(
+                        |(version, dist)| {
+                            let version_map_dist = VersionMapDistHandle {
+                                inner: VersionMapDistHandleInner::Lazy { lazy, dist },
+                            };
+                            (version, version_map_dist)
+                        },
+                    ))
                 }
             })
         }
@@ -342,16 +335,9 @@ struct VersionMapLazy {
 impl VersionMapLazy {
     /// Returns the distribution for the given version, if it exists.
     fn get(&self, version: &Version) -> Option<&PrioritizedDist> {
-        self.get_with_version(version)
-            .map(|(_, prioritized_dist)| prioritized_dist)
-    }
-
-    /// Returns the distribution for the given version along with the version
-    /// in this map, if it exists.
-    fn get_with_version(&self, version: &Version) -> Option<(&Version, &PrioritizedDist)> {
-        let (version, lazy_dist) = self.map.get_key_value(version)?;
+        let lazy_dist = self.map.get(version)?;
         let priority_dist = self.get_lazy(lazy_dist)?;
-        Some((version, priority_dist))
+        Some(priority_dist)
     }
 
     /// Given a reference to a possibly-initialized distribution that is in
@@ -535,14 +521,22 @@ impl VersionMapLazy {
         }
 
         // Determine a compatibility for the wheel based on tags.
-        let priority = match &self.tags {
-            Some(tags) => match filename.compatibility(tags) {
+        let priority = if let Some(tags) = &self.tags {
+            match filename.compatibility(tags) {
                 TagCompatibility::Incompatible(tag) => {
-                    return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag))
+                    return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag));
                 }
                 TagCompatibility::Compatible(priority) => Some(priority),
-            },
-            None => None,
+            }
+        } else {
+            // Check if the wheel is compatible with the `requires-python` (i.e., the Python
+            // ABI tag is not less than the `requires-python` minimum version).
+            if !self.requires_python.matches_wheel_tag(filename) {
+                return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
+                    IncompatibleTag::AbiPythonVersion,
+                ));
+            }
+            None
         };
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
@@ -560,16 +554,8 @@ impl VersionMapLazy {
             }
         };
 
-        // Check if the wheel is compatible with the `requires-python` (i.e., the Python ABI tag
-        // is not less than the `requires-python` minimum version).
-        if !self.requires_python.matches_wheel_tag(filename) {
-            return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
-                IncompatibleTag::AbiPythonVersion,
-            ));
-        }
-
         // Break ties with the build tag.
-        let build_tag = filename.build_tag.clone();
+        let build_tag = filename.build_tag().cloned();
 
         WheelCompatibility::Compatible(hash, priority, build_tag)
     }
@@ -579,7 +565,7 @@ impl VersionMapLazy {
 /// a single version of a package.
 #[derive(Debug)]
 enum LazyPrioritizedDist {
-    /// Represents a eagerly constructed distribution from a
+    /// Represents an eagerly constructed distribution from a
     /// `FlatDistributions`.
     OnlyFlat(PrioritizedDist),
     /// Represents a lazily constructed distribution from an index into a
@@ -608,4 +594,30 @@ struct SimplePrioritizedDist {
     /// construct a distribution. (One easy way to effect this, at the time
     /// of writing, is to use `--exclude-newer 1900-01-01`.)
     dist: OnceLock<Option<PrioritizedDist>>,
+}
+
+/// A range that can be used to iterate over a subset of a [`BTreeMap`].
+#[derive(Debug)]
+struct BoundingRange<'a> {
+    min: Bound<&'a Version>,
+    max: Bound<&'a Version>,
+}
+
+impl<'a> From<&'a Ranges<Version>> for BoundingRange<'a> {
+    fn from(value: &'a Ranges<Version>) -> Self {
+        let (min, max) = value
+            .bounding_range()
+            .unwrap_or((Bound::Unbounded, Bound::Unbounded));
+        Self { min, max }
+    }
+}
+
+impl<'a> RangeBounds<Version> for BoundingRange<'a> {
+    fn start_bound(&self) -> Bound<&'a Version> {
+        self.min
+    }
+
+    fn end_bound(&self) -> Bound<&'a Version> {
+        self.max
+    }
 }

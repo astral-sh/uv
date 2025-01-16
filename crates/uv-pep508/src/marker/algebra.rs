@@ -51,6 +51,7 @@ use std::ops::Bound;
 use std::sync::Mutex;
 use std::sync::MutexGuard;
 
+use arcstr::ArcStr;
 use itertools::{Either, Itertools};
 use rustc_hash::FxHashMap;
 use std::sync::LazyLock;
@@ -287,28 +288,31 @@ impl InternerGuard<'_> {
                 // values in `exclusions`.
                 //
                 // See: https://discuss.python.org/t/clarify-usage-of-platform-system/70900
-                let (key, value) = match (key, value.as_str()) {
-                    (MarkerValueString::PlatformSystem, "Windows") => {
-                        (CanonicalMarkerValueString::SysPlatform, "win32".to_string())
-                    }
+                let (key, value) = match (key, value.as_ref()) {
+                    (MarkerValueString::PlatformSystem, "Windows") => (
+                        CanonicalMarkerValueString::SysPlatform,
+                        arcstr::literal!("win32"),
+                    ),
                     (MarkerValueString::PlatformSystem, "Darwin") => (
                         CanonicalMarkerValueString::SysPlatform,
-                        "darwin".to_string(),
+                        arcstr::literal!("darwin"),
                     ),
-                    (MarkerValueString::PlatformSystem, "Linux") => {
-                        (CanonicalMarkerValueString::SysPlatform, "linux".to_string())
-                    }
-                    (MarkerValueString::PlatformSystem, "AIX") => {
-                        (CanonicalMarkerValueString::SysPlatform, "aix".to_string())
-                    }
+                    (MarkerValueString::PlatformSystem, "Linux") => (
+                        CanonicalMarkerValueString::SysPlatform,
+                        arcstr::literal!("linux"),
+                    ),
+                    (MarkerValueString::PlatformSystem, "AIX") => (
+                        CanonicalMarkerValueString::SysPlatform,
+                        arcstr::literal!("aix"),
+                    ),
                     (MarkerValueString::PlatformSystem, "Emscripten") => (
                         CanonicalMarkerValueString::SysPlatform,
-                        "emscripten".to_string(),
+                        arcstr::literal!("emscripten"),
                     ),
                     // See: https://peps.python.org/pep-0738/#sys
                     (MarkerValueString::PlatformSystem, "Android") => (
                         CanonicalMarkerValueString::SysPlatform,
-                        "android".to_string(),
+                        arcstr::literal!("android"),
                     ),
                     _ => (key.into(), value),
                 };
@@ -869,48 +873,48 @@ impl InternerGuard<'_> {
                 MarkerExpression::String {
                     key: MarkerValueString::OsName,
                     operator: MarkerOperator::Equal,
-                    value: "nt".to_string(),
+                    value: arcstr::literal!("nt"),
                 },
                 MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: "linux".to_string(),
+                    value: arcstr::literal!("linux"),
                 },
             ),
             (
                 MarkerExpression::String {
                     key: MarkerValueString::OsName,
                     operator: MarkerOperator::Equal,
-                    value: "nt".to_string(),
+                    value: arcstr::literal!("nt"),
                 },
                 MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: "darwin".to_string(),
+                    value: arcstr::literal!("darwin"),
                 },
             ),
             (
                 MarkerExpression::String {
                     key: MarkerValueString::OsName,
                     operator: MarkerOperator::Equal,
-                    value: "nt".to_string(),
+                    value: arcstr::literal!("nt"),
                 },
                 MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: "ios".to_string(),
+                    value: arcstr::literal!("ios"),
                 },
             ),
             (
                 MarkerExpression::String {
                     key: MarkerValueString::OsName,
                     operator: MarkerOperator::Equal,
-                    value: "posix".to_string(),
+                    value: arcstr::literal!("posix"),
                 },
                 MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
-                    value: "win32".to_string(),
+                    value: arcstr::literal!("win32"),
                 },
             ),
         ];
@@ -950,12 +954,12 @@ impl InternerGuard<'_> {
                     MarkerExpression::String {
                         key: MarkerValueString::PlatformSystem,
                         operator: MarkerOperator::Equal,
-                        value: platform_system.to_string(),
+                        value: ArcStr::from(platform_system),
                     },
                     MarkerExpression::String {
                         key: MarkerValueString::SysPlatform,
                         operator: MarkerOperator::Equal,
-                        value: sys_platform.to_string(),
+                        value: ArcStr::from(sys_platform),
                     },
                 ));
             }
@@ -996,13 +1000,13 @@ pub(crate) enum Variable {
     /// string marker and value.
     In {
         key: CanonicalMarkerValueString,
-        value: String,
+        value: ArcStr,
     },
     /// A variable representing a `<value> in <key>` expression for a particular
     /// string marker and value.
     Contains {
         key: CanonicalMarkerValueString,
-        value: String,
+        value: ArcStr,
     },
     /// A variable representing the existence or absence of a given extra.
     ///
@@ -1128,7 +1132,7 @@ pub(crate) enum Edges {
     // Invariant: All ranges are simple, meaning they can be represented by a bounded
     // interval without gaps. Additionally, there are at least two edges in the set.
     String {
-        edges: SmallVec<(Ranges<String>, NodeId)>,
+        edges: SmallVec<(Ranges<ArcStr>, NodeId)>,
     },
     // The edges of a boolean variable, representing the values `true` (the `high` child)
     // and `false` (the `low` child).
@@ -1158,8 +1162,8 @@ impl Edges {
     ///
     /// This function will panic for the `In` and `Contains` marker operators, which
     /// should be represented as separate boolean variables.
-    fn from_string(operator: MarkerOperator, value: String) -> Edges {
-        let range: Ranges<String> = match operator {
+    fn from_string(operator: MarkerOperator, value: ArcStr) -> Edges {
+        let range: Ranges<ArcStr> = match operator {
             MarkerOperator::Equal => Ranges::singleton(value),
             MarkerOperator::NotEqual => Ranges::singleton(value).complement(),
             MarkerOperator::GreaterThan => Ranges::strictly_higher_than(value),
@@ -1412,8 +1416,7 @@ impl Edges {
         // not the resulting edges.
         for (left_range, left_child) in left_edges {
             for (right_range, right_child) in right_edges {
-                let intersection = right_range.intersection(left_range);
-                if intersection.is_empty() {
+                if right_range.is_disjoint(left_range) {
                     continue;
                 }
 
@@ -1508,7 +1511,7 @@ fn normalize_specifier(specifier: VersionSpecifier) -> VersionSpecifier {
     // for `python_version` to fully simplify any ranges, such as `python_version > '3.9' or python_version <= '3.9'`,
     // which is always `true` for `python_version`. For `python_full_version` however, this decision
     // is a semantic change.
-    let mut release = version.release();
+    let mut release = &*version.release();
 
     // Strip any trailing `0`s.
     //
@@ -1553,7 +1556,7 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
     // version segments. For example, a python version of `3.7.0`, `3.7.1`, and so on, would all
     // result in a `python_version` marker of `3.7`. For this reason, we must consider the range
     // of values that would satisfy a `python_version` specifier when truncated in order to transform
-    // the the specifier into its `python_full_version` equivalent.
+    // the specifier into its `python_full_version` equivalent.
     if let Some((major, minor)) = major_minor {
         let version = Version::new([major, minor]);
 
@@ -1583,7 +1586,7 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
             Operator::EqualStar | Operator::NotEqualStar | Operator::TildeEqual => specifier,
         })
     } else {
-        let &[major, minor, ..] = specifier.version().release() else {
+        let [major, minor, ..] = *specifier.version().release() else {
             unreachable!()
         };
 

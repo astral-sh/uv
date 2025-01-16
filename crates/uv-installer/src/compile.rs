@@ -48,8 +48,11 @@ pub enum CompileError {
         #[source]
         err: Box<Self>,
     },
-    #[error("Bytecode timed out ({}s)", _0.as_secs_f32())]
-    CompileTimeout(Duration),
+    #[error("Bytecode timed out ({}s) compiling file: `{}`", elapsed.as_secs_f32(), source_file)]
+    CompileTimeout {
+        elapsed: Duration,
+        source_file: String,
+    },
     #[error("Python startup timed out ({}s)", _0.as_secs_f32())]
     StartupTimeout(Duration),
 }
@@ -358,7 +361,10 @@ async fn worker_main_loop(
         // should ever take.
         tokio::time::timeout(COMPILE_TIMEOUT, python_handle)
             .await
-            .map_err(|_| CompileError::CompileTimeout(COMPILE_TIMEOUT))??;
+            .map_err(|_| CompileError::CompileTimeout {
+                elapsed: COMPILE_TIMEOUT,
+                source_file: source_file.clone(),
+            })??;
 
         // This is a sanity check, if we don't get the path back something has gone wrong, e.g.
         // we're not actually running a python interpreter.

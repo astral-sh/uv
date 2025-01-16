@@ -1,10 +1,12 @@
-use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, num::NonZeroUsize, path::PathBuf};
+
+use serde::{Deserialize, Serialize};
 use url::Url;
+
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
-    TrustedHost, TrustedPublishing,
+    ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, RequiredVersion,
+    TargetTriple, TrustedHost, TrustedPublishing,
 };
 use uv_distribution_types::{
     Index, IndexUrl, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
@@ -149,6 +151,20 @@ impl Options {
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct GlobalOptions {
+    /// Enforce a requirement on the version of uv.
+    ///
+    /// If the version of uv does not meet the requirement at runtime, uv will exit
+    /// with an error.
+    ///
+    /// Accepts a [PEP 440](https://peps.python.org/pep-0440/) specifier, like `==0.5.0` or `>=0.5.0`.
+    #[option(
+        default = "null",
+        value_type = "str",
+        example = r#"
+            required-version = ">=0.5.0"
+        "#
+    )]
+    pub required_version: Option<RequiredVersion>,
     /// Whether to load TLS certificates from the platform's native certificate store.
     ///
     /// By default, uv loads certificates from the bundled `webpki-roots` crate. The
@@ -1262,16 +1278,16 @@ pub struct PipOptions {
         "#
     )]
     pub universal: Option<bool>,
-    /// Limit candidate packages to those that were uploaded prior to the given date.
+    /// Limit candidate packages to those that were uploaded prior to a given point in time.
     ///
-    /// Accepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g.,
-    /// `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`) in your
-    /// system's configured time zone.
+    /// Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
+    /// `2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will
+    /// behave consistently across timezones.
     #[option(
         default = "None",
         value_type = "str",
         example = r#"
-            exclude-newer = "2006-12-02"
+            exclude-newer = "2006-12-02T02:07:43Z"
         "#
     )]
     pub exclude_newer: Option<ExcludeNewer>,
@@ -1623,6 +1639,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
 pub struct OptionsWire {
     // #[serde(flatten)]
     // globals: GlobalOptions
+    required_version: Option<RequiredVersion>,
     native_tls: Option<bool>,
     offline: Option<bool>,
     no_cache: Option<bool>,
@@ -1704,6 +1721,7 @@ pub struct OptionsWire {
 impl From<OptionsWire> for Options {
     fn from(value: OptionsWire) -> Self {
         let OptionsWire {
+            required_version,
             native_tls,
             offline,
             no_cache,
@@ -1764,6 +1782,7 @@ impl From<OptionsWire> for Options {
 
         Self {
             globals: GlobalOptions {
+                required_version,
                 native_tls,
                 offline,
                 no_cache,

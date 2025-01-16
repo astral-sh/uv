@@ -37,9 +37,20 @@ pub trait Reporter: Send + Sync {
     fn on_checkout_complete(&self, url: &Url, rev: &str, id: usize);
 }
 
+impl dyn Reporter {
+    /// Converts this reporter to a [`uv_distribution::Reporter`].
+    pub(crate) fn into_distribution_reporter(
+        self: Arc<dyn Reporter>,
+    ) -> Arc<dyn uv_distribution::Reporter> {
+        Arc::new(Facade {
+            reporter: self.clone(),
+        })
+    }
+}
+
 /// A facade for converting from [`Reporter`] to [`uv_distribution::Reporter`].
-pub(crate) struct Facade {
-    pub(crate) reporter: Arc<dyn Reporter>,
+struct Facade {
+    reporter: Arc<dyn Reporter>,
 }
 
 impl uv_distribution::Reporter for Facade {

@@ -32,7 +32,7 @@ use uv_static::EnvVars;
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 
-pub const PACKSE_VERSION: &str = "0.3.42";
+pub const PACKSE_VERSION: &str = "0.3.45";
 
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
@@ -489,12 +489,6 @@ impl TestContext {
             // Avoid locale issues in tests
             command.env(EnvVars::LC_ALL, "C");
         }
-
-        if cfg!(all(windows, debug_assertions)) {
-            // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-            // default windows stack of 1MB
-            command.env(EnvVars::UV_STACK_SIZE, (4 * 1024 * 1024).to_string());
-        }
     }
 
     /// Create a `pip compile` command for testing.
@@ -581,13 +575,6 @@ impl TestContext {
         let mut command = self.new_command();
         command.arg("help");
         command.env_remove(EnvVars::UV_CACHE_DIR);
-
-        if cfg!(all(windows, debug_assertions)) {
-            // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-            // default windows stack of 1MB
-            command.env(EnvVars::UV_STACK_SIZE, (4 * 1024 * 1024).to_string());
-        }
-
         command
     }
 
@@ -636,13 +623,6 @@ impl TestContext {
     pub fn publish(&self) -> Command {
         let mut command = self.new_command();
         command.arg("publish");
-
-        if cfg!(all(windows, debug_assertions)) {
-            // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-            // default windows stack of 1MB
-            command.env(EnvVars::UV_STACK_SIZE, (4 * 1024 * 1024).to_string());
-        }
-
         command
     }
 
@@ -922,7 +902,7 @@ impl TestContext {
 
     /// For when we add pypy to the test suite.
     #[allow(clippy::unused_self)]
-    pub fn python_kind(&self) -> &str {
+    pub fn python_kind(&self) -> &'static str {
         "python"
     }
 

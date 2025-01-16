@@ -1,14 +1,15 @@
-use async_http_range_reader::AsyncHttpRangeReader;
-use futures::{FutureExt, TryStreamExt};
-use http::HeaderMap;
-use itertools::Either;
-use reqwest::{Client, Response, StatusCode};
-use reqwest_middleware::ClientWithMiddleware;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
+
+use async_http_range_reader::AsyncHttpRangeReader;
+use futures::{FutureExt, StreamExt, TryStreamExt};
+use http::HeaderMap;
+use itertools::Either;
+use reqwest::{Client, Response, StatusCode};
+use reqwest_middleware::ClientWithMiddleware;
 use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
@@ -247,38 +248,42 @@ impl RegistryClient {
         }
 
         let mut results = Vec::new();
-        for index in it {
-            match self.simple_single_index(package_name, index).await {
-                Ok(metadata) => {
-                    results.push((index, metadata));
 
-                    // If we're only using the first match, we can stop here.
-                    if self.index_strategy == IndexStrategy::FirstIndex {
+        match self.index_strategy {
+            // If we're searching for the first index that contains the package, fetch serially.
+            IndexStrategy::FirstIndex => {
+                for index in it {
+                    if let Some(metadata) = self
+                        .simple_single_index(package_name, index, capabilities)
+                        .await?
+                    {
+                        results.push((index, metadata));
                         break;
                     }
                 }
-                Err(err) => match err.into_kind() {
-                    // The package could not be found in the remote index.
-                    ErrorKind::WrappedReqwestError(url, err) => match err.status() {
-                        Some(StatusCode::NOT_FOUND) => {}
-                        Some(StatusCode::UNAUTHORIZED) => {
-                            capabilities.set_unauthorized(index.clone());
+            }
+
+            // Otherwise, fetch concurrently.
+            IndexStrategy::UnsafeBestMatch | IndexStrategy::UnsafeFirstMatch => {
+                // TODO(charlie): Respect concurrency limits.
+                results = futures::stream::iter(it)
+                    .map(|index| async move {
+                        let metadata = self
+                            .simple_single_index(package_name, index, capabilities)
+                            .await?;
+                        Ok((index, metadata))
+                    })
+                    .buffered(8)
+                    .filter_map(|result: Result<_, Error>| async move {
+                        match result {
+                            Ok((index, Some(metadata))) => Some(Ok((index, metadata))),
+                            Ok((_, None)) => None,
+                            Err(err) => Some(Err(err)),
                         }
-                        Some(StatusCode::FORBIDDEN) => {
-                            capabilities.set_forbidden(index.clone());
-                        }
-                        _ => return Err(ErrorKind::WrappedReqwestError(url, err).into()),
-                    },
-
-                    // The package is unavailable due to a lack of connectivity.
-                    ErrorKind::Offline(_) => {}
-
-                    // The package could not be found in the local index.
-                    ErrorKind::FileNotFound(_) => {}
-
-                    other => return Err(other.into()),
-                },
-            };
+                    })
+                    .try_collect::<Vec<_>>()
+                    .await?;
+            }
         }
 
         if results.is_empty() {
@@ -297,11 +302,14 @@ impl RegistryClient {
     ///
     /// The index can either be a PEP 503-compatible remote repository, or a local directory laid
     /// out in the same format.
+    ///
+    /// Returns `Ok(None)` if the package is not found in the index.
     async fn simple_single_index(
         &self,
         package_name: &PackageName,
         index: &IndexUrl,
-    ) -> Result<OwnedArchive<SimpleMetadata>, Error> {
+        capabilities: &IndexCapabilities,
+    ) -> Result<Option<OwnedArchive<SimpleMetadata>>, Error> {
         // Format the URL for PyPI.
         let mut url: Url = index.clone().into();
         url.path_segments_mut()
@@ -328,11 +336,38 @@ impl RegistryClient {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        if matches!(index, IndexUrl::Path(_)) {
+        let result = if matches!(index, IndexUrl::Path(_)) {
             self.fetch_local_index(package_name, &url).await
         } else {
             self.fetch_remote_index(package_name, &url, &cache_entry, cache_control)
                 .await
+        };
+
+        match result {
+            Ok(metadata) => Ok(Some(metadata)),
+            Err(err) => match err.into_kind() {
+                // The package could not be found in the remote index.
+                ErrorKind::WrappedReqwestError(url, err) => match err.status() {
+                    Some(StatusCode::NOT_FOUND) => Ok(None),
+                    Some(StatusCode::UNAUTHORIZED) => {
+                        capabilities.set_unauthorized(index.clone());
+                        Ok(None)
+                    }
+                    Some(StatusCode::FORBIDDEN) => {
+                        capabilities.set_forbidden(index.clone());
+                        Ok(None)
+                    }
+                    _ => Err(ErrorKind::WrappedReqwestError(url, err).into()),
+                },
+
+                // The package is unavailable due to a lack of connectivity.
+                ErrorKind::Offline(_) => Ok(None),
+
+                // The package could not be found in the local index.
+                ErrorKind::FileNotFound(_) => Ok(None),
+
+                err => Err(err.into()),
+            },
         }
     }
 
@@ -474,7 +509,7 @@ impl RegistryClient {
                         }
                     }
                     FileLocation::AbsoluteUrl(url) => {
-                        let url = url.to_url();
+                        let url = url.to_url().map_err(ErrorKind::InvalidUrl)?;
                         if url.scheme() == "file" {
                             let path = url
                                 .to_file_path()
@@ -786,15 +821,13 @@ impl VersionFiles {
     }
 
     pub fn all(self) -> impl Iterator<Item = (DistFilename, File)> {
-        self.wheels
+        self.source_dists
             .into_iter()
-            .map(|VersionWheel { name, file }| (DistFilename::WheelFilename(name), file))
+            .map(|VersionSourceDist { name, file }| (DistFilename::SourceDistFilename(name), file))
             .chain(
-                self.source_dists
+                self.wheels
                     .into_iter()
-                    .map(|VersionSourceDist { name, file }| {
-                        (DistFilename::SourceDistFilename(name), file)
-                    }),
+                    .map(|VersionWheel { name, file }| (DistFilename::WheelFilename(name), file)),
             )
     }
 }
