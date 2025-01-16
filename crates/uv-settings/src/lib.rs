@@ -318,8 +318,6 @@ mod test {
     #[test]
     #[cfg(not(windows))]
     fn test_locate_system_config_xdg() -> Result<(), FixtureError> {
-        use std::os::unix::fs::PermissionsExt;
-
         // Write a `uv.toml` to a temporary directory.
         let context = assert_fs::TempDir::new()?;
         context.child("uv").child("uv.toml").write_str(indoc! {
@@ -357,17 +355,23 @@ mod test {
             first_config.path()
         );
 
-        // Try a permissions error
-        let second = context.child("second");
-        let second_config = first.child("uv").child("uv.toml");
-        second_config.write_str("")?;
-        second_config
-            .metadata()
-            .unwrap()
-            .permissions()
-            .set_mode(0o000);
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_locate_system_config_xdg_unix_permissions() -> Result<(), FixtureError> {
+        let context = assert_fs::TempDir::new()?;
+        let config = context.child("uv").child("uv.toml");
+        config.write_str("")?;
+        fs_err::set_permissions(
+            &context,
+            std::os::unix::fs::PermissionsExt::from_mode(0o000),
+        )
+        .unwrap();
+
         assert_eq!(
-            locate_system_config_xdg(Some(second.to_str().unwrap())),
+            locate_system_config_xdg(Some(context.to_str().unwrap())),
             None
         );
 
