@@ -26372,3 +26372,84 @@ fn lock_empty_extra() -> Result<()> {
 
     Ok(())
 }
+
+/// The fork markers in the lockfile don't cover the supported environments (here: universal). We
+/// need to discard the lockfile.
+#[test]
+fn lock_invalid_fork_markers() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "attrs"
+        requires-python = ">=3.8"
+        version = "1.0.0"
+
+        [dependency-groups]
+        dev = ["idna"]
+        "#,
+    )?;
+
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        requires-python = ">=3.8"
+        resolution-markers = [
+            "python_full_version >= '3.10' and platform_python_implementation == 'CPython'",
+            "python_full_version == '3.9.*'",
+            "python_full_version < '3.9'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "attrs"
+        version = "1.0.0"
+        source = { editable = "." }
+
+        [package.dev-dependencies]
+        dev = [
+            { name = "idna", marker = "python_full_version < '3.10' or platform_python_implementation == 'CPython'" },
+        ]
+
+        [package.metadata]
+
+        [package.metadata.requires-dev]
+        dev = [{ name = "idna" }]
+
+        [[package]]
+        name = "idna"
+        version = "3.10"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/f1/70/7703c29685631f5a7590aa73f1f1d3fa9a380e654b86af429e0934a32f7d/idna-3.10.tar.gz", hash = "sha256:12f65c9b470abda6dc35cf8e63cc574b1c52b11df2c86030af0ac09b01b13ea9", size = 190490 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/76/c6/c88e154df9c4e1a2a66ccf0005a88dfb2650c1dffb6f5ce603dfbd452ce3/idna-3.10-py3-none-any.whl", hash = "sha256:946d195a0d259cbba61165e88e65941f16e9b36ea6ddb97f00452bae8b1287d3", size = 70442 },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Ignoring existing lockfile due to fork markers not covering the supported environments: `(python_full_version >= '3.8' and python_full_version < '3.10') or (python_full_version >= '3.8' and platform_python_implementation == 'CPython')` vs `python_full_version >= '3.8'`
+    Resolved 2 packages in [TIME]
+    Updated idna v3.10 -> v3.6
+    "###);
+
+    // Check that the lockfile got updated and we don't show the warning anymore.
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    Ok(())
+}

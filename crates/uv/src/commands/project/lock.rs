@@ -25,6 +25,7 @@ use uv_distribution_types::{
 use uv_git::ResolvedRepositoryReference;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
+use uv_pep508::MarkerTree;
 use uv_pypi_types::{Conflicts, Requirement, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
@@ -961,6 +962,42 @@ impl ValidatedLock {
             debug!(
                 "Ignoring existing lockfile due to change in supported environments: `{:?}` vs. `{:?}`",
                 expected, actual
+            );
+            return Ok(Self::Versions(lock));
+        }
+
+        // Catch a lockfile where the union of fork markers doesn't cover the supported
+        // environments.
+        //
+        // We subset by requires-python, since the space outside of it does not matter. The fork
+        // markers however should contain the requires-python value, if they don't it wouldn't be
+        // a problem on sync, but it indicates a broken lockfile where we should recompute the
+        // fork-markers (the versions are preserved, so the churn is low).
+        let fork_markers_union = if lock.fork_markers().is_empty() {
+            requires_python.to_marker_tree()
+        } else {
+            let mut fork_markers_union = MarkerTree::FALSE;
+            for fork_marker in lock.fork_markers() {
+                fork_markers_union.or(fork_marker.pep508());
+            }
+            fork_markers_union
+        };
+        let mut environments_union = if let Some(environments) = environments {
+            let mut environments_union = MarkerTree::FALSE;
+            for fork_marker in environments.as_markers() {
+                environments_union.or(*fork_marker);
+            }
+            environments_union
+        } else {
+            MarkerTree::TRUE
+        };
+        // We respect requires-python in addition to the environments the user specified.
+        environments_union.and(requires_python.to_marker_tree());
+        if !fork_markers_union.negate().is_disjoint(environments_union) {
+            warn_user!(
+                "Ignoring existing lockfile due to fork markers not covering the supported environments: `{}` vs `{}`",
+                fork_markers_union.try_to_string().unwrap_or("true".to_string()),
+                environments_union.try_to_string().unwrap_or("true".to_string()),
             );
             return Ok(Self::Versions(lock));
         }
