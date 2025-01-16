@@ -5,11 +5,27 @@ $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 20GB |
 					Mount-VHD -Passthru |
 					Initialize-Disk -Passthru |
 					New-Partition -AssignDriveLetter -UseMaximumSize |
-					Format-Volume -FileSystem ReFS -Confirm:$false -Force
-
-Write-Output $Volume
+					Format-Volume -DevDrive -Confirm:$false -Force
 
 $Drive = "$($Volume.DriveLetter):"
+
+# Set the drive as trusted
+# See https://learn.microsoft.com/en-us/windows/dev-drive/#how-do-i-designate-a-dev-drive-as-trusted
+fsutil devdrv trust $Drive
+
+# Disable antivirus filtering on dev drives
+# See https://learn.microsoft.com/en-us/windows/dev-drive/#how-do-i-configure-additional-filters-on-dev-drive
+fsutil devdrv enable /disallowAv
+
+# Remount so the changes take effect
+Dismount-VHD -Path C:/uv_dev_drive.vhdx
+Mount-VHD -Path C:/uv_dev_drive.vhdx
+
+# Show some debug information
+Write-Output $Volume
+fsutil devdrv query $Drive
+
+# Configure a temporary directory
 $Tmp = "$($Drive)/uv-tmp"
 
 # Create the directory ahead of time in an attempt to avoid race-conditions
