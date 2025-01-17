@@ -341,6 +341,13 @@ Specifies the directory where uv stores managed tools.
 Used ephemeral environments like CI to install uv to a specific path while preventing
 the installer from modifying shell profiles or environment variables.
 
+### `UV_VENV_SEED`
+
+Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual environment
+created by `uv venv`.
+
+Note that `setuptools` and `wheel` are not included in Python 3.12+ environments.
+
 
 
 ## Externally defined variables

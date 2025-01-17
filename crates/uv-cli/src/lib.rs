@@ -2365,8 +2365,8 @@ pub struct VenvArgs {
 
     /// Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual environment.
     ///
-    /// Note `setuptools` and `wheel` are not included in Python 3.12+ environments.
-    #[arg(long)]
+    /// Note that `setuptools` and `wheel` are not included in Python 3.12+ environments.
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_VENV_SEED)]
     pub seed: bool,
 
     /// Preserve any existing files or directories at the target path.
