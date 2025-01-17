@@ -28,6 +28,7 @@ pub(crate) struct WindowsPython {
 /// Find all Pythons registered in the Windows registry following PEP 514.
 pub(crate) fn registry_pythons() -> Result<Vec<WindowsPython>, windows_result::Error> {
     let mut registry_pythons = Vec::new();
+    // Prefer `HKEY_CURRENT_USER` over `HKEY_LOCAL_MACHINE`
     for root_key in [CURRENT_USER, LOCAL_MACHINE] {
         let Ok(key_python) = root_key.open(r"Software\Python") else {
             continue;
