@@ -680,6 +680,38 @@ jobs:
           echo "$CONDA_PREFIX"
           ./uv pip install anyio
 
+  integration-test-deadnsakes-39-linux:
+    timeout-minutes: 5
+    needs: build-binary-linux
+    name: "integration test | free-threaded on linux"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "install python3.9"
+        run: |
+          sudo add-apt-repository ppa:deadsnakes
+          sudo apt-get update
+          sudo apt-get install python3.9
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Create a virtual environment"
+        run: |
+          ./uv venv -p 3.9 --python-preference only-system
+
+      - name: "Check version"
+        run: |
+          .venv/bin/python --version
+
+      - name: "Check install"
+        run: |
+          ./uv pip install -v anyio
+
   integration-test-free-threaded-linux:
     timeout-minutes: 5
     needs: build-binary-linux
