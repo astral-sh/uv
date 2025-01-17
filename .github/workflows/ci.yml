@@ -708,9 +708,20 @@ jobs:
         run: |
           .venv/bin/python --version
 
+      - name: "Check install missing distutils"
+        run: |
+          ./uv pip install -v anyio 2>&1 | tee log.txt || true
+          # We should report that distutils is missing
+          grep 'Python installation is missing `distutils`' log.txt
+
+      - name: "Install distutils"
+        run: |
+          sudo apt-get install python3.9-distutils
+
       - name: "Check install"
         run: |
           ./uv pip install -v anyio
+          # Now the install should succeed
 
   integration-test-free-threaded-linux:
     timeout-minutes: 5
