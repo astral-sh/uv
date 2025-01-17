@@ -1344,18 +1344,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
     pub(crate) async fn source_tree_requires_dist(
         &self,
-        project_root: &Path,
+        source_tree: &Path,
     ) -> Result<Option<RequiresDist>, Error> {
         // Attempt to read static metadata from the `pyproject.toml`.
-        match read_requires_dist(project_root).await {
+        match read_requires_dist(source_tree).await {
             Ok(requires_dist) => {
                 debug!(
                     "Found static `requires-dist` for: {}",
-                    project_root.display()
+                    source_tree.display()
                 );
                 let requires_dist = RequiresDist::from_project_maybe_workspace(
                     requires_dist,
-                    project_root,
+                    source_tree,
                     None,
                     self.build_context.locations(),
                     self.build_context.sources(),
@@ -1375,7 +1375,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             ) => {
                 debug!(
                     "No static `requires-dist` available for: {} ({err:?})",
-                    project_root.display()
+                    source_tree.display()
                 );
                 Ok(None)
             }
