@@ -1,14 +1,13 @@
 use std::fmt::Formatter;
 use std::str::FromStr;
 
-use uv_small_str::SmallString;
-
 /// A tag to represent the ABI compatibility of a Python distribution.
 ///
 /// This is the second segment in the wheel filename, following the language tag. For example,
 /// in `cp39-none-manylinux_2_24_x86_64.whl`, the ABI tag is `none`.
 #[derive(
     Debug,
+    Copy,
     Clone,
     Eq,
     PartialEq,
@@ -42,13 +41,11 @@ pub enum AbiTag {
     },
     /// Ex) `pyston_23_x86_64_linux_gnu`
     Pyston { implementation_version: (u8, u8) },
-    /// Ex) `pypy_73`
-    Unknown { tag: SmallString },
 }
 
 impl AbiTag {
     /// Return a pretty string representation of the ABI tag.
-    pub fn pretty(&self) -> Option<String> {
+    pub fn pretty(self) -> Option<String> {
         match self {
             AbiTag::None => None,
             AbiTag::Abi3 => None,
@@ -70,7 +67,6 @@ impl AbiTag {
                 implementation_version.0, implementation_version.1
             )),
             AbiTag::Pyston { .. } => Some("Pyston".to_string()),
-            AbiTag::Unknown { .. } => None,
         }
     }
 }
@@ -121,14 +117,16 @@ impl std::fmt::Display for AbiTag {
             } => {
                 write!(f, "pyston_{impl_major}{impl_minor}_x86_64_linux_gnu")
             }
-            Self::Unknown { tag } => write!(f, "{tag}"),
         }
     }
 }
 
-impl AbiTag {
+impl FromStr for AbiTag {
+    type Err = ParseAbiTagError;
+
     /// Parse an [`AbiTag`] from a string.
-    fn parse(s: &str) -> Result<Self, ParseAbiTagError> {
+    #[allow(clippy::cast_possible_truncation)]
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         /// Parse a Python version from a string (e.g., convert `39` into `(3, 9)`).
         fn parse_python_version(
             version_str: &str,
@@ -290,14 +288,6 @@ impl AbiTag {
     }
 }
 
-impl FromStr for AbiTag {
-    type Err = ParseAbiTagError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(AbiTag::parse(s).unwrap_or_else(|_| AbiTag::Unknown { tag: s.into() }))
-    }
-}
-
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum ParseAbiTagError {
     #[error("Unknown ABI tag format: {0}")]
@@ -351,17 +341,19 @@ pub enum ParseAbiTagError {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use crate::abi_tag::{AbiTag, ParseAbiTagError};
 
     #[test]
     fn none_abi() {
-        assert_eq!(AbiTag::parse("none"), Ok(AbiTag::None));
+        assert_eq!(AbiTag::from_str("none"), Ok(AbiTag::None));
         assert_eq!(AbiTag::None.to_string(), "none");
     }
 
     #[test]
     fn abi3() {
-        assert_eq!(AbiTag::parse("abi3"), Ok(AbiTag::Abi3));
+        assert_eq!(AbiTag::from_str("abi3"), Ok(AbiTag::Abi3));
         assert_eq!(AbiTag::Abi3.to_string(), "abi3");
     }
 
@@ -371,25 +363,25 @@ mod tests {
             gil_disabled: false,
             python_version: (3, 9),
         };
-        assert_eq!(AbiTag::parse("cp39").as_ref(), Ok(&tag));
+        assert_eq!(AbiTag::from_str("cp39"), Ok(tag));
         assert_eq!(tag.to_string(), "cp39");
 
         let tag = AbiTag::CPython {
             gil_disabled: false,
             python_version: (3, 7),
         };
-        assert_eq!(AbiTag::parse("cp37m").as_ref(), Ok(&tag));
+        assert_eq!(AbiTag::from_str("cp37m"), Ok(tag));
         assert_eq!(tag.to_string(), "cp37m");
 
         let tag = AbiTag::CPython {
             gil_disabled: true,
             python_version: (3, 13),
         };
-        assert_eq!(AbiTag::parse("cp313t").as_ref(), Ok(&tag));
+        assert_eq!(AbiTag::from_str("cp313t"), Ok(tag));
         assert_eq!(tag.to_string(), "cp313t");
 
         assert_eq!(
-            AbiTag::parse("cpXY"),
+            AbiTag::from_str("cpXY"),
             Err(ParseAbiTagError::MissingMajorVersion {
                 implementation: "CPython",
                 tag: "cpXY".to_string()
@@ -403,32 +395,32 @@ mod tests {
             python_version: Some((3, 9)),
             implementation_version: (7, 3),
         };
-        assert_eq!(AbiTag::parse("pypy39_pp73").as_ref(), Ok(&tag));
+        assert_eq!(AbiTag::from_str("pypy39_pp73"), Ok(tag));
         assert_eq!(tag.to_string(), "pypy39_pp73");
 
         let tag = AbiTag::PyPy {
             python_version: None,
             implementation_version: (7, 3),
         };
-        assert_eq!(AbiTag::parse("pypy_73").as_ref(), Ok(&tag));
+        assert_eq!(AbiTag::from_str("pypy_73").as_ref(), Ok(&tag));
         assert_eq!(tag.to_string(), "pypy_73");
 
         assert_eq!(
-            AbiTag::parse("pypy39"),
+            AbiTag::from_str("pypy39"),
             Err(ParseAbiTagError::InvalidFormat {
                 implementation: "PyPy",
                 tag: "pypy39".to_string()
             })
         );
         assert_eq!(
-            AbiTag::parse("pypy39_73"),
+            AbiTag::from_str("pypy39_73"),
             Err(ParseAbiTagError::InvalidFormat {
                 implementation: "PyPy",
                 tag: "pypy39_73".to_string()
             })
         );
         assert_eq!(
-            AbiTag::parse("pypy39_ppXY"),
+            AbiTag::from_str("pypy39_ppXY"),
             Err(ParseAbiTagError::InvalidImplMajorVersion {
                 implementation: "PyPy",
                 tag: "pypy39_ppXY".to_string()
@@ -443,27 +435,27 @@ mod tests {
             implementation_version: (2, 40),
         };
         assert_eq!(
-            AbiTag::parse("graalpy310_graalpy240_310_native").as_ref(),
-            Ok(&tag)
+            AbiTag::from_str("graalpy310_graalpy240_310_native"),
+            Ok(tag)
         );
         assert_eq!(tag.to_string(), "graalpy310_graalpy240_310_native");
 
         assert_eq!(
-            AbiTag::parse("graalpy310"),
+            AbiTag::from_str("graalpy310"),
             Err(ParseAbiTagError::InvalidFormat {
                 implementation: "GraalPy",
                 tag: "graalpy310".to_string()
             })
         );
         assert_eq!(
-            AbiTag::parse("graalpy310_240"),
+            AbiTag::from_str("graalpy310_240"),
             Err(ParseAbiTagError::InvalidFormat {
                 implementation: "GraalPy",
                 tag: "graalpy310_240".to_string()
             })
         );
         assert_eq!(
-            AbiTag::parse("graalpy310_graalpyXY"),
+            AbiTag::from_str("graalpy310_graalpyXY"),
             Err(ParseAbiTagError::InvalidFormat {
                 implementation: "GraalPy",
                 tag: "graalpy310_graalpyXY".to_string()
@@ -476,21 +468,18 @@ mod tests {
         let tag = AbiTag::Pyston {
             implementation_version: (2, 3),
         };
-        assert_eq!(
-            AbiTag::parse("pyston_23_x86_64_linux_gnu").as_ref(),
-            Ok(&tag)
-        );
+        assert_eq!(AbiTag::from_str("pyston_23_x86_64_linux_gnu"), Ok(tag));
         assert_eq!(tag.to_string(), "pyston_23_x86_64_linux_gnu");
 
         assert_eq!(
-            AbiTag::parse("pyston23_x86_64_linux_gnu"),
+            AbiTag::from_str("pyston23_x86_64_linux_gnu"),
             Err(ParseAbiTagError::InvalidFormat {
                 implementation: "Pyston",
                 tag: "pyston23_x86_64_linux_gnu".to_string()
             })
         );
         assert_eq!(
-            AbiTag::parse("pyston_XY_x86_64_linux_gnu"),
+            AbiTag::from_str("pyston_XY_x86_64_linux_gnu"),
             Err(ParseAbiTagError::InvalidImplMajorVersion {
                 implementation: "Pyston",
                 tag: "pyston_XY_x86_64_linux_gnu".to_string()
@@ -501,11 +490,11 @@ mod tests {
     #[test]
     fn unknown_abi() {
         assert_eq!(
-            AbiTag::parse("unknown"),
+            AbiTag::from_str("unknown"),
             Err(ParseAbiTagError::UnknownFormat("unknown".to_string()))
         );
         assert_eq!(
-            AbiTag::parse(""),
+            AbiTag::from_str(""),
             Err(ParseAbiTagError::UnknownFormat(String::new()))
         );
     }

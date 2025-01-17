@@ -71,8 +71,6 @@ pub enum PlatformTag {
     Illumos { release_arch: SmallString },
     /// Ex) `solaris_11_4_x86_64`
     Solaris { release_arch: SmallString },
-    /// Ex) `win_ia64`
-    Unknown { tag: SmallString },
 }
 
 impl PlatformTag {
@@ -99,7 +97,6 @@ impl PlatformTag {
             PlatformTag::Haiku { .. } => Some("Haiku"),
             PlatformTag::Illumos { .. } => Some("Illumos"),
             PlatformTag::Solaris { .. } => Some("Solaris"),
-            PlatformTag::Unknown { .. } => None,
         }
     }
 }
@@ -265,14 +262,15 @@ impl std::fmt::Display for PlatformTag {
             Self::Haiku { release_arch } => write!(f, "haiku_{release_arch}"),
             Self::Illumos { release_arch } => write!(f, "illumos_{release_arch}"),
             Self::Solaris { release_arch } => write!(f, "solaris_{release_arch}_64bit"),
-            Self::Unknown { tag } => write!(f, "{tag}"),
         }
     }
 }
 
-impl PlatformTag {
+impl FromStr for PlatformTag {
+    type Err = ParsePlatformTagError;
+
     /// Parse a [`PlatformTag`] from a string.
-    fn parse(s: &str) -> Result<Self, ParsePlatformTagError> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Match against any static variants.
         match s {
             "any" => return Ok(Self::Any),
@@ -622,14 +620,6 @@ impl PlatformTag {
     }
 }
 
-impl FromStr for PlatformTag {
-    type Err = ParsePlatformTagError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(PlatformTag::parse(s).unwrap_or_else(|_| PlatformTag::Unknown { tag: s.into() }))
-    }
-}
-
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum ParsePlatformTagError {
     #[error("Unknown platform tag format: {0}")]
@@ -648,13 +638,14 @@ pub enum ParsePlatformTagError {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
 
     use crate::platform_tag::{ParsePlatformTagError, PlatformTag};
     use crate::{Arch, BinaryFormat};
 
     #[test]
     fn any_platform() {
-        assert_eq!(PlatformTag::parse("any"), Ok(PlatformTag::Any));
+        assert_eq!(PlatformTag::from_str("any"), Ok(PlatformTag::Any));
         assert_eq!(PlatformTag::Any.to_string(), "any");
     }
 
@@ -666,13 +657,13 @@ mod tests {
             arch: Arch::X86_64,
         };
         assert_eq!(
-            PlatformTag::parse("manylinux_2_24_x86_64").as_ref(),
+            PlatformTag::from_str("manylinux_2_24_x86_64").as_ref(),
             Ok(&tag)
         );
         assert_eq!(tag.to_string(), "manylinux_2_24_x86_64");
 
         assert_eq!(
-            PlatformTag::parse("manylinux_x_24_x86_64"),
+            PlatformTag::from_str("manylinux_x_24_x86_64"),
             Err(ParsePlatformTagError::InvalidMajorVersion {
                 platform: "manylinux",
                 tag: "manylinux_x_24_x86_64".to_string()
@@ -680,7 +671,7 @@ mod tests {
         );
 
         assert_eq!(
-            PlatformTag::parse("manylinux_2_x_x86_64"),
+            PlatformTag::from_str("manylinux_2_x_x86_64"),
             Err(ParsePlatformTagError::InvalidMinorVersion {
                 platform: "manylinux",
                 tag: "manylinux_2_x_x86_64".to_string()
@@ -688,7 +679,7 @@ mod tests {
         );
 
         assert_eq!(
-            PlatformTag::parse("manylinux_2_24_invalid"),
+            PlatformTag::from_str("manylinux_2_24_invalid"),
             Err(ParsePlatformTagError::InvalidArch {
                 platform: "manylinux",
                 tag: "manylinux_2_24_invalid".to_string()
@@ -699,11 +690,14 @@ mod tests {
     #[test]
     fn manylinux1_platform() {
         let tag = PlatformTag::Manylinux1 { arch: Arch::X86_64 };
-        assert_eq!(PlatformTag::parse("manylinux1_x86_64").as_ref(), Ok(&tag));
+        assert_eq!(
+            PlatformTag::from_str("manylinux1_x86_64").as_ref(),
+            Ok(&tag)
+        );
         assert_eq!(tag.to_string(), "manylinux1_x86_64");
 
         assert_eq!(
-            PlatformTag::parse("manylinux1_invalid"),
+            PlatformTag::from_str("manylinux1_invalid"),
             Err(ParsePlatformTagError::InvalidArch {
                 platform: "manylinux1",
                 tag: "manylinux1_invalid".to_string()
@@ -715,13 +709,13 @@ mod tests {
     fn manylinux2010_platform() {
         let tag = PlatformTag::Manylinux2010 { arch: Arch::X86_64 };
         assert_eq!(
-            PlatformTag::parse("manylinux2010_x86_64").as_ref(),
+            PlatformTag::from_str("manylinux2010_x86_64").as_ref(),
             Ok(&tag)
         );
         assert_eq!(tag.to_string(), "manylinux2010_x86_64");
 
         assert_eq!(
-            PlatformTag::parse("manylinux2010_invalid"),
+            PlatformTag::from_str("manylinux2010_invalid"),
             Err(ParsePlatformTagError::InvalidArch {
                 platform: "manylinux2010",
                 tag: "manylinux2010_invalid".to_string()
@@ -733,13 +727,13 @@ mod tests {
     fn manylinux2014_platform() {
         let tag = PlatformTag::Manylinux2014 { arch: Arch::X86_64 };
         assert_eq!(
-            PlatformTag::parse("manylinux2014_x86_64").as_ref(),
+            PlatformTag::from_str("manylinux2014_x86_64").as_ref(),
             Ok(&tag)
         );
         assert_eq!(tag.to_string(), "manylinux2014_x86_64");
 
         assert_eq!(
-            PlatformTag::parse("manylinux2014_invalid"),
+            PlatformTag::from_str("manylinux2014_invalid"),
             Err(ParsePlatformTagError::InvalidArch {
                 platform: "manylinux2014",
                 tag: "manylinux2014_invalid".to_string()
@@ -750,11 +744,11 @@ mod tests {
     #[test]
     fn linux_platform() {
         let tag = PlatformTag::Linux { arch: Arch::X86_64 };
-        assert_eq!(PlatformTag::parse("linux_x86_64").as_ref(), Ok(&tag));
+        assert_eq!(PlatformTag::from_str("linux_x86_64").as_ref(), Ok(&tag));
         assert_eq!(tag.to_string(), "linux_x86_64");
 
         assert_eq!(
-            PlatformTag::parse("linux_invalid"),
+            PlatformTag::from_str("linux_invalid"),
             Err(ParsePlatformTagError::InvalidArch {
                 platform: "linux",
                 tag: "linux_invalid".to_string()
@@ -770,13 +764,13 @@ mod tests {
             arch: Arch::X86_64,
         };
         assert_eq!(
-            PlatformTag::parse("musllinux_1_2_x86_64").as_ref(),
+            PlatformTag::from_str("musllinux_1_2_x86_64").as_ref(),
             Ok(&tag)
         );
         assert_eq!(tag.to_string(), "musllinux_1_2_x86_64");
 
         assert_eq!(
-            PlatformTag::parse("musllinux_x_2_x86_64"),
+            PlatformTag::from_str("musllinux_x_2_x86_64"),
             Err(ParsePlatformTagError::InvalidMajorVersion {
                 platform: "musllinux",
                 tag: "musllinux_x_2_x86_64".to_string()
@@ -784,7 +778,7 @@ mod tests {
         );
 
         assert_eq!(
-            PlatformTag::parse("musllinux_1_x_x86_64"),
+            PlatformTag::from_str("musllinux_1_x_x86_64"),
             Err(ParsePlatformTagError::InvalidMinorVersion {
                 platform: "musllinux",
                 tag: "musllinux_1_x_x86_64".to_string()
@@ -792,7 +786,7 @@ mod tests {
         );
 
         assert_eq!(
-            PlatformTag::parse("musllinux_1_2_invalid"),
+            PlatformTag::from_str("musllinux_1_2_invalid"),
             Err(ParsePlatformTagError::InvalidArch {
                 platform: "musllinux",
                 tag: "musllinux_1_2_invalid".to_string()
@@ -808,13 +802,13 @@ mod tests {
             binary_format: BinaryFormat::Universal2,
         };
         assert_eq!(
-            PlatformTag::parse("macosx_11_0_universal2").as_ref(),
+            PlatformTag::from_str("macosx_11_0_universal2").as_ref(),
             Ok(&tag)
         );
         assert_eq!(tag.to_string(), "macosx_11_0_universal2");
 
         assert_eq!(
-            PlatformTag::parse("macosx_x_0_universal2"),
+            PlatformTag::from_str("macosx_x_0_universal2"),
             Err(ParsePlatformTagError::InvalidMajorVersion {
                 platform: "macosx",
                 tag: "macosx_x_0_universal2".to_string()
@@ -822,7 +816,7 @@ mod tests {
         );
 
         assert_eq!(
-            PlatformTag::parse("macosx_11_x_universal2"),
+            PlatformTag::from_str("macosx_11_x_universal2"),
             Err(ParsePlatformTagError::InvalidMinorVersion {
                 platform: "macosx",
                 tag: "macosx_11_x_universal2".to_string()
@@ -830,7 +824,7 @@ mod tests {
         );
 
         assert_eq!(
-            PlatformTag::parse("macosx_11_0_invalid"),
+            PlatformTag::from_str("macosx_11_0_invalid"),
             Err(ParsePlatformTagError::InvalidArch {
                 platform: "macosx",
                 tag: "macosx_11_0_invalid".to_string()
@@ -840,19 +834,25 @@ mod tests {
 
     #[test]
     fn win32_platform() {
-        assert_eq!(PlatformTag::parse("win32"), Ok(PlatformTag::Win32));
+        assert_eq!(PlatformTag::from_str("win32"), Ok(PlatformTag::Win32));
         assert_eq!(PlatformTag::Win32.to_string(), "win32");
     }
 
     #[test]
     fn win_amd64_platform() {
-        assert_eq!(PlatformTag::parse("win_amd64"), Ok(PlatformTag::WinAmd64));
+        assert_eq!(
+            PlatformTag::from_str("win_amd64"),
+            Ok(PlatformTag::WinAmd64)
+        );
         assert_eq!(PlatformTag::WinAmd64.to_string(), "win_amd64");
     }
 
     #[test]
     fn win_arm64_platform() {
-        assert_eq!(PlatformTag::parse("win_arm64"), Ok(PlatformTag::WinArm64));
+        assert_eq!(
+            PlatformTag::from_str("win_arm64"),
+            Ok(PlatformTag::WinArm64)
+        );
         assert_eq!(PlatformTag::WinArm64.to_string(), "win_arm64");
     }
 
@@ -862,7 +862,7 @@ mod tests {
             release_arch: "13_14_x86_64".into(),
         };
         assert_eq!(
-            PlatformTag::parse("freebsd_13_14_x86_64").as_ref(),
+            PlatformTag::from_str("freebsd_13_14_x86_64").as_ref(),
             Ok(&tag)
         );
         assert_eq!(tag.to_string(), "freebsd_13_14_x86_64");
@@ -873,7 +873,10 @@ mod tests {
         let tag = PlatformTag::Illumos {
             release_arch: "5_11_x86_64".into(),
         };
-        assert_eq!(PlatformTag::parse("illumos_5_11_x86_64").as_ref(), Ok(&tag));
+        assert_eq!(
+            PlatformTag::from_str("illumos_5_11_x86_64").as_ref(),
+            Ok(&tag)
+        );
         assert_eq!(tag.to_string(), "illumos_5_11_x86_64");
     }
 
@@ -883,13 +886,13 @@ mod tests {
             release_arch: "11_4_x86_64".into(),
         };
         assert_eq!(
-            PlatformTag::parse("solaris_11_4_x86_64_64bit").as_ref(),
+            PlatformTag::from_str("solaris_11_4_x86_64_64bit").as_ref(),
             Ok(&tag)
         );
         assert_eq!(tag.to_string(), "solaris_11_4_x86_64_64bit");
 
         assert_eq!(
-            PlatformTag::parse("solaris_11_4_x86_64"),
+            PlatformTag::from_str("solaris_11_4_x86_64"),
             Err(ParsePlatformTagError::InvalidArch {
                 platform: "solaris",
                 tag: "solaris_11_4_x86_64".to_string()
@@ -900,11 +903,11 @@ mod tests {
     #[test]
     fn unknown_platform() {
         assert_eq!(
-            PlatformTag::parse("unknown"),
+            PlatformTag::from_str("unknown"),
             Err(ParsePlatformTagError::UnknownFormat("unknown".to_string()))
         );
         assert_eq!(
-            PlatformTag::parse(""),
+            PlatformTag::from_str(""),
             Err(ParsePlatformTagError::UnknownFormat(String::new()))
         );
     }

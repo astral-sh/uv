@@ -744,12 +744,8 @@ impl PubGrubReportFormatter<'_> {
         match tag {
             IncompatibleTag::Invalid => None,
             IncompatibleTag::Python => {
-                let best = tags.and_then(Tags::python_tag).cloned();
-                let tags = prioritized
-                    .python_tags()
-                    .into_iter()
-                    .cloned()
-                    .collect::<BTreeSet<_>>();
+                let best = tags.and_then(Tags::python_tag);
+                let tags = prioritized.python_tags();
                 if tags.is_empty() {
                     None
                 } else {
@@ -762,7 +758,7 @@ impl PubGrubReportFormatter<'_> {
                 }
             }
             IncompatibleTag::Abi | IncompatibleTag::AbiPythonVersion => {
-                let best = tags.and_then(Tags::abi_tag).cloned();
+                let best = tags.and_then(Tags::abi_tag);
                 let tags = prioritized
                     .abi_tags()
                     .into_iter()
@@ -774,8 +770,7 @@ impl PubGrubReportFormatter<'_> {
                     // In that case, the wheel isn't compatible, but when solving for Python 3.13,
                     // the `cp312` Python tag _can_ be compatible (e.g., for `cp312-abi3-macosx_11_0_arm64.whl`),
                     // so this is considered an ABI incompatibility rather than Python incompatibility.
-                    .filter(|tag| **tag != AbiTag::None)
-                    .cloned()
+                    .filter(|tag| *tag != AbiTag::None)
                     .collect::<BTreeSet<_>>();
                 if tags.is_empty() {
                     None
@@ -1581,7 +1576,7 @@ impl std::fmt::Display for PubGrubHint {
                 tags,
                 best,
             } => {
-                if let Some(best) = best.as_ref() {
+                if let Some(best) = best {
                     let s = if tags.len() == 1 { "" } else { "s" };
                     let best = if let Some(pretty) = best.pretty() {
                         format!("{} (`{}`)", pretty.cyan(), best.cyan())
@@ -1621,7 +1616,7 @@ impl std::fmt::Display for PubGrubHint {
                 tags,
                 best,
             } => {
-                if let Some(best) = best.as_ref() {
+                if let Some(best) = best {
                     let s = if tags.len() == 1 { "" } else { "s" };
                     let best = if let Some(pretty) = best.pretty() {
                         format!("{} (`{}`)", pretty.cyan(), best.cyan())
