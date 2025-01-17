@@ -242,16 +242,16 @@ impl ManagedPythonInstallations {
     pub fn find_matching_current_platform(
         &self,
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation>, Error> {
-        let platform_key = platform_key_from_env()?;
+        let os = Os::from_env();
+        let arch = Arch::from_env();
+        let libc = Libc::from_env()?;
 
         let iter = ManagedPythonInstallations::from_settings(None)?
             .find_all()?
             .filter(move |installation| {
-                installation
-                    .path
-                    .file_name()
-                    .map(OsStr::to_string_lossy)
-                    .is_some_and(|filename| filename.ends_with(&platform_key))
+                installation.key.os == os
+                    && installation.key.arch.family == arch.family
+                    && installation.key.libc == libc
             });
 
         Ok(iter)
