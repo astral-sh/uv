@@ -2091,7 +2091,7 @@ impl PipCheckSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct BuildSettings {
     pub(crate) src: Option<PathBuf>,
-    pub(crate) package: Option<PackageName>,
+    pub(crate) packages: Vec<PackageName>,
     pub(crate) all_packages: bool,
     pub(crate) out_dir: Option<PathBuf>,
     pub(crate) sdist: bool,
@@ -2113,7 +2113,7 @@ impl BuildSettings {
         let BuildArgs {
             src,
             out_dir,
-            package,
+            packages,
             all_packages,
             sdist,
             wheel,
@@ -2139,7 +2139,7 @@ impl BuildSettings {
 
         Self {
             src,
-            package,
+            packages,
             all_packages,
             out_dir,
             sdist,
