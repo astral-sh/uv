@@ -496,8 +496,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 
     /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
-    pub async fn requires_dist(&self, project_root: &Path) -> Result<Option<RequiresDist>, Error> {
-        self.builder.source_tree_requires_dist(project_root).await
+    pub async fn requires_dist(
+        &self,
+        source_tree: impl AsRef<Path>,
+    ) -> Result<Option<RequiresDist>, Error> {
+        self.builder
+            .source_tree_requires_dist(source_tree.as_ref())
+            .await
     }
 
     /// Stream a wheel from a URL, unzipping it into the cache as it's downloaded.

@@ -17,7 +17,7 @@ use url::Url;
 
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::BuildOptions;
-use uv_distribution::DistributionDatabase;
+use uv_distribution::{DistributionDatabase, RequiresDist};
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
@@ -1213,58 +1213,80 @@ impl Lock {
                 continue;
             }
 
-            // Get the metadata for the distribution.
-            let dist = package.to_dist(
-                root,
-                // When validating, it's okay to use wheels that don't match the current platform.
-                TagPolicy::Preferred(tags),
-                // When validating, it's okay to use (e.g.) a source distribution with `--no-build`.
-                // We're just trying to determine whether the lockfile is up-to-date. If we end
-                // up needing to build a source distribution in order to do so, below, we'll error
-                // there.
-                &BuildOptions::default(),
-            )?;
-
             // Fetch the metadata for the distribution.
             //
-            // TODO(charlie): We don't need the version here, so we could avoid running a PEP 517
-            // build if only the version is dynamic.
-            let metadata = {
-                let id = dist.version_id();
-                if let Some(archive) =
-                    index
-                        .distributions()
-                        .get(&id)
-                        .as_deref()
-                        .and_then(|response| {
-                            if let MetadataResponse::Found(archive, ..) = response {
-                                Some(archive)
-                            } else {
-                                None
-                            }
-                        })
-                {
-                    // If the metadata is already in the index, return it.
-                    archive.metadata.clone()
-                } else {
-                    // Run the PEP 517 build process to extract metadata from the source distribution.
-                    let archive = database
-                        .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
-                        .await
-                        .map_err(|err| LockErrorKind::Resolution {
-                            id: package.id.clone(),
-                            err,
-                        })?;
+            // If the distribution is a source tree, attempt to extract the requirements from the
+            // `pyproject.toml` directly. The distribution database will do this too, but we can be
+            // even more aggressive here since we _only_ need the requirements. So, for example,
+            // even if the version is dynamic, we can still extract the requirements without
+            // performing a build, unlike in the database where we typically construct a "complete"
+            // metadata object.
+            let metadata = if let Some(source_tree) = package.id.source.as_source_tree() {
+                database
+                    .requires_dist(root.join(source_tree))
+                    .await
+                    .map_err(|err| LockErrorKind::Resolution {
+                        id: package.id.clone(),
+                        err,
+                    })?
+            } else {
+                None
+            };
 
-                    let metadata = archive.metadata.clone();
+            let metadata = if let Some(metadata) = metadata {
+                metadata
+            } else {
+                // Get the metadata for the distribution.
+                let dist = package.to_dist(
+                    root,
+                    // When validating, it's okay to use wheels that don't match the current platform.
+                    TagPolicy::Preferred(tags),
+                    // When validating, it's okay to use (e.g.) a source distribution with `--no-build`.
+                    // We're just trying to determine whether the lockfile is up-to-date. If we end
+                    // up needing to build a source distribution in order to do so, below, we'll error
+                    // there.
+                    &BuildOptions::default(),
+                )?;
 
-                    // Insert the metadata into the index.
-                    index
-                        .distributions()
-                        .done(id, Arc::new(MetadataResponse::Found(archive)));
+                let metadata = {
+                    let id = dist.version_id();
+                    if let Some(archive) =
+                        index
+                            .distributions()
+                            .get(&id)
+                            .as_deref()
+                            .and_then(|response| {
+                                if let MetadataResponse::Found(archive, ..) = response {
+                                    Some(archive)
+                                } else {
+                                    None
+                                }
+                            })
+                    {
+                        // If the metadata is already in the index, return it.
+                        archive.metadata.clone()
+                    } else {
+                        // Run the PEP 517 build process to extract metadata from the source distribution.
+                        let archive = database
+                            .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
+                            .await
+                            .map_err(|err| LockErrorKind::Resolution {
+                                id: package.id.clone(),
+                                err,
+                            })?;
 
-                    metadata
-                }
+                        let metadata = archive.metadata.clone();
+
+                        // Insert the metadata into the index.
+                        index
+                            .distributions()
+                            .done(id, Arc::new(MetadataResponse::Found(archive)));
+
+                        metadata
+                    }
+                };
+
+                RequiresDist::from(metadata)
             };
 
             // Validate the `requires-dist` metadata.
@@ -2770,10 +2792,18 @@ impl Source {
     }
 
     /// Returns `true` if the source is that of a source tree.
-    pub(crate) fn is_source_tree(&self) -> bool {
+    fn is_source_tree(&self) -> bool {
         match self {
             Source::Directory(..) | Source::Editable(..) | Source::Virtual(..) => true,
             Source::Path(..) | Source::Git(..) | Source::Registry(..) | Source::Direct(..) => false,
+        }
+    }
+
+    /// Returns the path to the source tree, if the source is a source tree.
+    fn as_source_tree(&self) -> Option<&Path> {
+        match self {
+            Source::Directory(path) | Source::Editable(path) | Source::Virtual(path) => Some(path),
+            Source::Path(..) | Source::Git(..) | Source::Registry(..) | Source::Direct(..) => None,
         }
     }
 
