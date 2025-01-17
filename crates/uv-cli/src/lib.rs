@@ -1185,7 +1185,7 @@ pub struct PipCompileArgs {
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aarch64-apple-darwin`.
     ///
-    /// When targetting macOS (Darwin), the default minimum version is `12.0`. Use
+    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
     /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
@@ -1475,7 +1475,7 @@ pub struct PipSyncArgs {
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aarch64-apple-darwin`.
     ///
-    /// When targetting macOS (Darwin), the default minimum version is `12.0`. Use
+    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
     /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
     ///
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
@@ -1757,7 +1757,7 @@ pub struct PipInstallArgs {
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aarch64-apple-darwin`.
     ///
-    /// When targetting macOS (Darwin), the default minimum version is `12.0`. Use
+    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
     /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
     ///
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
