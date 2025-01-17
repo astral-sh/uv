@@ -1,2 +1,0 @@
-iniconfig ; platform_python_implementation == "CPython" and python_version >= "3.10"
-coverage
