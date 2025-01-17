@@ -5538,6 +5538,7 @@ dependencies = [
  "same-file",
  "schemars",
  "serde",
+ "smallvec",
  "textwrap",
  "thiserror 2.0.11",
  "tokio",
