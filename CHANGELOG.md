@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.5.21
+
+### Enhancements
+
+- Avoid building dynamic versions when validating lockfile ([#10703](https://github.com/astral-sh/uv/pull/10703))
+
+### Configuration
+
+- Add `UV_VENV_SEED` environment variable ([#10715](https://github.com/astral-sh/uv/pull/10715))
+
+### Performance
+
+- Store unsupported tags in wheel filename ([#10665](https://github.com/astral-sh/uv/pull/10665))
+
+### Bug fixes
+
+- Avoid attempting to patch macOS dylib for non-macOS installs ([#10721](https://github.com/astral-sh/uv/pull/10721))
+- Avoid narrowing `requires-python` marker with disjunctions ([#10704](https://github.com/astral-sh/uv/pull/10704))
+- Respect environment variable credentials for indexes outside root ([#10688](https://github.com/astral-sh/uv/pull/10688))
+- Respect preferences for explicit index dependencies from `requirements.txt` ([#10690](https://github.com/astral-sh/uv/pull/10690))
+- Sort preferences by environment, then index ([#10700](https://github.com/astral-sh/uv/pull/10700))
+- Ignore permission errors when looking for user-level configuration file ([#10697](https://github.com/astral-sh/uv/pull/10697))
+
+### Documentation
+
+- Add `SyntaxWarning` compatibility note to bytecode compilation docs ([#10701](https://github.com/astral-sh/uv/pull/10701))
+- Add `MACOSX_DEPLOYMENT_TARGET` to the `--python-platform` documentation ([#10698](https://github.com/astral-sh/uv/pull/10698))
+
 ## 0.5.20
 
 ### Bug fixes
