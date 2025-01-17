@@ -542,7 +542,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let version = match version {
                         ResolverVersion::Unforked(version) => version,
                         ResolverVersion::Forked(forks) => {
-                            forked_states.extend(self.version_forks_to_fork_states(state, forks));
+                            debug!("Currently solving: {}", state.env);
+
+                            for y in self.version_forks_to_fork_states(state, forks) {
+                                debug!("Forking to solve: {}", y.env);
+                                forked_states.push(y);
+                            }
+                            // forked_states.extend(self.version_forks_to_fork_states(state, forks));
                             continue 'FORK;
                         }
                         ResolverVersion::Unavailable(version, reason) => {
@@ -1234,6 +1240,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         {
             if matches!(self.options.fork_strategy, ForkStrategy::RequiresPython) {
                 if env.marker_environment().is_none() {
+                    // So here, we have:
+                    // `python_full_version < '3.10' or platform_python_implementation != 'CPython'`
+                    //
+                    // We then run into a dependency (`coverage==7.6.10`) that has `>=3.9`.
+                    //
+                    // So we want to solve separately for `3.8` and `3.9`.
                     let forks = fork_version_by_python_requirement(
                         requires_python,
                         python_requirement,
@@ -2760,10 +2772,12 @@ impl ForkState {
     /// If the fork should be dropped (e.g., because its markers can never be true for its
     /// Python requirement), then this returns `None`.
     fn with_env(mut self, env: ResolverEnvironment) -> Self {
+        debug!("Creating env: {env}");
+        debug!("Current python requirement: {:?}", self.python_requirement);
         self.env = env;
         // If the fork contains a narrowed Python requirement, apply it.
         if let Some(req) = self.env.narrow_python_requirement(&self.python_requirement) {
-            debug!("Narrowed `requires-python` bound to: {}", req.target());
+            debug!("Narrowed `requires-python` bound to: {:?}", req.target());
             self.python_requirement = req;
         }
         self

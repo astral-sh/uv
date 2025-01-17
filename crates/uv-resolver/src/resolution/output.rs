@@ -7,7 +7,7 @@ use petgraph::{
     Directed, Direction,
 };
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
-
+use tracing::debug;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
@@ -164,6 +164,8 @@ impl ResolverOutput {
         let mut seen = FxHashSet::default();
         for resolution in resolutions {
             let marker = resolution.env.try_universal_markers().unwrap_or_default();
+
+            debug!("Got resolution with: {:?}", marker);
 
             // Add every edge to the graph, propagating the marker for the current fork, if
             // necessary.

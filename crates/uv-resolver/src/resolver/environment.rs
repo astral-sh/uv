@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use tracing::trace;
+use tracing::{debug, trace};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerEnvironment, MarkerTree};
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ResolverMarkerEnvironment};
@@ -544,13 +544,41 @@ pub(crate) fn fork_version_by_python_requirement(
         panic!("resolver must be in universal mode for forking")
     };
 
+    debug!("Using env marker: {:?}", env_marker);
+    debug!("Using requires-python: {:?}", python_requirement.target());
+
     let mut envs = vec![];
     if !env_marker.is_disjoint(lower.to_marker_tree()) {
+        debug!("Narrowing to: {:?}", lower.to_marker_tree());
+        debug!("Narrowed env: {:?}", env.narrow_environment(lower.to_marker_tree()));
         envs.push(env.narrow_environment(lower.to_marker_tree()));
     }
     if !env_marker.is_disjoint(upper.to_marker_tree()) {
+        debug!("Narrowing to: {:?}", upper.to_marker_tree());
+        debug!("Narrowed env: {:?}", env.narrow_environment(upper.to_marker_tree()));
         envs.push(env.narrow_environment(upper.to_marker_tree()));
     }
+
+    // The big issue here is: if `python_requirement` is more narrow than the environment marker,
+    // the split will _not_ cover the entire environment. So, for example, with the current bug,
+    // if marker is `python_version >= '3.10' or sys_platform == 'linux'`, and the Python
+    // requirement is `>=3.11`, then we lose the portion of the environment that is `sys_platform
+    // == 'linux'`.
+    //
+    // So it's only an issue if we have a broken invariant, I think.
+
+    // // Compute the remainder.
+    // let mut remainder = env_marker.clone();
+    // remainder.and(lower.to_marker_tree().negate());
+    // remainder.and(upper.to_marker_tree().negate());
+    // // remainder.and(python_requirement.to_marker_tree());
+    // if !remainder.is_false() {
+    //     println!("Remainder: {:?}", remainder);
+    //     println!("python_requirement: {:?}", python_requirement);
+    //     envs.push(env.narrow_environment(remainder));
+    //     // return vec![];
+    // }
+
     debug_assert!(!envs.is_empty(), "at least one fork should be produced");
     envs
 }
