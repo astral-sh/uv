@@ -51,7 +51,10 @@ fn missing_requirements_txt() {
 
 #[test]
 fn missing_venv() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12")
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+
     let requirements = context.temp_dir.child("requirements.txt");
     requirements.write_str("anyio")?;
     fs::remove_dir_all(&context.venv)?;
@@ -62,8 +65,8 @@ fn missing_venv() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to inspect Python interpreter from active virtual environment at `.venv/bin/python3`
-      Caused by: Python interpreter not found at `[VENV]/bin/python3`
+    error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/python`
+      Caused by: Python interpreter not found at `[VENV]/[BIN]/python`
     "###);
 
     assert!(predicates::path::missing().eval(&context.venv));
