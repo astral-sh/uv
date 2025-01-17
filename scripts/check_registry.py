@@ -93,14 +93,16 @@ InstallPath                    (default)              :
 
 def filter_snapshot(snapshot: str) -> str:
     snapshot = snapshot.strip()
+    # Long URLs are wrapped into multiple lines
     snapshot = re.sub(
-        "DownloadUrl ( *): .*\n.*tar.gz", r"DownloadUrl \1: <downloadUrl>", snapshot
+        "DownloadUrl ( *): .*(\n.*)+?(\n +)DownloadSha256", r"DownloadUrl \1: <downloadUrl>\3DownloadSha256", snapshot
     )
     snapshot = re.sub(
         "DownloadSha256 ( *): .*", r"DownloadSha256 \1: <downloadSha256>", snapshot
     )
     return snapshot
 
+print(filter_snapshot(expected_registry))
 
 def main(uv: str):
     # Check 1: Install interpreters and check that all their keys are set in the
