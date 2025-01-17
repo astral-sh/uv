@@ -983,7 +983,9 @@ pub(crate) fn find_python_installation(
         if !result.as_ref().err().map_or(true, Error::is_critical) {
             // Track the first non-critical error
             if first_error.is_none() {
-                first_error = Some(result);
+                if let Err(err) = result {
+                    first_error = Some(err);
+                }
             }
             continue;
         }
@@ -1039,8 +1041,8 @@ pub(crate) fn find_python_installation(
 
     // If we found a Python, but it was unusable for some reason, report that instead of saying we
     // couldn't find any Python interpreters.
-    if let Some(result) = first_error {
-        return result;
+    if let Some(err) = first_error {
+        return Err(err);
     }
 
     Ok(Err(PythonNotFound {
