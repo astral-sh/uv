@@ -62,6 +62,19 @@ fn missing_venv() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    error: Failed to inspect Python interpreter from active virtual environment at `.venv/bin/python3`
+      Caused by: Python interpreter not found at `[VENV]/bin/python3`
+    "###);
+
+    assert!(predicates::path::missing().eval(&context.venv));
+
+    // If not "active", we hint to create one
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt").env_remove("VIRTUAL_ENV"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
     error: No virtual environment found; run `uv venv` to create an environment, or pass `--system` to install into a non-virtual environment
     "###);
 
