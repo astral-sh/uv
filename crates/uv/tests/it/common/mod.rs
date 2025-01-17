@@ -479,6 +479,7 @@ impl TestContext {
             .env(EnvVars::UV_TEST_PYTHON_PATH, self.python_path())
             .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .env_remove(EnvVars::UV_CACHE_DIR)
+            .env_remove(EnvVars::UV_TOOL_BIN_DIR)
             .current_dir(self.temp_dir.path());
 
         if activate_venv {
