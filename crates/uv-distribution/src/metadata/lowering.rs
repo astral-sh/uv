@@ -236,16 +236,12 @@ impl LoweredRequirement {
                                 .find(|Index { name, .. }| {
                                     name.as_ref().is_some_and(|name| *name == index)
                                 })
+                                .map(|Index { url: index, .. }| index.clone())
                             else {
                                 return Err(LoweringError::MissingIndex(
                                     requirement.name.clone(),
                                     index,
                                 ));
-                            };
-                            let url = if let Some(credentials) = index.credentials() {
-                                credentials.apply(index.url.clone().into_url())
-                            } else {
-                                index.url.clone().into_url()
                             };
                             let conflict = project_name.and_then(|project_name| {
                                 if let Some(extra) = extra {
@@ -256,7 +252,12 @@ impl LoweredRequirement {
                                     })
                                 }
                             });
-                            let source = registry_source(&requirement, url, conflict, lower_bound);
+                            let source = registry_source(
+                                &requirement,
+                                index.into_url(),
+                                conflict,
+                                lower_bound,
+                            );
                             (source, marker)
                         }
                         Source::Workspace {
@@ -464,19 +465,20 @@ impl LoweredRequirement {
                                 .find(|Index { name, .. }| {
                                     name.as_ref().is_some_and(|name| *name == index)
                                 })
+                                .map(|Index { url: index, .. }| index.clone())
                             else {
                                 return Err(LoweringError::MissingIndex(
                                     requirement.name.clone(),
                                     index,
                                 ));
                             };
-                            let url = if let Some(credentials) = index.credentials() {
-                                credentials.apply(index.url.clone().into_url())
-                            } else {
-                                index.url.clone().into_url()
-                            };
                             let conflict = None;
-                            let source = registry_source(&requirement, url, conflict, lower_bound);
+                            let source = registry_source(
+                                &requirement,
+                                index.into_url(),
+                                conflict,
+                                lower_bound,
+                            );
                             (source, marker)
                         }
                         Source::Workspace { .. } => {
