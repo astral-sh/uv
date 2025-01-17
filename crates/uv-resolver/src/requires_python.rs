@@ -115,7 +115,12 @@ impl RequiresPython {
     }
 
     /// Narrow the [`RequiresPython`] by computing the intersection with the given range.
+    ///
+    /// Returns `None` if the given range is not narrower than the current range.
     pub fn narrow(&self, range: &RequiresPythonRange) -> Option<Self> {
+        if *range == self.range {
+            return None;
+        }
         let lower = if range.0 >= self.range.0 {
             Some(&range.0)
         } else {
