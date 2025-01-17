@@ -121,10 +121,27 @@ impl Preference {
 }
 
 #[derive(Debug, Clone)]
-struct Entry {
+pub(crate) struct Entry {
     marker: UniversalMarker,
     index: Option<IndexUrl>,
     pin: Pin,
+}
+
+impl Entry {
+    /// Return the [`UniversalMarker`] associated with the entry.
+    pub(crate) fn marker(&self) -> &UniversalMarker {
+        &self.marker
+    }
+
+    /// Return the [`IndexUrl`] associated with the entry, if any.
+    pub(crate) fn index(&self) -> Option<&IndexUrl> {
+        self.index.as_ref()
+    }
+
+    /// Return the pinned data associated with the entry.
+    pub(crate) fn pin(&self) -> &Pin {
+        &self.pin
+    }
 }
 
 /// A set of pinned packages that should be preserved during resolution, if possible.
@@ -232,15 +249,11 @@ impl Preferences {
     }
 
     /// Return the pinned version for a package, if any.
-    pub(crate) fn get(
-        &self,
-        package_name: &PackageName,
-    ) -> impl Iterator<Item = (&UniversalMarker, Option<&IndexUrl>, &Version)> {
+    pub(crate) fn get(&self, package_name: &PackageName) -> &[Entry] {
         self.0
             .get(package_name)
-            .into_iter()
-            .flatten()
-            .map(|entry| (&entry.marker, entry.index.as_ref(), entry.pin.version()))
+            .map(Vec::as_slice)
+            .unwrap_or_default()
     }
 
     /// Return the hashes for a package, if the version matches that of the pin.
@@ -273,12 +286,12 @@ pub(crate) struct Pin {
 
 impl Pin {
     /// Return the version of the pinned package.
-    fn version(&self) -> &Version {
+    pub(crate) fn version(&self) -> &Version {
         &self.version
     }
 
     /// Return the hashes of the pinned package.
-    fn hashes(&self) -> &[HashDigest] {
+    pub(crate) fn hashes(&self) -> &[HashDigest] {
         &self.hashes
     }
 }
