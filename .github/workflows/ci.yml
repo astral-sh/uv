@@ -686,7 +686,7 @@ jobs:
     name: "integration test | deadsnakes python3.9 on ubuntu"
     runs-on: ubuntu-latest
     steps:
-      - name: "install python3.9"
+      - name: "Install python3.9"
         run: |
           sudo add-apt-repository ppa:deadsnakes
           sudo apt-get update
@@ -718,7 +718,7 @@ jobs:
     name: "integration test | free-threaded on linux"
     runs-on: ubuntu-latest
     steps:
-      - name: "install python3.13-nogil"
+      - name: "Install python3.13-nogil"
         run: |
           sudo add-apt-repository ppa:deadsnakes
           sudo apt-get update
