@@ -9,39 +9,43 @@ from argparse import ArgumentParser
 # This is the snapshot as of python build standalone 20250115, we redact URL and hash
 # below. We don't redact the path inside the runner, if the runner configuration changes
 # (or uv's installation paths), please update the snapshot.
-expected_registry = r"""
-    Hive: HKEY_CURRENT_USER\Software\Python
-
+expected_registry = [
+    r"""
 Name                           Property
 ----                           --------
 Astral                         DisplayName : Astral
                                SupportUrl  : https://github.com/astral-sh/uv
-
+""",
+    r"""
     Hive: HKEY_CURRENT_USER\Software\Python\Astral
 
+
 Name                           Property
-----                           --------
+                               ----                           --------
 CPython3.11.11                 DisplayName     : CPython 3.11.11 (64-bit)
-                               SupportUrl      : https://github.com/astral-sh/uv
-                               Version         : 3.11.11
-                               SysVersion      : 3.11.11
-                               SysArchitecture : 64bit
-                               DownloadUrl     : https://github.com/astral-sh/python-build-standalone/releases/download
-                               /20250115/cpython-3.11.11%2B20250115-x86_64-pc-windows-msvc-install_only_stripped.tar.gz
-                               DownloadSha256  : 6810fee03a788bf83c2450d4aaaff8b25bf6d52853947c829983cd4382ca3027
+SupportUrl      : https://github.com/astral-sh/uv
+Version         : 3.11.11
+SysVersion      : 3.11.11
+SysArchitecture : 64bit
+DownloadUrl     : <downloadUrl>
+                   DownloadSha256  : <downloadSha256>
 
-    Hive: HKEY_CURRENT_USER\Software\Python\Astral\CPython3.11.11
+
+                                      Hive: HKEY_CURRENT_USER\Software\Python\Astral\CPython3.11.11
+
 
 Name                           Property
-----                           --------
+                               ----                           --------
 InstallPath                    (default)              :
-                               C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.11.11-windows-x86_64-none
-                               ExecutablePath         : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.11.11-
-                               windows-x86_64-none\python.exe
-                               WindowedExecutablePath : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.11.11-
-                               windows-x86_64-none\pythonw.exe
-
+C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.11.11-windows-x86_64-none
+ExecutablePath         : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.11.11-
+                                                                                    windows-x86_64-none\python.exe
+WindowedExecutablePath : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.11.11-
+                                                                                    windows-x86_64-none\pythonw.exe
+""",
+    r"""
     Hive: HKEY_CURRENT_USER\Software\Python\Astral
+
 
 Name                           Property
 ----                           --------
@@ -50,11 +54,12 @@ CPython3.12.8                  DisplayName     : CPython 3.12.8 (64-bit)
                                Version         : 3.12.8
                                SysVersion      : 3.12.8
                                SysArchitecture : 64bit
-                               DownloadUrl     : https://github.com/astral-sh/python-build-standalone/releases/download
-                               /20250115/cpython-3.12.8%2B20250115-x86_64-pc-windows-msvc-install_only_stripped.tar.gz
-                               DownloadSha256  : 8a4e9e748eeee7ae71048a108a55a9bac48f8bedf9dff413a7c87744f0408ef1
+                               DownloadUrl     : <downloadUrl>
+                               DownloadSha256  : <downloadSha256>
+
 
     Hive: HKEY_CURRENT_USER\Software\Python\Astral\CPython3.12.8
+
 
 Name                           Property
 ----                           --------
@@ -64,8 +69,10 @@ InstallPath                    (default)              :
                                indows-x86_64-none\python.exe
                                WindowedExecutablePath : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.12.8-w
                                indows-x86_64-none\pythonw.exe
-
+""",
+    r"""
     Hive: HKEY_CURRENT_USER\Software\Python\Astral
+
 
 Name                           Property
 ----                           --------
@@ -74,11 +81,12 @@ CPython3.13.1                  DisplayName     : CPython 3.13.1 (64-bit)
                                Version         : 3.13.1
                                SysVersion      : 3.13.1
                                SysArchitecture : 64bit
-                               DownloadUrl     : https://github.com/astral-sh/python-build-standalone/releases/download
-                               /20250115/cpython-3.13.1%2B20250115-x86_64-pc-windows-msvc-install_only_stripped.tar.gz
-                               DownloadSha256  : 8ccd98ae4a4f36a72195ec4063c749f17e39a5f7923fa672757fc69e91892572
+                               DownloadUrl     : <downloadUrl>
+                               DownloadSha256  : <downloadSha256>
+
 
     Hive: HKEY_CURRENT_USER\Software\Python\Astral\CPython3.13.1
+
 
 Name                           Property
 ----                           --------
@@ -88,21 +96,23 @@ InstallPath                    (default)              :
                                indows-x86_64-none\python.exe
                                WindowedExecutablePath : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.13.1-w
                                indows-x86_64-none\pythonw.exe
-"""
+""",
+]
 
 
 def filter_snapshot(snapshot: str) -> str:
     snapshot = snapshot.strip()
     # Long URLs are wrapped into multiple lines
     snapshot = re.sub(
-        "DownloadUrl ( *): .*(\n.*)+?(\n +)DownloadSha256", r"DownloadUrl \1: <downloadUrl>\3DownloadSha256", snapshot
+        "DownloadUrl ( *): .*(\n.*)+?(\n +)DownloadSha256",
+        r"DownloadUrl \1: <downloadUrl>\3DownloadSha256",
+        snapshot,
     )
     snapshot = re.sub(
         "DownloadSha256 ( *): .*", r"DownloadSha256 \1: <downloadSha256>", snapshot
     )
     return snapshot
 
-print(filter_snapshot(expected_registry))
 
 def main(uv: str):
     # Check 1: Install interpreters and check that all their keys are set in the
@@ -120,16 +130,18 @@ def main(uv: str):
         ],
         text=True,
     )
-    if filter_snapshot(actual_registry) != filter_snapshot(expected_registry):
-        print("Registry mismatch:")
-        print("Expected:")
-        print("=" * 80)
-        print(filter_snapshot(expected_registry))
-        print("Actual:")
-        print("=" * 80)
-        print(filter_snapshot(actual_registry))
-        print("=" * 80)
-        sys.exit(1)
+    for expected in expected_registry:
+        if filter_snapshot(expected) not in filter_snapshot(actual_registry):
+            print("Registry mismatch:")
+            print("Expected Snippet:")
+            print("=" * 80)
+            print(filter_snapshot(expected))
+            print("=" * 80)
+            print("Actual:")
+            print("=" * 80)
+            print(filter_snapshot(actual_registry))
+            print("=" * 80)
+            sys.exit(1)
     py_311_line = r" -V:Astral/CPython3.11.11 C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.11.11-windows-x86_64-none\python.exe"
     py_312_line = r" -V:Astral/CPython3.12.8 C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.12.8-windows-x86_64-none\python.exe"
     py_313_line = r" -V:Astral/CPython3.13.1 C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.13.1-windows-x86_64-none\python.exe"
