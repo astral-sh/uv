@@ -28,8 +28,7 @@ fn python_find() {
         ----- stdout -----
 
         ----- stderr -----
-        error: Failed to inspect Python interpreter from active virtual environment at `.venv/bin/python3`
-          Caused by: Python interpreter not found at `[VENV]/bin/python3`
+        error: No interpreter found in virtual environments, managed installations, or search path
         "###);
     }
 
@@ -125,8 +124,7 @@ fn python_find() {
         ----- stdout -----
 
         ----- stderr -----
-        error: Failed to inspect Python interpreter from active virtual environment at `.venv/bin/python3`
-          Caused by: Python interpreter not found at `[VENV]/bin/python3`
+        error: No interpreter found for PyPy in virtual environments, managed installations, or search path
         "###);
     }
 
@@ -538,8 +536,7 @@ fn python_find_unsupported_version() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to inspect Python interpreter from active virtual environment at `.venv/bin/python3`
-      Caused by: Python interpreter not found at `[VENV]/bin/python3`
+    error: No interpreter found for Python 4.2 in virtual environments, managed installations, or search path
     "###);
 
     // Request a low version with a range
@@ -549,8 +546,7 @@ fn python_find_unsupported_version() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to inspect Python interpreter from active virtual environment at `.venv/bin/python3`
-      Caused by: Python interpreter not found at `[VENV]/bin/python3`
+    error: No interpreter found for Python <3.0 in virtual environments, managed installations, or search path
     "###);
 
     // Request free-threaded Python on unsupported version
@@ -573,7 +569,7 @@ fn python_find_venv_invalid() {
         .with_filtered_virtualenv_bin();
 
     // We find the virtual environment
-    uv_snapshot!(context.filters(), context.python_find(), @r###"
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -585,7 +581,7 @@ fn python_find_venv_invalid() {
     // If the binaries are missing from a virtual environment, we fail
     fs_err::remove_dir_all(venv_bin_path(&context.venv)).unwrap();
 
-    uv_snapshot!(context.filters(), context.python_find(), @r###"
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -596,7 +592,7 @@ fn python_find_venv_invalid() {
     "###);
 
     // Unless the virtual environment is not active
-    uv_snapshot!(context.filters(), context.python_find().env_remove(EnvVars::VIRTUAL_ENV), @r###"
+    uv_snapshot!(context.filters(), context.python_find(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -608,7 +604,7 @@ fn python_find_venv_invalid() {
     // If there's not a `pyvenv.cfg` file, it's also non-fatal, we ignore the environment
     fs_err::remove_file(context.venv.join("pyvenv.cfg")).unwrap();
 
-    uv_snapshot!(context.filters(), context.python_find(), @r###"
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
