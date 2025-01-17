@@ -296,11 +296,11 @@ pub struct ManagedPythonInstallation {
     key: PythonInstallationKey,
     /// The URL with the Python archive.
     ///
-    /// Empty when self was built from a path.
+    /// Empty when self was constructed from a path.
     url: Option<&'static str>,
     /// The SHA256 of the Python archive at the URL.
     ///
-    /// Empty when self was built from a path.
+    /// Empty when self was constructed from a path.
     sha256: Option<&'static str>,
 }
 

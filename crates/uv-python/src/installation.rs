@@ -322,7 +322,7 @@ impl PythonInstallationKey {
 
     /// The version in `x.y.z` format.
     pub fn sys_version(&self) -> String {
-        format!("{}.{}.{}", self.major, self.minor, self.patch,)
+        format!("{}.{}.{}", self.major, self.minor, self.patch)
     }
 
     pub fn arch(&self) -> &Arch {

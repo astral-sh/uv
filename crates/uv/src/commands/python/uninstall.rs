@@ -110,24 +110,26 @@ async fn do_uninstall(
         }
         if !found {
             // Clear any remnants in the registry
-            #[cfg(windows)]
             if preview.is_enabled() {
-                let mut errors = Vec::new();
-                uv_python::windows_registry::uninstall_windows_registry(
-                    &installed_installations,
-                    all,
-                    &mut errors,
-                );
-                if !errors.is_empty() {
-                    for (key, err) in errors {
-                        writeln!(
-                            printer.stderr(),
-                            "Failed to uninstall {}: {}",
-                            key.green(),
-                            err.to_string().trim()
-                        )?;
+                #[cfg(windows)]
+                {
+                    let mut errors = Vec::new();
+                    uv_python::windows_registry::uninstall_windows_registry(
+                        &installed_installations,
+                        all,
+                        &mut errors,
+                    );
+                    if !errors.is_empty() {
+                        for (key, err) in errors {
+                            writeln!(
+                                printer.stderr(),
+                                "Failed to uninstall {}: {}",
+                                key.green(),
+                                err.to_string().trim()
+                            )?;
+                        }
+                        return Ok(ExitStatus::Failure);
                     }
-                    return Ok(ExitStatus::Failure);
                 }
             }
 

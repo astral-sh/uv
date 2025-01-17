@@ -45,6 +45,7 @@ mod virtualenv;
 #[cfg(windows)]
 pub mod windows_registry;
 
+#[cfg(windows)]
 pub(crate) const COMPANY: &str = "Astral";
 
 #[cfg(not(test))]

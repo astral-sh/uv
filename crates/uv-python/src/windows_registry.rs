@@ -146,13 +146,8 @@ fn write_registry_entry(
     company.set_string("DisplayName", "Astral")?;
     company.set_string("SupportUrl", "https://github.com/astral-sh/uv")?;
 
-    // Ex) Cpython3.13.1
-    let python_tag = format!(
-        "{}{}",
-        installation.key().implementation().pretty(),
-        installation.key().version()
-    );
-    let tag = company.create(&python_tag)?;
+    // Ex) CPython3.13.1
+    let tag = company.create(&python_tag_(installation.key()))?;
     let display_name = format!(
         "{} {} ({}-bit)",
         installation.key().implementation().pretty(),
@@ -164,7 +159,7 @@ fn write_registry_entry(
     tag.set_string("Version", &installation.key().version().to_string())?;
     tag.set_string("SysVersion", &installation.key().sys_version())?;
     tag.set_string("SysArchitecture", &format!("{pointer_width}bit"))?;
-    // Store python build standalone release
+    // Store `python-build-standalone` release
     if let Some(url) = installation.url() {
         tag.set_string("DownloadUrl", url)?;
     }
@@ -188,6 +183,10 @@ fn write_registry_entry(
     Ok(())
 }
 
+fn python_tag_(key: &PythonInstallationKey) -> String {
+    format!("{}{}", key.implementation().pretty(), key.version())
+}
+
 /// Remove Python entries from the Windows Registry (PEP 514).
 pub fn uninstall_windows_registry(
     installations: &[ManagedPythonInstallation],
@@ -209,11 +208,7 @@ pub fn uninstall_windows_registry(
     }
 
     for installation in installations {
-        let python_tag = format!(
-            "{}{}",
-            installation.key().implementation().pretty(),
-            installation.key().version()
-        );
+        let python_tag = python_tag_(installation.key());
 
         let python_entry = format!("{astral_key}\\{python_tag}");
         if let Err(err) = CURRENT_USER.remove_tree(&python_entry) {
@@ -227,7 +222,7 @@ pub fn uninstall_windows_registry(
                 errors.push((
                     installation.key().clone(),
                     anyhow::Error::new(err)
-                        .context("Failed to clear registry entries under {astral_key}"),
+                        .context("Failed to clear registry entries under HKCU:\\{python_entry}"),
                 ));
             }
         };
