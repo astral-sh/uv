@@ -5782,6 +5782,8 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
 
+<p>When targetting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -6184,6 +6186,8 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 </dd><dt><code>--python-platform</code> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
 
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
+
+<p>When targetting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
 
 <p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
 
@@ -6642,6 +6646,8 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 </dd><dt><code>--python-platform</code> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
 
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
+
+<p>When targetting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
 
 <p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
 
