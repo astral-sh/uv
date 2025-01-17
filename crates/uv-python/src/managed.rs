@@ -519,15 +519,17 @@ impl ManagedPythonInstallation {
     /// See <https://github.com/astral-sh/uv/issues/10598> for more information.
     pub fn ensure_dylib_patched(&self) -> Result<(), macos_dylib::Error> {
         if cfg!(target_os = "macos") {
-            if *self.implementation() == ImplementationName::CPython {
-                let dylib_path = self.python_dir().join("lib").join(format!(
-                    "{}python{}{}{}",
-                    std::env::consts::DLL_PREFIX,
-                    self.key.version().python_version(),
-                    self.key.variant().suffix(),
-                    std::env::consts::DLL_SUFFIX
-                ));
-                macos_dylib::patch_dylib_install_name(dylib_path)?;
+            if self.key().os.is_like_darwin() {
+                if *self.implementation() == ImplementationName::CPython {
+                    let dylib_path = self.python_dir().join("lib").join(format!(
+                        "{}python{}{}{}",
+                        std::env::consts::DLL_PREFIX,
+                        self.key.version().python_version(),
+                        self.key.variant().suffix(),
+                        std::env::consts::DLL_SUFFIX
+                    ));
+                    macos_dylib::patch_dylib_install_name(dylib_path)?;
+                }
             }
         }
         Ok(())
