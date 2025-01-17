@@ -111,7 +111,7 @@ mod tests {
 
     use crate::{
         discovery::{
-            find_best_python_installation, find_python_installation, EnvironmentPreference,
+            self, find_best_python_installation, find_python_installation, EnvironmentPreference,
         },
         PythonPreference,
     };
@@ -589,11 +589,10 @@ mod tests {
                 PythonPreference::default(),
                 &context.cache,
             )
-        })?;
+        });
         assert!(
-            matches!(result, Err(PythonNotFound { .. })),
-            // TODO(zanieb): We could improve the error handling to hint this to the user
-            "If only Python 2 is available, we should not find a python; got {result:?}"
+            matches!(result, Err(discovery::Error::Query(..))),
+            "If only Python 2 is available, we should report the interpreter query error; got {result:?}"
         );
 
         Ok(())
