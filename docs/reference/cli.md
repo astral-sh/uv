@@ -8072,8 +8072,9 @@ uv venv [OPTIONS] [PATH]
 
 </dd><dt><code>--seed</code></dt><dd><p>Install seed packages (one or more of: <code>pip</code>, <code>setuptools</code>, and <code>wheel</code>) into the virtual environment.</p>
 
-<p>Note <code>setuptools</code> and <code>wheel</code> are not included in Python 3.12+ environments.</p>
+<p>Note that <code>setuptools</code> and <code>wheel</code> are not included in Python 3.12+ environments.</p>
 
+<p>May also be set with the <code>UV_VENV_SEED</code> environment variable.</p>
 </dd><dt><code>--system-site-packages</code></dt><dd><p>Give the virtual environment access to the system site packages directory.</p>
 
 <p>Unlike <code>pip</code>, when a virtual environment is created with <code>--system-site-packages</code>, uv will <em>not</em> take system site packages into account when running commands like <code>uv pip list</code> or <code>uv pip install</code>. The <code>--system-site-packages</code> flag will provide the virtual environment with access to the system site packages directory at runtime, but will not affect the behavior of uv commands.</p>

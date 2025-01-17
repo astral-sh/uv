@@ -234,6 +234,12 @@ impl EnvVars {
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     pub const UV_PYPY_INSTALL_MIRROR: &'static str = "UV_PYPY_INSTALL_MIRROR";
 
+    /// Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual environment
+    /// created by `uv venv`.
+    ///
+    /// Note that `setuptools` and `wheel` are not included in Python 3.12+ environments.
+    pub const UV_VENV_SEED: &'static str = "UV_VENV_SEED";
+
     /// Used to override `PATH` to limit Python executable availability in the test suite.
     #[attr_hidden]
     pub const UV_TEST_PYTHON_PATH: &'static str = "UV_TEST_PYTHON_PATH";
