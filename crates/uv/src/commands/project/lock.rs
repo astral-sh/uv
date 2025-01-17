@@ -468,6 +468,12 @@ async fn do_lock(
         }
     }
 
+    for index in target.indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
+    }
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
         .native_tls(native_tls)
