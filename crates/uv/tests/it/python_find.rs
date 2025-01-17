@@ -28,7 +28,8 @@ fn python_find() {
         ----- stdout -----
 
         ----- stderr -----
-        error: No interpreter found in virtual environments, managed installations, or search path
+        error: Failed to inspect Python interpreter from active virtual environment at `.venv/bin/python3`
+          Caused by: Python interpreter not found at `[VENV]/bin/python3`
         "###);
     }
 
@@ -124,7 +125,8 @@ fn python_find() {
         ----- stdout -----
 
         ----- stderr -----
-        error: No interpreter found for PyPy in virtual environments, managed installations, or search path
+        error: Failed to inspect Python interpreter from active virtual environment at `.venv/bin/python3`
+          Caused by: Python interpreter not found at `[VENV]/bin/python3`
         "###);
     }
 
@@ -536,7 +538,8 @@ fn python_find_unsupported_version() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for Python 4.2 in virtual environments, managed installations, or search path
+    error: Failed to inspect Python interpreter from active virtual environment at `.venv/bin/python3`
+      Caused by: Python interpreter not found at `[VENV]/bin/python3`
     "###);
 
     // Request a low version with a range
@@ -546,7 +549,8 @@ fn python_find_unsupported_version() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for Python <3.0 in virtual environments, managed installations, or search path
+    error: Failed to inspect Python interpreter from active virtual environment at `.venv/bin/python3`
+      Caused by: Python interpreter not found at `[VENV]/bin/python3`
     "###);
 
     // Request free-threaded Python on unsupported version
