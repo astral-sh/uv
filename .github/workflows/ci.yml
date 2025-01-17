@@ -1563,17 +1563,7 @@ jobs:
 
       # NB: Run this last, we are modifying the registry
       - name: "Test PEP 514 registration"
-        run: |
-          ./uv.exe python install --preview 3.11
-          ./uv.exe python install --preview 3.12
-          ./uv.exe python install --preview 3.13
-          Get-ChildItem -Path "HKCU:\Software\Python" -Recurse
-          py --list-paths
-          ./uv.exe python uninstall --preview 3.11
-          Get-ChildItem -Path "HKCU:\Software\Python" -Recurse
-          py --list-paths
-          ./uv.exe python uninstall --preview --all
-          Get-ChildItem -Path "HKCU:\Software\Python" -Recurse
+        run: python ./scripts/check_registry.py --uv ./uv.exe
 
   system-test-windows-python-313:
     timeout-minutes: 10
