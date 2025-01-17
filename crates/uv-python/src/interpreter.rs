@@ -606,8 +606,8 @@ pub enum InterpreterInfoError {
     UnsupportedPython,
     #[error("Python installation is missing `distutils`, which is required for packaging on older Python versions. Your system may package it separately, e.g., as `python{python_major}-distutils` or `python{python_major}.{python_minor}-distutils`.")]
     MissingRequiredDistutils {
-        python_major: String,
-        python_minor: String,
+        python_major: usize,
+        python_minor: usize,
     },
 }
 

@@ -683,7 +683,7 @@ jobs:
   integration-test-deadnsakes-39-linux:
     timeout-minutes: 5
     needs: build-binary-linux
-    name: "integration test | free-threaded on linux"
+    name: "integration test | deadsnakes python3.9 on ubuntu"
     runs-on: ubuntu-latest
     steps:
       - name: "install python3.9"
