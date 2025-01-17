@@ -720,9 +720,15 @@ impl Error {
                 InterpreterError::Encode(_)
                 | InterpreterError::Io(_)
                 | InterpreterError::SpawnFailed { .. } => true,
-                InterpreterError::QueryScript { path, .. }
-                | InterpreterError::UnexpectedResponse { path, .. }
+                InterpreterError::UnexpectedResponse { path, .. }
                 | InterpreterError::StatusCode { path, .. } => {
+                    debug!(
+                        "Skipping bad interpreter at {} from {source}: {err}",
+                        path.display()
+                    );
+                    false
+                }
+                InterpreterError::QueryScript { path, err } => {
                     debug!(
                         "Skipping bad interpreter at {} from {source}: {err}",
                         path.display()
