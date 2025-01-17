@@ -111,8 +111,11 @@ def main(uv: str):
     subprocess.check_call([uv, "python", "install", "--preview", "3.13.1"])
     # Use the powershell command to get an outside view on the registry values we wrote
     actual_registry = subprocess.check_output(
-        ["Get-ChildItem", "-Path", r"HKCU:\Software\Python", "-Recurse"],
-        shell=True,
+        [
+            "powershell",
+            "-Command",
+            "Get-ChildItem -Path HKCU:\Software\Python -Recurse",
+        ],
         text=True,
     )
     if filter_snapshot(actual_registry) != filter_snapshot(expected_registry):
@@ -158,8 +161,11 @@ def main(uv: str):
     # Check 3: Remove all interpreters and check that they are all gone.
     subprocess.check_call([uv, "python", "uninstall", "--preview", "--all"])
     empty_registry = subprocess.check_output(
-        ["Get-ChildItem", "-Path", r"HKCU:\Software\Python", "-Recurse"],
-        shell=True,
+        [
+            "powershell",
+            "-Command",
+            "Get-ChildItem -Path HKCU:\Software\Python -Recurse",
+        ],
         text=True,
     )
     if empty_registry.strip():
