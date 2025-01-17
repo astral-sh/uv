@@ -23,25 +23,23 @@ Astral                         DisplayName : Astral
 Name                           Property
                                ----                           --------
 CPython3.11.11                 DisplayName     : CPython 3.11.11 (64-bit)
-SupportUrl      : https://github.com/astral-sh/uv
-Version         : 3.11.11
-SysVersion      : 3.11.11
-SysArchitecture : 64bit
-DownloadUrl     : <downloadUrl>
-                   DownloadSha256  : <downloadSha256>
+                               SupportUrl      : https://github.com/astral-sh/uv
+                               Version         : 3.11.11
+                               SysVersion      : 3.11.11
+                               SysArchitecture : 64bit
+                               DownloadUrl     : <downloadUrl>
+                               DownloadSha256  : <downloadSha256>
 
 
-                                      Hive: HKEY_CURRENT_USER\Software\Python\Astral\CPython3.11.11
+Hive: HKEY_CURRENT_USER\Software\Python\Astral\CPython3.11.11
 
 
 Name                           Property
                                ----                           --------
 InstallPath                    (default)              :
 C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.11.11-windows-x86_64-none
-ExecutablePath         : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.11.11-
-                                                                                    windows-x86_64-none\python.exe
-WindowedExecutablePath : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.11.11-
-                                                                                    windows-x86_64-none\pythonw.exe
+ExecutablePath         : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.11.11-windows-x86_64-none\python.exe
+WindowedExecutablePath : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.11.11-windows-x86_64-none\pythonw.exe
 """,
     r"""
     Hive: HKEY_CURRENT_USER\Software\Python\Astral
@@ -65,10 +63,8 @@ Name                           Property
 ----                           --------
 InstallPath                    (default)              :
                                C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.12.8-windows-x86_64-none
-                               ExecutablePath         : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.12.8-w
-                               indows-x86_64-none\python.exe
-                               WindowedExecutablePath : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.12.8-w
-                               indows-x86_64-none\pythonw.exe
+                               ExecutablePath         : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.12.8-windows-x86_64-none\python.exe
+                               WindowedExecutablePath : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.12.8-windows-x86_64-none\pythonw.exe
 """,
     r"""
     Hive: HKEY_CURRENT_USER\Software\Python\Astral
@@ -92,16 +88,16 @@ Name                           Property
 ----                           --------
 InstallPath                    (default)              :
                                C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.13.1-windows-x86_64-none
-                               ExecutablePath         : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.13.1-w
-                               indows-x86_64-none\python.exe
-                               WindowedExecutablePath : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.13.1-w
-                               indows-x86_64-none\pythonw.exe
+                               ExecutablePath         : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.13.1-windows-x86_64-none\python.exe
+                               WindowedExecutablePath : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.13.1-windows-x86_64-none\pythonw.exe
 """,
 ]
 
 
 def filter_snapshot(snapshot: str) -> str:
     snapshot = snapshot.strip()
+    # Trim trailing whitespace
+    snapshot = "\n".join(line.rstrip() for line in snapshot.splitlines())
     # Long URLs are wrapped into multiple lines
     snapshot = re.sub(
         "DownloadUrl ( *): .*(\n.*)+?(\n +)DownloadSha256",
@@ -122,14 +118,13 @@ def main(uv: str):
     subprocess.check_call([uv, "python", "install", "--preview", "3.12.8"])
     subprocess.check_call([uv, "python", "install", "--preview", "3.13.1"])
     # Use the powershell command to get an outside view on the registry values we wrote
-    actual_registry = subprocess.check_output(
-        [
-            "powershell",
-            "-Command",
-            "Get-ChildItem -Path HKCU:\Software\Python -Recurse",
-        ],
-        text=True,
-    )
+    list_registry_command = [
+        "powershell",
+        "-Command",
+        # By default, powershell wraps the output at terminal size
+        r"Get-ChildItem -Path HKCU:\Software\Python -Recurse | Format-Table | Out-String -width 1000",
+    ]
+    actual_registry = subprocess.check_output(list_registry_command, text=True)
     for expected in expected_registry:
         if filter_snapshot(expected) not in filter_snapshot(actual_registry):
             print("Registry mismatch:")
@@ -174,14 +169,7 @@ def main(uv: str):
 
     # Check 3: Remove all interpreters and check that they are all gone.
     subprocess.check_call([uv, "python", "uninstall", "--preview", "--all"])
-    empty_registry = subprocess.check_output(
-        [
-            "powershell",
-            "-Command",
-            "Get-ChildItem -Path HKCU:\Software\Python -Recurse",
-        ],
-        text=True,
-    )
+    empty_registry = subprocess.check_output(list_registry_command, text=True)
     if empty_registry.strip():
         print("Registry not cleared:")
         print("=" * 80)
