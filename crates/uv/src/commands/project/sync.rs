@@ -363,8 +363,8 @@ pub(super) async fn do_sync(
         }
     }
 
-    // Populate credentials from the workspace.
-    store_credentials_from_workspace(target);
+    // Populate credentials from the target.
+    store_credentials_from_target(target);
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
@@ -522,7 +522,14 @@ fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolu
 ///
 /// These credentials can come from any of `tool.uv.sources`, `tool.uv.dev-dependencies`,
 /// `project.dependencies`, and `project.optional-dependencies`.
-fn store_credentials_from_workspace(target: InstallTarget<'_>) {
+fn store_credentials_from_target(target: InstallTarget<'_>) {
+    // Iterate over any idnexes in the target.
+    for index in target.indexes() {
+        if let Some(credentials) = index.credentials() {
+            store_credentials(index.raw_url(), credentials);
+        }
+    }
+
     // Iterate over any sources in the target.
     for source in target.sources() {
         match source {

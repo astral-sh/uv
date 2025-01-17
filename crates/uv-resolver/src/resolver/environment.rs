@@ -690,17 +690,14 @@ mod tests {
     }
 
     /// Inside a fork whose marker's Python requirement is equal
-    /// to our Requires-Python means that narrowing produces a
-    /// result, but is unchanged from what we started with.
+    /// to our Requires-Python means that narrowing does not produce
+    /// a result.
     #[test]
     fn narrow_python_requirement_forking_no_op() {
         let pyreq = python_requirement("3.10");
         let resolver_env = ResolverEnvironment::universal(vec![])
             .narrow_environment(marker("python_version >= '3.10'"));
-        assert_eq!(
-            resolver_env.narrow_python_requirement(&pyreq),
-            Some(python_requirement("3.10")),
-        );
+        assert_eq!(resolver_env.narrow_python_requirement(&pyreq), None);
     }
 
     /// In this test, we narrow a more relaxed requirement compared to the

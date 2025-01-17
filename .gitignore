@@ -35,3 +35,7 @@ profile.json
 
 # macOS
 **/.DS_Store
+
+# IDE
+.idea
+.vscode

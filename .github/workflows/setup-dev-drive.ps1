@@ -8,17 +8,36 @@
 
 # Note we use `Get-PSDrive` is not sufficient because the drive letter is assigned.
 if (Test-Path "D:\") {
-    Write-Output "Using `D:` drive"
+    Write-Output "Using existing drive at D:"
     $Drive = "D:"
 } else {
-    $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 20GB |
-        Mount-VHD -Passthru |
-        Initialize-Disk -Passthru |
-        New-Partition -AssignDriveLetter -UseMaximumSize |
-        Format-Volume -FileSystem ReFS -Confirm:$false -Force
+	# The size (20 GB) is chosen empirically to be large enough for our
+	# workflows; larger drives can take longer to set up.
+	$Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 20GB |
+						Mount-VHD -Passthru |
+						Initialize-Disk -Passthru |
+						New-Partition -AssignDriveLetter -UseMaximumSize |
+						Format-Volume -DevDrive -Confirm:$false -Force
 
-    Write-Output "Using ReFS drive at $Volume"
-    $Drive = "$($Volume.DriveLetter):"
+	$Drive = "$($Volume.DriveLetter):"
+
+	# Set the drive as trusted
+	# See https://learn.microsoft.com/en-us/windows/dev-drive/#how-do-i-designate-a-dev-drive-as-trusted
+	fsutil devdrv trust $Drive
+
+	# Disable antivirus filtering on dev drives
+	# See https://learn.microsoft.com/en-us/windows/dev-drive/#how-do-i-configure-additional-filters-on-dev-drive
+	fsutil devdrv enable /disallowAv
+
+	# Remount so the changes take effect
+	Dismount-VHD -Path C:/uv_dev_drive.vhdx
+	Mount-VHD -Path C:/uv_dev_drive.vhdx
+
+	# Show some debug information
+	Write-Output $Volume
+	fsutil devdrv query $Drive
+
+    Write-Output "Using Dev Drive at $Volume"
 }
 
 $Tmp = "$($Drive)\uv-tmp"

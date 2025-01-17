@@ -25,7 +25,8 @@ use crate::libc::LibcDetectionError;
 use crate::platform::Error as PlatformError;
 use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
-use crate::{sysconfig, PythonRequest, PythonVariant};
+use crate::{macos_dylib, sysconfig, PythonRequest, PythonVariant};
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
@@ -88,6 +89,8 @@ pub enum Error {
     NameParseError(#[from] installation::PythonInstallationKeyError),
     #[error(transparent)]
     LibcDetection(#[from] LibcDetectionError),
+    #[error(transparent)]
+    MacOsDylib(#[from] macos_dylib::Error),
 }
 /// A collection of uv-managed Python installations installed on the current system.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -508,6 +511,28 @@ impl ManagedPythonInstallation {
         Ok(())
     }
 
+    /// On macOS, ensure that the `install_name` for the Python dylib is set
+    /// correctly, rather than pointing at `/install/lib/libpython{version}.dylib`.
+    /// This is necessary to ensure that native extensions written in Rust
+    /// link to the correct location for the Python library.
+    ///
+    /// See <https://github.com/astral-sh/uv/issues/10598> for more information.
+    pub fn ensure_dylib_patched(&self) -> Result<(), macos_dylib::Error> {
+        if cfg!(target_os = "macos") {
+            if *self.implementation() == ImplementationName::CPython {
+                let dylib_path = self.python_dir().join("lib").join(format!(
+                    "{}python{}{}{}",
+                    std::env::consts::DLL_PREFIX,
+                    self.key.version().python_version(),
+                    self.key.variant().suffix(),
+                    std::env::consts::DLL_SUFFIX
+                ));
+                macos_dylib::patch_dylib_install_name(dylib_path)?;
+            }
+        }
+        Ok(())
+    }
+
     /// Create a link to the managed Python executable.
     ///
     /// If the file already exists at the target path, an error will be returned.
@@ -603,7 +628,7 @@ impl ManagedPythonInstallation {
 }
 
 /// Generate a platform portion of a key from the environment.
-fn platform_key_from_env() -> Result<String, Error> {
+pub fn platform_key_from_env() -> Result<String, Error> {
     let os = Os::from_env();
     let arch = Arch::from_env();
     let libc = Libc::from_env()?;

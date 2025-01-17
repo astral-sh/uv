@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.5.18"
+version = "0.5.20"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -133,8 +133,8 @@ ignored = [
 ]
 
 [features]
-default = ["python", "python-managed", "pypi", "git", "performance", "crates-io"]
-# Use better memory allocators, etc. — also turns-on self-update.
+default = ["python", "python-managed", "pypi", "git", "performance", "crates-io", "test-ecosystem"]
+# Use better memory allocators, etc.
 performance = [
     "performance-memory-allocator",
     "performance-flate2-backend",
@@ -156,5 +156,7 @@ pypi = []
 git = []
 # Introduces a dependency on crates.io.
 crates-io = []
+# Includes test cases that require ecosystem packages
+test-ecosystem = []
 # Adds self-update functionality.
 self-update = ["axoupdater", "uv-cli/self-update"]

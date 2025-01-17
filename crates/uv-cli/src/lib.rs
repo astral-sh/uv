@@ -1184,6 +1184,9 @@ pub struct PipCompileArgs {
     /// Represented as a "target triple", a string that describes the target platform in terms of
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aarch64-apple-darwin`.
+    ///
+    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
 
@@ -1472,6 +1475,9 @@ pub struct PipSyncArgs {
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aarch64-apple-darwin`.
     ///
+    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    ///
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
     /// platform; as a result, the installed distributions may not be compatible with the _current_
     /// platform. Conversely, any distributions that are built from source may be incompatible with
@@ -1750,6 +1756,9 @@ pub struct PipInstallArgs {
     /// Represented as a "target triple", a string that describes the target platform in terms of
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aarch64-apple-darwin`.
+    ///
+    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
     ///
     /// WARNING: When specified, uv will select wheels that are compatible with the _target_
     /// platform; as a result, the installed distributions may not be compatible with the _current_
@@ -2365,8 +2374,8 @@ pub struct VenvArgs {
 
     /// Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual environment.
     ///
-    /// Note `setuptools` and `wheel` are not included in Python 3.12+ environments.
-    #[arg(long)]
+    /// Note that `setuptools` and `wheel` are not included in Python 3.12+ environments.
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_VENV_SEED)]
     pub seed: bool,
 
     /// Preserve any existing files or directories at the target path.
@@ -2395,8 +2404,8 @@ pub struct VenvArgs {
     /// the directory name. If not provided (`uv venv`), the prompt is set to
     /// the current directory's name.
     ///
-    /// If "." is provided, the the current directory name will be used
-    /// regardless of whether a path was provided to `uv venv`.
+    /// If "." is provided, the current directory name will be used regardless
+    /// of whether a path was provided to `uv venv`.
     #[arg(long, verbatim_doc_comment)]
     pub prompt: Option<String>,
 

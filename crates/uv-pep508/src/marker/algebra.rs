@@ -1556,7 +1556,7 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
     // version segments. For example, a python version of `3.7.0`, `3.7.1`, and so on, would all
     // result in a `python_version` marker of `3.7`. For this reason, we must consider the range
     // of values that would satisfy a `python_version` specifier when truncated in order to transform
-    // the the specifier into its `python_full_version` equivalent.
+    // the specifier into its `python_full_version` equivalent.
     if let Some((major, minor)) = major_minor {
         let version = Version::new([major, minor]);
 

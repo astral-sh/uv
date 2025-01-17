@@ -233,7 +233,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         let package_version = uv_pep440::Version::from_str(uv_version::version())?;
         if !required_version.contains(&package_version) {
             return Err(anyhow::anyhow!(
-                "Required version `{required_version}` does not match the running version `{package_version}`",
+                "Required uv version `{required_version}` does not match the running version `{package_version}`",
             ));
         }
     }
