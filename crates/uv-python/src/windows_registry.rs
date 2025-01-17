@@ -147,7 +147,7 @@ fn write_registry_entry(
     company.set_string("SupportUrl", "https://github.com/astral-sh/uv")?;
 
     // Ex) CPython3.13.1
-    let tag = company.create(&python_tag_(installation.key()))?;
+    let tag = company.create(python_tag_(installation.key()))?;
     let display_name = format!(
         "{} {} ({}-bit)",
         installation.key().implementation().pretty(),
