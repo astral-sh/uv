@@ -22,9 +22,9 @@ affects selection of dependency versions (they must support the same Python vers
 [Entry points](https://packaging.python.org/en/latest/specifications/entry-points/#entry-points) are
 the official term for an installed package to advertise interfaces. These include:
 
-- [Command line interfaces]()
-- [Graphical user interfaces]()
-- [Plugin entry points]()
+- [Command line interfaces](#command-line-interfaces)
+- [Graphical user interfaces](#graphical-user-interfaces)
+- [Plugin entry points](#plugin-entry-points)
 
 !!! important
 
