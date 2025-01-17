@@ -1561,6 +1561,20 @@ jobs:
       - name: "Validate global Python install"
         run: python ./scripts/check_system_python.py --uv ./uv.exe
 
+      # NB: Run this last, we are modifying the registry
+      - name: "Test PEP 514 registration"
+        run: |
+          ./uv.exe python install --preview 3.11
+          ./uv.exe python install --preview 3.12
+          ./uv.exe python install --preview 3.13
+          Get-ChildItem -Path "HKCU:\Software\Python" -Recurse
+          py --list-paths
+          ./uv.exe python uninstall --preview 3.11
+          Get-ChildItem -Path "HKCU:\Software\Python" -Recurse
+          py --list-paths
+          ./uv.exe python uninstall --preview --all
+          Get-ChildItem -Path "HKCU:\Software\Python" -Recurse
+
   system-test-windows-python-313:
     timeout-minutes: 10
     needs: build-binary-windows
