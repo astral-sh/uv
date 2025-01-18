@@ -242,7 +242,7 @@ impl GitRemote {
     /// if we can. If that can successfully load our revision then we've
     /// populated the database with the latest version of `reference`, so
     /// return that database and the rev we resolve to.
-    pub(crate) fn checkout(
+    pub(crate) async fn checkout(
         &self,
         into: &Path,
         db: Option<GitDatabase>,
@@ -256,6 +256,7 @@ impl GitRemote {
 
         if let Some(mut db) = db {
             fetch(&mut db.repo, self.url.as_str(), reference, client)
+                .await
                 .with_context(|| format!("failed to fetch into: {}", into.user_display()))?;
 
             let resolved_commit_hash = match locked_rev {
@@ -282,6 +283,7 @@ impl GitRemote {
         paths::create_dir_all(into)?;
         let mut repo = GitRepository::init(into)?;
         fetch(&mut repo, self.url.as_str(), reference, client)
+            .await
             .with_context(|| format!("failed to clone into: {}", into.user_display()))?;
         let rev = match locked_rev {
             Some(rev) => rev,
@@ -476,13 +478,13 @@ impl GitCheckout {
 /// * Dispatches `git fetch` using the git CLI.
 ///
 /// The `remote_url` argument is the git remote URL where we want to fetch from.
-pub(crate) fn fetch(
+pub(crate) async fn fetch(
     repo: &mut GitRepository,
     remote_url: &str,
     reference: &GitReference,
     client: &ClientWithMiddleware,
 ) -> Result<()> {
-    let oid_to_fetch = match github_fast_path(repo, remote_url, reference, client) {
+    let oid_to_fetch = match github_fast_path(repo, remote_url, reference, client).await {
         Ok(FastPathRev::UpToDate) => return Ok(()),
         Ok(FastPathRev::NeedsFetch(rev)) => Some(rev),
         Ok(FastPathRev::Indeterminate) => None,
@@ -715,7 +717,7 @@ enum FastPathRev {
 /// this function and move forward on the normal path.
 ///
 /// [^1]: <https://developer.github.com/v3/repos/commits/#get-the-sha-1-of-a-commit-reference>
-fn github_fast_path(
+async fn github_fast_path(
     repo: &mut GitRepository,
     url: &str,
     reference: &GitReference,
@@ -785,34 +787,28 @@ fn github_fast_path(
         "https://api.github.com/repos/{username}/{repository}/commits/{github_branch_name}"
     );
 
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
+    debug!("Attempting GitHub fast path for: {url}");
+    let mut request = client.get(&url);
+    request = request.header("Accept", "application/vnd.github.3.sha");
+    request = request.header("User-Agent", "uv");
+    if let Some(local_object) = local_object {
+        request = request.header("If-None-Match", local_object.to_string());
+    }
 
-    runtime.block_on(async move {
-        debug!("Attempting GitHub fast path for: {url}");
-        let mut request = client.get(&url);
-        request = request.header("Accept", "application/vnd.github.3.sha");
-        request = request.header("User-Agent", "uv");
-        if let Some(local_object) = local_object {
-            request = request.header("If-None-Match", local_object.to_string());
-        }
-
-        let response = request.send().await?;
-        response.error_for_status_ref()?;
-        let response_code = response.status();
-        if response_code == StatusCode::NOT_MODIFIED {
-            Ok(FastPathRev::UpToDate)
-        } else if response_code == StatusCode::OK {
-            let oid_to_fetch = response.text().await?.parse()?;
-            Ok(FastPathRev::NeedsFetch(oid_to_fetch))
-        } else {
-            // Usually response_code == 404 if the repository does not exist, and
-            // response_code == 422 if exists but GitHub is unable to resolve the
-            // requested rev.
-            Ok(FastPathRev::Indeterminate)
-        }
-    })
+    let response = request.send().await?;
+    response.error_for_status_ref()?;
+    let response_code = response.status();
+    if response_code == StatusCode::NOT_MODIFIED {
+        Ok(FastPathRev::UpToDate)
+    } else if response_code == StatusCode::OK {
+        let oid_to_fetch = response.text().await?.parse()?;
+        Ok(FastPathRev::NeedsFetch(oid_to_fetch))
+    } else {
+        // Usually response_code == 404 if the repository does not exist, and
+        // response_code == 422 if exists but GitHub is unable to resolve the
+        // requested rev.
+        Ok(FastPathRev::Indeterminate)
+    }
 }
 
 /// Whether a `url` is one from GitHub.

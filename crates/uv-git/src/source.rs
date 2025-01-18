@@ -116,7 +116,7 @@ impl GitSource {
 
     /// Fetch the underlying Git repository at the given revision.
     #[instrument(skip(self), fields(repository = %self.git.repository, rev = ?self.git.precise))]
-    pub fn fetch(self) -> Result<Fetch> {
+    pub async fn fetch(self) -> Result<Fetch> {
         // Compute the canonical URL for the repository.
         let canonical = RepositoryUrl::new(&self.git.repository);
 
@@ -152,13 +152,15 @@ impl GitSource {
                     reporter.on_checkout_start(remote.url(), self.git.reference.as_rev())
                 });
 
-                let (db, actual_rev) = remote.checkout(
-                    &db_path,
-                    db,
-                    &self.git.reference,
-                    locked_rev.map(GitOid::from),
-                    &self.client,
-                )?;
+                let (db, actual_rev) = remote
+                    .checkout(
+                        &db_path,
+                        db,
+                        &self.git.reference,
+                        locked_rev.map(GitOid::from),
+                        &self.client,
+                    )
+                    .await?;
 
                 (db, GitSha::from(actual_rev), task)
             }
