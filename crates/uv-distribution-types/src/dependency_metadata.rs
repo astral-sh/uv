@@ -34,17 +34,17 @@ impl DependencyMetadata {
                 .iter()
                 .find(|v| v.version.as_ref() == Some(version))
                 .inspect(|_| {
-                    debug!("Found dependency metadata entry for `{package}=={version}`",);
+                    debug!("Found dependency metadata entry for `{package}=={version}`");
                 })
                 .or_else(|| versions.iter().find(|v| v.version.is_none()))
                 .inspect(|_| {
-                    debug!("Found global metadata entry for `{package}`",);
+                    debug!("Found global metadata entry for `{package}`");
                 });
             let Some(metadata) = metadata else {
                 warn!("No dependency metadata entry found for `{package}=={version}`");
                 return None;
             };
-            debug!("Found dependency metadata entry for `{package}=={version}`",);
+            debug!("Found dependency metadata entry for `{package}=={version}`");
             Some(ResolutionMetadata {
                 name: metadata.name.clone(),
                 version: version.clone(),

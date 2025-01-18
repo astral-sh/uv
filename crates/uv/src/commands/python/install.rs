@@ -217,7 +217,7 @@ pub(crate) async fn install(
                 Either::Left(installation)
             }
         } else {
-            debug!("No installation found for request `{}`", request.cyan(),);
+            debug!("No installation found for request `{}`", request.cyan());
 
             Either::Right(request)
         }

@@ -340,7 +340,7 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
                     )
                 } else {
                     // Ex) `flask>=1.0.0`
-                    format!("`{}{}`", step.name.cyan(), range.cyan(),)
+                    format!("`{}{}`", step.name.cyan(), range.cyan())
                 }
             }
         } else {
@@ -354,7 +354,7 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
                     )
                 } else {
                     // Ex) `flask[dotenv]`
-                    format!("`{}`", format!("{}[{}]", step.name, extra).cyan(),)
+                    format!("`{}`", format!("{}[{}]", step.name, extra).cyan())
                 }
             } else if let Some(group) = &step.group {
                 if let Some(version) = step.version.as_ref() {
@@ -366,7 +366,7 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
                     )
                 } else {
                     // Ex) `flask:dev`
-                    format!("`{}`", format!("{}:{}", step.name, group).cyan(),)
+                    format!("`{}`", format!("{}:{}", step.name, group).cyan())
                 }
             } else {
                 if let Some(version) = step.version.as_ref() {

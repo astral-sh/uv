@@ -120,7 +120,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                     match reason {
                         UnavailableReason::Package(reason) => {
                             let message = reason.singular_message();
-                            format!("{}{}", package, Padded::new(" ", &message, ""),)
+                            format!("{}{}", package, Padded::new(" ", &message, ""))
                         }
                         UnavailableReason::Version(reason) => {
                             let range = self.compatible_range(package, set);
@@ -1543,7 +1543,7 @@ impl std::fmt::Display for PubGrubHint {
                 let option = match option {
                     NoBuild::All => "for all packages (i.e., with `--no-build`)".to_string(),
                     NoBuild::Packages(_) => {
-                        format!("for `{package}` (i.e., with `--no-build-package {package}`)",)
+                        format!("for `{package}` (i.e., with `--no-build-package {package}`)")
                     }
                     NoBuild::None => unreachable!(),
                 };
@@ -1559,7 +1559,7 @@ impl std::fmt::Display for PubGrubHint {
                 let option = match option {
                     NoBinary::All => "for all packages (i.e., with `--no-binary`)".to_string(),
                     NoBinary::Packages(_) => {
-                        format!("for `{package}` (i.e., with `--no-binary-package {package}`)",)
+                        format!("for `{package}` (i.e., with `--no-binary-package {package}`)")
                     }
                     NoBinary::None => unreachable!(),
                 };
