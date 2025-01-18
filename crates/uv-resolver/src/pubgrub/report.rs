@@ -1104,7 +1104,8 @@ pub(crate) enum PubGrubHint {
     UnauthorizedIndex { index: IndexUrl },
     /// An index returned a Forbidden (403) response.
     ForbiddenIndex { index: IndexUrl },
-    /// No wheels are available for a package, and using source distributions was disabled.
+    /// None of the available wheels for a package have a compatible Python language tag (e.g.,
+    /// `cp310` in `cp310-abi3-manylinux_2_17_x86_64.whl`).
     LanguageTags {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
@@ -1114,7 +1115,8 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         best: Option<LanguageTag>,
     },
-    /// No wheels are available for a package, and using source distributions was disabled.
+    /// None of the available wheels for a package have a compatible ABI tag (e.g., `abi3` in
+    /// `cp310-abi3-manylinux_2_17_x86_64.whl`).
     AbiTags {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
@@ -1124,7 +1126,8 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         best: Option<AbiTag>,
     },
-    /// No wheels are available for a package, and using source distributions was disabled.
+    /// None of the available wheels for a package have a compatible platform tag (e.g.,
+    /// `manylinux_2_17_x86_64` in `cp310-abi3-manylinux_2_17_x86_64.whl`).
     PlatformTags {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
