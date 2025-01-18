@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use tracing::debug;
@@ -11,7 +12,7 @@ use reqwest_middleware::ClientWithMiddleware;
 use uv_cache_key::{cache_digest, RepositoryUrl};
 use uv_fs::LockedFile;
 
-use crate::{Fetch, GitReference, GitSha, GitSource, GitUrl, Reporter};
+use crate::{Fetch, GitHubRepository, GitReference, GitSha, GitSource, GitUrl, Reporter};
 
 #[derive(Debug, thiserror::Error)]
 pub enum GitResolverError {
@@ -21,6 +22,10 @@ pub enum GitResolverError {
     Join(#[from] tokio::task::JoinError),
     #[error("Git operation failed")]
     Git(#[source] anyhow::Error),
+    #[error(transparent)]
+    Reqwest(#[from] reqwest::Error),
+    #[error(transparent)]
+    ReqwestMiddleware(#[from] reqwest_middleware::Error),
 }
 
 /// A resolver for Git repositories.
@@ -36,6 +41,61 @@ impl GitResolver {
     /// Returns the [`GitSha`] for the given [`RepositoryReference`], if it exists.
     fn get(&self, reference: &RepositoryReference) -> Option<Ref<RepositoryReference, GitSha>> {
         self.0.get(reference)
+    }
+
+    /// Resolve a Git URL to a specific commit without performing any Git operations.
+    ///
+    /// Returns a [`GitSha`] if the URL has already been resolved (i.e., is available in the cache),
+    /// or if it can be fetched via the GitHub API. Otherwise, returns `None`.
+    pub async fn github_fast_path(
+        &self,
+        url: &GitUrl,
+        client: ClientWithMiddleware,
+    ) -> Result<Option<GitSha>, GitResolverError> {
+        let reference = RepositoryReference::from(url);
+
+        // If we know the precise commit already, return it.
+        if let Some(precise) = self.get(&reference) {
+            return Ok(Some(*precise));
+        }
+
+        // If the URL is a GitHub URL, attempt to resolve it via the GitHub API.
+        let Some(GitHubRepository { owner, repo }) = GitHubRepository::parse(url.repository())
+        else {
+            return Ok(None);
+        };
+
+        // Determine the Git reference.
+        let rev = url.reference().as_rev();
+
+        let url = format!("https://api.github.com/repos/{owner}/{repo}/commits/{rev}");
+
+        debug!("Attempting GitHub fast path for: {url}");
+        let mut request = client.get(&url);
+        request = request.header("Accept", "application/vnd.github.3.sha");
+        request = request.header("User-Agent", "uv");
+
+        let response = request.send().await?;
+        if !response.status().is_success() {
+            // Returns a 404 if the repository does not exist, and a 422 if GitHub is unable to
+            // resolve the requested rev.
+            debug!(
+                "GitHub API request failed for: {url} ({})",
+                response.status()
+            );
+            return Ok(None);
+        }
+
+        // Parse the response as a Git SHA.
+        let precise = response.text().await?;
+        let precise =
+            GitSha::from_str(&precise).map_err(|err| GitResolverError::Git(err.into()))?;
+
+        // Insert the resolved URL into the in-memory cache. This ensures that subsequent fetches
+        // resolve to the same precise commit.
+        self.insert(reference, precise);
+
+        Ok(Some(precise))
     }
 
     /// Fetch a remote Git repository.
