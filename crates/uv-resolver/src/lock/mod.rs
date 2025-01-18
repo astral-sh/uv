@@ -8,6 +8,7 @@ use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -4174,14 +4175,14 @@ where
 enum LockErrorKind {
     /// An error that occurs when multiple packages with the same
     /// ID were found.
-    #[error("Found duplicate package `{id}`")]
+    #[error("Found duplicate package `{id}`", id = id.cyan())]
     DuplicatePackage {
         /// The ID of the conflicting package.
         id: PackageId,
     },
     /// An error that occurs when there are multiple dependencies for the
     /// same package that have identical identifiers.
-    #[error("For package `{id}`, found duplicate dependency `{dependency}`")]
+    #[error("For package `{id}`, found duplicate dependency `{dependency}`", id = id.cyan(), dependency = dependency.cyan())]
     DuplicateDependency {
         /// The ID of the package for which a duplicate dependency was
         /// found.
@@ -4192,7 +4193,7 @@ enum LockErrorKind {
     /// An error that occurs when there are multiple dependencies for the
     /// same package that have identical identifiers, as part of the
     /// that package's optional dependencies.
-    #[error("For package `{id}[{extra}]`, found duplicate dependency `{dependency}`")]
+    #[error("For package `{id}`, found duplicate dependency `{dependency}`", id = format!("{id}[{extra}]").cyan(), dependency = dependency.cyan())]
     DuplicateOptionalDependency {
         /// The ID of the package for which a duplicate dependency was
         /// found.
@@ -4205,7 +4206,7 @@ enum LockErrorKind {
     /// An error that occurs when there are multiple dependencies for the
     /// same package that have identical identifiers, as part of the
     /// that package's development dependencies.
-    #[error("For package `{id}:{group}`, found duplicate dependency `{dependency}`")]
+    #[error("For package `{id}`, found duplicate dependency `{dependency}`", id = format!("{id}:{group}").cyan(), dependency = dependency.cyan())]
     DuplicateDevDependency {
         /// The ID of the package for which a duplicate dependency was
         /// found.
@@ -4228,8 +4229,8 @@ enum LockErrorKind {
     /// for a given wheel or source distribution.
     #[error("Failed to parse file extension; expected one of: {0}")]
     MissingExtension(#[from] ExtensionError),
-    /// Failed to parse a git source URL.
-    #[error("Failed to parse source git URL")]
+    /// Failed to parse a Git source URL.
+    #[error("Failed to parse Git URL")]
     InvalidGitSourceUrl(
         /// The underlying error that occurred. This includes the
         /// errant URL in the message.
@@ -4239,7 +4240,7 @@ enum LockErrorKind {
     /// An error that occurs when there's an unrecognized dependency.
     ///
     /// That is, a dependency for a package that isn't in the lockfile.
-    #[error("For package `{id}`, found dependency `{dependency}` with no locked package")]
+    #[error("For package `{id}`, found dependency `{dependency}` with no locked package", id = id.cyan(), dependency = dependency.cyan())]
     UnrecognizedDependency {
         /// The ID of the package that has an unrecognized dependency.
         id: PackageId,
@@ -4249,7 +4250,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a hash is expected (or not) for a particular
     /// artifact, but one was not found (or was).
-    #[error("Since the package `{id}` comes from a {source} dependency, a hash was {expected} but one was not found for {artifact_type}", source = id.source.name(), expected = if *expected { "expected" } else { "not expected" })]
+    #[error("Since the package `{id}` comes from a {source} dependency, a hash was {expected} but one was not found for {artifact_type}", id = id.cyan(), source = id.source.name(), expected = if *expected { "expected" } else { "not expected" })]
     Hash {
         /// The ID of the package that has a missing hash.
         id: PackageId,
@@ -4261,7 +4262,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a package is included with an extra name,
     /// but no corresponding base package (i.e., without the extra) exists.
-    #[error("Found package `{id}` with extra `{extra}` but no base package")]
+    #[error("Found package `{id}` with extra `{extra}` but no base package", id = id.cyan(), extra = extra.cyan())]
     MissingExtraBase {
         /// The ID of the package that has a missing base.
         id: PackageId,
@@ -4271,9 +4272,7 @@ enum LockErrorKind {
     /// An error that occurs when a package is included with a development
     /// dependency group, but no corresponding base package (i.e., without
     /// the group) exists.
-    #[error(
-        "found package `{id}` with development dependency group `{group}` but no base package"
-    )]
+    #[error("Found package `{id}` with development dependency group `{group}` but no base package", id = id.cyan())]
     MissingDevBase {
         /// The ID of the package that has a missing base.
         id: PackageId,
@@ -4291,7 +4290,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a distribution indicates that it is sourced from a remote
     /// registry, but is missing a URL.
-    #[error("Found registry distribution `{name}=={version}` without a valid URL")]
+    #[error("Found registry distribution `{name}` ({version}) without a valid URL", name = name.cyan(), version = format!("v{version}").cyan())]
     MissingUrl {
         /// The name of the distribution that is missing a URL.
         name: PackageName,
@@ -4300,7 +4299,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a distribution indicates that it is sourced from a local registry,
     /// but is missing a path.
-    #[error("Found registry distribution `{name}=={version}` without a valid path")]
+    #[error("Found registry distribution `{name}` ({version}) without a valid path", name = name.cyan(), version = format!("v{version}").cyan())]
     MissingPath {
         /// The name of the distribution that is missing a path.
         name: PackageName,
@@ -4309,55 +4308,53 @@ enum LockErrorKind {
     },
     /// An error that occurs when a distribution indicates that it is sourced from a registry, but
     /// is missing a filename.
-    #[error("Found registry distribution `{id}` without a valid filename")]
+    #[error("Found registry distribution `{id}` without a valid filename", id = id.cyan())]
     MissingFilename {
         /// The ID of the distribution that is missing a filename.
         id: PackageId,
     },
     /// An error that occurs when a distribution is included with neither wheels nor a source
     /// distribution.
-    #[error("Distribution `{id}` can't be installed because it doesn't have a source distribution or wheel for the current platform")]
+    #[error("Distribution `{id}` can't be installed because it doesn't have a source distribution or wheel for the current platform", id = id.cyan())]
     NeitherSourceDistNorWheel {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a distribution is marked as both `--no-binary` and `--no-build`.
-    #[error("Distribution `{id}` can't be installed because it is marked as both `--no-binary` and `--no-build`")]
+    #[error("Distribution `{id}` can't be installed because it is marked as both `--no-binary` and `--no-build`", id = id.cyan())]
     NoBinaryNoBuild {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a distribution is marked as `--no-binary`, but no source
     /// distribution is available.
-    #[error("Distribution `{id}` can't be installed because it is marked as `--no-binary` but has no source distribution")]
+    #[error("Distribution `{id}` can't be installed because it is marked as `--no-binary` but has no source distribution", id = id.cyan())]
     NoBinary {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a distribution is marked as `--no-build`, but no binary
     /// distribution is available.
-    #[error("Distribution `{id}` can't be installed because it is marked as `--no-build` but has no binary distribution")]
+    #[error("Distribution `{id}` can't be installed because it is marked as `--no-build` but has no binary distribution", id = id.cyan())]
     NoBuild {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a wheel-only distribution is incompatible with the current
     /// platform.
-    #[error(
-        "distribution `{id}` can't be installed because the binary distribution is incompatible with the current platform"
-    )]
+    #[error("Distribution `{id}` can't be installed because the binary distribution is incompatible with the current platform", id = id.cyan())]
     IncompatibleWheelOnly {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a wheel-only source is marked as `--no-binary`.
-    #[error("Distribution `{id}` can't be installed because it is marked as `--no-binary` but is itself a binary distribution")]
+    #[error("Distribution `{id}` can't be installed because it is marked as `--no-binary` but is itself a binary distribution", id = id.cyan())]
     NoBinaryWheelOnly {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when converting between URLs and paths.
-    #[error("Found dependency `{id}` with no locked distribution")]
+    #[error("Found dependency `{id}` with no locked distribution", id = id.cyan())]
     VerbatimUrl {
         /// The ID of the distribution that has a missing base.
         id: PackageId,
@@ -4388,20 +4385,14 @@ enum LockErrorKind {
     ),
     /// An error that occurs when an ambiguous `package.dependency` is
     /// missing a `version` field.
-    #[error(
-        "Dependency `{name}` has missing `version` \
-         field but has more than one matching package"
-    )]
+    #[error("Dependency `{name}` has missing `version` field but has more than one matching package", name = name.cyan())]
     MissingDependencyVersion {
         /// The name of the dependency that is missing a `version` field.
         name: PackageName,
     },
     /// An error that occurs when an ambiguous `package.dependency` is
     /// missing a `source` field.
-    #[error(
-        "Dependency `{name}` has missing `source` \
-         field but has more than one matching package"
-    )]
+    #[error("Dependency `{name}` has missing `source` field but has more than one matching package", name = name.cyan())]
     MissingDependencySource {
         /// The name of the dependency that is missing a `source` field.
         name: PackageName,
@@ -4435,19 +4426,19 @@ enum LockErrorKind {
     UrlToPath,
     /// An error that occurs when multiple packages with the same
     /// name were found when identifying the root packages.
-    #[error("Found multiple packages matching `{name}`")]
+    #[error("Found multiple packages matching `{name}`", name = name.cyan())]
     MultipleRootPackages {
         /// The ID of the package.
         name: PackageName,
     },
     /// An error that occurs when a root package can't be found.
-    #[error("Could not find root package `{name}`")]
+    #[error("Could not find root package `{name}`", name = name.cyan())]
     MissingRootPackage {
         /// The ID of the package.
         name: PackageName,
     },
     /// An error that occurs when resolving metadata for a package.
-    #[error("Failed to generate package metadata for `{id}`")]
+    #[error("Failed to generate package metadata for `{id}`", id = id.cyan())]
     Resolution {
         /// The ID of the distribution that failed to resolve.
         id: PackageId,
@@ -4564,7 +4555,18 @@ fn deduplicated_simplified_pep508_markers(
 
 #[cfg(test)]
 mod tests {
+    use uv_warnings::anstream;
+
     use super::*;
+
+    /// Assert a given display snapshot, stripping ANSI color codes.
+    macro_rules! assert_stripped_snapshot {
+        ($expr:expr, @$snapshot:literal) => {{
+            let expr = format!("{}", $expr);
+            let expr = format!("{}", anstream::adapter::strip_str(&expr));
+            insta::assert_snapshot!(expr, @$snapshot);
+        }};
+    }
 
     #[test]
     fn missing_dependency_source_unambiguous() {
@@ -4671,8 +4673,8 @@ sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d
 name = "a"
 version = "0.1.0"
 "#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(result, @"Dependency `a` has missing `source` field but has more than one matching package");
     }
 
     #[test]
@@ -4703,8 +4705,8 @@ sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d
 name = "a"
 source =  { registry = "https://pypi.org/simple" }
 "#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(result, @"Dependency `a` has missing `version` field but has more than one matching package");
     }
 
     #[test]
@@ -4734,8 +4736,8 @@ sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d
 [[package.dependencies]]
 name = "a"
 "#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(result, @"Dependency `a` has missing `version` field but has more than one matching package");
     }
 
     #[test]
