@@ -745,7 +745,7 @@ impl PubGrubReportFormatter<'_> {
             IncompatibleTag::Invalid => None,
             IncompatibleTag::Python => {
                 let best = tags.and_then(Tags::python_tag);
-                let tags = prioritized.python_tags();
+                let tags = prioritized.python_tags().collect::<BTreeSet<_>>();
                 if tags.is_empty() {
                     None
                 } else {
@@ -761,7 +761,6 @@ impl PubGrubReportFormatter<'_> {
                 let best = tags.and_then(Tags::abi_tag);
                 let tags = prioritized
                     .abi_tags()
-                    .into_iter()
                     // Ignore `none`, which is universally compatible.
                     //
                     // As an example, `none` can appear here if we're solving for Python 3.13, and
@@ -796,9 +795,8 @@ impl PubGrubReportFormatter<'_> {
                 // we only show platforms for ABI-compatible wheels.
                 let tags = prioritized
                     .platform_tags(self.tags?)
-                    .into_iter()
                     .cloned()
-                    .collect::<Vec<_>>();
+                    .collect::<BTreeSet<_>>();
                 if tags.is_empty() {
                     None
                 } else {
@@ -1132,7 +1130,7 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         version: Version,
         // excluded from `PartialEq` and `Hash`
-        tags: Vec<PlatformTag>,
+        tags: BTreeSet<PlatformTag>,
     },
 }
 
