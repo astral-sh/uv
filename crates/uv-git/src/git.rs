@@ -255,7 +255,7 @@ impl GitRemote {
         let enable_lfs_fetch = env::var(EnvVars::UV_GIT_LFS).is_ok();
 
         if let Some(mut db) = db {
-            fetch(&mut db.repo, self.url.as_str(), reference, client)
+            fetch(&mut db.repo, &self.url, reference, client)
                 .with_context(|| format!("failed to fetch into: {}", into.user_display()))?;
 
             let resolved_commit_hash = match locked_rev {
@@ -265,7 +265,7 @@ impl GitRemote {
 
             if let Some(rev) = resolved_commit_hash {
                 if enable_lfs_fetch {
-                    fetch_lfs(&mut db.repo, self.url.as_str(), &rev)
+                    fetch_lfs(&mut db.repo, &self.url, &rev)
                         .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
                 }
                 return Ok((db, rev));
@@ -281,14 +281,14 @@ impl GitRemote {
 
         paths::create_dir_all(into)?;
         let mut repo = GitRepository::init(into)?;
-        fetch(&mut repo, self.url.as_str(), reference, client)
+        fetch(&mut repo, &self.url, reference, client)
             .with_context(|| format!("failed to clone into: {}", into.user_display()))?;
         let rev = match locked_rev {
             Some(rev) => rev,
             None => reference.resolve(&repo)?,
         };
         if enable_lfs_fetch {
-            fetch_lfs(&mut repo, self.url.as_str(), &rev)
+            fetch_lfs(&mut repo, &self.url, &rev)
                 .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
         }
 
@@ -478,7 +478,7 @@ impl GitCheckout {
 /// The `remote_url` argument is the git remote URL where we want to fetch from.
 pub(crate) fn fetch(
     repo: &mut GitRepository,
-    remote_url: &str,
+    remote_url: &Url,
     reference: &GitReference,
     client: &ClientWithMiddleware,
 ) -> Result<()> {
@@ -616,7 +616,7 @@ pub(crate) fn fetch(
 /// Attempts to use `git` CLI installed on the system to fetch a repository.
 fn fetch_with_cli(
     repo: &mut GitRepository,
-    url: &str,
+    url: &Url,
     refspecs: &[String],
     tags: bool,
 ) -> Result<()> {
@@ -627,7 +627,7 @@ fn fetch_with_cli(
     }
     cmd.arg("--force") // handle force pushes
         .arg("--update-head-ok") // see discussion in #2078
-        .arg(url)
+        .arg(url.as_str())
         .args(refspecs)
         // If cargo is run by git (for example, the `exec` command in `git
         // rebase`), the GIT_DIR is set by git and will point to the wrong
@@ -664,7 +664,7 @@ static GIT_LFS: LazyLock<Result<ProcessBuilder>> = LazyLock::new(|| {
 });
 
 /// Attempts to use `git-lfs` CLI to fetch required LFS objects for a given revision.
-fn fetch_lfs(repo: &mut GitRepository, url: &str, revision: &GitOid) -> Result<()> {
+fn fetch_lfs(repo: &mut GitRepository, url: &Url, revision: &GitOid) -> Result<()> {
     let mut cmd = if let Ok(lfs) = GIT_LFS.as_ref() {
         debug!("Fetching Git LFS objects");
         lfs.clone()
@@ -675,7 +675,7 @@ fn fetch_lfs(repo: &mut GitRepository, url: &str, revision: &GitOid) -> Result<(
     };
 
     cmd.arg("fetch")
-        .arg(url)
+        .arg(url.as_str())
         .arg(revision.as_str())
         // These variables are unset for the same reason as in `fetch_with_cli`.
         .env_remove(EnvVars::GIT_DIR)
@@ -717,12 +717,11 @@ enum FastPathRev {
 /// [^1]: <https://developer.github.com/v3/repos/commits/#get-the-sha-1-of-a-commit-reference>
 fn github_fast_path(
     repo: &mut GitRepository,
-    url: &str,
+    url: &Url,
     reference: &GitReference,
     client: &ClientWithMiddleware,
 ) -> Result<FastPathRev> {
-    let url = Url::parse(url)?;
-    if !is_github(&url) {
+    if !is_github(url) {
         return Ok(FastPathRev::Indeterminate);
     }
 
