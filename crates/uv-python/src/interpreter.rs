@@ -572,7 +572,12 @@ impl Display for UnexpectedResponseError {
             writeln!(f, "{} stdout:\n{}", delim, self.stdout)?;
         }
         if !self.stderr.trim().is_empty() {
-            write!(f, "{0} stderr:\n{1}\n{0}", delim, self.stderr)?;
+            writeln!(
+                f,
+                "{delim} stderr:\n{err}\n{delim}",
+                delim = delim,
+                err = self.stderr
+            )?;
         }
         Ok(())
     }
@@ -600,7 +605,12 @@ impl Display for StatusCodeError {
             writeln!(f, "{} stdout:\n{}", delim, self.stdout)?;
         }
         if !self.stderr.trim().is_empty() {
-            write!(f, "{0} stderr:\n{1}\n{0}", delim, self.stderr)?;
+            write!(
+                f,
+                "{delim} stderr:\n{err}\n{delim}",
+                delim = delim,
+                err = self.stderr
+            )?;
         }
         Ok(())
     }
