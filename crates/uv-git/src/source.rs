@@ -52,68 +52,6 @@ impl GitSource {
         }
     }
 
-    /// Resolve a Git source to a specific revision.
-    #[instrument(skip(self), fields(repository = %self.git.repository, rev = ?self.git.precise))]
-    pub fn resolve(self) -> Result<GitSha> {
-        // Compute the canonical URL for the repository.
-        let canonical = RepositoryUrl::new(&self.git.repository);
-
-        // The path to the repo, within the Git database.
-        let ident = cache_digest(&canonical);
-        let db_path = self.cache.join("db").join(&ident);
-
-        // Authenticate the URL, if necessary.
-        let remote = if let Some(credentials) = GIT_STORE.get(&canonical) {
-            Cow::Owned(credentials.apply(self.git.repository.clone()))
-        } else {
-            Cow::Borrowed(&self.git.repository)
-        };
-
-        let remote = GitRemote::new(&remote);
-        let (db, actual_rev, task) = match (self.git.precise, remote.db_at(&db_path).ok()) {
-            // If we have a locked revision, and we have a preexisting database
-            // which has that revision, then no update needs to happen.
-            (Some(rev), Some(db)) if db.contains(rev.into()) => {
-                debug!("Using existing Git source `{}`", self.git.repository);
-                (db, rev, None)
-            }
-
-            // ... otherwise we use this state to update the git database. Note
-            // that we still check for being offline here, for example in the
-            // situation that we have a locked revision but the database
-            // doesn't have it.
-            (locked_rev, db) => {
-                debug!("Updating Git source `{}`", self.git.repository);
-
-                // Report the checkout operation to the reporter.
-                let task = self.reporter.as_ref().map(|reporter| {
-                    reporter.on_checkout_start(remote.url(), self.git.reference.as_rev())
-                });
-
-                let (db, actual_rev) = remote.checkout(
-                    &db_path,
-                    db,
-                    &self.git.reference,
-                    locked_rev.map(GitOid::from),
-                    &self.client,
-                )?;
-
-                (db, GitSha::from(actual_rev), task)
-            }
-        };
-
-        let short_id = db.to_short_id(actual_rev.into())?;
-
-        // Report the checkout operation to the reporter.
-        if let Some(task) = task {
-            if let Some(reporter) = self.reporter.as_ref() {
-                reporter.on_checkout_complete(remote.url(), short_id.as_str(), task);
-            }
-        }
-
-        Ok(actual_rev)
-    }
-
     /// Fetch the underlying Git repository at the given revision.
     #[instrument(skip(self), fields(repository = %self.git.repository, rev = ?self.git.precise))]
     pub fn fetch(self) -> Result<Fetch> {
