@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::env::consts::ARCH;
+use std::fmt::{Display, Formatter};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
@@ -551,6 +552,61 @@ impl ExternallyManaged {
 }
 
 #[derive(Debug, Error)]
+pub struct UnexpectedResponseError {
+    pub(super) err: serde_json::Error,
+    pub(super) stdout: String,
+    pub(super) stderr: String,
+    pub(super) path: PathBuf,
+}
+
+impl Display for UnexpectedResponseError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f,
+            "Querying Python at `{}` did not return the expected data\n{}",
+            self.path.display(),
+            self.err
+        )?;
+        let delim = "---";
+        if !self.stdout.trim().is_empty() {
+            writeln!(f, "{} stdout:\n{}", delim, self.stdout)?;
+        }
+        if !self.stderr.trim().is_empty() {
+            write!(f, "{0} stderr:\n{1}\n{0}", delim, self.stderr)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Error)]
+pub struct StatusCodeError {
+    pub(super) code: ExitStatus,
+    pub(super) stdout: String,
+    pub(super) stderr: String,
+    pub(super) path: PathBuf,
+}
+
+impl Display for StatusCodeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f,
+            "Querying Python at `{}` failed with exit status {}",
+            self.path.display(),
+            self.code
+        )?;
+
+        let delim = "---";
+        if !self.stdout.trim().is_empty() {
+            writeln!(f, "{} stdout:\n{}", delim, self.stdout)?;
+        }
+        if !self.stderr.trim().is_empty() {
+            write!(f, "{0} stderr:\n{1}\n{0}", delim, self.stderr)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Error)]
 pub enum Error {
     #[error("Failed to query Python interpreter")]
     Io(#[from] io::Error),
@@ -562,20 +618,10 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
-    #[error("Querying Python at `{}` did not return the expected data\n{err}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---", path.display())]
-    UnexpectedResponse {
-        err: serde_json::Error,
-        stdout: String,
-        stderr: String,
-        path: PathBuf,
-    },
-    #[error("Querying Python at `{}` failed with exit status {code}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---", path.display())]
-    StatusCode {
-        code: ExitStatus,
-        stdout: String,
-        stderr: String,
-        path: PathBuf,
-    },
+    #[error("{0}")]
+    UnexpectedResponse(UnexpectedResponseError),
+    #[error("{0}")]
+    StatusCode(StatusCodeError),
     #[error("Can't use Python at `{path}`")]
     QueryScript {
         #[source]
@@ -660,12 +706,12 @@ impl InterpreterInfo {
                 });
             }
 
-            return Err(Error::StatusCode {
+            return Err(Error::StatusCode(StatusCodeError {
                 code: output.status,
                 stderr,
                 stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
                 path: interpreter.to_path_buf(),
-            });
+            }));
         }
 
         let result: InterpreterInfoResult =
@@ -679,12 +725,12 @@ impl InterpreterInfo {
                         path: interpreter.to_path_buf(),
                     }
                 } else {
-                    Error::UnexpectedResponse {
+                    Error::UnexpectedResponse(UnexpectedResponseError {
                         err,
                         stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
                         stderr,
                         path: interpreter.to_path_buf(),
-                    }
+                    })
                 }
             })?;
 
