@@ -680,7 +680,7 @@ jobs:
           echo "$CONDA_PREFIX"
           ./uv pip install anyio
 
-  integration-test-deadnsakes-39-linux:
+  integration-test-deadsnakes-39-linux:
     timeout-minutes: 5
     needs: build-binary-linux
     name: "integration test | deadsnakes python3.9 on ubuntu"
