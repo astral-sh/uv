@@ -21,7 +21,7 @@ Astral                         DisplayName : Astral
 
 
 Name                           Property
-                               ----                           --------
+----                           --------
 CPython3.11.11                 DisplayName     : CPython 3.11.11 (64-bit)
                                SupportUrl      : https://github.com/astral-sh/uv
                                Version         : 3.11.11
@@ -35,7 +35,7 @@ Hive: HKEY_CURRENT_USER\Software\Python\Astral\CPython3.11.11
 
 
 Name                           Property
-                               ----                           --------
+----                           --------
 InstallPath                    (default)              :
 C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.11.11-windows-x86_64-none
 ExecutablePath         : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.11.11-windows-x86_64-none\python.exe
