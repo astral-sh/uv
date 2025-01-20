@@ -22,7 +22,7 @@ Applications are the default target for `uv init`, but can also be specified wit
 $ uv init example-app
 ```
 
-The project includes a `pyproject.toml`, a sample file (`hello.py`), a readme, and a Python version
+The project includes a `pyproject.toml`, a sample file (`app.py`), a readme, and a Python version
 pin file (`.python-version`).
 
 ```console
@@ -30,7 +30,7 @@ $ tree example-app
 example-app
 ├── .python-version
 ├── README.md
-├── hello.py
+├── app.py
 └── pyproject.toml
 ```
 
@@ -49,7 +49,7 @@ dependencies = []
 
 The sample file defines a `main` function with some standard boilerplate:
 
-```python title="hello.py"
+```python title="app.py"
 def main():
     print("Hello from example-app!")
 
@@ -61,7 +61,7 @@ if __name__ == "__main__":
 Python files can be executed with `uv run`:
 
 ```console
-$ uv run hello.py
+$ uv run app.py
 Hello from example-project!
 ```
 
