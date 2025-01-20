@@ -13,7 +13,7 @@ expected_registry = [
     r"""
 Name                           Property
 ----                           --------
-Astral                         DisplayName : Astral
+Astral                         DisplayName : Astral Software Inc.
                                SupportUrl  : https://github.com/astral-sh/uv
 """,
     r"""
