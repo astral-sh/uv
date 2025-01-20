@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{trace, warn};
 
-use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
+use uv_cache::{Cache, CacheBucket, CachedByTimestamp};
 use uv_cache_info::Timestamp;
 use uv_cache_key::cache_digest;
 use uv_fs::{write_atomic_sync, PythonExt, Simplified};
@@ -762,34 +762,31 @@ impl InterpreterInfo {
             })?;
 
         // Read from the cache.
-        if cache
-            .freshness(&cache_entry, None)
-            .is_ok_and(Freshness::is_fresh)
-        {
-            if let Ok(data) = fs::read(cache_entry.path()) {
-                match rmp_serde::from_slice::<CachedByTimestamp<Self>>(&data) {
-                    Ok(cached) => {
-                        if cached.timestamp == modified {
-                            trace!(
-                                "Cached interpreter info for Python {}, skipping probing: {}",
-                                cached.data.markers.python_full_version(),
-                                executable.user_display()
-                            );
-                            return Ok(cached.data);
-                        }
-
+        // We ignore the freshness of the cache entry and use only our own logic, otherwise
+        // `--upgrade` always implies querying Python.
+        if let Ok(data) = fs::read(cache_entry.path()) {
+            match rmp_serde::from_slice::<CachedByTimestamp<Self>>(&data) {
+                Ok(cached) => {
+                    if cached.timestamp == modified {
                         trace!(
-                            "Ignoring stale interpreter markers for: {}",
+                            "Cached interpreter info for Python {}, skipping probing: {}",
+                            cached.data.markers.python_full_version(),
                             executable.user_display()
                         );
+                        return Ok(cached.data);
                     }
-                    Err(err) => {
-                        warn!(
-                            "Broken interpreter cache entry at {}, removing: {err}",
-                            cache_entry.path().user_display()
-                        );
-                        let _ = fs_err::remove_file(cache_entry.path());
-                    }
+
+                    trace!(
+                        "Ignoring stale interpreter markers for: {}",
+                        executable.user_display()
+                    );
+                }
+                Err(err) => {
+                    warn!(
+                        "Broken interpreter cache entry at {}, removing: {err}",
+                        cache_entry.path().user_display()
+                    );
+                    let _ = fs_err::remove_file(cache_entry.path());
                 }
             }
         }
