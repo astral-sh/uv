@@ -6,7 +6,7 @@ use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize};
 
 use uv_normalize::{ExtraName, PackageName};
-use uv_pep508::{MarkerTree, Requirement};
+use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
 
 use crate::metadata::pyproject_toml::PyProjectToml;
 use crate::{LenientRequirement, MetadataError, VerbatimParsedUrl};
@@ -197,8 +197,34 @@ impl From<RequiresDist> for FlatRequiresDist {
             }
         }
 
-        // Drop all the self-requirements now that we flattened them out.
-        requires_dist.retain(|req| req.name != value.name);
+        // Drop all the self-requirements now that we flattened them out, but retain any that have
+        // a version specifier.
+        //
+        // For example, if a project depends on itself, as in:
+        // ```toml
+        // [project]
+        // name = "project"
+        // version = "0.1.0"
+        // requires-python = ">=3.12"
+        // dependencies = ["typing-extensions", "project==0.1.0"]
+        // ```
+        //
+        // We should retain `project==0.1.0`.
+        requires_dist.retain(|req| {
+            if req.name == value.name {
+                if req
+                    .version_or_url
+                    .as_ref()
+                    .is_none_or(|version_or_url| match version_or_url {
+                        VersionOrUrl::Url(_) => false,
+                        VersionOrUrl::VersionSpecifier(specifiers) => specifiers.is_empty(),
+                    })
+                {
+                    return false;
+                }
+            }
+            true
+        });
 
         Self {
             name: value.name,
