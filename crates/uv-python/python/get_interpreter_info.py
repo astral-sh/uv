@@ -224,7 +224,7 @@ def get_virtualenv():
         }
 
 
-def get_scheme():
+def get_scheme(use_sysconfig_scheme: bool):
     """Return the Scheme for the current interpreter.
 
     The paths returned should be absolute.
@@ -401,15 +401,7 @@ def get_scheme():
             "data": scheme["data"],
         }
 
-    # By default, pip uses sysconfig on Python 3.10+.
-    # But Python distributors can override this decision by setting:
-    #     sysconfig._PIP_USE_SYSCONFIG = True / False
-    # Rationale in https://github.com/pypa/pip/issues/10647
-    use_sysconfig = bool(
-        getattr(sysconfig, "_PIP_USE_SYSCONFIG", sys.version_info >= (3, 10))
-    )
-
-    if use_sysconfig:
+    if use_sysconfig_scheme:
         return get_sysconfig_scheme()
     else:
         return get_distutils_scheme()
@@ -571,6 +563,35 @@ def main() -> None:
     elif os_and_arch["os"]["name"] == "musllinux":
         manylinux_compatible = True
 
+
+    # By default, pip uses sysconfig on Python 3.10+.
+    # But Python distributors can override this decision by setting:
+    #     sysconfig._PIP_USE_SYSCONFIG = True / False
+    # Rationale in https://github.com/pypa/pip/issues/10647
+    use_sysconfig_scheme = bool(
+        getattr(sysconfig, "_PIP_USE_SYSCONFIG", sys.version_info >= (3, 10))
+    )
+    
+    # If we're not using sysconfig, make sure distutils is available.
+    if not use_sysconfig_scheme:
+        try:
+            import distutils.dist
+        except ImportError:
+            # We require distutils, but it's not installed; this is fairly
+            # common in, e.g., deadsnakes where distutils is packaged
+            # separately from Python.
+            print(
+                json.dumps(
+                    {
+                        "result": "error",
+                        "kind": "missing_required_distutils",
+                        "python_major": sys.version_info[0],
+                        "python_minor": sys.version_info[1],
+                    }
+                )
+            )
+            sys.exit(0)
+
     interpreter_info = {
         "result": "success",
         "markers": markers,
@@ -585,7 +606,7 @@ def main() -> None:
         # "/install" as the prefix. With `sysconfig` patching, we rewrite the prefix to match the actual installation
         # location. So in newer versions, we also write a dedicated flag to indicate standalone builds.
         "standalone": sysconfig.get_config_var("prefix") == "/install" or bool(sysconfig.get_config_var("PYTHON_BUILD_STANDALONE")),
-        "scheme": get_scheme(),
+        "scheme": get_scheme(use_sysconfig_scheme),
         "virtualenv": get_virtualenv(),
         "platform": os_and_arch,
         "manylinux_compatible": manylinux_compatible,

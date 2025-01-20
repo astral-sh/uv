@@ -604,6 +604,11 @@ pub enum InterpreterInfoError {
     UnsupportedPythonVersion { python_version: String },
     #[error("Python executable does not support `-I` flag. Please use Python 3.8 or newer.")]
     UnsupportedPython,
+    #[error("Python installation is missing `distutils`, which is required for packaging on older Python versions. Your system may package it separately, e.g., as `python{python_major}-distutils` or `python{python_major}.{python_minor}-distutils`.")]
+    MissingRequiredDistutils {
+        python_major: usize,
+        python_minor: usize,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
