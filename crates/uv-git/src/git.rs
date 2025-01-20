@@ -275,11 +275,13 @@ impl GitRemote {
         // Otherwise start from scratch to handle corrupt git repositories.
         // After our fetch (which is interpreted as a clone now) we do the same
         // resolution to figure out what we cloned.
-        if into.exists() {
-            paths::remove_dir_all(into)?;
+        match fs_err::remove_dir_all(into) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
         }
 
-        paths::create_dir_all(into)?;
+        fs_err::create_dir_all(into)?;
         let mut repo = GitRepository::init(into)?;
         fetch(&mut repo, &self.url, reference, client)
             .with_context(|| format!("failed to clone into: {}", into.user_display()))?;
@@ -392,9 +394,11 @@ impl GitCheckout {
     /// This is a filesystem-to-filesystem clone.
     fn clone_into(into: &Path, database: &GitDatabase, revision: GitOid) -> Result<Self> {
         let dirname = into.parent().unwrap();
-        paths::create_dir_all(dirname)?;
-        if into.exists() {
-            paths::remove_dir_all(into)?;
+        fs_err::create_dir_all(dirname)?;
+        match fs_err::remove_dir_all(into) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
         }
 
         // Perform a local clone of the repository, which will attempt to use
