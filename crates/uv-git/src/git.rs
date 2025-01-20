@@ -49,8 +49,6 @@ pub enum GitReference {
     Branch(String),
     /// A specific tag.
     Tag(String),
-    /// A specific (short) commit.
-    ShortCommit(String),
     /// From a reference that's ambiguously a branch or tag.
     BranchOrTag(String),
     /// From a reference that's ambiguously a short commit, a branch, or a tag.
@@ -93,7 +91,6 @@ impl GitReference {
         match self {
             Self::Tag(rev) => Some(rev),
             Self::Branch(rev) => Some(rev),
-            Self::ShortCommit(rev) => Some(rev),
             Self::BranchOrTag(rev) => Some(rev),
             Self::BranchOrTagOrCommit(rev) => Some(rev),
             Self::FullCommit(rev) => Some(rev),
@@ -107,7 +104,6 @@ impl GitReference {
         match self {
             Self::Tag(rev) => rev,
             Self::Branch(rev) => rev,
-            Self::ShortCommit(rev) => rev,
             Self::BranchOrTag(rev) => rev,
             Self::BranchOrTagOrCommit(rev) => rev,
             Self::FullCommit(rev) => rev,
@@ -121,7 +117,6 @@ impl GitReference {
         match self {
             Self::Branch(_) => "branch",
             Self::Tag(_) => "tag",
-            Self::ShortCommit(_) => "short commit",
             Self::BranchOrTag(_) => "branch or tag",
             Self::FullCommit(_) => "commit",
             Self::BranchOrTagOrCommit(_) => "branch, tag, or commit",
@@ -374,9 +369,7 @@ impl GitReference {
             Self::DefaultBranch => repo.rev_parse("refs/remotes/origin/HEAD"),
 
             // Resolve a direct commit reference.
-            Self::FullCommit(s) | Self::ShortCommit(s) | Self::NamedRef(s) => {
-                repo.rev_parse(&format!("{s}^0"))
-            }
+            Self::FullCommit(s) | Self::NamedRef(s) => repo.rev_parse(&format!("{s}^0")),
         };
 
         result.with_context(|| anyhow::format_err!("failed to find {refkind} `{self}`"))
@@ -529,8 +522,7 @@ pub(crate) fn fetch(
 
         // For ambiguous references, we can fetch the exact commit (if known); otherwise,
         // we fetch all branches and tags.
-        GitReference::ShortCommit(branch_or_tag_or_commit)
-        | GitReference::BranchOrTagOrCommit(branch_or_tag_or_commit) => {
+        GitReference::BranchOrTagOrCommit(branch_or_tag_or_commit) => {
             // The `oid_to_fetch` is the exact commit we want to fetch. But it could be the exact
             // commit of a branch or tag. We should only fetch it directly if it's the exact commit
             // of a short commit hash.
@@ -739,9 +731,7 @@ fn github_fast_path(
         GitReference::BranchOrTag(branch_or_tag) => branch_or_tag,
         GitReference::DefaultBranch => "HEAD",
         GitReference::NamedRef(rev) => rev,
-        GitReference::FullCommit(rev)
-        | GitReference::ShortCommit(rev)
-        | GitReference::BranchOrTagOrCommit(rev) => {
+        GitReference::FullCommit(rev) | GitReference::BranchOrTagOrCommit(rev) => {
             // `revparse_single` (used by `resolve`) is the only way to turn
             // short hash -> long hash, but it also parses other things,
             // like branch and tag names, which might coincidentally be

@@ -115,7 +115,6 @@ impl From<GitUrl> for Url {
             match git.reference {
                 GitReference::Branch(rev)
                 | GitReference::Tag(rev)
-                | GitReference::ShortCommit(rev)
                 | GitReference::BranchOrTag(rev)
                 | GitReference::NamedRef(rev)
                 | GitReference::FullCommit(rev)
