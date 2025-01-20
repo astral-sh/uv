@@ -1,5 +1,4 @@
 use crate::commands::ExitStatus;
-use anyhow::Context;
 use tokio::process::Child;
 use tracing::debug;
 
@@ -63,6 +62,7 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
 
 #[cfg(unix)]
 fn terminate_process(child: &mut Child) -> anyhow::Result<()> {
+    use anyhow::Context;
     use nix::sys::signal::{self, Signal};
     use nix::unistd::Pid;
 
