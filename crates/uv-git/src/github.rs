@@ -14,7 +14,7 @@ pub struct GitHubRepository<'a> {
 impl<'a> GitHubRepository<'a> {
     /// Parse a GitHub repository from a URL.
     ///
-    /// Expects to receive a URL of the form: `https://github.com/{user}/{repo}`, e.g.,
+    /// Expects to receive a URL of the form: `https://github.com/{user}/{repo}[.git]`, e.g.,
     /// `https://github.com/astral-sh/uv`. Otherwise, returns `None`.
     pub fn parse(url: &'a Url) -> Option<Self> {
         // The fast path is only available for GitHub repositories.
