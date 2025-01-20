@@ -7,17 +7,18 @@ use std::path::{Path, PathBuf};
 use std::str::{self, FromStr};
 use std::sync::LazyLock;
 
-use crate::sha::GitOid;
-use crate::GitSha;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use cargo_util::{paths, ProcessBuilder};
 use reqwest::StatusCode;
 use reqwest_middleware::ClientWithMiddleware;
-
 use tracing::{debug, warn};
 use url::Url;
+
 use uv_fs::Simplified;
 use uv_static::EnvVars;
+
+use crate::sha::GitOid;
+use crate::{GitHubRepository, GitSha};
 
 /// A file indicates that if present, `git reset` has been done and a repo
 /// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
@@ -720,16 +721,17 @@ enum FastPathRev {
 ///
 /// [^1]: <https://developer.github.com/v3/repos/commits/#get-the-sha-1-of-a-commit-reference>
 fn github_fast_path(
-    repo: &mut GitRepository,
+    git: &mut GitRepository,
     url: &Url,
     reference: &GitReference,
     client: &ClientWithMiddleware,
 ) -> Result<FastPathRev> {
-    if !is_github(url) {
+    let Some(GitHubRepository { owner, repo }) = GitHubRepository::parse(url) else {
         return Ok(FastPathRev::Indeterminate);
-    }
+    };
 
-    let local_object = reference.resolve(repo).ok();
+    let local_object = reference.resolve(git).ok();
+
     let github_branch_name = match reference {
         GitReference::Branch(branch) => branch,
         GitReference::Tag(tag) => tag,
@@ -765,28 +767,12 @@ fn github_fast_path(
         }
     };
 
-    // This expects GitHub urls in the form `github.com/user/repo` and nothing
-    // else
-    let mut pieces = url
-        .path_segments()
-        .ok_or_else(|| anyhow!("no path segments on url"))?;
-    let username = pieces
-        .next()
-        .ok_or_else(|| anyhow!("couldn't find username"))?;
-    let repository = pieces
-        .next()
-        .ok_or_else(|| anyhow!("couldn't find repository name"))?;
-    if pieces.next().is_some() {
-        anyhow::bail!("too many segments on URL");
-    }
+    // TODO(charlie): If we _know_ that we have a full commit SHA, there's no need to perform this
+    // request. We can just return `FastPathRev::NeedsFetch`. However, we need to audit all uses of
+    // `GitReference::FullCommit` to ensure that we _know_ it's a SHA, as opposed to (e.g.) a Git
+    // tag that just "looks like" a commit (i.e., a tag composed of 40 hex characters).
 
-    // Trim off the `.git` from the repository, if present, since that's
-    // optional for GitHub and won't work when we try to use the API as well.
-    let repository = repository.strip_suffix(".git").unwrap_or(repository);
-
-    let url = format!(
-        "https://api.github.com/repos/{username}/{repository}/commits/{github_branch_name}"
-    );
+    let url = format!("https://api.github.com/repos/{owner}/{repo}/commits/{github_branch_name}");
 
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -802,7 +788,11 @@ fn github_fast_path(
         }
 
         let response = request.send().await?;
+
+        // GitHub returns a 404 if the repository does not exist, and a 422 if it exists but GitHub
+        // is unable to resolve the requested revision.
         response.error_for_status_ref()?;
+
         let response_code = response.status();
         if response_code == StatusCode::NOT_MODIFIED {
             Ok(FastPathRev::UpToDate)
@@ -810,17 +800,9 @@ fn github_fast_path(
             let oid_to_fetch = response.text().await?.parse()?;
             Ok(FastPathRev::NeedsFetch(oid_to_fetch))
         } else {
-            // Usually response_code == 404 if the repository does not exist, and
-            // response_code == 422 if exists but GitHub is unable to resolve the
-            // requested rev.
             Ok(FastPathRev::Indeterminate)
         }
     })
-}
-
-/// Whether a `url` is one from GitHub.
-fn is_github(url: &Url) -> bool {
-    url.host_str() == Some("github.com")
 }
 
 /// Whether a `rev` looks like a commit hash (ASCII hex digits).
