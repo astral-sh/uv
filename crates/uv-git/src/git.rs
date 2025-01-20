@@ -74,11 +74,7 @@ impl GitReference {
         if rev.starts_with("refs/") {
             Self::NamedRef(rev)
         } else if looks_like_commit_hash(&rev) {
-            if rev.len() == 40 {
-                Self::FullCommit(rev)
-            } else {
-                Self::BranchOrTagOrCommit(rev)
-            }
+            Self::BranchOrTagOrCommit(rev)
         } else {
             Self::BranchOrTag(rev)
         }
@@ -245,6 +241,8 @@ impl GitRemote {
         locked_rev: Option<GitOid>,
         client: &ClientWithMiddleware,
     ) -> Result<(GitDatabase, GitOid)> {
+        // So, if we have FullCommit, then we should be assuming it's actually a commit. We don't
+        // need to hit GitHub.
         let locked_ref = locked_rev.map(|oid| GitReference::FullCommit(oid.to_string()));
         let reference = locked_ref.as_ref().unwrap_or(reference);
         let enable_lfs_fetch = env::var(EnvVars::UV_GIT_LFS).is_ok();
@@ -729,7 +727,7 @@ fn github_fast_path(
         GitReference::BranchOrTag(branch_or_tag) => branch_or_tag,
         GitReference::DefaultBranch => "HEAD",
         GitReference::NamedRef(rev) => rev,
-        GitReference::FullCommit(rev) | GitReference::BranchOrTagOrCommit(rev) => {
+        GitReference::BranchOrTagOrCommit(rev) => {
             // `revparse_single` (used by `resolve`) is the only way to turn
             // short hash -> long hash, but it also parses other things,
             // like branch and tag names, which might coincidentally be
@@ -754,6 +752,20 @@ fn github_fast_path(
             }
             rev
         }
+        GitReference::FullCommit(rev) => {
+            debug!("Skipping GitHub fast path; full commit hash provided: {rev}");
+
+            let rev = GitOid::from_str(rev)?;
+            if let Some(ref local_object) = local_object {
+                if rev == *local_object {
+                    return Ok(FastPathRev::UpToDate);
+                }
+            }
+
+            // If we know the reference is a full commit hash, we can just return it without
+            // querying GitHub.
+            return Ok(FastPathRev::NeedsFetch(rev));
+        },
     };
 
     // TODO(charlie): If we _know_ that we have a full commit SHA, there's no need to perform this
