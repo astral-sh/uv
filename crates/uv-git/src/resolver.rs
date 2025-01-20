@@ -5,14 +5,14 @@ use std::sync::Arc;
 
 use tracing::debug;
 
+use crate::{Fetch, GitHubRepository, GitReference, GitSha, GitSource, GitUrl, Reporter};
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
 use fs_err::tokio as fs;
 use reqwest_middleware::ClientWithMiddleware;
 use uv_cache_key::{cache_digest, RepositoryUrl};
 use uv_fs::LockedFile;
-
-use crate::{Fetch, GitHubRepository, GitReference, GitSha, GitSource, GitUrl, Reporter};
+use uv_version::version;
 
 #[derive(Debug, thiserror::Error)]
 pub enum GitResolverError {
@@ -73,7 +73,10 @@ impl GitResolver {
         debug!("Attempting GitHub fast path for: {url}");
         let mut request = client.get(&url);
         request = request.header("Accept", "application/vnd.github.3.sha");
-        request = request.header("User-Agent", "uv");
+        request = request.header(
+            "User-Agent",
+            format!("uv/{} (+https://github.com/astral-sh/uv)", version()),
+        );
 
         let response = request.send().await?;
         if !response.status().is_success() {

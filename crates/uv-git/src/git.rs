@@ -16,6 +16,7 @@ use url::Url;
 
 use uv_fs::Simplified;
 use uv_static::EnvVars;
+use uv_version::version;
 
 use crate::sha::GitOid;
 use crate::{GitHubRepository, GitSha};
@@ -782,7 +783,10 @@ fn github_fast_path(
         debug!("Attempting GitHub fast path for: {url}");
         let mut request = client.get(&url);
         request = request.header("Accept", "application/vnd.github.3.sha");
-        request = request.header("User-Agent", "uv");
+        request = request.header(
+            "User-Agent",
+            format!("uv/{} (+https://github.com/astral-sh/uv)", version()),
+        );
         if let Some(local_object) = local_object {
             request = request.header("If-None-Match", local_object.to_string());
         }
