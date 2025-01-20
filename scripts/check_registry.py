@@ -17,8 +17,6 @@ Astral                         DisplayName : Astral Software Inc.
                                SupportUrl  : https://github.com/astral-sh/uv
 """,
     r"""
-
-
     Hive: HKEY_CURRENT_USER\Software\Python
 
 
@@ -76,7 +74,7 @@ InstallPath                    (default)              : C:\Users\runneradmin\App
                                WindowedExecutablePath : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.12.8-windows-x86_64-none\pythonw.exe
 """,
     r"""
-     Hive: HKEY_CURRENT_USER\Software\Python\Astral
+    Hive: HKEY_CURRENT_USER\Software\Python\Astral
 
 
 Name                           Property
