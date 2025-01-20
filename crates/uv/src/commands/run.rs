@@ -47,6 +47,15 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
         {
             use std::os::unix::process::ExitStatusExt;
             debug!("Command exited with signal: {:?}", status.signal());
+            // Following https://tldp.org/LDP/abs/html/exitcodes.html, a fatal signal n gets the
+            // exit code 128+n
+            if let Some(mapped_code) = status
+                .signal()
+                .and_then(|signal| u8::try_from(signal).ok())
+                .and_then(|signal| 128u8.checked_add(signal))
+            {
+                return Ok(ExitStatus::External(mapped_code));
+            }
         }
         Ok(ExitStatus::Failure)
     }
