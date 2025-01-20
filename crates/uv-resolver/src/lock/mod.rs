@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::Infallible;
+use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -33,7 +34,9 @@ use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryRefere
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
-use uv_platform_tags::{PlatformTag, TagCompatibility, TagPriority, Tags};
+use uv_platform_tags::{
+    AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
+};
 use uv_pypi_types::{
     redact_credentials, ConflictPackage, Conflicts, HashDigest, ParsedArchiveUrl, ParsedGitUrl,
     Requirement, RequirementSource,
@@ -1917,16 +1920,92 @@ impl Package {
                 id: self.id.clone(),
             }
             .into()),
-            (false, false) if self.id.source.is_wheel() => {
-                Err(LockErrorKind::IncompatibleWheelOnly {
+            (false, false) if self.id.source.is_wheel() => Err(LockError {
+                kind: Box::new(LockErrorKind::IncompatibleWheelOnly {
                     id: self.id.clone(),
+                }),
+                hint: self.tag_hint(tag_policy),
+            }),
+            (false, false) => Err(LockError {
+                kind: Box::new(LockErrorKind::NeitherSourceDistNorWheel {
+                    id: self.id.clone(),
+                }),
+                hint: self.tag_hint(tag_policy),
+            }),
+        }
+    }
+
+    /// Generate a [`LockErrorHint`] based on wheel-tag incompatibilities.
+    fn tag_hint(&self, tag_policy: TagPolicy<'_>) -> Option<LockErrorHint> {
+        let incompatibility = self
+            .wheels
+            .iter()
+            .map(|wheel| {
+                tag_policy.tags().compatibility(
+                    wheel.filename.python_tags(),
+                    wheel.filename.abi_tags(),
+                    wheel.filename.platform_tags(),
+                )
+            })
+            .max()?;
+        match incompatibility {
+            TagCompatibility::Incompatible(IncompatibleTag::Python) => {
+                let best = tag_policy.tags().python_tag();
+                let tags = self.python_tags().collect::<BTreeSet<_>>();
+                if tags.is_empty() {
+                    None
+                } else {
+                    Some(LockErrorHint::LanguageTags {
+                        package: self.id.name.clone(),
+                        version: self.id.version.clone(),
+                        tags,
+                        best,
+                    })
                 }
-                .into())
             }
-            (false, false) => Err(LockErrorKind::NeitherSourceDistNorWheel {
-                id: self.id.clone(),
+            TagCompatibility::Incompatible(IncompatibleTag::Abi) => {
+                let best = tag_policy.tags().abi_tag();
+                let tags = self
+                    .abi_tags()
+                    // Ignore `none`, which is universally compatible.
+                    //
+                    // As an example, `none` can appear here if we're solving for Python 3.13, and
+                    // the distribution includes a wheel for `cp312-none-macosx_11_0_arm64`.
+                    //
+                    // In that case, the wheel isn't compatible, but when solving for Python 3.13,
+                    // the `cp312` Python tag _can_ be compatible (e.g., for `cp312-abi3-macosx_11_0_arm64.whl`),
+                    // so this is considered an ABI incompatibility rather than Python incompatibility.
+                    .filter(|tag| *tag != AbiTag::None)
+                    .collect::<BTreeSet<_>>();
+                if tags.is_empty() {
+                    None
+                } else {
+                    Some(LockErrorHint::AbiTags {
+                        package: self.id.name.clone(),
+                        version: self.id.version.clone(),
+                        tags,
+                        best,
+                    })
+                }
             }
-            .into()),
+            TagCompatibility::Incompatible(IncompatibleTag::Platform) => {
+                let best = tag_policy.tags().platform_tag().cloned();
+                let tags = self
+                    .platform_tags(tag_policy.tags())
+                    .cloned()
+                    .collect::<BTreeSet<_>>();
+                if tags.is_empty() {
+                    None
+                } else {
+                    Some(LockErrorHint::PlatformTags {
+                        package: self.id.name.clone(),
+                        version: self.id.version.clone(),
+                        tags,
+                        best,
+                    })
+                }
+            }
+            _ => None,
         }
     }
 
@@ -2271,6 +2350,43 @@ impl Package {
         }
 
         Ok(table)
+    }
+
+    /// Returns an iterator over the compatible Python tags of the available wheels.
+    fn python_tags(&self) -> impl Iterator<Item = LanguageTag> + '_ {
+        self.wheels
+            .iter()
+            .flat_map(|wheel| wheel.filename.python_tags())
+            .copied()
+    }
+
+    /// Returns an iterator over the compatible Python tags of the available wheels.
+    fn abi_tags(&self) -> impl Iterator<Item = AbiTag> + '_ {
+        self.wheels
+            .iter()
+            .flat_map(|wheel| wheel.filename.abi_tags())
+            .copied()
+    }
+
+    /// Returns the set of platform tags for the distribution that are ABI-compatible with the given
+    /// tags.
+    pub fn platform_tags<'a>(
+        &'a self,
+        tags: &'a Tags,
+    ) -> impl Iterator<Item = &'a PlatformTag> + 'a {
+        self.wheels.iter().flat_map(move |wheel| {
+            if wheel.filename.python_tags().iter().any(|wheel_py| {
+                wheel
+                    .filename
+                    .abi_tags()
+                    .iter()
+                    .any(|wheel_abi| tags.is_compatible_abi(*wheel_py, *wheel_abi))
+            }) {
+                wheel.filename.platform_tags().iter()
+            } else {
+                [].iter()
+            }
+        })
     }
 
     fn find_best_wheel(&self, tag_policy: TagPolicy<'_>) -> Option<usize> {
@@ -4127,14 +4243,32 @@ fn normalize_requirement(requirement: Requirement, root: &Path) -> Result<Requir
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-#[error(transparent)]
-pub struct LockError(Box<LockErrorKind>);
+#[derive(Debug)]
+pub struct LockError {
+    kind: Box<LockErrorKind>,
+    hint: Option<LockErrorHint>,
+}
+
+impl std::error::Error for LockError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.kind.source()
+    }
+}
+
+impl std::fmt::Display for LockError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.kind)?;
+        if let Some(hint) = &self.hint {
+            write!(f, "\n\n{hint}")?;
+        }
+        Ok(())
+    }
+}
 
 impl LockError {
     /// Returns true if the [`LockError`] is a resolver error.
     pub fn is_resolution(&self) -> bool {
-        matches!(&*self.0, LockErrorKind::Resolution { .. })
+        matches!(&*self.kind, LockErrorKind::Resolution { .. })
     }
 }
 
@@ -4143,7 +4277,246 @@ where
     LockErrorKind: From<E>,
 {
     fn from(err: E) -> Self {
-        LockError(Box::new(LockErrorKind::from(err)))
+        LockError {
+            kind: Box::new(LockErrorKind::from(err)),
+            hint: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::enum_variant_names)]
+enum LockErrorHint {
+    /// None of the available wheels for a package have a compatible Python language tag (e.g.,
+    /// `cp310` in `cp310-abi3-manylinux_2_17_x86_64.whl`).
+    LanguageTags {
+        package: PackageName,
+        version: Option<Version>,
+        tags: BTreeSet<LanguageTag>,
+        best: Option<LanguageTag>,
+    },
+    /// None of the available wheels for a package have a compatible ABI tag (e.g., `abi3` in
+    /// `cp310-abi3-manylinux_2_17_x86_64.whl`).
+    AbiTags {
+        package: PackageName,
+        version: Option<Version>,
+        tags: BTreeSet<AbiTag>,
+        best: Option<AbiTag>,
+    },
+    /// None of the available wheels for a package have a compatible platform tag (e.g.,
+    /// `manylinux_2_17_x86_64` in `cp310-abi3-manylinux_2_17_x86_64.whl`).
+    PlatformTags {
+        package: PackageName,
+        version: Option<Version>,
+        tags: BTreeSet<PlatformTag>,
+        best: Option<PlatformTag>,
+    },
+}
+
+impl std::fmt::Display for LockErrorHint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::LanguageTags {
+                package,
+                version,
+                tags,
+                best,
+            } => {
+                if let Some(best) = best {
+                    let s = if tags.len() == 1 { "" } else { "s" };
+                    let best = if let Some(pretty) = best.pretty() {
+                        format!("{} (`{}`)", pretty.cyan(), best.cyan())
+                    } else {
+                        format!("{}", best.cyan())
+                    };
+                    if let Some(version) = version {
+                        write!(
+                            f,
+                            "{}{} You're using {}, but `{}` ({}) only has wheels with the following Python implementation tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            best,
+                            package.cyan(),
+                            format!("v{version}").cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    } else {
+                        write!(
+                            f,
+                            "{}{} You're using {}, but `{}` only has wheels with the following Python implementation tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            best,
+                            package.cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    }
+                } else {
+                    let s = if tags.len() == 1 { "" } else { "s" };
+                    if let Some(version) = version {
+                        write!(
+                            f,
+                            "{}{} Wheels are available for `{}` ({}) with the following Python implementation tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            package.cyan(),
+                            format!("v{version}").cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    } else {
+                        write!(
+                            f,
+                            "{}{} Wheels are available for `{}` with the following Python implementation tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            package.cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    }
+                }
+            }
+            Self::AbiTags {
+                package,
+                version,
+                tags,
+                best,
+            } => {
+                if let Some(best) = best {
+                    let s = if tags.len() == 1 { "" } else { "s" };
+                    let best = if let Some(pretty) = best.pretty() {
+                        format!("{} (`{}`)", pretty.cyan(), best.cyan())
+                    } else {
+                        format!("{}", best.cyan())
+                    };
+                    if let Some(version) = version {
+                        write!(
+                            f,
+                            "{}{} You're using {}, but  `{}` ({}) only has wheels with the following Python ABI tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            best,
+                            package.cyan(),
+                            format!("v{version}").cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    } else {
+                        write!(
+                            f,
+                            "{}{} You're using {}, but `{}` only has wheels with the following Python ABI tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            best,
+                            package.cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    }
+                } else {
+                    let s = if tags.len() == 1 { "" } else { "s" };
+                    if let Some(version) = version {
+                        write!(
+                            f,
+                            "{}{} Wheels are available for `{}` ({}) with the following Python ABI tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            package.cyan(),
+                            format!("v{version}").cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    } else {
+                        write!(
+                            f,
+                            "{}{} Wheels are available for `{}` with the following Python ABI tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            package.cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    }
+                }
+            }
+            Self::PlatformTags {
+                package,
+                version,
+                tags,
+                best,
+            } => {
+                let s = if tags.len() == 1 { "" } else { "s" };
+                if let Some(best) = best {
+                    let best = if let Some(pretty) = best.pretty() {
+                        format!("{} (`{}`)", pretty.cyan(), best.cyan())
+                    } else {
+                        format!("`{}`", best.cyan())
+                    };
+                    if let Some(version) = version {
+                        write!(
+                            f,
+                            "{}{} You're on {}, but `{}` ({}) only has wheels for the following platform{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            best,
+                            package.cyan(),
+                            format!("v{version}").cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    } else {
+                        write!(
+                            f,
+                            "{}{} You're on {}, but `{}` only has wheels for the following platform{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            best,
+                            package.cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    }
+                } else {
+                    if let Some(version) = version {
+                        write!(
+                            f,
+                            "{}{} Wheels are available for `{}` ({}) on the following platform{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            package.cyan(),
+                            format!("v{version}").cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    } else {
+                        write!(
+                            f,
+                            "{}{} Wheels are available for `{}` on the following platform{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            package.cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
