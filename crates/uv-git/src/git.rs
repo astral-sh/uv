@@ -102,7 +102,7 @@ impl GitReference {
     }
 
     /// Converts the [`GitReference`] to a `str` that can be used as a revision.
-    pub(crate) fn as_rev(&self) -> &str {
+    pub fn as_rev(&self) -> &str {
         match self {
             Self::Tag(rev) => rev,
             Self::Branch(rev) => rev,
