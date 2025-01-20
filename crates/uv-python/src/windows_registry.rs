@@ -2,7 +2,7 @@
 
 use crate::managed::ManagedPythonInstallation;
 use crate::platform::Arch;
-use crate::{PythonInstallationKey, PythonVersion, COMPANY};
+use crate::{PythonInstallationKey, PythonVersion, COMPANY_DISPLAY_NAME, COMPANY_KEY};
 use std::cmp::Ordering;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -143,8 +143,8 @@ fn write_registry_entry(
 
     // Similar to using the bin directory in HOME on Unix, we only install for the current user
     // on Windows.
-    let company = CURRENT_USER.create(format!("Software\\Python\\{COMPANY}"))?;
-    company.set_string("DisplayName", "Astral")?;
+    let company = CURRENT_USER.create(format!("Software\\Python\\{COMPANY_KEY}"))?;
+    company.set_string("DisplayName", COMPANY_DISPLAY_NAME)?;
     company.set_string("SupportUrl", "https://github.com/astral-sh/uv")?;
 
     // Ex) CPython3.13.1
@@ -196,7 +196,7 @@ pub fn uninstall_windows_registry(
 ) {
     // Windows returns this code when the registry key doesn't exist.
     let error_not_found = HRESULT::from_win32(ERROR_FILE_NOT_FOUND);
-    let astral_key = format!("Software\\Python\\{COMPANY}");
+    let astral_key = format!("Software\\Python\\{COMPANY_KEY}");
     if all {
         if let Err(err) = CURRENT_USER.remove_tree(&astral_key) {
             if err.code() == error_not_found {

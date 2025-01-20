@@ -46,7 +46,9 @@ mod virtualenv;
 pub mod windows_registry;
 
 #[cfg(windows)]
-pub(crate) const COMPANY: &str = "Astral";
+pub(crate) const COMPANY_KEY: &str = "Astral";
+#[cfg(windows)]
+pub(crate) const COMPANY_DISPLAY_NAME: &str = "Astral Software Inc.";
 
 #[cfg(not(test))]
 pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
