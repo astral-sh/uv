@@ -578,6 +578,7 @@ fn git_source(
 ) -> Result<RequirementSource, LoweringError> {
     let reference = match (rev, tag, branch) {
         (None, None, None) => GitReference::DefaultBranch,
+        // TODO(charlie): Here, we should not assume that the revision is a commit.
         (Some(rev), None, None) => GitReference::from_rev(rev),
         (None, Some(tag), None) => GitReference::Tag(tag),
         (None, None, Some(branch)) => GitReference::Branch(branch),

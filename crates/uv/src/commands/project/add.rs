@@ -898,6 +898,8 @@ fn augment_requirement(
                         url,
                     } => {
                         let reference = if let Some(rev) = rev {
+                            // TODO(charlie): Here, it's probably okay for us to assume that the
+                            // rev is a commit.
                             GitReference::from_rev(rev.to_string())
                         } else if let Some(tag) = tag {
                             GitReference::Tag(tag.to_string())
@@ -924,6 +926,8 @@ fn augment_requirement(
                 url: match requirement.url.parsed_url {
                     ParsedUrl::Git(mut git) => {
                         let reference = if let Some(rev) = rev {
+                            // TODO(charlie): Here, it's probably okay for us to assume that the
+                            // rev is a commit.
                             Some(GitReference::from_rev(rev.to_string()))
                         } else if let Some(tag) = tag {
                             Some(GitReference::Tag(tag.to_string()))
