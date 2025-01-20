@@ -2489,12 +2489,13 @@ impl Package {
     }
 }
 
-/// Attempts to construct a `VerbatimUrl` from the given `Path`.
+/// Attempts to construct a `VerbatimUrl` from the given normalized `Path`.
 fn verbatim_url(path: &Path, id: &PackageId) -> Result<VerbatimUrl, LockError> {
-    let url = VerbatimUrl::from_absolute_path(path).map_err(|err| LockErrorKind::VerbatimUrl {
-        id: id.clone(),
-        err,
-    })?;
+    let url =
+        VerbatimUrl::from_normalized_path(path).map_err(|err| LockErrorKind::VerbatimUrl {
+            id: id.clone(),
+            err,
+        })?;
     Ok(url)
 }
 
@@ -4146,7 +4147,7 @@ fn normalize_requirement(requirement: Requirement, root: &Path) -> Result<Requir
             url: _,
         } => {
             let install_path = uv_fs::normalize_path_buf(root.join(&install_path));
-            let url = VerbatimUrl::from_absolute_path(&install_path)
+            let url = VerbatimUrl::from_normalized_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
             Ok(Requirement {
@@ -4169,7 +4170,7 @@ fn normalize_requirement(requirement: Requirement, root: &Path) -> Result<Requir
             url: _,
         } => {
             let install_path = uv_fs::normalize_path_buf(root.join(&install_path));
-            let url = VerbatimUrl::from_absolute_path(&install_path)
+            let url = VerbatimUrl::from_normalized_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
             Ok(Requirement {
