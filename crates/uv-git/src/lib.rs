@@ -2,6 +2,7 @@ use url::Url;
 
 pub use crate::credentials::{store_credentials_from_url, GIT_STORE};
 pub use crate::git::{GitReference, GIT};
+pub use crate::github::GitHubRepository;
 pub use crate::resolver::{
     GitResolver, GitResolverError, RepositoryReference, ResolvedRepositoryReference,
 };
@@ -10,6 +11,7 @@ pub use crate::source::{Fetch, GitSource, Reporter};
 
 mod credentials;
 mod git;
+mod github;
 mod resolver;
 mod sha;
 mod source;
