@@ -1037,7 +1037,6 @@ fn lock_wheel_url() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "anyio", extras = ["trio"], marker = "extra == 'test'" },
             { name = "coverage", extras = ["toml"], marker = "extra == 'test'", specifier = ">=7" },
             { name = "exceptiongroup", marker = "python_full_version < '3.11'", specifier = ">=1.0.2" },
             { name = "exceptiongroup", marker = "extra == 'test'", specifier = ">=1.2.0" },
@@ -1051,6 +1050,7 @@ fn lock_wheel_url() -> Result<()> {
             { name = "sphinx", marker = "extra == 'doc'", specifier = ">=7" },
             { name = "sphinx-autodoc-typehints", marker = "extra == 'doc'", specifier = ">=1.2.0" },
             { name = "sphinx-rtd-theme", marker = "extra == 'doc'" },
+            { name = "trio", marker = "extra == 'test'", specifier = ">=0.23" },
             { name = "trio", marker = "extra == 'trio'", specifier = ">=0.23" },
             { name = "trustme", marker = "extra == 'test'" },
             { name = "typing-extensions", marker = "python_full_version < '3.11'", specifier = ">=4.1" },
@@ -1192,7 +1192,6 @@ fn lock_sdist_url() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "anyio", extras = ["trio"], marker = "extra == 'test'" },
             { name = "coverage", extras = ["toml"], marker = "extra == 'test'", specifier = ">=7" },
             { name = "exceptiongroup", marker = "python_full_version < '3.11'", specifier = ">=1.0.2" },
             { name = "exceptiongroup", marker = "extra == 'test'", specifier = ">=1.2.0" },
@@ -1206,6 +1205,7 @@ fn lock_sdist_url() -> Result<()> {
             { name = "sphinx", marker = "extra == 'doc'", specifier = ">=7" },
             { name = "sphinx-autodoc-typehints", marker = "extra == 'doc'", specifier = ">=1.2.0" },
             { name = "sphinx-rtd-theme", marker = "extra == 'doc'" },
+            { name = "trio", marker = "extra == 'test'", specifier = ">=0.23" },
             { name = "trio", marker = "extra == 'trio'", specifier = ">=0.23" },
             { name = "trustme", marker = "extra == 'test'" },
             { name = "typing-extensions", marker = "python_full_version < '3.11'", specifier = ">=4.1" },
@@ -20713,13 +20713,12 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
 
     // Re-run with `--locked`. We should accept the lockfile, since the metadata is unchanged.
     uv_snapshot!(context.filters(), context.lock().arg("--locked").env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     "###);
 
     Ok(())
@@ -20835,8 +20834,8 @@ fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
+            { name = "anyio", marker = "extra == 'all'" },
             { name = "anyio", marker = "extra == 'async'" },
-            { name = "project", extras = ["async"], marker = "extra == 'all'" },
         ]
 
         [[package]]
@@ -21341,11 +21340,11 @@ fn lock_recursive_extra() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
+            { name = "iniconfig", marker = "python_full_version == '3.12.*' and sys_platform == 'darwin' and extra == 'qux'" },
+            { name = "iniconfig", marker = "sys_platform == 'darwin' and extra == 'bop'" },
+            { name = "iniconfig", marker = "extra == 'bar'" },
+            { name = "iniconfig", marker = "extra == 'baz'" },
             { name = "iniconfig", marker = "extra == 'foo'" },
-            { name = "project", extras = ["bar"], marker = "sys_platform == 'darwin' and extra == 'bop'" },
-            { name = "project", extras = ["bar"], marker = "extra == 'baz'" },
-            { name = "project", extras = ["bop"], marker = "python_full_version == '3.12.*' and extra == 'qux'" },
-            { name = "project", extras = ["foo"], marker = "extra == 'bar'" },
         ]
         "###
         );
@@ -21576,10 +21575,7 @@ fn lock_self_compatible() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [
-            { name = "project" },
-            { name = "typing-extensions" },
-        ]
+        requires-dist = [{ name = "typing-extensions" }]
 
         [[package]]
         name = "typing-extensions"
@@ -21807,10 +21803,7 @@ fn lock_self_extra_to_extra_compatible() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [
-            { name = "project", extras = ["foo"], marker = "extra == 'foo'" },
-            { name = "typing-extensions" },
-        ]
+        requires-dist = [{ name = "typing-extensions" }]
 
         [[package]]
         name = "typing-extensions"
@@ -21976,10 +21969,7 @@ fn lock_self_extra_compatible() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [
-            { name = "project", marker = "extra == 'foo'" },
-            { name = "typing-extensions" },
-        ]
+        requires-dist = [{ name = "typing-extensions" }]
 
         [[package]]
         name = "typing-extensions"
@@ -22108,10 +22098,7 @@ fn lock_self_marker_compatible() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [
-            { name = "project", marker = "sys_platform == 'win32'" },
-            { name = "typing-extensions" },
-        ]
+        requires-dist = [{ name = "typing-extensions" }]
 
         [[package]]
         name = "typing-extensions"

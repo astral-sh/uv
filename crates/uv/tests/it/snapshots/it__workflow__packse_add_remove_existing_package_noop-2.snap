@@ -1,5 +1,5 @@
 ---
-source: crates/uv/tests/workflow.rs
+source: crates/uv/tests/it/workflow.rs
 expression: lock
 ---
 version = 1
@@ -340,8 +340,8 @@ requires-dist = [
     { name = "chevron-blue", specifier = ">=0.2.1" },
     { name = "hatchling", specifier = ">=1.20.0" },
     { name = "msgspec", specifier = ">=0.18.4" },
-    { name = "packse", extras = ["index"], marker = "extra == 'serve'" },
     { name = "pypiserver", marker = "extra == 'index'", specifier = ">=2.0.1" },
+    { name = "pypiserver", marker = "extra == 'serve'", specifier = ">=2.0.1" },
     { name = "pyyaml", specifier = ">=6.0.1" },
     { name = "setuptools", specifier = ">=69.1.1" },
     { name = "twine", specifier = ">=4.0.2" },
