@@ -20,6 +20,7 @@ use crate::downloads::PythonDownloadRequest;
 use crate::implementation::ImplementationName;
 use crate::installation::PythonInstallation;
 use crate::interpreter::Error as InterpreterError;
+use crate::interpreter::{StatusCodeError, UnexpectedResponseError};
 use crate::managed::ManagedPythonInstallations;
 #[cfg(windows)]
 use crate::microsoft_store::find_microsoft_store_pythons;
@@ -721,8 +722,8 @@ impl Error {
                 | InterpreterError::Io(_)
                 | InterpreterError::SpawnFailed { .. } => true,
                 InterpreterError::QueryScript { path, .. }
-                | InterpreterError::UnexpectedResponse { path, .. }
-                | InterpreterError::StatusCode { path, .. } => {
+                | InterpreterError::UnexpectedResponse(UnexpectedResponseError { path, .. })
+                | InterpreterError::StatusCode(StatusCodeError { path, .. }) => {
                     debug!(
                         "Skipping bad interpreter at {} from {source}: {err}",
                         path.display()
