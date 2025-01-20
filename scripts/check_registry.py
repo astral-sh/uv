@@ -103,6 +103,7 @@ InstallPath                    (default)              : C:\Users\runneradmin\App
 
 
 def filter_snapshot(snapshot: str) -> str:
+    snapshot = snapshot.strip("\n\r")
     # Trim trailing whitespace
     snapshot = "\n".join(line.rstrip() for line in snapshot.splitlines())
     # Long URLs are wrapped into multiple lines
