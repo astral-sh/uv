@@ -1,0 +1,22 @@
+[project]
+name = "hatchling-example"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Charlie Marsh", email = "charlie.r.marsh@gmail.com" }
+]
+requires-python = ">=3.13.0"
+dependencies = []
+
+[project.optional-dependencies]
+all = [
+    "hatchling-example[fastapi_optional]",
+]
+fastapi_optional = [
+    "fastapi>=0.110.2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

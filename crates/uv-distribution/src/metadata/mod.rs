@@ -57,17 +57,26 @@ impl Metadata {
     /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
     /// dependencies.
     pub fn from_metadata23(metadata: ResolutionMetadata) -> Self {
-        Self {
+        let requires_dist = uv_pypi_types::RequiresDist {
             name: metadata.name,
-            version: metadata.version,
-            requires_dist: metadata
-                .requires_dist
-                .into_iter()
-                .map(uv_pypi_types::Requirement::from)
-                .collect(),
-            requires_python: metadata.requires_python,
+            requires_dist: metadata.requires_dist,
             provides_extras: metadata.provides_extras,
-            dependency_groups: BTreeMap::default(),
+        };
+
+        let RequiresDist {
+            name,
+            requires_dist,
+            provides_extras,
+            dependency_groups,
+        } = RequiresDist::from_metadata23(requires_dist);
+
+        Self {
+            name,
+            version: metadata.version,
+            requires_dist,
+            requires_python: metadata.requires_python,
+            provides_extras,
+            dependency_groups,
             dynamic: metadata.dynamic,
         }
     }

@@ -1,0 +1,9 @@
+Metadata-Version: 2.2
+Name: ads-mega-model
+Version: 0.0.0
+Requires-Python: ==3.10.12
+Requires-Dist: wandb==0.17.6
+Provides-Extra: cpu
+Requires-Dist: torch==2.2.2; extra == "cpu"
+Provides-Extra: cu118
+Requires-Dist: torch==2.2.2; extra == "cu118"

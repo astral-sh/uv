@@ -1,0 +1,9 @@
+README.md
+pyproject.toml
+src/example.egg-info/PKG-INFO
+src/example.egg-info/SOURCES.txt
+src/example.egg-info/dependency_links.txt
+src/example.egg-info/requires.txt
+src/example.egg-info/top_level.txt
+src/uv_example/__init__.py
+src/uv_example/py.typed

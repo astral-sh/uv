@@ -1,0 +1,8 @@
+Metadata-Version: 2.2
+Name: example
+Version: 0.1.0
+Requires-Python: >=3.13.0
+Provides-Extra: all
+Requires-Dist: example[async]; extra == "all"
+Provides-Extra: async
+Requires-Dist: fastapi; extra == "async"

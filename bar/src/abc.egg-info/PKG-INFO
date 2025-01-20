@@ -1,0 +1,10 @@
+Metadata-Version: 2.2
+Name: abc
+Version: 0.0.0
+Summary: test
+Requires-Python: >=3.10
+Requires-Dist: orjson>=3.10.7
+Provides-Extra: all
+Requires-Dist: abc[fastapi_optional]; extra == "all"
+Provides-Extra: fastapi-optional
+Requires-Dist: fastapi>=0.110.2; extra == "fastapi-optional"

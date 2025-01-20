@@ -5381,6 +5381,7 @@ dependencies = [
  "mailparse",
  "regex",
  "rkyv",
+ "rustc-hash",
  "schemars",
  "serde",
  "serde-untagged",

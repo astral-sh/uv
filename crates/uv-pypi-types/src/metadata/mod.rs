@@ -23,7 +23,7 @@ pub use metadata10::Metadata10;
 pub use metadata12::Metadata12;
 pub use metadata23::Metadata23;
 pub use metadata_resolver::ResolutionMetadata;
-pub use requires_dist::RequiresDist;
+pub use requires_dist::{FlatRequiresDist, RequiresDist};
 pub use requires_txt::RequiresTxt;
 
 /// <https://github.com/PyO3/python-pkginfo-rs/blob/d719988323a0cfea86d4737116d7917f30e819e2/src/error.rs>

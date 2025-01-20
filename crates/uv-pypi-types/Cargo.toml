@@ -30,6 +30,7 @@ jiff = { workspace = true, features = ["serde"] }
 mailparse = { workspace = true }
 regex = { workspace = true }
 rkyv = { workspace = true }
+rustc-hash = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde-untagged = { workspace = true }

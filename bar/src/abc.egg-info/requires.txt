@@ -1,0 +1,7 @@
+orjson>=3.10.7
+
+[all]
+abc[fastapi_optional]
+
+[fastapi_optional]
+fastapi>=0.110.2

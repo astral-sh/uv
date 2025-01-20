@@ -1,0 +1,33 @@
+[project]
+name = "ads-mega-model"
+version = "0.1.0"
+requires-python = "==3.10.12"
+dependencies = [
+    "wandb==0.17.6",
+]
+
+[project.optional-dependencies]
+cpu = [
+  "torch==2.2.2",
+]
+cu118 = [
+  "torch==2.2.2",
+]
+
+[tool.uv]
+conflicts = [
+  [
+    { extra = "cpu" },
+    { extra = "cu118" },
+  ],
+]
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cpu", extra = "cpu", marker = "platform_system != 'Darwin'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

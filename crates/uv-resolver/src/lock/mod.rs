@@ -1276,6 +1276,8 @@ impl Lock {
             };
 
             // Validate the `requires-dist` metadata.
+            // TODO(charlie): If `actual` contains a self-extra, we should _also_ try comparing
+            // against the expanded metadata.
             {
                 let expected: BTreeSet<_> = metadata
                     .requires_dist

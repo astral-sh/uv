@@ -1210,6 +1210,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .boxed_local()
             .await?
         {
+            debug!("Build metadata for {source} returned: {:?}", metadata);
+
             // If necessary, mark the metadata as dynamic.
             let metadata = if dynamic {
                 ResolutionMetadata {

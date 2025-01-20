@@ -4,6 +4,7 @@ use std::path::Path;
 use uv_configuration::{LowerBound, SourceStrategy};
 use uv_distribution_types::IndexLocations;
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_pypi_types::FlatRequiresDist;
 use uv_workspace::dependency_groups::FlatDependencyGroups;
 use uv_workspace::pyproject::{Sources, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
@@ -23,14 +24,18 @@ impl RequiresDist {
     /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
     /// dependencies.
     pub fn from_metadata23(metadata: uv_pypi_types::RequiresDist) -> Self {
+        let FlatRequiresDist {
+            name,
+            requires_dist,
+            provides_extras,
+        } = FlatRequiresDist::from(metadata);
         Self {
-            name: metadata.name,
-            requires_dist: metadata
-                .requires_dist
+            name,
+            requires_dist: requires_dist
                 .into_iter()
                 .map(uv_pypi_types::Requirement::from)
                 .collect(),
-            provides_extras: metadata.provides_extras,
+            provides_extras,
             dependency_groups: BTreeMap::default(),
         }
     }
@@ -83,6 +88,9 @@ impl RequiresDist {
         source_strategy: SourceStrategy,
         lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
+        // Flatten the metadata.
+        let metadata = FlatRequiresDist::from(metadata);
+
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
         let project_indexes = match source_strategy {
@@ -250,7 +258,7 @@ impl RequiresDist {
     /// present in the relevant `project.optional-dependencies` or `dependency-groups` section.
     fn validate_sources(
         sources: &BTreeMap<PackageName, Sources>,
-        metadata: &uv_pypi_types::RequiresDist,
+        metadata: &FlatRequiresDist,
         dependency_groups: &FlatDependencyGroups,
     ) -> Result<(), MetadataError> {
         for (name, sources) in sources {

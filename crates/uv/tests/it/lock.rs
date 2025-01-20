@@ -20713,13 +20713,12 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
 
     // Re-run with `--locked`. We should accept the lockfile, since the metadata is unchanged.
     uv_snapshot!(context.filters(), context.lock().arg("--locked").env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     "###);
 
     Ok(())
@@ -20835,8 +20834,8 @@ fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
+            { name = "anyio", marker = "extra == 'all'" },
             { name = "anyio", marker = "extra == 'async'" },
-            { name = "project", extras = ["async"], marker = "extra == 'all'" },
         ]
 
         [[package]]
