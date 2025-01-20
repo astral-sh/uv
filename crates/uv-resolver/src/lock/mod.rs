@@ -3489,7 +3489,6 @@ impl From<GitReference> for GitSourceKind {
         match value {
             GitReference::Branch(branch) => GitSourceKind::Branch(branch.to_string()),
             GitReference::Tag(tag) => GitSourceKind::Tag(tag.to_string()),
-            GitReference::ShortCommit(rev) => GitSourceKind::Rev(rev.to_string()),
             GitReference::BranchOrTag(rev) => GitSourceKind::Rev(rev.to_string()),
             GitReference::BranchOrTagOrCommit(rev) => GitSourceKind::Rev(rev.to_string()),
             GitReference::NamedRef(rev) => GitSourceKind::Rev(rev.to_string()),
@@ -3543,8 +3542,7 @@ fn locked_git_url(git_dist: &GitSourceDist) -> Url {
             url.query_pairs_mut()
                 .append_pair("tag", tag.to_string().as_str());
         }
-        GitReference::ShortCommit(rev)
-        | GitReference::BranchOrTag(rev)
+        GitReference::BranchOrTag(rev)
         | GitReference::BranchOrTagOrCommit(rev)
         | GitReference::NamedRef(rev)
         | GitReference::FullCommit(rev) => {

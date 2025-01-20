@@ -742,8 +742,7 @@ impl From<RequirementSource> for RequirementSourceWire {
                         url.query_pairs_mut()
                             .append_pair("tag", tag.to_string().as_str());
                     }
-                    GitReference::ShortCommit(rev)
-                    | GitReference::BranchOrTag(rev)
+                    GitReference::BranchOrTag(rev)
                     | GitReference::BranchOrTagOrCommit(rev)
                     | GitReference::NamedRef(rev)
                     | GitReference::FullCommit(rev) => {
