@@ -17,6 +17,17 @@ Astral                         DisplayName : Astral Software Inc.
                                SupportUrl  : https://github.com/astral-sh/uv
 """,
     r"""
+
+
+    Hive: HKEY_CURRENT_USER\Software\Python
+
+
+Name                           Property
+----                           --------
+Astral                         DisplayName : Astral Software Inc.
+                               SupportUrl  : https://github.com/astral-sh/uv
+
+
     Hive: HKEY_CURRENT_USER\Software\Python\Astral
 
 
@@ -31,15 +42,14 @@ CPython3.11.11                 DisplayName     : CPython 3.11.11 (64-bit)
                                DownloadSha256  : <downloadSha256>
 
 
-Hive: HKEY_CURRENT_USER\Software\Python\Astral\CPython3.11.11
+    Hive: HKEY_CURRENT_USER\Software\Python\Astral\CPython3.11.11
 
 
 Name                           Property
 ----                           --------
-InstallPath                    (default)              :
-C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.11.11-windows-x86_64-none
-ExecutablePath         : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.11.11-windows-x86_64-none\python.exe
-WindowedExecutablePath : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.11.11-windows-x86_64-none\pythonw.exe
+InstallPath                    (default)              : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.11.11-windows-x86_64-none
+                               ExecutablePath         : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.11.11-windows-x86_64-none\python.exe
+                               WindowedExecutablePath : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.11.11-windows-x86_64-none\pythonw.exe
 """,
     r"""
     Hive: HKEY_CURRENT_USER\Software\Python\Astral
@@ -61,13 +71,12 @@ CPython3.12.8                  DisplayName     : CPython 3.12.8 (64-bit)
 
 Name                           Property
 ----                           --------
-InstallPath                    (default)              :
-                               C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.12.8-windows-x86_64-none
+InstallPath                    (default)              : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.12.8-windows-x86_64-none
                                ExecutablePath         : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.12.8-windows-x86_64-none\python.exe
                                WindowedExecutablePath : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.12.8-windows-x86_64-none\pythonw.exe
 """,
     r"""
-    Hive: HKEY_CURRENT_USER\Software\Python\Astral
+     Hive: HKEY_CURRENT_USER\Software\Python\Astral
 
 
 Name                           Property
@@ -86,8 +95,7 @@ CPython3.13.1                  DisplayName     : CPython 3.13.1 (64-bit)
 
 Name                           Property
 ----                           --------
-InstallPath                    (default)              :
-                               C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.13.1-windows-x86_64-none
+InstallPath                    (default)              : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.13.1-windows-x86_64-none
                                ExecutablePath         : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.13.1-windows-x86_64-none\python.exe
                                WindowedExecutablePath : C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.13.1-windows-x86_64-none\pythonw.exe
 """,
