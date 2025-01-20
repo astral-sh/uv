@@ -870,10 +870,12 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
             }
             // TODO(charlie): The use of `CWD` here is incorrect. These should be resolved relative
             // to the workspace root, but we don't have access to it here. When comparing these
-            // sources in the lockfile, we replace the URL anyway.
+            // sources in the lockfile, we replace the URL anyway. Ideally, we'd either remove the
+            // URL field or make it optional.
             RequirementSourceWire::Path { path } => {
                 let path = PathBuf::from(path);
-                let url = VerbatimUrl::from_path(&path, &*CWD)?;
+                let url =
+                    VerbatimUrl::from_normalized_path(uv_fs::normalize_path_buf(CWD.join(&path)))?;
                 Ok(Self::Path {
                     ext: DistExtension::from_path(path.as_path())
                         .map_err(|err| ParsedUrlError::MissingExtensionPath(path.clone(), err))?,
@@ -883,7 +885,9 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
             }
             RequirementSourceWire::Directory { directory } => {
                 let directory = PathBuf::from(directory);
-                let url = VerbatimUrl::from_path(&directory, &*CWD)?;
+                let url = VerbatimUrl::from_normalized_path(uv_fs::normalize_path_buf(
+                    CWD.join(&directory),
+                ))?;
                 Ok(Self::Directory {
                     install_path: directory,
                     editable: false,
@@ -893,7 +897,9 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
             }
             RequirementSourceWire::Editable { editable } => {
                 let editable = PathBuf::from(editable);
-                let url = VerbatimUrl::from_path(&editable, &*CWD)?;
+                let url = VerbatimUrl::from_normalized_path(uv_fs::normalize_path_buf(
+                    CWD.join(&editable),
+                ))?;
                 Ok(Self::Directory {
                     install_path: editable,
                     editable: true,
@@ -903,7 +909,9 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
             }
             RequirementSourceWire::Virtual { r#virtual } => {
                 let r#virtual = PathBuf::from(r#virtual);
-                let url = VerbatimUrl::from_path(&r#virtual, &*CWD)?;
+                let url = VerbatimUrl::from_normalized_path(uv_fs::normalize_path_buf(
+                    CWD.join(&r#virtual),
+                ))?;
                 Ok(Self::Directory {
                     install_path: r#virtual,
                     editable: false,
