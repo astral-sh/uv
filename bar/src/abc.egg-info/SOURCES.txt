@@ -1,7 +1,0 @@
-pyproject.toml
-src/__about__.py
-src/abc.egg-info/PKG-INFO
-src/abc.egg-info/SOURCES.txt
-src/abc.egg-info/dependency_links.txt
-src/abc.egg-info/requires.txt
-src/abc.egg-info/top_level.txt

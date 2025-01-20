@@ -1,8 +1,0 @@
-README.md
-hello.py
-pyproject.toml
-ads_mega_model.egg-info/PKG-INFO
-ads_mega_model.egg-info/SOURCES.txt
-ads_mega_model.egg-info/dependency_links.txt
-ads_mega_model.egg-info/requires.txt
-ads_mega_model.egg-info/top_level.txt

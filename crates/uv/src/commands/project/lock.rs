@@ -1031,7 +1031,7 @@ impl ValidatedLock {
                     );
                 } else {
                     debug!(
-                        "Ignoring existing lockfile due to mismatched requirements for: `{name}`\n  Requested: {:#?}\n  Existing: {:#?}",
+                        "Ignoring existing lockfile due to mismatched requirements for: `{name}`\n  Requested: {:?}\n  Existing: {:?}",
                         expected, actual
                     );
                 }

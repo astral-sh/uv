@@ -134,7 +134,7 @@ impl RequiresDist {
 ///
 /// The [`FlatRequiresDist`] struct is used to flatten out the recursive dependencies, i.e., convert
 /// from the former to the latter.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FlatRequiresDist {
     pub name: PackageName,
     pub requires_dist: Vec<Requirement<VerbatimParsedUrl>>,
@@ -205,5 +205,117 @@ impl From<RequiresDist> for FlatRequiresDist {
             requires_dist,
             provides_extras: value.provides_extras,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use uv_normalize::PackageName;
+
+    #[test]
+    fn test_flat_requires_dist_noop() {
+        let requires_dist = RequiresDist {
+            name: PackageName::from_str("pkg").unwrap(),
+            requires_dist: vec![
+                Requirement::from_str("requests>=2.0.0").unwrap(),
+                Requirement::from_str("pytest; extra == 'test'").unwrap(),
+                Requirement::from_str("black; extra == 'dev'").unwrap(),
+            ],
+            provides_extras: vec![
+                ExtraName::from_str("test").unwrap(),
+                ExtraName::from_str("dev").unwrap(),
+            ],
+        };
+
+        let expected = FlatRequiresDist {
+            name: PackageName::from_str("pkg").unwrap(),
+            requires_dist: vec![
+                Requirement::from_str("requests>=2.0.0").unwrap(),
+                Requirement::from_str("pytest; extra == 'test'").unwrap(),
+                Requirement::from_str("black; extra == 'dev'").unwrap(),
+            ],
+            provides_extras: vec![
+                ExtraName::from_str("test").unwrap(),
+                ExtraName::from_str("dev").unwrap(),
+            ],
+        };
+
+        let actual = FlatRequiresDist::from(requires_dist);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_flat_requires_dist_basic() {
+        let requires_dist = RequiresDist {
+            name: PackageName::from_str("pkg").unwrap(),
+            requires_dist: vec![
+                Requirement::from_str("requests>=2.0.0").unwrap(),
+                Requirement::from_str("pytest; extra == 'test'").unwrap(),
+                Requirement::from_str("pkg[dev]; extra == 'test'").unwrap(),
+                Requirement::from_str("black; extra == 'dev'").unwrap(),
+            ],
+            provides_extras: vec![
+                ExtraName::from_str("test").unwrap(),
+                ExtraName::from_str("dev").unwrap(),
+            ],
+        };
+
+        let expected = FlatRequiresDist {
+            name: PackageName::from_str("pkg").unwrap(),
+            requires_dist: vec![
+                Requirement::from_str("requests>=2.0.0").unwrap(),
+                Requirement::from_str("pytest; extra == 'test'").unwrap(),
+                Requirement::from_str("black; extra == 'dev'").unwrap(),
+                Requirement::from_str("black; extra == 'test'").unwrap(),
+            ],
+            provides_extras: vec![
+                ExtraName::from_str("test").unwrap(),
+                ExtraName::from_str("dev").unwrap(),
+            ],
+        };
+
+        let actual = FlatRequiresDist::from(requires_dist);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_flat_requires_dist_with_markers() {
+        let requires_dist = RequiresDist {
+            name: PackageName::from_str("pkg").unwrap(),
+            requires_dist: vec![
+                Requirement::from_str("requests>=2.0.0").unwrap(),
+                Requirement::from_str("pytest; extra == 'test'").unwrap(),
+                Requirement::from_str("pkg[dev]; extra == 'test' and sys_platform == 'win32'")
+                    .unwrap(),
+                Requirement::from_str("black; extra == 'dev' and sys_platform == 'win32'").unwrap(),
+            ],
+            provides_extras: vec![
+                ExtraName::from_str("test").unwrap(),
+                ExtraName::from_str("dev").unwrap(),
+            ],
+        };
+
+        let expected = FlatRequiresDist {
+            name: PackageName::from_str("pkg").unwrap(),
+            requires_dist: vec![
+                Requirement::from_str("requests>=2.0.0").unwrap(),
+                Requirement::from_str("pytest; extra == 'test'").unwrap(),
+                Requirement::from_str("black; extra == 'dev' and sys_platform == 'win32'").unwrap(),
+                Requirement::from_str("black; extra == 'test' and sys_platform == 'win32'")
+                    .unwrap(),
+            ],
+            provides_extras: vec![
+                ExtraName::from_str("test").unwrap(),
+                ExtraName::from_str("dev").unwrap(),
+            ],
+        };
+
+        let actual = FlatRequiresDist::from(requires_dist);
+
+        assert_eq!(actual, expected);
     }
 }

@@ -1,6 +1,0 @@
-
-[all]
-example[async]
-
-[async]
-fastapi
