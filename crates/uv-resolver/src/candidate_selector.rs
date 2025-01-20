@@ -187,27 +187,17 @@ impl CandidateSelector {
             [] => return None,
             [entry] => {
                 // Filter out preferences that map to a conflicting index.
-                if index.is_some_and(|index| {
-                    entry
-                        .index()
-                        .is_some_and(|entry_index| entry_index != index)
-                }) {
+                if index.is_some_and(|index| !entry.index().matches(index)) {
                     return None;
-                };
+                }
                 Either::Left(std::iter::once((entry.marker(), entry.pin().version())))
             }
             [..] => {
                 type Entries<'a> = SmallVec<[&'a Entry; 3]>;
 
                 let mut preferences = preferences.iter().collect::<Entries>();
-                preferences.retain(|entry| {
-                    // Filter out preferences that map to a conflicting index.
-                    !index.is_some_and(|index| {
-                        entry
-                            .index()
-                            .is_some_and(|entry_index| entry_index != index)
-                    })
-                });
+                // Filter out preferences that map to a conflicting index.
+                preferences.retain(|entry| index.is_none_or(|index| entry.index().matches(index)));
                 preferences.sort_by_key(|entry| {
                     let marker = entry.marker();
 
@@ -215,7 +205,7 @@ impl CandidateSelector {
                     let matches_env = env.included_by_marker(marker.pep508());
 
                     // Prefer preferences that match the current index.
-                    let matches_index = index == entry.index();
+                    let matches_index = index.is_none_or(|index| entry.index().matches(index));
 
                     std::cmp::Reverse((matches_env, matches_index))
                 });

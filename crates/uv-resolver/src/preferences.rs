@@ -4,7 +4,7 @@ use std::str::FromStr;
 use rustc_hash::FxHashMap;
 use tracing::trace;
 
-use uv_distribution_types::{IndexUrl, InstalledDist, InstalledMetadata, InstalledVersion, Name};
+use uv_distribution_types::IndexUrl;
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
 use uv_pep508::{MarkerTree, VersionOrUrl};
@@ -28,7 +28,7 @@ pub struct Preference {
     /// The markers on the requirement itself (those after the semicolon).
     marker: MarkerTree,
     /// The index URL of the package, if any.
-    index: Option<IndexUrl>,
+    index: PreferenceIndex,
     /// If coming from a package with diverging versions, the markers of the forks this preference
     /// is part of, otherwise `None`.
     fork_markers: Vec<UniversalMarker>,
@@ -62,9 +62,10 @@ impl Preference {
             name: requirement.name,
             version: specifier.version().clone(),
             marker: requirement.marker,
-            // requirements.txt doesn't have fork annotations.
+            // `requirements.txt` doesn't have fork annotations.
             fork_markers: vec![],
-            index: None,
+            // `requirements.txt` doesn't allow a requirement to specify an explicit index.
+            index: PreferenceIndex::Any,
             hashes: entry
                 .hashes
                 .iter()
@@ -72,23 +73,6 @@ impl Preference {
                 .map(HashDigest::from_str)
                 .collect::<Result<_, _>>()?,
         }))
-    }
-
-    /// Create a [`Preference`] from an installed distribution.
-    pub fn from_installed(dist: &InstalledDist) -> Self {
-        let version = match dist.installed_version() {
-            InstalledVersion::Version(version) => version,
-            InstalledVersion::Url(_, version) => version,
-        };
-        Self {
-            name: dist.name().clone(),
-            version: version.clone(),
-            marker: MarkerTree::TRUE,
-            index: None,
-            // Installed distributions don't have fork annotations.
-            fork_markers: vec![],
-            hashes: Vec::new(),
-        }
     }
 
     /// Create a [`Preference`] from a locked distribution.
@@ -103,7 +87,7 @@ impl Preference {
             name: package.id.name.clone(),
             version: version.clone(),
             marker: MarkerTree::TRUE,
-            index: package.index(install_path)?,
+            index: PreferenceIndex::from(package.index(install_path)?),
             fork_markers: package.fork_markers().to_vec(),
             hashes: Vec::new(),
         }))
@@ -121,9 +105,39 @@ impl Preference {
 }
 
 #[derive(Debug, Clone)]
+pub enum PreferenceIndex {
+    /// The preference should match to any index.
+    Any,
+    /// The preference should match to an implicit index.
+    Implicit,
+    /// The preference should match to a specific index.
+    Explicit(IndexUrl),
+}
+
+impl PreferenceIndex {
+    /// Returns `true` if the preference matches the given explicit [`IndexUrl`].
+    pub(crate) fn matches(&self, index: &IndexUrl) -> bool {
+        match self {
+            Self::Any => true,
+            Self::Implicit => false,
+            Self::Explicit(preference) => preference == index,
+        }
+    }
+}
+
+impl From<Option<IndexUrl>> for PreferenceIndex {
+    fn from(index: Option<IndexUrl>) -> Self {
+        match index {
+            Some(index) => Self::Explicit(index),
+            None => Self::Implicit,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct Entry {
     marker: UniversalMarker,
-    index: Option<IndexUrl>,
+    index: PreferenceIndex,
     pin: Pin,
 }
 
@@ -134,8 +148,8 @@ impl Entry {
     }
 
     /// Return the [`IndexUrl`] associated with the entry, if any.
-    pub(crate) fn index(&self) -> Option<&IndexUrl> {
-        self.index.as_ref()
+    pub(crate) fn index(&self) -> &PreferenceIndex {
+        &self.index
     }
 
     /// Return the pinned data associated with the entry.
@@ -162,7 +176,7 @@ impl Preferences {
         preferences: impl IntoIterator<Item = Preference>,
         env: &ResolverEnvironment,
     ) -> Self {
-        let mut slf = Self::default();
+        let mut map = FxHashMap::<PackageName, Vec<_>>::default();
         for preference in preferences {
             // Filter non-matching preferences when resolving for an environment.
             if let Some(markers) = env.marker_environment() {
@@ -187,31 +201,29 @@ impl Preferences {
 
             // Flatten the list of markers into individual entries.
             if preference.fork_markers.is_empty() {
-                slf.insert(
-                    preference.name,
-                    preference.index,
-                    UniversalMarker::TRUE,
-                    Pin {
+                map.entry(preference.name).or_default().push(Entry {
+                    marker: UniversalMarker::TRUE,
+                    index: preference.index,
+                    pin: Pin {
                         version: preference.version,
                         hashes: preference.hashes,
                     },
-                );
+                });
             } else {
                 for fork_marker in preference.fork_markers {
-                    slf.insert(
-                        preference.name.clone(),
-                        preference.index.clone(),
-                        fork_marker,
-                        Pin {
+                    map.entry(preference.name.clone()).or_default().push(Entry {
+                        marker: fork_marker,
+                        index: preference.index.clone(),
+                        pin: Pin {
                             version: preference.version.clone(),
                             hashes: preference.hashes.clone(),
                         },
-                    );
+                    });
                 }
             }
         }
 
-        slf
+        Self(map)
     }
 
     /// Insert a preference at the back.
@@ -224,7 +236,7 @@ impl Preferences {
     ) {
         self.0.entry(package_name).or_default().push(Entry {
             marker: markers,
-            index,
+            index: PreferenceIndex::from(index),
             pin: pin.into(),
         });
     }
@@ -235,7 +247,7 @@ impl Preferences {
     ) -> impl Iterator<
         Item = (
             &PackageName,
-            impl Iterator<Item = (&UniversalMarker, Option<&IndexUrl>, &Version)>,
+            impl Iterator<Item = (&UniversalMarker, &PreferenceIndex, &Version)>,
         ),
     > {
         self.0.iter().map(|(name, preferences)| {
@@ -243,7 +255,7 @@ impl Preferences {
                 name,
                 preferences
                     .iter()
-                    .map(|entry| (&entry.marker, entry.index.as_ref(), entry.pin.version())),
+                    .map(|entry| (&entry.marker, &entry.index, entry.pin.version())),
             )
         })
     }
