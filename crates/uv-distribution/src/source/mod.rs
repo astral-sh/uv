@@ -1518,11 +1518,22 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .github_metadata(precise, source, resource, client)
                 .await?
             {
-                debug!("Found static metadata via GitHub fast path for: {source}");
-                return Ok(ArchiveMetadata {
-                    metadata: Metadata::from_metadata23(metadata),
-                    hashes: vec![],
-                });
+                // Validate the metadata, but ignore it if the metadata doesn't match.
+                match validate_metadata(source, &metadata) {
+                    Ok(()) => {
+                        debug!("Found static metadata via GitHub fast path for: {source}");
+                        return Ok(ArchiveMetadata {
+                            metadata: Metadata::from_metadata23(metadata),
+                            hashes: vec![],
+                        });
+                    }
+                    Err(Error::WheelMetadataNameMismatch { metadata, given }) => {
+                        debug!(
+                            "Ignoring `pyproject.toml` from GitHub for: {source} (metadata: {metadata}, given: {given})"
+                        );
+                    }
+                    Err(err) => return Err(err),
+                }
             }
         }
 
