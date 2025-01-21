@@ -6,7 +6,7 @@ pub use crate::github::GitHubRepository;
 pub use crate::resolver::{
     GitResolver, GitResolverError, RepositoryReference, ResolvedRepositoryReference,
 };
-pub use crate::sha::{GitOid, GitSha, OidParseError};
+pub use crate::sha::{GitSha, OidParseError};
 pub use crate::source::{Fetch, GitSource, Reporter};
 
 mod credentials;

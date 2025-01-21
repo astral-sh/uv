@@ -14,7 +14,8 @@ use url::Url;
 use uv_cache_key::{cache_digest, RepositoryUrl};
 
 use crate::git::GitRemote;
-use crate::{GitOid, GitSha, GitUrl, GIT_STORE};
+use crate::sha::GitOid;
+use crate::{GitSha, GitUrl, GIT_STORE};
 
 /// A remote Git source that can be checked out locally.
 pub struct GitSource {
