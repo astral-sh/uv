@@ -98,13 +98,13 @@ impl PubGrubDependency {
                 } = requirement;
                 match &*package {
                     PubGrubPackageInner::Package { .. } => PubGrubDependency {
-                        package: package.clone(),
-                        version: version.clone(),
+                        package,
+                        version,
                         url,
                     },
                     PubGrubPackageInner::Marker { .. } => PubGrubDependency {
-                        package: package.clone(),
-                        version: version.clone(),
+                        package,
+                        version,
                         url,
                     },
                     PubGrubPackageInner::Extra { name, .. } => {
@@ -116,8 +116,8 @@ impl PubGrubDependency {
                             );
                         }
                         PubGrubDependency {
-                            package: package.clone(),
-                            version: version.clone(),
+                            package,
+                            version,
                             url,
                         }
                     }
@@ -130,8 +130,8 @@ impl PubGrubDependency {
                             );
                         }
                         PubGrubDependency {
-                            package: package.clone(),
-                            version: version.clone(),
+                            package,
+                            version,
                             url,
                         }
                     }
