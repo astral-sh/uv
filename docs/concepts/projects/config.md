@@ -172,6 +172,16 @@ This option can be used to write to the system Python environment, though it is 
 `uv sync` will remove extraneous packages from the environment by default and, as such, may leave
 the system in a broken state.
 
+To target the system environment, set `UV_PROJECT_ENVIRONMENT` to the prefix of the Python
+installation. For example, on Debian-based systems, this is usually `/usr/local`:
+
+```console
+$ python -c "import sysconfig; print(sysconfig.get_config_var('prefix'))"
+/usr/local
+```
+
+To target this environment, you'd export `UV_PROJECT_ENVIRONMENT=/usr/local`.
+
 !!! important
 
     If an absolute path is provided and the setting is used across multiple projects, the

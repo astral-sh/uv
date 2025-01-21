@@ -14,7 +14,7 @@ use uv_workspace::WorkspaceError;
 pub use crate::metadata::build_requires::BuildRequires;
 pub use crate::metadata::lowering::LoweredRequirement;
 use crate::metadata::lowering::LoweringError;
-pub use crate::metadata::requires_dist::RequiresDist;
+pub use crate::metadata::requires_dist::{FlatRequiresDist, RequiresDist};
 
 mod build_requires;
 mod lowering;
