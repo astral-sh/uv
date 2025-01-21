@@ -200,19 +200,6 @@ jobs:
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
-      - name: "Smoke test"
-        run: |
-          uv="./target/debug/uv"
-          $uv venv -v
-          $uv pip install ruff -v
-
-      - name: "Smoke test completion"
-        run: |
-          uv="./target/debug/uv"
-          uvx="./target/debug/uvx"
-          eval "$($uv generate-shell-completion bash)"
-          eval "$($uvx --generate-shell-completion bash)"
-
   cargo-test-macos:
     timeout-minutes: 10
     needs: determine_changes
@@ -244,12 +231,6 @@ jobs:
             --features python-patch \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
-
-      - name: "Smoke test"
-        run: |
-          uv="./target/debug/uv"
-          $uv venv -v
-          $uv pip install ruff -v
 
   cargo-test-windows:
     timeout-minutes: 15
@@ -293,22 +274,6 @@ jobs:
           UV_LINK_MODE: copy
         run: |
           cargo nextest run --no-default-features --features python,pypi,python-managed --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
-
-      - name: "Smoke test"
-        working-directory: ${{ env.UV_WORKSPACE }}
-        run: |
-          Set-Alias -Name uv -Value ./target/debug/uv
-          uv venv -v
-          uv pip install ruff -v
-
-      - name: "Smoke test completion"
-        working-directory: ${{ env.UV_WORKSPACE }}
-        shell: powershell
-        run: |
-          Set-Alias -Name uv -Value ./target/debug/uv
-          Set-Alias -Name uvx -Value ./target/debug/uvx
-          (& uv generate-shell-completion powershell) | Out-String | Invoke-Expression
-          (& uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
 
   # Separate jobs for the nightly crate
   windows-trampoline-check:
@@ -451,13 +416,15 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
       - name: "Build"
-        run: cargo build --target x86_64-unknown-linux-musl
+        run: cargo build --target x86_64-unknown-linux-musl --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
           name: uv-linux-${{ github.sha }}
-          path: ./target/x86_64-unknown-linux-musl/debug/uv
+          path: |
+            ./target/x86_64-unknown-linux-musl/debug/uv
+            ./target/x86_64-unknown-linux-musl/debug/uvx
           retention-days: 1
 
   build-binary-macos-aarch64:
@@ -473,13 +440,15 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
       - name: "Build"
-        run: cargo build
+        run: cargo build --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
           name: uv-macos-aarch64-${{ github.sha }}
-          path: ./target/debug/uv
+          path: |
+            ./target/debug/uv
+            ./target/debug/uvx
           retention-days: 1
 
   build-binary-macos-x86_64:
@@ -495,13 +464,15 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
       - name: "Build"
-        run: cargo build
+        run: cargo build --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
           name: uv-macos-x86_64-${{ github.sha }}
-          path: ./target/debug/uv
+          path: |
+            ./target/debug/uv
+            ./target/debug/uvx
           retention-days: 1
 
   build-binary-windows:
@@ -527,13 +498,15 @@ jobs:
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build
+        run: cargo build --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
           name: uv-windows-${{ github.sha }}
-          path: ${{ env.UV_WORKSPACE }}/target/debug/uv.exe
+          path: |
+            ${{ env.UV_WORKSPACE }}/target/debug/uv.exe
+            ${{ env.UV_WORKSPACE }}/target/debug/uvx.exe
           retention-days: 1
 
   cargo-build-msrv:
@@ -639,6 +612,74 @@ jobs:
         run: |
           ./uv venv
           ./${{ matrix.command }}
+
+  smoke-test-linux:
+    timeout-minutes: 10
+    needs: build-binary-linux
+    name: "smoke test | linux"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: |
+          chmod +x ./uv
+          chmod +x ./uvx
+
+      - name: "Smoke test"
+        run: |
+          ./uv venv -v
+          ./uv pip install ruff -v
+          ./uvx -v ruff --version
+          eval "$(./uv generate-shell-completion bash)"
+          eval "$(./uvx --generate-shell-completion bash)"
+
+  smoke-test-macos:
+    timeout-minutes: 10
+    needs: build-binary-macos-x86_64
+    name: "smoke test | macos"
+    runs-on: macos-latest
+    steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-macos-x86_64-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: |
+          chmod +x ./uv
+          chmod +x ./uvx
+
+      - name: "Smoke test"
+        run: |
+          ./uv venv -v
+          ./uv pip install ruff -v
+          ./uvx -v ruff --version
+          eval "$(./uv generate-shell-completion bash)"
+          eval "$(./uvx --generate-shell-completion bash)"
+
+  smoke-test-windows:
+    timeout-minutes: 10
+    needs: build-binary-windows
+    name: "smoke test | windows"
+    runs-on: windows-latest
+    steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-${{ github.sha }}
+
+      - name: "Smoke test"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
+          ./uv venv -v
+          ./uv pip install ruff -v
+          ./uvx -v ruff --version
+          (& ./uv generate-shell-completion powershell) | Out-String | Invoke-Expression
+          (& ./uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
 
   integration-test-conda:
     timeout-minutes: 10
