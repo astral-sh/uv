@@ -25,7 +25,7 @@ use crate::satisfies::RequirementSatisfaction;
 ///
 /// Packages are indexed by both name and (for editable installs) URL.
 #[derive(Debug, Clone)]
-pub struct SitePackages {
+pub struct InstalledPackages {
     interpreter: Interpreter,
     /// The vector of all installed distributions. The `by_name` and `by_url` indices index into
     /// this vector. The vector may contain `None` values, which represent distributions that were
@@ -39,7 +39,7 @@ pub struct SitePackages {
     by_url: FxHashMap<Url, Vec<usize>>,
 }
 
-impl SitePackages {
+impl InstalledPackages {
     /// Build an index of installed packages from the given Python environment.
     pub fn from_environment(environment: &PythonEnvironment) -> Result<Self> {
         Self::from_interpreter(environment.interpreter())
@@ -48,15 +48,15 @@ impl SitePackages {
     /// Build an index of installed packages from the given Python executable.
     pub fn from_interpreter(interpreter: &Interpreter) -> Result<Self> {
         let mut distributions: Vec<Option<InstalledDist>> = Vec::new();
-        let mut by_name = FxHashMap::default();
-        let mut by_url = FxHashMap::default();
+        let mut by_name: FxHashMap<PackageName, Vec<usize>> = FxHashMap::default();
+        let mut by_url: FxHashMap<Url, Vec<usize>> = FxHashMap::default();
 
-        for site_packages in interpreter.site_packages() {
+        for import_path_entry in interpreter.sys_path() {
             // Read the site-packages directory.
-            let site_packages = match fs::read_dir(site_packages) {
-                Ok(site_packages) => {
+            let ordered_directory_paths = match fs::read_dir(import_path_entry) {
+                Ok(import_path_entry) => {
                     // Collect sorted directory paths; `read_dir` is not stable across platforms
-                    let dist_likes: BTreeSet<_> = site_packages
+                    let dist_likes: BTreeSet<_> = import_path_entry
                         .filter_map(|read_dir| match read_dir {
                             Ok(entry) => match entry.file_type() {
                                 Ok(file_type) => (file_type.is_dir()
@@ -73,18 +73,14 @@ impl SitePackages {
                     dist_likes
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                    return Ok(Self {
-                        interpreter: interpreter.clone(),
-                        distributions,
-                        by_name,
-                        by_url,
-                    });
+                    // The site-packages directory doesn't exist, skip it.
+                    continue;
                 }
                 Err(err) => return Err(err).context("Failed to read site-packages directory"),
             };
 
             // Index all installed packages by name.
-            for path in site_packages {
+            for path in ordered_directory_paths {
                 let dist_info = match InstalledDist::try_from_path(&path) {
                     Ok(Some(dist_info)) => dist_info,
                     Ok(None) => continue,
@@ -185,7 +181,7 @@ impl SitePackages {
     pub fn diagnostics(
         &self,
         markers: &ResolverMarkerEnvironment,
-    ) -> Result<Vec<SitePackagesDiagnostic>> {
+    ) -> Result<Vec<InstalledPackagesDiagnostic>> {
         let mut diagnostics = Vec::new();
 
         for (package, indexes) in &self.by_name {
@@ -198,7 +194,7 @@ impl SitePackages {
 
             if let Some(conflict) = distributions.next() {
                 // There are multiple installed distributions for the same package.
-                diagnostics.push(SitePackagesDiagnostic::DuplicatePackage {
+                diagnostics.push(InstalledPackagesDiagnostic::DuplicatePackage {
                     package: package.clone(),
                     paths: std::iter::once(distribution.path().to_owned())
                         .chain(std::iter::once(conflict.path().to_owned()))
@@ -215,7 +211,7 @@ impl SitePackages {
 
                 // Determine the dependencies for the given package.
                 let Ok(metadata) = distribution.metadata() else {
-                    diagnostics.push(SitePackagesDiagnostic::MetadataUnavailable {
+                    diagnostics.push(InstalledPackagesDiagnostic::MetadataUnavailable {
                         package: package.clone(),
                         path: distribution.path().to_owned(),
                     });
@@ -225,7 +221,7 @@ impl SitePackages {
                 // Verify that the package is compatible with the current Python version.
                 if let Some(requires_python) = metadata.requires_python.as_ref() {
                     if !requires_python.contains(markers.python_full_version()) {
-                        diagnostics.push(SitePackagesDiagnostic::IncompatiblePythonVersion {
+                        diagnostics.push(InstalledPackagesDiagnostic::IncompatiblePythonVersion {
                             package: package.clone(),
                             version: self.interpreter.python_version().clone(),
                             requires_python: requires_python.clone(),
@@ -243,7 +239,7 @@ impl SitePackages {
                     match installed.as_slice() {
                         [] => {
                             // No version installed.
-                            diagnostics.push(SitePackagesDiagnostic::MissingDependency {
+                            diagnostics.push(InstalledPackagesDiagnostic::MissingDependency {
                                 package: package.clone(),
                                 requirement: dependency.clone(),
                             });
@@ -259,7 +255,7 @@ impl SitePackages {
                                     // The installed version doesn't satisfy the requirement.
                                     if !version_specifier.contains(installed.version()) {
                                         diagnostics.push(
-                                            SitePackagesDiagnostic::IncompatibleDependency {
+                                            InstalledPackagesDiagnostic::IncompatibleDependency {
                                                 package: package.clone(),
                                                 version: installed.version().clone(),
                                                 requirement: dependency.clone(),
@@ -394,7 +390,7 @@ pub enum SatisfiesResult {
     Unsatisfied(String),
 }
 
-impl IntoIterator for SitePackages {
+impl IntoIterator for InstalledPackages {
     type Item = InstalledDist;
     type IntoIter = Flatten<std::vec::IntoIter<Option<InstalledDist>>>;
 
@@ -404,7 +400,7 @@ impl IntoIterator for SitePackages {
 }
 
 #[derive(Debug)]
-pub enum SitePackagesDiagnostic {
+pub enum InstalledPackagesDiagnostic {
     MetadataUnavailable {
         /// The package that is missing metadata.
         package: PackageName,
@@ -441,7 +437,7 @@ pub enum SitePackagesDiagnostic {
     },
 }
 
-impl Diagnostic for SitePackagesDiagnostic {
+impl Diagnostic for InstalledPackagesDiagnostic {
     /// Convert the diagnostic into a user-facing message.
     fn message(&self) -> String {
         match self {
@@ -495,7 +491,7 @@ impl Diagnostic for SitePackagesDiagnostic {
     }
 }
 
-impl InstalledPackagesProvider for SitePackages {
+impl InstalledPackagesProvider for InstalledPackages {
     fn iter(&self) -> impl Iterator<Item = &InstalledDist> {
         self.iter()
     }
