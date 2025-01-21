@@ -693,7 +693,7 @@ jobs:
 
       - name: "Create a virtual environment"
         run: |
-          ./uv venv -p 3.9 --python-preference only-system
+          ./uv venv -p 3.9 --python-preference only-system -v
 
       - name: "Check version"
         run: |
