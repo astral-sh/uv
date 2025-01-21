@@ -3,22 +3,19 @@ use std::str::FromStr;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use serde::de::IntoDeserializer;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::Requirement;
 
-use crate::{
-    LenientRequirement, LenientVersionSpecifiers, MetadataError, ResolutionMetadata,
-    VerbatimParsedUrl,
-};
+use crate::{LenientRequirement, LenientVersionSpecifiers, MetadataError, ResolutionMetadata};
 
 /// Extract the metadata from a `pyproject.toml` file, as specified in PEP 621.
 ///
 /// If we're coming from a source distribution, we may already know the version (unlike for a source
 /// tree), so we can tolerate dynamic versions.
-pub(crate) fn parse_pyproject_toml(
+pub(super) fn parse_pyproject_toml(
     contents: &str,
     sdist_version: Option<&Version>,
 ) -> Result<ResolutionMetadata, MetadataError> {
@@ -109,13 +106,13 @@ pub(crate) fn parse_pyproject_toml(
 /// A `pyproject.toml` as specified in PEP 517.
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
-struct PyProjectToml {
-    project: Option<Project>,
-    tool: Option<Tool>,
+pub(super) struct PyProjectToml {
+    pub(super) project: Option<Project>,
+    pub(super) tool: Option<Tool>,
 }
 
 impl PyProjectToml {
-    pub(crate) fn from_toml(toml: &str) -> Result<Self, MetadataError> {
+    pub(super) fn from_toml(toml: &str) -> Result<Self, MetadataError> {
         let pyproject_toml: toml_edit::ImDocument<_> = toml_edit::ImDocument::from_str(toml)
             .map_err(MetadataError::InvalidPyprojectTomlSyntax)?;
         let pyproject_toml: Self = PyProjectToml::deserialize(pyproject_toml.into_deserializer())
@@ -132,20 +129,20 @@ impl PyProjectToml {
 /// See <https://packaging.python.org/en/latest/specifications/pyproject-toml>.
 #[derive(Deserialize, Debug)]
 #[serde(try_from = "PyprojectTomlWire")]
-struct Project {
+pub(super) struct Project {
     /// The name of the project
-    name: PackageName,
+    pub(super) name: PackageName,
     /// The version of the project as supported by PEP 440
-    version: Option<Version>,
+    pub(super) version: Option<Version>,
     /// The Python version requirements of the project
-    requires_python: Option<String>,
+    pub(super) requires_python: Option<String>,
     /// Project dependencies
-    dependencies: Option<Vec<String>>,
+    pub(super) dependencies: Option<Vec<String>>,
     /// Optional dependencies
-    optional_dependencies: Option<IndexMap<ExtraName, Vec<String>>>,
+    pub(super) optional_dependencies: Option<IndexMap<ExtraName, Vec<String>>>,
     /// Specifies which fields listed by PEP 621 were intentionally unspecified
     /// so another tool can/will provide such metadata dynamically.
-    dynamic: Option<Vec<String>>,
+    pub(super) dynamic: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -177,92 +174,14 @@ impl TryFrom<PyprojectTomlWire> for Project {
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
-struct Tool {
-    poetry: Option<ToolPoetry>,
+pub(super) struct Tool {
+    pub(super) poetry: Option<ToolPoetry>,
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 #[allow(clippy::empty_structs_with_brackets)]
-struct ToolPoetry {}
-
-/// Python Package Metadata 2.3 as specified in
-/// <https://packaging.python.org/specifications/core-metadata/>.
-///
-/// This is a subset of [`ResolutionMetadata`]; specifically, it omits the `version` and `requires-python`
-/// fields, which aren't necessary when extracting the requirements of a package without installing
-/// the package itself.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "kebab-case")]
-pub struct RequiresDist {
-    pub name: PackageName,
-    pub requires_dist: Vec<Requirement<VerbatimParsedUrl>>,
-    pub provides_extras: Vec<ExtraName>,
-}
-
-impl RequiresDist {
-    /// Extract the [`RequiresDist`] from a `pyproject.toml` file, as specified in PEP 621.
-    pub fn parse_pyproject_toml(contents: &str) -> Result<Self, MetadataError> {
-        let pyproject_toml = PyProjectToml::from_toml(contents)?;
-
-        let project = pyproject_toml
-            .project
-            .ok_or(MetadataError::FieldNotFound("project"))?;
-
-        // If any of the fields we need were declared as dynamic, we can't use the `pyproject.toml`
-        // file.
-        let dynamic = project.dynamic.unwrap_or_default();
-        for field in dynamic {
-            match field.as_str() {
-                "dependencies" => return Err(MetadataError::DynamicField("dependencies")),
-                "optional-dependencies" => {
-                    return Err(MetadataError::DynamicField("optional-dependencies"))
-                }
-                _ => (),
-            }
-        }
-
-        // If dependencies are declared with Poetry, and `project.dependencies` is omitted, treat
-        // the dependencies as dynamic. The inclusion of a `project` table without defining
-        // `project.dependencies` is almost certainly an error.
-        if project.dependencies.is_none()
-            && pyproject_toml.tool.and_then(|tool| tool.poetry).is_some()
-        {
-            return Err(MetadataError::PoetrySyntax);
-        }
-
-        let name = project.name;
-
-        // Extract the requirements.
-        let mut requires_dist = project
-            .dependencies
-            .unwrap_or_default()
-            .into_iter()
-            .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
-            .map_ok(Requirement::from)
-            .collect::<Result<Vec<_>, _>>()?;
-
-        // Extract the optional dependencies.
-        let mut provides_extras: Vec<ExtraName> = Vec::new();
-        for (extra, requirements) in project.optional_dependencies.unwrap_or_default() {
-            requires_dist.extend(
-                requirements
-                    .into_iter()
-                    .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
-                    .map_ok(Requirement::from)
-                    .map_ok(|requirement| requirement.with_extra_marker(&extra))
-                    .collect::<Result<Vec<_>, _>>()?,
-            );
-            provides_extras.push(extra);
-        }
-
-        Ok(Self {
-            name,
-            requires_dist,
-            provides_extras,
-        })
-    }
-}
+pub(super) struct ToolPoetry {}
 
 #[cfg(test)]
 mod tests {

@@ -20,6 +20,7 @@ use crate::downloads::PythonDownloadRequest;
 use crate::implementation::ImplementationName;
 use crate::installation::PythonInstallation;
 use crate::interpreter::Error as InterpreterError;
+use crate::interpreter::{StatusCodeError, UnexpectedResponseError};
 use crate::managed::ManagedPythonInstallations;
 #[cfg(windows)]
 use crate::microsoft_store::find_microsoft_store_pythons;
@@ -720,9 +721,15 @@ impl Error {
                 InterpreterError::Encode(_)
                 | InterpreterError::Io(_)
                 | InterpreterError::SpawnFailed { .. } => true,
-                InterpreterError::QueryScript { path, .. }
-                | InterpreterError::UnexpectedResponse { path, .. }
-                | InterpreterError::StatusCode { path, .. } => {
+                InterpreterError::UnexpectedResponse(UnexpectedResponseError { path, .. })
+                | InterpreterError::StatusCode(StatusCodeError { path, .. }) => {
+                    debug!(
+                        "Skipping bad interpreter at {} from {source}: {err}",
+                        path.display()
+                    );
+                    false
+                }
+                InterpreterError::QueryScript { path, err } => {
                     debug!(
                         "Skipping bad interpreter at {} from {source}: {err}",
                         path.display()
@@ -971,9 +978,16 @@ pub(crate) fn find_python_installation(
 ) -> Result<FindPythonResult, Error> {
     let installations = find_python_installations(request, environments, preference, cache);
     let mut first_prerelease = None;
+    let mut first_error = None;
     for result in installations {
         // Iterate until the first critical error or happy result
         if !result.as_ref().err().map_or(true, Error::is_critical) {
+            // Track the first non-critical error
+            if first_error.is_none() {
+                if let Err(err) = result {
+                    first_error = Some(err);
+                }
+            }
             continue;
         }
 
@@ -1024,6 +1038,12 @@ pub(crate) fn find_python_installation(
     // If we only found pre-releases, they're implicitly allowed and we should return the first one.
     if let Some(installation) = first_prerelease {
         return Ok(Ok(installation));
+    }
+
+    // If we found a Python, but it was unusable for some reason, report that instead of saying we
+    // couldn't find any Python interpreters.
+    if let Some(err) = first_error {
+        return Err(err);
     }
 
     Ok(Err(PythonNotFound {

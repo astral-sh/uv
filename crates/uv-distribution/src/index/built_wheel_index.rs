@@ -170,7 +170,7 @@ impl<'a> BuiltWheelIndex<'a> {
 
         let cache_shard = self.cache.shard(
             CacheBucket::SourceDistributions,
-            WheelCache::Git(&source_dist.url, &git_sha.to_short_string()).root(),
+            WheelCache::Git(&source_dist.url, git_sha.as_short_str()).root(),
         );
 
         // If there are build settings, we need to scope to a cache shard.

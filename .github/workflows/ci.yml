@@ -268,18 +268,9 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
 
-      # We do not test with Python patch versions on Windows
-      # so we can use `setup-python` instead of our bootstrapping code
-      # this is much faster on the extremely slow GitHub Windows runners.
-      - uses: actions/setup-python@v5
-        with:
-          python-version: |
-            3.8
-            3.9
-            3.10
-            3.11
-            3.12
-            3.13
+      - uses: astral-sh/setup-uv@v5
+      - name: "Install required Python versions"
+        run: uv python install
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -680,13 +671,55 @@ jobs:
           echo "$CONDA_PREFIX"
           ./uv pip install anyio
 
+  integration-test-deadsnakes-39-linux:
+    timeout-minutes: 5
+    needs: build-binary-linux
+    name: "integration test | deadsnakes python3.9 on ubuntu"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Install python3.9"
+        run: |
+          sudo add-apt-repository ppa:deadsnakes
+          sudo apt-get update
+          sudo apt-get install python3.9
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Check missing distutils"
+        run: |
+          ./uv venv -p 3.9 --python-preference only-system -v 2>&1 | tee log.txt || true
+          # We should report that distutils is missing
+          grep 'Python installation is missing `distutils`' log.txt
+
+      - name: "Install distutils"
+        run: |
+          sudo apt-get install python3.9-distutils
+
+      - name: "Create a virtualenv"
+        run: |
+          ./uv venv -p 3.9 --python-preference only-system -v
+
+      - name: "Check version"
+        run: |
+          .venv/bin/python --version
+
+      - name: "Check install"
+        run: |
+          ./uv pip install -v anyio
+
   integration-test-free-threaded-linux:
     timeout-minutes: 5
     needs: build-binary-linux
     name: "integration test | free-threaded on linux"
     runs-on: ubuntu-latest
     steps:
-      - name: "install python3.13-nogil"
+      - name: "Install python3.13-nogil"
         run: |
           sudo add-apt-repository ppa:deadsnakes
           sudo apt-get update

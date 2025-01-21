@@ -637,15 +637,10 @@ async fn do_lock(
             let resolver_env = ResolverEnvironment::universal(
                 forks_lock
                     .map(|lock| {
-                        // TODO(ag): Consider whether we should be capturing
-                        // conflicting extras/groups for every fork. If
-                        // we did, then we'd be able to use them here,
-                        // which would in turn flow into construction of
-                        // `ResolverEnvironment`.
                         lock.fork_markers()
                             .iter()
                             .copied()
-                            .map(UniversalMarker::pep508)
+                            .map(UniversalMarker::combined)
                             .collect()
                     })
                     .unwrap_or_else(|| {

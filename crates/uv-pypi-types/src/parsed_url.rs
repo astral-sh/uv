@@ -5,7 +5,7 @@ use thiserror::Error;
 use url::{ParseError, Url};
 
 use uv_distribution_filename::{DistExtension, ExtensionError};
-use uv_git::{GitReference, GitSha, GitUrl, OidParseError};
+use uv_git::{GitOid, GitReference, GitUrl, OidParseError};
 use uv_pep508::{
     looks_like_git_repository, Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError,
 };
@@ -23,7 +23,7 @@ pub enum ParsedUrlError {
     #[error("Invalid path in file URL: `{0}`")]
     InvalidFileUrl(String),
     #[error("Failed to parse Git reference from URL: `{0}`")]
-    GitShaParse(String, #[source] OidParseError),
+    GitOidParse(String, #[source] OidParseError),
     #[error("Not a valid URL: `{0}`")]
     UrlParse(String, #[source] ParseError),
     #[error(transparent)]
@@ -247,7 +247,7 @@ impl ParsedGitUrl {
     pub fn from_source(
         repository: Url,
         reference: GitReference,
-        precise: Option<GitSha>,
+        precise: Option<GitOid>,
         subdirectory: Option<PathBuf>,
     ) -> Self {
         let url = if let Some(precise) = precise {
@@ -275,7 +275,7 @@ impl TryFrom<Url> for ParsedGitUrl {
             .unwrap_or(url_in.as_str());
         let url = Url::parse(url).map_err(|err| ParsedUrlError::UrlParse(url.to_string(), err))?;
         let url = GitUrl::try_from(url)
-            .map_err(|err| ParsedUrlError::GitShaParse(url_in.to_string(), err))?;
+            .map_err(|err| ParsedUrlError::GitOidParse(url_in.to_string(), err))?;
         Ok(Self { url, subdirectory })
     }
 }

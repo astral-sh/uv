@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::Infallible;
+use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -14,11 +15,12 @@ use petgraph::visit::EdgeRef;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::Serializer;
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
+use tracing::trace;
 use url::Url;
 
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::BuildOptions;
-use uv_distribution::{DistributionDatabase, RequiresDist};
+use uv_distribution::{DistributionDatabase, FlatRequiresDist, RequiresDist};
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
@@ -29,11 +31,13 @@ use uv_distribution_types::{
     RemoteSource, ResolvedDist, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{relative_to, PortablePath, PortablePathBuf};
-use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
+use uv_git::{GitOid, GitReference, RepositoryReference, ResolvedRepositoryReference};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
-use uv_platform_tags::{PlatformTag, TagCompatibility, TagPriority, Tags};
+use uv_platform_tags::{
+    AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
+};
 use uv_pypi_types::{
     redact_credentials, ConflictPackage, Conflicts, HashDigest, ParsedArchiveUrl, ParsedGitUrl,
     Requirement, RequirementSource,
@@ -661,8 +665,7 @@ impl Lock {
 
         if !self.fork_markers.is_empty() {
             let fork_markers = each_element_on_its_line_array(
-                deduplicated_simplified_pep508_markers(&self.fork_markers, &self.requires_python)
-                    .into_iter(),
+                simplified_universal_markers(&self.fork_markers, &self.requires_python).into_iter(),
             );
             if !fork_markers.is_empty() {
                 doc.insert("resolution-markers", value(fork_markers));
@@ -964,6 +967,94 @@ impl Lock {
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
     ) -> Result<SatisfiesResult<'_>, LockError> {
+        /// Return a [`SatisfiesResult`] if the given [`RequiresDist`] does not match the [`Package`].
+        fn satisfies_requires_dist<'lock>(
+            metadata: RequiresDist,
+            package: &'lock Package,
+            root: &Path,
+        ) -> Result<SatisfiesResult<'lock>, LockError> {
+            // Special-case: if the version is dynamic, compare the flattened requirements.
+            let flattened = if package.is_dynamic() {
+                Some(
+                    FlatRequiresDist::from_requirements(
+                        metadata.requires_dist.clone(),
+                        &package.id.name,
+                    )
+                    .into_iter()
+                    .map(|requirement| normalize_requirement(requirement, root))
+                    .collect::<Result<BTreeSet<_>, _>>()?,
+                )
+            } else {
+                None
+            };
+
+            // Validate the `requires-dist` metadata.
+            let expected: BTreeSet<_> = metadata
+                .requires_dist
+                .into_iter()
+                .map(|requirement| normalize_requirement(requirement, root))
+                .collect::<Result<_, _>>()?;
+            let actual: BTreeSet<_> = package
+                .metadata
+                .requires_dist
+                .iter()
+                .cloned()
+                .map(|requirement| normalize_requirement(requirement, root))
+                .collect::<Result<_, _>>()?;
+
+            if expected != actual && flattened.is_none_or(|expected| expected != actual) {
+                return Ok(SatisfiesResult::MismatchedPackageRequirements(
+                    &package.id.name,
+                    package.id.version.as_ref(),
+                    expected,
+                    actual,
+                ));
+            }
+
+            // Validate the `dependency-groups` metadata.
+            let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = metadata
+                .dependency_groups
+                .into_iter()
+                .filter(|(_, requirements)| !requirements.is_empty())
+                .map(|(group, requirements)| {
+                    Ok::<_, LockError>((
+                        group,
+                        requirements
+                            .into_iter()
+                            .map(|requirement| normalize_requirement(requirement, root))
+                            .collect::<Result<_, _>>()?,
+                    ))
+                })
+                .collect::<Result<_, _>>()?;
+            let actual: BTreeMap<GroupName, BTreeSet<Requirement>> = package
+                .metadata
+                .dependency_groups
+                .iter()
+                .filter(|(_, requirements)| !requirements.is_empty())
+                .map(|(group, requirements)| {
+                    Ok::<_, LockError>((
+                        group.clone(),
+                        requirements
+                            .iter()
+                            .cloned()
+                            .map(|requirement| normalize_requirement(requirement, root))
+                            .collect::<Result<_, _>>()?,
+                    ))
+                })
+                .collect::<Result<_, _>>()?;
+
+            if expected != actual {
+                return Ok(SatisfiesResult::MismatchedPackageDependencyGroups(
+                    &package.id.name,
+                    package.id.version.as_ref(),
+                    expected,
+                    actual,
+                ));
+            }
+
+            Ok(SatisfiesResult::Satisfied)
+        }
+
         let mut queue: VecDeque<&Package> = VecDeque::new();
         let mut seen = FxHashSet::default();
 
@@ -1216,9 +1307,29 @@ impl Lock {
                 None
             };
 
-            let metadata = if let Some(metadata) = metadata {
-                metadata
-            } else {
+            let satisfied = metadata.is_some_and(|metadata| {
+                match satisfies_requires_dist(metadata, package, root) {
+                    Ok(SatisfiesResult::Satisfied) => {
+                        trace!("Static `Requires-Dist` for `{}` is up-to-date", package.id);
+                        true
+                    },
+                    Ok(..) => {
+                        trace!("Static `Requires-Dist` for `{}` is out-of-date; falling back to distribution database", package.id);
+                        false
+                    },
+                    Err(..) => {
+                        trace!("Static `Requires-Dist` for `{}` is invalid; falling back to distribution database", package.id);
+                        false
+                    },
+                }
+            });
+
+            // If the `requires-dist` metadata matches the requirements, we're done; otherwise,
+            // fetch the "full" metadata, which may involve invoking the build system. In some
+            // cases, build backends return metadata that does _not_ match the `pyproject.toml`
+            // exactly. For example, `hatchling` will flatten any recursive (or self-referential)
+            // extras, while `setuptools` will not.
+            if !satisfied {
                 // Get the metadata for the distribution.
                 let dist = package.to_dist(
                     root,
@@ -1269,74 +1380,9 @@ impl Lock {
                     }
                 };
 
-                RequiresDist::from(metadata)
-            };
-
-            // Validate the `requires-dist` metadata.
-            {
-                let expected: BTreeSet<_> = metadata
-                    .requires_dist
-                    .into_iter()
-                    .map(|requirement| normalize_requirement(requirement, root))
-                    .collect::<Result<_, _>>()?;
-                let actual: BTreeSet<_> = package
-                    .metadata
-                    .requires_dist
-                    .iter()
-                    .cloned()
-                    .map(|requirement| normalize_requirement(requirement, root))
-                    .collect::<Result<_, _>>()?;
-
-                if expected != actual {
-                    return Ok(SatisfiesResult::MismatchedPackageRequirements(
-                        &package.id.name,
-                        package.id.version.as_ref(),
-                        expected,
-                        actual,
-                    ));
-                }
-            }
-
-            // Validate the `dependency-groups` metadata.
-            {
-                let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = metadata
-                    .dependency_groups
-                    .into_iter()
-                    .filter(|(_, requirements)| !requirements.is_empty())
-                    .map(|(group, requirements)| {
-                        Ok::<_, LockError>((
-                            group,
-                            requirements
-                                .into_iter()
-                                .map(|requirement| normalize_requirement(requirement, root))
-                                .collect::<Result<_, _>>()?,
-                        ))
-                    })
-                    .collect::<Result<_, _>>()?;
-                let actual: BTreeMap<GroupName, BTreeSet<Requirement>> = package
-                    .metadata
-                    .dependency_groups
-                    .iter()
-                    .filter(|(_, requirements)| !requirements.is_empty())
-                    .map(|(group, requirements)| {
-                        Ok::<_, LockError>((
-                            group.clone(),
-                            requirements
-                                .iter()
-                                .cloned()
-                                .map(|requirement| normalize_requirement(requirement, root))
-                                .collect::<Result<_, _>>()?,
-                        ))
-                    })
-                    .collect::<Result<_, _>>()?;
-
-                if expected != actual {
-                    return Ok(SatisfiesResult::MismatchedPackageDependencyGroups(
-                        &package.id.name,
-                        package.id.version.as_ref(),
-                        expected,
-                        actual,
-                    ));
+                match satisfies_requires_dist(RequiresDist::from(metadata), package, root)? {
+                    SatisfiesResult::Satisfied => {}
+                    result => return Ok(result),
                 }
             }
 
@@ -1604,11 +1650,7 @@ impl TryFrom<LockWire> for Lock {
             .fork_markers
             .into_iter()
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
-            // TODO(ag): Consider whether this should also deserialize a conflict marker.
-            // We currently aren't serializing. Dropping it completely is likely to be wrong.
-            .map(|complexified_marker| {
-                UniversalMarker::new(complexified_marker, ConflictMarker::TRUE)
-            })
+            .map(UniversalMarker::from_combined)
             .collect();
         let lock = Lock::new(
             wire.version,
@@ -1917,16 +1959,92 @@ impl Package {
                 id: self.id.clone(),
             }
             .into()),
-            (false, false) if self.id.source.is_wheel() => {
-                Err(LockErrorKind::IncompatibleWheelOnly {
+            (false, false) if self.id.source.is_wheel() => Err(LockError {
+                kind: Box::new(LockErrorKind::IncompatibleWheelOnly {
                     id: self.id.clone(),
+                }),
+                hint: self.tag_hint(tag_policy),
+            }),
+            (false, false) => Err(LockError {
+                kind: Box::new(LockErrorKind::NeitherSourceDistNorWheel {
+                    id: self.id.clone(),
+                }),
+                hint: self.tag_hint(tag_policy),
+            }),
+        }
+    }
+
+    /// Generate a [`LockErrorHint`] based on wheel-tag incompatibilities.
+    fn tag_hint(&self, tag_policy: TagPolicy<'_>) -> Option<LockErrorHint> {
+        let incompatibility = self
+            .wheels
+            .iter()
+            .map(|wheel| {
+                tag_policy.tags().compatibility(
+                    wheel.filename.python_tags(),
+                    wheel.filename.abi_tags(),
+                    wheel.filename.platform_tags(),
+                )
+            })
+            .max()?;
+        match incompatibility {
+            TagCompatibility::Incompatible(IncompatibleTag::Python) => {
+                let best = tag_policy.tags().python_tag();
+                let tags = self.python_tags().collect::<BTreeSet<_>>();
+                if tags.is_empty() {
+                    None
+                } else {
+                    Some(LockErrorHint::LanguageTags {
+                        package: self.id.name.clone(),
+                        version: self.id.version.clone(),
+                        tags,
+                        best,
+                    })
                 }
-                .into())
             }
-            (false, false) => Err(LockErrorKind::NeitherSourceDistNorWheel {
-                id: self.id.clone(),
+            TagCompatibility::Incompatible(IncompatibleTag::Abi) => {
+                let best = tag_policy.tags().abi_tag();
+                let tags = self
+                    .abi_tags()
+                    // Ignore `none`, which is universally compatible.
+                    //
+                    // As an example, `none` can appear here if we're solving for Python 3.13, and
+                    // the distribution includes a wheel for `cp312-none-macosx_11_0_arm64`.
+                    //
+                    // In that case, the wheel isn't compatible, but when solving for Python 3.13,
+                    // the `cp312` Python tag _can_ be compatible (e.g., for `cp312-abi3-macosx_11_0_arm64.whl`),
+                    // so this is considered an ABI incompatibility rather than Python incompatibility.
+                    .filter(|tag| *tag != AbiTag::None)
+                    .collect::<BTreeSet<_>>();
+                if tags.is_empty() {
+                    None
+                } else {
+                    Some(LockErrorHint::AbiTags {
+                        package: self.id.name.clone(),
+                        version: self.id.version.clone(),
+                        tags,
+                        best,
+                    })
+                }
             }
-            .into()),
+            TagCompatibility::Incompatible(IncompatibleTag::Platform) => {
+                let best = tag_policy.tags().platform_tag().cloned();
+                let tags = self
+                    .platform_tags(tag_policy.tags())
+                    .cloned()
+                    .collect::<BTreeSet<_>>();
+                if tags.is_empty() {
+                    None
+                } else {
+                    Some(LockErrorHint::PlatformTags {
+                        package: self.id.name.clone(),
+                        version: self.id.version.clone(),
+                        tags,
+                        best,
+                    })
+                }
+            }
+            _ => None,
         }
     }
 
@@ -2154,8 +2272,7 @@ impl Package {
 
         if !self.fork_markers.is_empty() {
             let fork_markers = each_element_on_its_line_array(
-                deduplicated_simplified_pep508_markers(&self.fork_markers, requires_python)
-                    .into_iter(),
+                simplified_universal_markers(&self.fork_markers, requires_python).into_iter(),
             );
             if !fork_markers.is_empty() {
                 table.insert("resolution-markers", value(fork_markers));
@@ -2273,6 +2390,43 @@ impl Package {
         Ok(table)
     }
 
+    /// Returns an iterator over the compatible Python tags of the available wheels.
+    fn python_tags(&self) -> impl Iterator<Item = LanguageTag> + '_ {
+        self.wheels
+            .iter()
+            .flat_map(|wheel| wheel.filename.python_tags())
+            .copied()
+    }
+
+    /// Returns an iterator over the compatible Python tags of the available wheels.
+    fn abi_tags(&self) -> impl Iterator<Item = AbiTag> + '_ {
+        self.wheels
+            .iter()
+            .flat_map(|wheel| wheel.filename.abi_tags())
+            .copied()
+    }
+
+    /// Returns the set of platform tags for the distribution that are ABI-compatible with the given
+    /// tags.
+    pub fn platform_tags<'a>(
+        &'a self,
+        tags: &'a Tags,
+    ) -> impl Iterator<Item = &'a PlatformTag> + 'a {
+        self.wheels.iter().flat_map(move |wheel| {
+            if wheel.filename.python_tags().iter().any(|wheel_py| {
+                wheel
+                    .filename
+                    .abi_tags()
+                    .iter()
+                    .any(|wheel_abi| tags.is_compatible_abi(*wheel_py, *wheel_abi))
+            }) {
+                wheel.filename.platform_tags().iter()
+            } else {
+                [].iter()
+            }
+        })
+    }
+
     fn find_best_wheel(&self, tag_policy: TagPolicy<'_>) -> Option<usize> {
         type WheelPriority<'lock> = (TagPriority, Option<&'lock BuildTag>);
 
@@ -2373,12 +2527,13 @@ impl Package {
     }
 }
 
-/// Attempts to construct a `VerbatimUrl` from the given `Path`.
+/// Attempts to construct a `VerbatimUrl` from the given normalized `Path`.
 fn verbatim_url(path: &Path, id: &PackageId) -> Result<VerbatimUrl, LockError> {
-    let url = VerbatimUrl::from_absolute_path(path).map_err(|err| LockErrorKind::VerbatimUrl {
-        id: id.clone(),
-        err,
-    })?;
+    let url =
+        VerbatimUrl::from_normalized_path(path).map_err(|err| LockErrorKind::VerbatimUrl {
+            id: id.clone(),
+            err,
+        })?;
     Ok(url)
 }
 
@@ -2439,11 +2594,7 @@ impl PackageWire {
                 .fork_markers
                 .into_iter()
                 .map(|simplified_marker| simplified_marker.into_marker(requires_python))
-                // TODO(ag): Consider whether this should also deserialize a conflict marker.
-                // We currently aren't serializing. Dropping it completely is likely to be wrong.
-                .map(|complexified_marker| {
-                    UniversalMarker::new(complexified_marker, ConflictMarker::TRUE)
-                })
+                .map(UniversalMarker::from_combined)
                 .collect(),
             dependencies: unwire_deps(self.dependencies)?,
             optional_dependencies: self
@@ -3046,7 +3197,7 @@ struct DirectSource {
 /// canonical ordering of package entries.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 struct GitSource {
-    precise: GitSha,
+    precise: GitOid,
     subdirectory: Option<PathBuf>,
     kind: GitSourceKind,
 }
@@ -3073,7 +3224,7 @@ impl GitSource {
                 _ => continue,
             };
         }
-        let precise = GitSha::from_str(url.fragment().ok_or(GitSourceError::MissingSha)?)
+        let precise = GitOid::from_str(url.fragment().ok_or(GitSourceError::MissingSha)?)
             .map_err(|_| GitSourceError::InvalidSha)?;
 
         Ok(GitSource {
@@ -3372,11 +3523,9 @@ impl From<GitReference> for GitSourceKind {
         match value {
             GitReference::Branch(branch) => GitSourceKind::Branch(branch.to_string()),
             GitReference::Tag(tag) => GitSourceKind::Tag(tag.to_string()),
-            GitReference::ShortCommit(rev) => GitSourceKind::Rev(rev.to_string()),
             GitReference::BranchOrTag(rev) => GitSourceKind::Rev(rev.to_string()),
             GitReference::BranchOrTagOrCommit(rev) => GitSourceKind::Rev(rev.to_string()),
             GitReference::NamedRef(rev) => GitSourceKind::Rev(rev.to_string()),
-            GitReference::FullCommit(rev) => GitSourceKind::Rev(rev.to_string()),
             GitReference::DefaultBranch => GitSourceKind::DefaultBranch,
         }
     }
@@ -3419,20 +3568,15 @@ fn locked_git_url(git_dist: &GitSourceDist) -> Url {
     // Put the requested reference in the query.
     match git_dist.git.reference() {
         GitReference::Branch(branch) => {
-            url.query_pairs_mut()
-                .append_pair("branch", branch.to_string().as_str());
+            url.query_pairs_mut().append_pair("branch", branch.as_str());
         }
         GitReference::Tag(tag) => {
-            url.query_pairs_mut()
-                .append_pair("tag", tag.to_string().as_str());
+            url.query_pairs_mut().append_pair("tag", tag.as_str());
         }
-        GitReference::ShortCommit(rev)
-        | GitReference::BranchOrTag(rev)
+        GitReference::BranchOrTag(rev)
         | GitReference::BranchOrTagOrCommit(rev)
-        | GitReference::NamedRef(rev)
-        | GitReference::FullCommit(rev) => {
-            url.query_pairs_mut()
-                .append_pair("rev", rev.to_string().as_str());
+        | GitReference::NamedRef(rev) => {
+            url.query_pairs_mut().append_pair("rev", rev.as_str());
         }
         GitReference::DefaultBranch => {}
     }
@@ -3443,7 +3587,7 @@ fn locked_git_url(git_dist: &GitSourceDist) -> Url {
             .git
             .precise()
             .as_ref()
-            .map(GitSha::to_string)
+            .map(GitOid::to_string)
             .as_deref(),
     );
 
@@ -4030,7 +4174,7 @@ fn normalize_requirement(requirement: Requirement, root: &Path) -> Result<Requir
             url: _,
         } => {
             let install_path = uv_fs::normalize_path_buf(root.join(&install_path));
-            let url = VerbatimUrl::from_absolute_path(&install_path)
+            let url = VerbatimUrl::from_normalized_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
             Ok(Requirement {
@@ -4053,7 +4197,7 @@ fn normalize_requirement(requirement: Requirement, root: &Path) -> Result<Requir
             url: _,
         } => {
             let install_path = uv_fs::normalize_path_buf(root.join(&install_path));
-            let url = VerbatimUrl::from_absolute_path(&install_path)
+            let url = VerbatimUrl::from_normalized_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
             Ok(Requirement {
@@ -4127,14 +4271,32 @@ fn normalize_requirement(requirement: Requirement, root: &Path) -> Result<Requir
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-#[error(transparent)]
-pub struct LockError(Box<LockErrorKind>);
+#[derive(Debug)]
+pub struct LockError {
+    kind: Box<LockErrorKind>,
+    hint: Option<LockErrorHint>,
+}
+
+impl std::error::Error for LockError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.kind.source()
+    }
+}
+
+impl std::fmt::Display for LockError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.kind)?;
+        if let Some(hint) = &self.hint {
+            write!(f, "\n\n{hint}")?;
+        }
+        Ok(())
+    }
+}
 
 impl LockError {
     /// Returns true if the [`LockError`] is a resolver error.
     pub fn is_resolution(&self) -> bool {
-        matches!(&*self.0, LockErrorKind::Resolution { .. })
+        matches!(&*self.kind, LockErrorKind::Resolution { .. })
     }
 }
 
@@ -4143,7 +4305,246 @@ where
     LockErrorKind: From<E>,
 {
     fn from(err: E) -> Self {
-        LockError(Box::new(LockErrorKind::from(err)))
+        LockError {
+            kind: Box::new(LockErrorKind::from(err)),
+            hint: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::enum_variant_names)]
+enum LockErrorHint {
+    /// None of the available wheels for a package have a compatible Python language tag (e.g.,
+    /// `cp310` in `cp310-abi3-manylinux_2_17_x86_64.whl`).
+    LanguageTags {
+        package: PackageName,
+        version: Option<Version>,
+        tags: BTreeSet<LanguageTag>,
+        best: Option<LanguageTag>,
+    },
+    /// None of the available wheels for a package have a compatible ABI tag (e.g., `abi3` in
+    /// `cp310-abi3-manylinux_2_17_x86_64.whl`).
+    AbiTags {
+        package: PackageName,
+        version: Option<Version>,
+        tags: BTreeSet<AbiTag>,
+        best: Option<AbiTag>,
+    },
+    /// None of the available wheels for a package have a compatible platform tag (e.g.,
+    /// `manylinux_2_17_x86_64` in `cp310-abi3-manylinux_2_17_x86_64.whl`).
+    PlatformTags {
+        package: PackageName,
+        version: Option<Version>,
+        tags: BTreeSet<PlatformTag>,
+        best: Option<PlatformTag>,
+    },
+}
+
+impl std::fmt::Display for LockErrorHint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::LanguageTags {
+                package,
+                version,
+                tags,
+                best,
+            } => {
+                if let Some(best) = best {
+                    let s = if tags.len() == 1 { "" } else { "s" };
+                    let best = if let Some(pretty) = best.pretty() {
+                        format!("{} (`{}`)", pretty.cyan(), best.cyan())
+                    } else {
+                        format!("{}", best.cyan())
+                    };
+                    if let Some(version) = version {
+                        write!(
+                            f,
+                            "{}{} You're using {}, but `{}` ({}) only has wheels with the following Python implementation tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            best,
+                            package.cyan(),
+                            format!("v{version}").cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    } else {
+                        write!(
+                            f,
+                            "{}{} You're using {}, but `{}` only has wheels with the following Python implementation tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            best,
+                            package.cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    }
+                } else {
+                    let s = if tags.len() == 1 { "" } else { "s" };
+                    if let Some(version) = version {
+                        write!(
+                            f,
+                            "{}{} Wheels are available for `{}` ({}) with the following Python implementation tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            package.cyan(),
+                            format!("v{version}").cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    } else {
+                        write!(
+                            f,
+                            "{}{} Wheels are available for `{}` with the following Python implementation tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            package.cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    }
+                }
+            }
+            Self::AbiTags {
+                package,
+                version,
+                tags,
+                best,
+            } => {
+                if let Some(best) = best {
+                    let s = if tags.len() == 1 { "" } else { "s" };
+                    let best = if let Some(pretty) = best.pretty() {
+                        format!("{} (`{}`)", pretty.cyan(), best.cyan())
+                    } else {
+                        format!("{}", best.cyan())
+                    };
+                    if let Some(version) = version {
+                        write!(
+                            f,
+                            "{}{} You're using {}, but  `{}` ({}) only has wheels with the following Python ABI tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            best,
+                            package.cyan(),
+                            format!("v{version}").cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    } else {
+                        write!(
+                            f,
+                            "{}{} You're using {}, but `{}` only has wheels with the following Python ABI tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            best,
+                            package.cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    }
+                } else {
+                    let s = if tags.len() == 1 { "" } else { "s" };
+                    if let Some(version) = version {
+                        write!(
+                            f,
+                            "{}{} Wheels are available for `{}` ({}) with the following Python ABI tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            package.cyan(),
+                            format!("v{version}").cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    } else {
+                        write!(
+                            f,
+                            "{}{} Wheels are available for `{}` with the following Python ABI tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            package.cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    }
+                }
+            }
+            Self::PlatformTags {
+                package,
+                version,
+                tags,
+                best,
+            } => {
+                let s = if tags.len() == 1 { "" } else { "s" };
+                if let Some(best) = best {
+                    let best = if let Some(pretty) = best.pretty() {
+                        format!("{} (`{}`)", pretty.cyan(), best.cyan())
+                    } else {
+                        format!("`{}`", best.cyan())
+                    };
+                    if let Some(version) = version {
+                        write!(
+                            f,
+                            "{}{} You're on {}, but `{}` ({}) only has wheels for the following platform{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            best,
+                            package.cyan(),
+                            format!("v{version}").cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    } else {
+                        write!(
+                            f,
+                            "{}{} You're on {}, but `{}` only has wheels for the following platform{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            best,
+                            package.cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    }
+                } else {
+                    if let Some(version) = version {
+                        write!(
+                            f,
+                            "{}{} Wheels are available for `{}` ({}) on the following platform{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            package.cyan(),
+                            format!("v{version}").cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    } else {
+                        write!(
+                            f,
+                            "{}{} Wheels are available for `{}` on the following platform{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            package.cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -4497,42 +4898,40 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
 
 /// Returns the simplified string-ified version of each marker given.
 ///
-/// If a marker is a duplicate of a previous marker or is always true after
-/// simplification, then it is omitted from the `Vec` returned. (And indeed,
-/// the `Vec` returned may be empty.)
-fn deduplicated_simplified_pep508_markers(
+/// Note that the marker strings returned will include conflict markers if they
+/// are present.
+fn simplified_universal_markers(
     markers: &[UniversalMarker],
     requires_python: &RequiresPython,
 ) -> Vec<String> {
-    // NOTE(ag): It's possible that `resolution-markers` should actually
-    // include conflicting marker info. In which case, we should serialize
-    // the entire `UniversalMarker` (taking care to still make the PEP 508
-    // simplified). At present, we don't include that info. And as a result,
-    // this can lead to duplicate markers, since each represents a fork with
-    // the same PEP 508 marker but a different conflict marker. We strip the
-    // conflict marker, which can leave duplicate PEP 508 markers.
-    //
-    // So if we did include the conflict marker, then we wouldn't need to do
-    // deduplication.
-    //
-    // Why don't we include conflict markers though? At present, it's just
-    // not clear that they are necessary. So by the principle of being
-    // conservative, we don't write them. In particular, I believe the original
-    // reason for `resolution-markers` is to prevent non-deterministic locking.
-    // But it's not clear that that can occur for conflict markers.
-    let mut simplified = vec![];
-    // Deduplicate without changing order.
+    let mut pep508_only = vec![];
     let mut seen = FxHashSet::default();
     for marker in markers {
-        let simplified_marker = SimplifiedMarkerTree::new(requires_python, marker.pep508());
-        let Some(simplified_string) = simplified_marker.try_to_string() else {
-            continue;
-        };
-        if seen.insert(simplified_string.clone()) {
-            simplified.push(simplified_string);
+        let simplified =
+            SimplifiedMarkerTree::new(requires_python, marker.pep508()).as_simplified_marker_tree();
+        if seen.insert(simplified) {
+            pep508_only.push(simplified);
         }
     }
-    simplified
+    let any_overlap = pep508_only
+        .iter()
+        .tuple_combinations()
+        .any(|(&marker1, &marker2)| !marker1.is_disjoint(marker2));
+    let markers = if !any_overlap {
+        pep508_only
+    } else {
+        markers
+            .iter()
+            .map(|marker| {
+                SimplifiedMarkerTree::new(requires_python, marker.combined())
+                    .as_simplified_marker_tree()
+            })
+            .collect()
+    };
+    markers
+        .into_iter()
+        .filter_map(MarkerTree::try_to_string)
+        .collect()
 }
 
 #[cfg(test)]
