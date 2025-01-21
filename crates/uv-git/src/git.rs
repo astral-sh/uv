@@ -74,11 +74,7 @@ impl GitReference {
         if rev.starts_with("refs/") {
             Self::NamedRef(rev)
         } else if looks_like_commit_hash(&rev) {
-            if rev.len() == 40 {
-                Self::FullCommit(rev)
-            } else {
-                Self::BranchOrTagOrCommit(rev)
-            }
+            Self::BranchOrTagOrCommit(rev)
         } else {
             Self::BranchOrTag(rev)
         }
@@ -729,7 +725,7 @@ fn github_fast_path(
         GitReference::BranchOrTag(branch_or_tag) => branch_or_tag,
         GitReference::DefaultBranch => "HEAD",
         GitReference::NamedRef(rev) => rev,
-        GitReference::FullCommit(rev) | GitReference::BranchOrTagOrCommit(rev) => {
+        GitReference::BranchOrTagOrCommit(rev) => {
             // `revparse_single` (used by `resolve`) is the only way to turn
             // short hash -> long hash, but it also parses other things,
             // like branch and tag names, which might coincidentally be
@@ -753,6 +749,20 @@ fn github_fast_path(
                 }
             }
             rev
+        }
+        GitReference::FullCommit(rev) => {
+            debug!("Skipping GitHub fast path; full commit hash provided: {rev}");
+
+            let rev = GitOid::from_str(rev)?;
+            if let Some(ref local_object) = local_object {
+                if rev == *local_object {
+                    return Ok(FastPathRev::UpToDate);
+                }
+            }
+
+            // If we know the reference is a full commit hash, we can just return it without
+            // querying GitHub.
+            return Ok(FastPathRev::NeedsFetch(rev));
         }
     };
 
