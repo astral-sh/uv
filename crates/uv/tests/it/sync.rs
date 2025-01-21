@@ -6038,3 +6038,49 @@ fn path_hash_mismatch() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn find_links_relative_in_config_works_from_subdir() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "subdir_test"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok==1.0.0"]
+
+        [tool.uv]
+        find-links = ["packages/"]
+    "#})?;
+
+    // Create packages/ subdirectory and copy our "offline" tqdm wheel there
+    let packages = context.temp_dir.child("packages");
+    packages.create_dir_all()?;
+
+    let wheel_src = context
+        .workspace_root
+        .join("scripts/links/ok-1.0.0-py3-none-any.whl");
+    let wheel_dst = packages.child("ok-1.0.0-py3-none-any.whl");
+    fs_err::copy(&wheel_src, &wheel_dst)?;
+
+    // Create a separate subdir, which will become our working directory
+    let subdir = context.temp_dir.child("subdir");
+    subdir.create_dir_all()?;
+
+    // Run `uv sync --offline` from subdir. We expect it to find the local wheel in ../packages/.
+    uv_snapshot!(context.filters(), context.sync().current_dir(&subdir).arg("--offline"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    "###);
+
+    Ok(())
+}
