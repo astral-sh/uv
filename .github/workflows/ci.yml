@@ -1708,6 +1708,10 @@ jobs:
       - name: "Validate global Python install"
         run: python ./scripts/check_system_python.py --uv ./uv.exe
 
+      # NB: Run this last, we are modifying the registry
+      - name: "Test PEP 514 registration"
+        run: python ./scripts/check_registry.py --uv ./uv.exe
+
   system-test-windows-x86_64-python-313:
     timeout-minutes: 10
     needs: build-binary-windows-x86_64
