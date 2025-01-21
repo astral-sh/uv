@@ -573,6 +573,9 @@ jobs:
         with:
           workspaces: ${{ env.UV_WORKSPACE }}
 
+      - name: "Install cross target"
+        run: rustup target add aarch64-pc-windows-msvc
+
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: cargo build --target aarch64-pc-windows-msvc
