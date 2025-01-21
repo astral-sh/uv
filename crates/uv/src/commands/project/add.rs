@@ -690,7 +690,9 @@ async fn lock_and_sync(
             FxHashMap::with_capacity_and_hasher(lock.packages().len(), FxBuildHasher);
         for dist in lock.packages() {
             let name = dist.name();
-            let version = dist.version();
+            let Some(version) = dist.version() else {
+                continue;
+            };
             match minimum_version.entry(name) {
                 Entry::Vacant(entry) => {
                     entry.insert(version);

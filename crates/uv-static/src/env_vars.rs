@@ -234,6 +234,12 @@ impl EnvVars {
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     pub const UV_PYPY_INSTALL_MIRROR: &'static str = "UV_PYPY_INSTALL_MIRROR";
 
+    /// Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual environment
+    /// created by `uv venv`.
+    ///
+    /// Note that `setuptools` and `wheel` are not included in Python 3.12+ environments.
+    pub const UV_VENV_SEED: &'static str = "UV_VENV_SEED";
+
     /// Used to override `PATH` to limit Python executable availability in the test suite.
     #[attr_hidden]
     pub const UV_TEST_PYTHON_PATH: &'static str = "UV_TEST_PYTHON_PATH";
@@ -248,9 +254,6 @@ impl EnvVars {
 
     /// Use to disable line wrapping for diagnostics.
     pub const UV_NO_WRAP: &'static str = "UV_NO_WRAP";
-
-    /// Use to increase the stack size used by uv in debug builds on Windows.
-    pub const UV_STACK_SIZE: &'static str = "UV_STACK_SIZE";
 
     /// Generates the environment variable key for the HTTP Basic authentication username.
     #[attr_env_var_pattern("UV_INDEX_{name}_USERNAME")]
@@ -504,6 +507,15 @@ impl EnvVars {
     /// See the [tracing documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#example-syntax)
     /// for more.
     pub const RUST_LOG: &'static str = "RUST_LOG";
+
+    /// Use to set the stack size used by uv.
+    ///
+    /// The value is in bytes, and the default is typically 2MB (2097152).
+    /// Unlike the normal `RUST_MIN_STACK` semantics, this can affect main thread
+    /// stack size, because we actually spawn our own main2 thread to work around
+    /// the fact that Windows' real main thread is only 1MB. That thread has size
+    /// `max(RUST_MIN_STACK, 4MB)`.
+    pub const RUST_MIN_STACK: &'static str = "RUST_MIN_STACK";
 
     /// The directory containing the `Cargo.toml` manifest for a package.
     #[attr_hidden]

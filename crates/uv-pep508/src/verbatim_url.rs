@@ -112,6 +112,34 @@ impl VerbatimUrl {
         Ok(Self { url, given: None })
     }
 
+    /// Parse a URL from a normalized path.
+    ///
+    /// Like [`VerbatimUrl::from_absolute_path`], but skips the normalization step.
+    pub fn from_normalized_path(path: impl AsRef<Path>) -> Result<Self, VerbatimUrlError> {
+        let path = path.as_ref();
+
+        // Error if the path is relative.
+        let path = if path.is_absolute() {
+            path
+        } else {
+            return Err(VerbatimUrlError::WorkingDirectory(path.to_path_buf()));
+        };
+
+        // Extract the fragment, if it exists.
+        let (path, fragment) = split_fragment(path);
+
+        // Convert to a URL.
+        let mut url = Url::from_file_path(path.clone())
+            .unwrap_or_else(|()| panic!("path is absolute: {}", path.display()));
+
+        // Set the fragment, if it exists.
+        if let Some(fragment) = fragment {
+            url.set_fragment(Some(fragment));
+        }
+
+        Ok(Self { url, given: None })
+    }
+
     /// Set the verbatim representation of the URL.
     #[must_use]
     pub fn with_given(self, given: impl AsRef<str>) -> Self {

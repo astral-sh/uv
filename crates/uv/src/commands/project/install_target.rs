@@ -3,7 +3,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use itertools::Either;
-
+use uv_distribution_types::Index;
 use uv_normalize::PackageName;
 use uv_pypi_types::{LenientRequirement, VerbatimParsedUrl};
 use uv_resolver::{Installable, Lock, Package};
@@ -88,6 +88,38 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
 }
 
 impl<'lock> InstallTarget<'lock> {
+    /// Return an iterator over the [`Index`] definitions in the target.
+    pub(crate) fn indexes(self) -> impl Iterator<Item = &'lock Index> {
+        match self {
+            Self::Project { workspace, .. }
+            | Self::Workspace { workspace, .. }
+            | Self::NonProjectWorkspace { workspace, .. } => {
+                Either::Left(workspace.indexes().iter().chain(
+                    workspace.packages().values().flat_map(|member| {
+                        member
+                            .pyproject_toml()
+                            .tool
+                            .as_ref()
+                            .and_then(|tool| tool.uv.as_ref())
+                            .and_then(|uv| uv.index.as_ref())
+                            .into_iter()
+                            .flatten()
+                    }),
+                ))
+            }
+            Self::Script { script, .. } => Either::Right(
+                script
+                    .metadata
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.top_level.index.as_deref())
+                    .into_iter()
+                    .flatten(),
+            ),
+        }
+    }
+
     /// Return an iterator over all [`Sources`] defined by the target.
     pub(crate) fn sources(&self) -> impl Iterator<Item = &Source> {
         match self {

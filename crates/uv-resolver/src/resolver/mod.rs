@@ -2694,9 +2694,7 @@ impl ForkState {
             if tracing::enabled!(Level::DEBUG) {
                 let incompatibility = self.pubgrub.incompatibility_store[incompatibility]
                     .iter()
-                    .map(|(package, _term)| {
-                        format!("{}", self.pubgrub.package_store[package].clone(),)
-                    })
+                    .map(|(package, _term)| &self.pubgrub.package_store[package])
                     .join(", ");
                 if let Some(version) = version {
                     debug!(

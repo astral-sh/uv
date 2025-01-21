@@ -1,23 +1,20 @@
 use std::borrow::Cow;
-use std::collections::VecDeque;
 use std::path::Path;
-use std::slice;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use futures::stream::FuturesOrdered;
 use futures::TryStreamExt;
-use rustc_hash::FxHashSet;
 use url::Url;
 
 use uv_configuration::ExtrasSpecification;
-use uv_distribution::{DistributionDatabase, Reporter, RequiresDist};
+use uv_distribution::{DistributionDatabase, FlatRequiresDist, Reporter, RequiresDist};
 use uv_distribution_types::{
     BuildableSource, DirectorySourceUrl, HashGeneration, HashPolicy, SourceUrl, VersionId,
 };
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
-use uv_pep508::{MarkerTree, RequirementOrigin};
+use uv_pep508::RequirementOrigin;
 use uv_pypi_types::Requirement;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
@@ -98,69 +95,16 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             .cloned()
             .collect::<Vec<_>>();
 
-        let dependencies = metadata
-            .requires_dist
-            .into_iter()
-            .map(|requirement| Requirement {
-                origin: Some(origin.clone()),
-                marker: requirement.marker.simplify_extras(&extras),
-                ..requirement
-            })
-            .collect::<Vec<_>>();
-
-        // Transitively process all extras that are recursively included, starting with the current
-        // extra.
-        let mut requirements = dependencies.clone();
-        let mut seen = FxHashSet::<(ExtraName, MarkerTree)>::default();
-        let mut queue: VecDeque<_> = requirements
-            .iter()
-            .filter(|req| req.name == metadata.name)
-            .flat_map(|req| {
-                req.extras
-                    .iter()
-                    .cloned()
-                    .map(|extra| (extra, req.marker.simplify_extras(&extras)))
-            })
-            .collect();
-        while let Some((extra, marker)) = queue.pop_front() {
-            if !seen.insert((extra.clone(), marker)) {
-                continue;
-            }
-
-            // Find the requirements for the extra.
-            for requirement in &dependencies {
-                if requirement.marker.top_level_extra_name().as_ref() == Some(&extra) {
-                    let requirement = {
-                        let mut marker = marker;
-                        marker.and(requirement.marker);
-                        Requirement {
-                            name: requirement.name.clone(),
-                            extras: requirement.extras.clone(),
-                            groups: requirement.groups.clone(),
-                            source: requirement.source.clone(),
-                            origin: requirement.origin.clone(),
-                            marker: marker.simplify_extras(slice::from_ref(&extra)),
-                        }
-                    };
-                    if requirement.name == metadata.name {
-                        // Add each transitively included extra.
-                        queue.extend(
-                            requirement
-                                .extras
-                                .iter()
-                                .cloned()
-                                .map(|extra| (extra, requirement.marker)),
-                        );
-                    } else {
-                        // Add the requirements for that extra.
-                        requirements.push(requirement);
-                    }
-                }
-            }
-        }
-
-        // Drop all the self-requirements now that we flattened them out.
-        requirements.retain(|req| req.name != metadata.name);
+        // Flatten any transitive extras.
+        let requirements =
+            FlatRequiresDist::from_requirements(metadata.requires_dist, &metadata.name)
+                .into_iter()
+                .map(|requirement| Requirement {
+                    origin: Some(origin.clone()),
+                    marker: requirement.marker.simplify_extras(&extras),
+                    ..requirement
+                })
+                .collect::<Vec<_>>();
 
         let project = metadata.name;
         let extras = metadata.provides_extras;

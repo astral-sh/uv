@@ -2890,7 +2890,7 @@ mod test {
     fn test_is_false() {
         assert!(m("python_version < '3.10' and python_version >= '3.10'").is_false());
         assert!(m("(python_version < '3.10' and python_version >= '3.10') \
-              or (python_version < '3.9' and python_version >= '3.9')",)
+              or (python_version < '3.9' and python_version >= '3.9')")
         .is_false());
 
         assert!(!m("python_version < '3.10'").is_false());
@@ -3150,7 +3150,7 @@ mod test {
 
         assert!(m("
                 (os_name == 'Linux' and extra == 'foo')
-                or (os_name != 'Linux' and extra == 'bar')",)
+                or (os_name != 'Linux' and extra == 'bar')")
         .without_extras()
         .is_true());
 
@@ -3183,7 +3183,7 @@ mod test {
         );
         assert!(m("
                 (os_name == 'foo' and extra == 'foo')
-                or (os_name == 'bar' and extra != 'foo')",)
+                or (os_name == 'bar' and extra != 'foo')")
         .only_extras()
         .is_true());
         assert_eq!(

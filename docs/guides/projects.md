@@ -1,3 +1,10 @@
+---
+title: Working on projects
+description:
+  A guide to using uv to create and manage Python projects, including adding dependencies, running
+  commands, and building publishable distributions.
+---
+
 # Working on projects
 
 uv supports managing Python projects, which define their dependencies in a `pyproject.toml` file.

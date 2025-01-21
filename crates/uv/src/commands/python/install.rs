@@ -217,7 +217,7 @@ pub(crate) async fn install(
                 Either::Left(installation)
             }
         } else {
-            debug!("No installation found for request `{}`", request.cyan(),);
+            debug!("No installation found for request `{}`", request.cyan());
 
             Either::Right(request)
         }
@@ -312,6 +312,9 @@ pub(crate) async fn install(
         installation.ensure_externally_managed()?;
         installation.ensure_sysconfig_patched()?;
         installation.ensure_canonical_executables()?;
+        if let Err(e) = installation.ensure_dylib_patched() {
+            e.warn_user(installation);
+        }
 
         if preview.is_disabled() {
             debug!("Skipping installation of Python executables, use `--preview` to enable.");
@@ -359,28 +362,30 @@ pub(crate) async fn install(
                         target.simplified_display()
                     );
 
-                    // Check if the existing link is valid
-                    let valid_link = target
-                        .read_link()
-                        .and_then(|target| target.try_exists())
-                        .inspect_err(|err| debug!("Failed to inspect executable with error: {err}"))
-                        .unwrap_or(true);
-
                     // Figure out what installation it references, if any
-                    let existing = valid_link
-                        .then(|| {
-                            find_matching_bin_link(
-                                installations
-                                    .iter()
-                                    .copied()
-                                    .chain(existing_installations.iter()),
-                                &target,
-                            )
-                        })
-                        .flatten();
+                    let existing = find_matching_bin_link(
+                        installations
+                            .iter()
+                            .copied()
+                            .chain(existing_installations.iter()),
+                        &target,
+                    );
 
                     match existing {
                         None => {
+                            // Determine if the link is valid, i.e., if it points to an existing
+                            // Python we don't manage. On Windows, we just assume it is valid because
+                            // symlinks are not common for Python interpreters.
+                            let valid_link = cfg!(windows)
+                                || target
+                                    .read_link()
+                                    .and_then(|target| target.try_exists())
+                                    .inspect_err(|err| {
+                                        debug!("Failed to inspect executable with error: {err}");
+                                    })
+                                    // If we can't verify the link, assume it is valid.
+                                    .unwrap_or(true);
+
                             // There's an existing executable we don't manage, require `--force`
                             if valid_link {
                                 if !force {

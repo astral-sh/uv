@@ -306,7 +306,6 @@ fn run_pep723_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -320,7 +319,6 @@ fn run_pep723_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     Resolved 1 package in [TIME]
     "###);
 
@@ -393,7 +391,6 @@ fn run_pep723_script() -> Result<()> {
     Hello, world!
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     "###);
 
     // Running a script with `--locked` should warn.
@@ -404,7 +401,6 @@ fn run_pep723_script() -> Result<()> {
     Hello, world!
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     warning: `--locked` is a no-op for Python scripts with inline metadata, which always run in isolation
     "###);
 
@@ -427,7 +423,6 @@ fn run_pep723_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
       × No solution found when resolving script dependencies:
       ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     "###);
@@ -450,7 +445,6 @@ fn run_pep723_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
       × No solution found when resolving script dependencies:
       ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     "###);
@@ -513,7 +507,6 @@ fn run_pep723_script_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     warning: The Python request from `.python-version` resolved to Python 3.8.[X], which is incompatible with the script's Python requirement: `>=3.11`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -535,7 +528,6 @@ fn run_pep723_script_requires_python() -> Result<()> {
     hello
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
@@ -616,7 +608,6 @@ fn run_pep723_script_metadata() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -647,7 +638,6 @@ fn run_pep723_script_metadata() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -689,7 +679,6 @@ fn run_pep723_script_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -726,7 +715,6 @@ fn run_pep723_script_constraints() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -765,7 +753,6 @@ fn run_pep723_script_overrides() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -842,7 +829,6 @@ fn run_pep723_script_lock() -> Result<()> {
     Hello, world!
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -871,7 +857,6 @@ fn run_pep723_script_lock() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     "###);
@@ -883,7 +868,6 @@ fn run_pep723_script_lock() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     warning: `--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation
     Traceback (most recent call last):
       File "[TEMP_DIR]/main.py", line 8, in <module>
@@ -899,7 +883,6 @@ fn run_pep723_script_lock() -> Result<()> {
     Hello, world!
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -3006,7 +2989,6 @@ fn run_compiled_python_file() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `script.py`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3167,7 +3149,6 @@ fn run_script_explicit() -> Result<()> {
     Hello, world!
 
     ----- stderr -----
-    Reading inline script metadata from `script`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3201,7 +3182,6 @@ fn run_script_explicit_stdin() -> Result<()> {
     Hello, world!
 
     ----- stderr -----
-    Reading inline script metadata from `stdin`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3270,7 +3250,6 @@ fn run_gui_script_explicit_windows() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `script`
     Resolved in [TIME]
     Audited in [TIME]
     Using executable: pythonw.exe
@@ -3304,7 +3283,6 @@ fn run_gui_script_explicit_stdin_windows() -> Result<()> {
     Hello, world!
 
     ----- stderr -----
-    Reading inline script metadata from `stdin`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3337,7 +3315,6 @@ fn run_gui_script_explicit_unix() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `script`
     Resolved in [TIME]
     Audited in [TIME]
     Using executable: python3
@@ -3371,7 +3348,6 @@ fn run_gui_script_explicit_stdin_unix() -> Result<()> {
     Hello, world!
 
     ----- stderr -----
-    Reading inline script metadata from `stdin`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3386,10 +3362,6 @@ fn run_remote_pep723_script() {
     let context = TestContext::new("3.12").with_filtered_python_names();
     let mut filters = context.filters();
     filters.push((
-        r"(?m)^Reading inline script metadata from:.*\.py$",
-        "Reading inline script metadata from: [TEMP_PATH].py",
-    ));
-    filters.push((
         r"(?m)^Downloaded remote script to:.*\.py$",
         "Downloaded remote script to: [TEMP_PATH].py",
     ));
@@ -3400,7 +3372,6 @@ fn run_remote_pep723_script() {
     Hello CI, from uv!
 
     ----- stderr -----
-    Reading inline script metadata from remote URL
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3464,7 +3435,6 @@ fn run_stdin_with_pep723() -> Result<()> {
     Hello, world!
 
     ----- stderr -----
-    Reading inline script metadata from `stdin`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]

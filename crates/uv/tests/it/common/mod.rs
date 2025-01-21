@@ -2,12 +2,12 @@
 #![allow(dead_code, unreachable_pub)]
 
 use std::borrow::BorrowMut;
-use std::env;
 use std::ffi::OsString;
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Output};
 use std::str::FromStr;
+use std::{env, io};
 
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_fs::assert::PathAssert;
@@ -479,6 +479,7 @@ impl TestContext {
             .env(EnvVars::UV_TEST_PYTHON_PATH, self.python_path())
             .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .env_remove(EnvVars::UV_CACHE_DIR)
+            .env_remove(EnvVars::UV_TOOL_BIN_DIR)
             .current_dir(self.temp_dir.path());
 
         if activate_venv {
@@ -488,12 +489,6 @@ impl TestContext {
         if cfg!(unix) {
             // Avoid locale issues in tests
             command.env(EnvVars::LC_ALL, "C");
-        }
-
-        if cfg!(all(windows, debug_assertions)) {
-            // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-            // default windows stack of 1MB
-            command.env(EnvVars::UV_STACK_SIZE, (4 * 1024 * 1024).to_string());
         }
     }
 
@@ -581,13 +576,6 @@ impl TestContext {
         let mut command = self.new_command();
         command.arg("help");
         command.env_remove(EnvVars::UV_CACHE_DIR);
-
-        if cfg!(all(windows, debug_assertions)) {
-            // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-            // default windows stack of 1MB
-            command.env(EnvVars::UV_STACK_SIZE, (4 * 1024 * 1024).to_string());
-        }
-
         command
     }
 
@@ -636,13 +624,6 @@ impl TestContext {
     pub fn publish(&self) -> Command {
         let mut command = self.new_command();
         command.arg("publish");
-
-        if cfg!(all(windows, debug_assertions)) {
-            // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-            // default windows stack of 1MB
-            command.env(EnvVars::UV_STACK_SIZE, (4 * 1024 * 1024).to_string());
-        }
-
         command
     }
 
@@ -655,7 +636,7 @@ impl TestContext {
             .env(EnvVars::UV_PREVIEW, "1")
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
             .current_dir(&self.temp_dir);
-        self.add_shared_args(&mut command, true);
+        self.add_shared_args(&mut command, false);
         command
     }
 
@@ -968,6 +949,14 @@ impl TestContext {
     pub fn copy_ecosystem_project(&self, name: &str) {
         let project_dir = PathBuf::from(format!("../../ecosystem/{name}"));
         self.temp_dir.copy_from(project_dir, &["*"]).unwrap();
+        // If there is a (gitignore) lockfile, remove it.
+        if let Err(err) = fs_err::remove_file(self.temp_dir.join("uv.lock")) {
+            assert_eq!(
+                err.kind(),
+                io::ErrorKind::NotFound,
+                "Failed to remove uv.lock: {err}"
+            );
+        }
     }
 
     /// Creates a way to compare the changes made to a lock file.

@@ -116,12 +116,12 @@ jobs:
     timeout-minutes: 15
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on: github-windows-2025-x86_64-16
+    runs-on: windows-latest
     name: "cargo clippy | windows"
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create Dev Drive using ReFS
+      - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
@@ -260,7 +260,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create Dev Drive using ReFS
+      - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
@@ -268,18 +268,9 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
 
-      # We do not test with Python patch versions on Windows
-      # so we can use `setup-python` instead of our bootstrapping code
-      # this is much faster on the extremely slow GitHub Windows runners.
-      - uses: actions/setup-python@v5
-        with:
-          python-version: |
-            3.8
-            3.9
-            3.10
-            3.11
-            3.12
-            3.13
+      - uses: astral-sh/setup-uv@v5
+      - name: "Install required Python versions"
+        run: uv python install
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -305,9 +296,6 @@ jobs:
 
       - name: "Smoke test"
         working-directory: ${{ env.UV_WORKSPACE }}
-        env:
-          # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: |
           Set-Alias -Name uv -Value ./target/debug/uv
           uv venv -v
@@ -316,9 +304,6 @@ jobs:
       - name: "Smoke test completion"
         working-directory: ${{ env.UV_WORKSPACE }}
         shell: powershell
-        env:
-          # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: |
           Set-Alias -Name uv -Value ./target/debug/uv
           Set-Alias -Name uvx -Value ./target/debug/uvx
@@ -330,7 +315,7 @@ jobs:
     timeout-minutes: 15
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on: github-windows-2025-x86_64-16
+    runs-on: windows-latest
     name: "check windows trampoline | ${{ matrix.target-arch }}"
     strategy:
       fail-fast: false
@@ -339,7 +324,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create Dev Drive using ReFS
+      - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
@@ -523,12 +508,12 @@ jobs:
     needs: determine_changes
     timeout-minutes: 10
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on: github-windows-2025-x86_64-8
+    runs-on: windows-latest
     name: "build binary | windows"
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create Dev Drive using ReFS
+      - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
@@ -686,13 +671,55 @@ jobs:
           echo "$CONDA_PREFIX"
           ./uv pip install anyio
 
+  integration-test-deadsnakes-39-linux:
+    timeout-minutes: 5
+    needs: build-binary-linux
+    name: "integration test | deadsnakes python3.9 on ubuntu"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Install python3.9"
+        run: |
+          sudo add-apt-repository ppa:deadsnakes
+          sudo apt-get update
+          sudo apt-get install python3.9
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Check missing distutils"
+        run: |
+          ./uv venv -p 3.9 --python-preference only-system -v 2>&1 | tee log.txt || true
+          # We should report that distutils is missing
+          grep 'Python installation is missing `distutils`' log.txt
+
+      - name: "Install distutils"
+        run: |
+          sudo apt-get install python3.9-distutils
+
+      - name: "Create a virtualenv"
+        run: |
+          ./uv venv -p 3.9 --python-preference only-system -v
+
+      - name: "Check version"
+        run: |
+          .venv/bin/python --version
+
+      - name: "Check install"
+        run: |
+          ./uv pip install -v anyio
+
   integration-test-free-threaded-linux:
     timeout-minutes: 5
     needs: build-binary-linux
     name: "integration test | free-threaded on linux"
     runs-on: ubuntu-latest
     steps:
-      - name: "install python3.13-nogil"
+      - name: "Install python3.13-nogil"
         run: |
           sudo add-apt-repository ppa:deadsnakes
           sudo apt-get update
@@ -744,9 +771,6 @@ jobs:
     needs: build-binary-windows
     name: "integration test | free-threaded on windows"
     runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
 
     steps:
       - name: "Download binary"
@@ -908,9 +932,6 @@ jobs:
           & .venv\Scripts\python.exe --version
 
       - name: "Check install"
-        env:
-          # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: |
           .\uv.exe pip install anyio
 
@@ -1040,9 +1061,6 @@ jobs:
           & .venv\Scripts\python.exe --version
 
       - name: "Check install"
-        env:
-          # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: |
           .\uv.exe pip install anyio
 
@@ -1534,9 +1552,6 @@ jobs:
     needs: build-binary-windows
     name: "check system | python3.10 on windows"
     runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -1560,9 +1575,6 @@ jobs:
     needs: build-binary-windows
     name: "check system | python3.10 on windows x86"
     runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -1587,9 +1599,6 @@ jobs:
     needs: build-binary-windows
     name: "check system | python3.13 on windows"
     runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -1615,9 +1624,6 @@ jobs:
     needs: build-binary-windows
     name: "check system | python3.12 via chocolatey"
     runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -1750,9 +1756,6 @@ jobs:
 
       - name: "Validate global Python install"
         shell: bash -el {0}
-        env:
-          # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: python ./scripts/check_system_python.py --uv ./uv
 
   system-test-amazonlinux:
@@ -1789,9 +1792,6 @@ jobs:
     needs: build-binary-windows
     name: "check system | embedded python3.10 on windows"
     runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
     steps:
       - uses: actions/checkout@v4
 

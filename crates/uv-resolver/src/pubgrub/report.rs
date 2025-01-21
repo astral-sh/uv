@@ -120,7 +120,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                     match reason {
                         UnavailableReason::Package(reason) => {
                             let message = reason.singular_message();
-                            format!("{}{}", package, Padded::new(" ", &message, ""),)
+                            format!("{}{}", package, Padded::new(" ", &message, ""))
                         }
                         UnavailableReason::Version(reason) => {
                             let range = self.compatible_range(package, set);
@@ -536,6 +536,7 @@ impl PubGrubReportFormatter<'_> {
         fork_urls: &ForkUrls,
         fork_indexes: &ForkIndexes,
         env: &ResolverEnvironment,
+        tags: Option<&Tags>,
         workspace_members: &BTreeSet<PackageName>,
         options: &Options,
         output_hints: &mut IndexSet<PubGrubHint>,
@@ -591,6 +592,7 @@ impl PubGrubReportFormatter<'_> {
                                     selector,
                                     fork_indexes,
                                     env,
+                                    tags,
                                 ) {
                                     output_hints.insert(hint);
                                 }
@@ -686,6 +688,7 @@ impl PubGrubReportFormatter<'_> {
                     fork_urls,
                     fork_indexes,
                     env,
+                    tags,
                     workspace_members,
                     options,
                     output_hints,
@@ -702,6 +705,7 @@ impl PubGrubReportFormatter<'_> {
                     fork_urls,
                     fork_indexes,
                     env,
+                    tags,
                     workspace_members,
                     options,
                     output_hints,
@@ -721,6 +725,7 @@ impl PubGrubReportFormatter<'_> {
         selector: &CandidateSelector,
         fork_indexes: &ForkIndexes,
         env: &ResolverEnvironment,
+        tags: Option<&Tags>,
     ) -> Option<PubGrubHint> {
         let response = if let Some(url) = fork_indexes.get(name) {
             index.explicit().get(&(name.clone(), url.clone()))
@@ -739,8 +744,8 @@ impl PubGrubReportFormatter<'_> {
         match tag {
             IncompatibleTag::Invalid => None,
             IncompatibleTag::Python => {
-                // Return all available language tags.
-                let tags = prioritized.python_tags();
+                let best = tags.and_then(Tags::python_tag);
+                let tags = prioritized.python_tags().collect::<BTreeSet<_>>();
                 if tags.is_empty() {
                     None
                 } else {
@@ -748,13 +753,14 @@ impl PubGrubReportFormatter<'_> {
                         package: name.clone(),
                         version: candidate.version().clone(),
                         tags,
+                        best,
                     })
                 }
             }
             IncompatibleTag::Abi | IncompatibleTag::AbiPythonVersion => {
+                let best = tags.and_then(Tags::abi_tag);
                 let tags = prioritized
                     .abi_tags()
-                    .into_iter()
                     // Ignore `none`, which is universally compatible.
                     //
                     // As an example, `none` can appear here if we're solving for Python 3.13, and
@@ -772,6 +778,7 @@ impl PubGrubReportFormatter<'_> {
                         package: name.clone(),
                         version: candidate.version().clone(),
                         tags,
+                        best,
                     })
                 }
             }
@@ -788,9 +795,8 @@ impl PubGrubReportFormatter<'_> {
                 // we only show platforms for ABI-compatible wheels.
                 let tags = prioritized
                     .platform_tags(self.tags?)
-                    .into_iter()
                     .cloned()
-                    .collect::<Vec<_>>();
+                    .collect::<BTreeSet<_>>();
                 if tags.is_empty() {
                     None
                 } else {
@@ -1098,29 +1104,36 @@ pub(crate) enum PubGrubHint {
     UnauthorizedIndex { index: IndexUrl },
     /// An index returned a Forbidden (403) response.
     ForbiddenIndex { index: IndexUrl },
-    /// No wheels are available for a package, and using source distributions was disabled.
+    /// None of the available wheels for a package have a compatible Python language tag (e.g.,
+    /// `cp310` in `cp310-abi3-manylinux_2_17_x86_64.whl`).
     LanguageTags {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
         version: Version,
         // excluded from `PartialEq` and `Hash`
         tags: BTreeSet<LanguageTag>,
+        // excluded from `PartialEq` and `Hash`
+        best: Option<LanguageTag>,
     },
-    /// No wheels are available for a package, and using source distributions was disabled.
+    /// None of the available wheels for a package have a compatible ABI tag (e.g., `abi3` in
+    /// `cp310-abi3-manylinux_2_17_x86_64.whl`).
     AbiTags {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
         version: Version,
         // excluded from `PartialEq` and `Hash`
         tags: BTreeSet<AbiTag>,
+        // excluded from `PartialEq` and `Hash`
+        best: Option<AbiTag>,
     },
-    /// No wheels are available for a package, and using source distributions was disabled.
+    /// None of the available wheels for a package have a compatible platform tag (e.g.,
+    /// `manylinux_2_17_x86_64` in `cp310-abi3-manylinux_2_17_x86_64.whl`).
     PlatformTags {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
         version: Version,
         // excluded from `PartialEq` and `Hash`
-        tags: Vec<PlatformTag>,
+        tags: BTreeSet<PlatformTag>,
     },
 }
 
@@ -1530,7 +1543,7 @@ impl std::fmt::Display for PubGrubHint {
                 let option = match option {
                     NoBuild::All => "for all packages (i.e., with `--no-build`)".to_string(),
                     NoBuild::Packages(_) => {
-                        format!("for `{package}` (i.e., with `--no-build-package {package}`)",)
+                        format!("for `{package}` (i.e., with `--no-build-package {package}`)")
                     }
                     NoBuild::None => unreachable!(),
                 };
@@ -1546,7 +1559,7 @@ impl std::fmt::Display for PubGrubHint {
                 let option = match option {
                     NoBinary::All => "for all packages (i.e., with `--no-binary`)".to_string(),
                     NoBinary::Packages(_) => {
-                        format!("for `{package}` (i.e., with `--no-binary-package {package}`)",)
+                        format!("for `{package}` (i.e., with `--no-binary-package {package}`)")
                     }
                     NoBinary::None => unreachable!(),
                 };
@@ -1562,37 +1575,81 @@ impl std::fmt::Display for PubGrubHint {
                 package,
                 version,
                 tags,
+                best,
             } => {
-                let s = if tags.len() == 1 { "" } else { "s" };
-                write!(
-                    f,
-                    "{}{} Wheels are available for `{}` ({}) with the following Python tag{s}: {}",
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    package.cyan(),
-                    format!("v{version}").cyan(),
-                    tags.iter()
-                        .map(|tag| format!("`{}`", tag.cyan()))
-                        .join(", "),
-                )
+                if let Some(best) = best {
+                    let s = if tags.len() == 1 { "" } else { "s" };
+                    let best = if let Some(pretty) = best.pretty() {
+                        format!("{} (`{}`)", pretty.cyan(), best.cyan())
+                    } else {
+                        format!("{}", best.cyan())
+                    };
+                    write!(
+                        f,
+                        "{}{} You require {}, but we only found wheels for `{}` ({}) with the following Python implementation tag{s}: {}",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        best,
+                        package.cyan(),
+                        format!("v{version}").cyan(),
+                        tags.iter()
+                            .map(|tag| format!("`{}`", tag.cyan()))
+                            .join(", "),
+                    )
+                } else {
+                    let s = if tags.len() == 1 { "" } else { "s" };
+                    write!(
+                        f,
+                        "{}{} Wheels are available for `{}` ({}) with the following Python implementation tag{s}: {}",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        package.cyan(),
+                        format!("v{version}").cyan(),
+                        tags.iter()
+                            .map(|tag| format!("`{}`", tag.cyan()))
+                            .join(", "),
+                    )
+                }
             }
             Self::AbiTags {
                 package,
                 version,
                 tags,
+                best,
             } => {
-                let s = if tags.len() == 1 { "" } else { "s" };
-                write!(
-                    f,
-                    "{}{} Wheels are available for `{}` ({}) with the following ABI tag{s}: {}",
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    package.cyan(),
-                    format!("v{version}").cyan(),
-                    tags.iter()
-                        .map(|tag| format!("`{}`", tag.cyan()))
-                        .join(", "),
-                )
+                if let Some(best) = best {
+                    let s = if tags.len() == 1 { "" } else { "s" };
+                    let best = if let Some(pretty) = best.pretty() {
+                        format!("{} (`{}`)", pretty.cyan(), best.cyan())
+                    } else {
+                        format!("{}", best.cyan())
+                    };
+                    write!(
+                        f,
+                        "{}{} You require {}, but we only found wheels for `{}` ({}) with the following Python ABI tag{s}: {}",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        best,
+                        package.cyan(),
+                        format!("v{version}").cyan(),
+                        tags.iter()
+                            .map(|tag| format!("`{}`", tag.cyan()))
+                            .join(", "),
+                    )
+                } else {
+                    let s = if tags.len() == 1 { "" } else { "s" };
+                    write!(
+                        f,
+                        "{}{} Wheels are available for `{}` ({}) with the following Python ABI tag{s}: {}",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        package.cyan(),
+                        format!("v{version}").cyan(),
+                        tags.iter()
+                            .map(|tag| format!("`{}`", tag.cyan()))
+                            .join(", "),
+                    )
+                }
             }
             Self::PlatformTags {
                 package,
@@ -1786,7 +1843,7 @@ fn update_availability_range(
         let segment_range = Range::from_range_bounds((lower.clone(), upper.clone()));
 
         // Drop the segment if it's disjoint with the available range, e.g., if the segment is
-        // `foo>999`, and the the available versions are all `<10` it's useless to show.
+        // `foo>999`, and the available versions are all `<10` it's useless to show.
         if segment_range.is_disjoint(&available_range) {
             continue;
         }

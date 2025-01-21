@@ -22,9 +22,9 @@ affects selection of dependency versions (they must support the same Python vers
 [Entry points](https://packaging.python.org/en/latest/specifications/entry-points/#entry-points) are
 the official term for an installed package to advertise interfaces. These include:
 
-- [Command line interfaces]()
-- [Graphical user interfaces]()
-- [Plugin entry points]()
+- [Command line interfaces](#command-line-interfaces)
+- [Graphical user interfaces](#graphical-user-interfaces)
+- [Plugin entry points](#plugin-entry-points)
 
 !!! important
 
@@ -171,6 +171,16 @@ environment. If an environment is not present at the provided path, uv will crea
 This option can be used to write to the system Python environment, though it is not recommended.
 `uv sync` will remove extraneous packages from the environment by default and, as such, may leave
 the system in a broken state.
+
+To target the system environment, set `UV_PROJECT_ENVIRONMENT` to the prefix of the Python
+installation. For example, on Debian-based systems, this is usually `/usr/local`:
+
+```console
+$ python -c "import sysconfig; print(sysconfig.get_config_var('prefix'))"
+/usr/local
+```
+
+To target this environment, you'd export `UV_PROJECT_ENVIRONMENT=/usr/local`.
 
 !!! important
 
