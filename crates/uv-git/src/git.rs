@@ -41,9 +41,7 @@ pub static GIT: LazyLock<Result<PathBuf, GitError>> = LazyLock::new(|| {
 });
 
 /// A reference to commit or commit-ish.
-#[derive(
-    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum GitReference {
     /// A specific branch.
     Branch(String),
