@@ -1,13 +1,12 @@
+use pubgrub::Range;
+use rustc_hash::FxHashMap;
 use std::cmp::Reverse;
 use std::collections::hash_map::OccupiedEntry;
 
-use pubgrub::Range;
-use rustc_hash::FxHashMap;
-
+use crate::fork_urls::ForkUrls;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
-use crate::fork_urls::ForkUrls;
 use crate::pubgrub::package::PubGrubPackage;
 use crate::pubgrub::PubGrubPackageInner;
 use crate::SentinelRange;
@@ -104,7 +103,7 @@ impl PubGrubPriorities {
             | PubGrubPriority::ConflictEarly(Reverse(index))
             | PubGrubPriority::Singleton(Reverse(index))
             | PubGrubPriority::DirectUrl(Reverse(index)) => Some(*index),
-            PubGrubPriority::Proxy | PubGrubPriority::Root => None,
+            PubGrubPriority::Root => None,
         }
     }
 
@@ -113,9 +112,9 @@ impl PubGrubPriorities {
         let package_priority = match &**package {
             PubGrubPackageInner::Root(_) => Some(PubGrubPriority::Root),
             PubGrubPackageInner::Python(_) => Some(PubGrubPriority::Root),
-            PubGrubPackageInner::Marker { .. } => Some(PubGrubPriority::Proxy),
-            PubGrubPackageInner::Extra { .. } => Some(PubGrubPriority::Proxy),
-            PubGrubPackageInner::Dev { .. } => Some(PubGrubPriority::Proxy),
+            PubGrubPackageInner::Marker { name, .. } => self.package_priority.get(name).copied(),
+            PubGrubPackageInner::Extra { name, .. } => self.package_priority.get(name).copied(),
+            PubGrubPackageInner::Dev { name, .. } => self.package_priority.get(name).copied(),
             PubGrubPackageInner::Package { name, .. } => self.package_priority.get(name).copied(),
         };
         let virtual_package_tiebreaker = self
@@ -224,13 +223,6 @@ pub(crate) enum PubGrubPriority {
     /// distributions to URLs, see [`PubGrubPackage::from_package`] an
     /// [`ForkUrls`].
     DirectUrl(Reverse<usize>),
-
-    /// The package is a proxy package.
-    ///
-    /// We process proxy packages eagerly since each proxy package expands into two "regular"
-    /// [`PubGrubPackage`] packages, which gives us additional constraints while not affecting the
-    /// priorities (since the expanded dependencies are all linked to the same package name).
-    Proxy,
 
     /// The package is the root package.
     Root,
