@@ -1,12 +1,13 @@
-use pubgrub::Range;
-use rustc_hash::FxHashMap;
 use std::cmp::Reverse;
 use std::collections::hash_map::OccupiedEntry;
 
-use crate::fork_urls::ForkUrls;
+use pubgrub::Range;
+use rustc_hash::FxHashMap;
+
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
+use crate::fork_urls::ForkUrls;
 use crate::pubgrub::package::PubGrubPackage;
 use crate::pubgrub::PubGrubPackageInner;
 use crate::SentinelRange;
@@ -23,7 +24,7 @@ use crate::SentinelRange;
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PubGrubPriorities {
     package_priority: FxHashMap<PackageName, PubGrubPriority>,
-    virtual_package_tiebreaker: FxHashMap<PubGrubPackage, u32>,
+    virtual_package_tiebreaker: FxHashMap<PubGrubPackage, PubGrubTiebreaker>,
 }
 
 impl PubGrubPriorities {
@@ -37,8 +38,10 @@ impl PubGrubPriorities {
         if !self.virtual_package_tiebreaker.contains_key(package) {
             self.virtual_package_tiebreaker.insert(
                 package.clone(),
-                u32::try_from(self.virtual_package_tiebreaker.len())
-                    .expect("Less than 2**32 packages"),
+                PubGrubTiebreaker::from(
+                    u32::try_from(self.virtual_package_tiebreaker.len())
+                        .expect("Less than 2**32 packages"),
+                ),
             );
         }
 
@@ -108,7 +111,10 @@ impl PubGrubPriorities {
     }
 
     /// Return the [`PubGrubPriority`] of the given package, if it exists.
-    pub(crate) fn get(&self, package: &PubGrubPackage) -> (Option<PubGrubPriority>, u32) {
+    pub(crate) fn get(
+        &self,
+        package: &PubGrubPackage,
+    ) -> (Option<PubGrubPriority>, Option<PubGrubTiebreaker>) {
         let package_priority = match &**package {
             PubGrubPackageInner::Root(_) => Some(PubGrubPriority::Root),
             PubGrubPackageInner::Python(_) => Some(PubGrubPriority::Root),
@@ -117,12 +123,8 @@ impl PubGrubPriorities {
             PubGrubPackageInner::Dev { name, .. } => self.package_priority.get(name).copied(),
             PubGrubPackageInner::Package { name, .. } => self.package_priority.get(name).copied(),
         };
-        let virtual_package_tiebreaker = self
-            .virtual_package_tiebreaker
-            .get(package)
-            .copied()
-            .unwrap_or_default();
-        (package_priority, virtual_package_tiebreaker)
+        let package_tiebreaker = self.virtual_package_tiebreaker.get(package).copied();
+        (package_priority, package_tiebreaker)
     }
 
     /// Mark a package as prioritized by setting it to [`PubGrubPriority::ConflictEarly`], if it
@@ -226,4 +228,13 @@ pub(crate) enum PubGrubPriority {
 
     /// The package is the root package.
     Root,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct PubGrubTiebreaker(Reverse<u32>);
+
+impl From<u32> for PubGrubTiebreaker {
+    fn from(value: u32) -> Self {
+        Self(Reverse(value))
+    }
 }
