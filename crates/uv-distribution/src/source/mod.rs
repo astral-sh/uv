@@ -40,7 +40,7 @@ use uv_distribution_types::{
 };
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic, LockedFile};
-use uv_git::{GitHubRepository, GitSha};
+use uv_git::{GitHubRepository, GitOid};
 use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
 use uv_pep440::{release_specifiers_to_ranges, Version};
@@ -1783,7 +1783,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Attempts to fetch the `pyproject.toml` from the resolved commit using the GitHub API.
     async fn github_metadata(
         &self,
-        commit: GitSha,
+        commit: GitOid,
         source: &BuildableSource<'_>,
         resource: &GitSourceUrl<'_>,
         client: &ManagedClient<'_>,

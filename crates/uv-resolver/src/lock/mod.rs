@@ -31,7 +31,7 @@ use uv_distribution_types::{
     RemoteSource, ResolvedDist, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{relative_to, PortablePath, PortablePathBuf};
-use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
+use uv_git::{GitOid, GitReference, RepositoryReference, ResolvedRepositoryReference};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
@@ -3192,7 +3192,7 @@ struct DirectSource {
 /// canonical ordering of package entries.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 struct GitSource {
-    precise: GitSha,
+    precise: GitOid,
     subdirectory: Option<PathBuf>,
     kind: GitSourceKind,
 }
@@ -3219,7 +3219,7 @@ impl GitSource {
                 _ => continue,
             };
         }
-        let precise = GitSha::from_str(url.fragment().ok_or(GitSourceError::MissingSha)?)
+        let precise = GitOid::from_str(url.fragment().ok_or(GitSourceError::MissingSha)?)
             .map_err(|_| GitSourceError::InvalidSha)?;
 
         Ok(GitSource {
@@ -3587,7 +3587,7 @@ fn locked_git_url(git_dist: &GitSourceDist) -> Url {
             .git
             .precise()
             .as_ref()
-            .map(GitSha::to_string)
+            .map(GitOid::to_string)
             .as_deref(),
     );
 

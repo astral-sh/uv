@@ -3,80 +3,24 @@ use std::str::{self, FromStr};
 
 use thiserror::Error;
 
-/// A complete Git SHA, i.e., a 40-character hexadecimal representation of a Git commit.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct GitSha(GitOid);
-
-impl GitSha {
-    /// Return the Git SHA as a string.
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-
-    /// Return a truncated representation, i.e., the first 16 characters of the SHA.
-    pub fn as_short_str(&self) -> &str {
-        &self.0.as_str()[..16]
-    }
-}
-
-impl From<GitSha> for GitOid {
-    fn from(value: GitSha) -> Self {
-        value.0
-    }
-}
-
-impl From<GitOid> for GitSha {
-    fn from(value: GitOid) -> Self {
-        Self(value)
-    }
-}
-
-impl Display for GitSha {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl FromStr for GitSha {
-    type Err = OidParseError;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        Ok(Self(GitOid::from_str(value)?))
-    }
-}
-
-impl serde::Serialize for GitSha {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        self.0.as_str().serialize(serializer)
-    }
-}
-
-impl<'de> serde::Deserialize<'de> for GitSha {
-    fn deserialize<D>(deserializer: D) -> Result<GitSha, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let value = String::deserialize(deserializer)?;
-        GitSha::from_str(&value).map_err(serde::de::Error::custom)
-    }
-}
-
 /// Unique identity of any Git object (commit, tree, blob, tag).
 ///
 /// Note this type does not validate whether the input is a valid hash.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct GitOid {
+pub struct GitOid {
     len: usize,
     bytes: [u8; 40],
 }
 
 impl GitOid {
     /// Return the string representation of an object ID.
-    pub(crate) fn as_str(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         str::from_utf8(&self.bytes[..self.len]).unwrap()
+    }
+
+    /// Return a truncated representation, i.e., the first 16 characters of the SHA.
+    pub fn as_short_str(&self) -> &str {
+        &self.as_str()[..16]
     }
 }
 
@@ -113,6 +57,25 @@ impl FromStr for GitOid {
 impl Display for GitOid {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_str())
+    }
+}
+
+impl serde::Serialize for GitOid {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.as_str().serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for GitOid {
+    fn deserialize<D>(deserializer: D) -> Result<GitOid, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        GitOid::from_str(&value).map_err(serde::de::Error::custom)
     }
 }
 

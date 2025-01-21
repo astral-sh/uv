@@ -18,8 +18,7 @@ use uv_fs::Simplified;
 use uv_static::EnvVars;
 use uv_version::version;
 
-use crate::sha::GitOid;
-use crate::{GitHubRepository, GitSha};
+use crate::{GitHubRepository, GitOid};
 
 /// A file indicates that if present, `git reset` has been done and a repo
 /// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
@@ -32,6 +31,7 @@ pub enum GitError {
     #[error(transparent)]
     Other(#[from] which::Error),
 }
+
 /// A global cache of the result of `which git`.
 pub static GIT: LazyLock<Result<PathBuf, GitError>> = LazyLock::new(|| {
     which::which("git").map_err(|e| match e {
@@ -123,10 +123,10 @@ impl GitReference {
         }
     }
 
-    /// Returns the precise [`GitSha`] of this reference, if it's a full commit.
-    pub(crate) fn as_sha(&self) -> Option<GitSha> {
+    /// Returns the precise [`GitOid`] of this reference, if it's a full commit.
+    pub(crate) fn as_sha(&self) -> Option<GitOid> {
         if let Self::FullCommit(rev) = self {
-            Some(GitSha::from_str(rev).expect("Full commit should be exactly 40 characters"))
+            Some(GitOid::from_str(rev).expect("Full commit should be exactly 40 characters"))
         } else {
             None
         }
