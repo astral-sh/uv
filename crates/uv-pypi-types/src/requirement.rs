@@ -8,7 +8,7 @@ use url::Url;
 use uv_distribution_filename::DistExtension;
 
 use uv_fs::{relative_to, PortablePath, PortablePathBuf, CWD};
-use uv_git::{GitReference, GitSha, GitUrl};
+use uv_git::{GitOid, GitReference, GitUrl};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{
@@ -406,7 +406,7 @@ pub enum RequirementSource {
         /// Optionally, the revision, tag, or branch to use.
         reference: GitReference,
         /// The precise commit to use, if known.
-        precise: Option<GitSha>,
+        precise: Option<GitOid>,
         /// The path to the source distribution if it is not in the repository root.
         subdirectory: Option<PathBuf>,
         /// The PEP 508 style url in the format
@@ -823,7 +823,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                     };
                 }
 
-                let precise = repository.fragment().map(GitSha::from_str).transpose()?;
+                let precise = repository.fragment().map(GitOid::from_str).transpose()?;
 
                 // Clear out any existing state.
                 repository.set_fragment(None);
