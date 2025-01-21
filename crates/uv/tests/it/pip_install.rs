@@ -1745,11 +1745,15 @@ fn install_git_public_https_missing_commit() {
     ----- stderr -----
       × Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
       ├─▶ Git operation failed
-      ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
-      ├─▶ failed to fetch commit `79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
-      ╰─▶ process didn't exit successfully: `git fetch [...]` (exit code: 128)
+      ├─▶ failed to find branch, tag, or commit `79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
+      ╰─▶ process didn't exit successfully: `/usr/bin/git rev-parse '79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b^0'` (exit code: 128)
+          --- stdout
+          79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b^0
+
           --- stderr
-          fatal: remote error: upload-pack: not our ref 79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b
+          fatal: ambiguous argument '79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b^0': unknown revision or path not in the working tree.
+          Use '--' to separate paths from revisions, like this:
+          'git <command> [<revision>...] -- [<file>...]'
     "###);
 }
 
