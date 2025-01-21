@@ -453,7 +453,7 @@ impl ManagedPythonDownload {
             .filter(|download| download.key.libc != Libc::Some(target_lexicon::Environment::Musl))
     }
 
-    pub fn url(&self) -> &str {
+    pub fn url(&self) -> &'static str {
         self.url
     }
 
@@ -465,7 +465,7 @@ impl ManagedPythonDownload {
         self.key.os()
     }
 
-    pub fn sha256(&self) -> Option<&str> {
+    pub fn sha256(&self) -> Option<&'static str> {
         self.sha256
     }
 

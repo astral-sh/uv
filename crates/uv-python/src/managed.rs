@@ -16,7 +16,7 @@ use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 use uv_trampoline_builder::{windows_python_launcher, Launcher};
 
-use crate::downloads::Error as DownloadError;
+use crate::downloads::{Error as DownloadError, ManagedPythonDownload};
 use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
 };
@@ -229,7 +229,7 @@ impl ManagedPythonInstallations {
                     .unwrap_or(true)
             })
             .filter_map(|path| {
-                ManagedPythonInstallation::new(path)
+                ManagedPythonInstallation::from_path(path)
                     .inspect_err(|err| {
                         warn!("Ignoring malformed managed Python entry:\n    {err}");
                     })
@@ -294,10 +294,27 @@ pub struct ManagedPythonInstallation {
     path: PathBuf,
     /// An install key for the Python version.
     key: PythonInstallationKey,
+    /// The URL with the Python archive.
+    ///
+    /// Empty when self was constructed from a path.
+    url: Option<&'static str>,
+    /// The SHA256 of the Python archive at the URL.
+    ///
+    /// Empty when self was constructed from a path.
+    sha256: Option<&'static str>,
 }
 
 impl ManagedPythonInstallation {
-    pub fn new(path: PathBuf) -> Result<Self, Error> {
+    pub fn new(path: PathBuf, download: &ManagedPythonDownload) -> Self {
+        Self {
+            path,
+            key: download.key().clone(),
+            url: Some(download.url()),
+            sha256: download.sha256(),
+        }
+    }
+
+    pub(crate) fn from_path(path: PathBuf) -> Result<Self, Error> {
         let key = PythonInstallationKey::from_str(
             path.file_name()
                 .ok_or(Error::NameError("name is empty".to_string()))?
@@ -307,7 +324,12 @@ impl ManagedPythonInstallation {
 
         let path = std::path::absolute(&path).map_err(|err| Error::AbsolutePath(path, err))?;
 
-        Ok(Self { path, key })
+        Ok(Self {
+            path,
+            key,
+            url: None,
+            sha256: None,
+        })
     }
 
     /// The path to this managed installation's Python executable.
@@ -315,7 +337,10 @@ impl ManagedPythonInstallation {
     /// If the installation has multiple execututables i.e., `python`, `python3`, etc., this will
     /// return the _canonical_ executable name which the other names link to. On Unix, this is
     /// `python{major}.{minor}{variant}` and on Windows, this is `python{exe}`.
-    pub fn executable(&self) -> PathBuf {
+    ///
+    /// If windowed is true, `pythonw.exe` is selected over `python.exe` on windows, with no changes
+    /// on non-windows.
+    pub fn executable(&self, windowed: bool) -> PathBuf {
         let implementation = match self.implementation() {
             ImplementationName::CPython => "python",
             ImplementationName::PyPy => "pypy",
@@ -342,6 +367,9 @@ impl ManagedPythonInstallation {
         // On Windows, the executable is just `python.exe` even for alternative variants
         let variant = if cfg!(unix) {
             self.key.variant.suffix()
+        } else if cfg!(windows) && windowed {
+            // Use windowed Python that doesn't open a terminal.
+            "w"
         } else {
             ""
         };
@@ -412,11 +440,11 @@ impl ManagedPythonInstallation {
 
     pub fn satisfies(&self, request: &PythonRequest) -> bool {
         match request {
-            PythonRequest::File(path) => self.executable() == *path,
+            PythonRequest::File(path) => self.executable(false) == *path,
             PythonRequest::Default | PythonRequest::Any => true,
             PythonRequest::Directory(path) => self.path() == *path,
             PythonRequest::ExecutableName(name) => self
-                .executable()
+                .executable(false)
                 .file_name()
                 .is_some_and(|filename| filename.to_string_lossy() == *name),
             PythonRequest::Implementation(implementation) => {
@@ -432,7 +460,7 @@ impl ManagedPythonInstallation {
 
     /// Ensure the environment contains the canonical Python executable names.
     pub fn ensure_canonical_executables(&self) -> Result<(), Error> {
-        let python = self.executable();
+        let python = self.executable(false);
 
         let canonical_names = &["python"];
 
@@ -539,7 +567,7 @@ impl ManagedPythonInstallation {
     ///
     /// If the file already exists at the target path, an error will be returned.
     pub fn create_bin_link(&self, target: &Path) -> Result<(), Error> {
-        let python = self.executable();
+        let python = self.executable(false);
 
         let bin = target.parent().ok_or(Error::NoExecutableDirectory)?;
         fs_err::create_dir_all(bin).map_err(|err| Error::ExecutableDirectory {
@@ -585,7 +613,7 @@ impl ManagedPythonInstallation {
     /// [`ManagedPythonInstallation::create_bin_link`].
     pub fn is_bin_link(&self, path: &Path) -> bool {
         if cfg!(unix) {
-            is_same_file(path, self.executable()).unwrap_or_default()
+            is_same_file(path, self.executable(false)).unwrap_or_default()
         } else if cfg!(windows) {
             let Some(launcher) = Launcher::try_from_path(path).unwrap_or_default() else {
                 return false;
@@ -593,7 +621,7 @@ impl ManagedPythonInstallation {
             if !matches!(launcher.kind, uv_trampoline_builder::LauncherKind::Python) {
                 return false;
             }
-            launcher.python_path == self.executable()
+            launcher.python_path == self.executable(false)
         } else {
             unreachable!("Only Windows and Unix are supported")
         }
@@ -626,6 +654,14 @@ impl ManagedPythonInstallation {
         }
         // Do not upgrade if the patch versions are the same
         self.key.patch != other.key.patch
+    }
+
+    pub fn url(&self) -> Option<&'static str> {
+        self.url
+    }
+
+    pub fn sha256(&self) -> Option<&'static str> {
+        self.sha256
     }
 }
 

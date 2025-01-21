@@ -64,9 +64,9 @@ which = { workspace = true }
 procfs = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { workspace = true }
 windows-registry = { workspace = true }
 windows-result = { workspace = true }
+windows-sys = { workspace = true }
 
 [dev-dependencies]
 anyhow = { version = "1.0.89" }
