@@ -30,7 +30,7 @@ fn run() -> std::io::Result<ExitStatus> {
             "Could not determine the location of the `uvx` binary",
         ));
     };
-    let uv = bin.join("uv");
+    let uv = bin.join(format!("uv{}", std::env::consts::EXE_SUFFIX));
     let args = ["tool", "uvx"]
         .iter()
         .map(OsString::from)
