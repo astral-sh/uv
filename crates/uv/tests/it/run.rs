@@ -3240,7 +3240,7 @@ fn run_gui_script_explicit_windows() -> Result<()> {
         if not executable.startswith("pythonw"):
             print(f"Error: Expected pythonw.exe but got: {executable}", file=sys.stderr)
             sys.exit(1)
-        
+
         print(f"Using executable: {executable}", file=sys.stderr)
     "#})?;
 
@@ -3748,5 +3748,21 @@ fn run_with_group_conflict() -> Result<()> {
      + iniconfig==2.0.0
     "###);
 
+    Ok(())
+}
+
+/// Test that a signal n makes the process exit with code 128+n.
+#[cfg(unix)]
+#[test]
+fn exit_status_signal() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let script = context.temp_dir.child("segfault.py");
+    script.write_str(indoc! {r"
+        import os
+        os.kill(os.getpid(), 11)
+    "})?;
+    let status = context.run().arg(script.path()).status()?;
+    assert_eq!(status.code().expect("a status code"), 139);
     Ok(())
 }
