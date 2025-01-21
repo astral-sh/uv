@@ -7281,14 +7281,14 @@ fn lock_relative_lock_deserialization() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&child), @r###"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-      × Failed to build `child @ file://[TEMP_DIR]/packages/child`
-      ├─▶ Failed to parse entry: `member`
-      ╰─▶ `member` references a workspace in `tool.uv.sources` (e.g., `member = { workspace = true }`), but is not a workspace member
+    error: Failed to generate package metadata for `child==0.1.0 @ editable+.`
+      Caused by: Failed to parse entry: `member`
+      Caused by: `member` references a workspace in `tool.uv.sources` (e.g., `member = { workspace = true }`), but is not a workspace member
     "###);
 
     Ok(())
@@ -15078,11 +15078,11 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG Using request timeout of [TIME]
     DEBUG Found static `requires-dist` for: [TEMP_DIR]/
     DEBUG No workspace root found, using project root
+    DEBUG Found static `pyproject.toml` for: project @ file://[TEMP_DIR]/
+    DEBUG No workspace root found, using project root
     DEBUG Ignoring existing lockfile due to mismatched requirements for: `project==0.1.0`
       Requested: {Requirement { name: PackageName("anyio"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([]), index: None, conflict: None }, origin: None }}
       Existing: {Requirement { name: PackageName("iniconfig"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([VersionSpecifier { operator: Equal, version: "2.0.0" }]), index: Some(Url { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("test.pypi.org")), port: None, path: "/simple", query: None, fragment: None }), conflict: None }, origin: None }}
-    DEBUG Found static `pyproject.toml` for: project @ file://[TEMP_DIR]/
-    DEBUG No workspace root found, using project root
     DEBUG Solving with installed Python version: 3.12.[X]
     DEBUG Solving with target Python version: >=3.12
     DEBUG Adding direct dependency: project*
@@ -20713,13 +20713,30 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
 
     // Re-run with `--locked`. We should accept the lockfile, since the metadata is unchanged.
     uv_snapshot!(context.filters(), context.lock().arg("--locked").env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "###);
+
+    fs_err::remove_dir_all(&context.cache_dir)?;
+
+    // However, running with `--offline` should fail, since we _do_ need to invoke `hatchling` to
+    // resolve the metadata when recursive extras are present.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: Failed to generate package metadata for `project @ editable+.`
+      Caused by: Failed to resolve requirements from `build-system.requires`
+      Caused by: No solution found when resolving: `hatchling`
+      Caused by: Because hatchling was not found in the cache and you require hatchling, we can conclude that your requirements are unsatisfiable.
+
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "###);
 
     Ok(())
@@ -20862,6 +20879,18 @@ fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
 
     // Re-run with `--locked`. We should accept the lockfile, since the metadata is unchanged.
     uv_snapshot!(context.filters(), context.lock().arg("--locked").env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "###);
+
+    fs_err::remove_dir_all(&context.cache_dir)?;
+
+    // Running with `--offline` should also succeed.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

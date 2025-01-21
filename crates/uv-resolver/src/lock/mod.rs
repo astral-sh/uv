@@ -15,6 +15,7 @@ use petgraph::visit::EdgeRef;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::Serializer;
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
+use tracing::trace;
 use url::Url;
 
 use uv_cache_key::RepositoryUrl;
@@ -967,6 +968,79 @@ impl Lock {
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
     ) -> Result<SatisfiesResult<'_>, LockError> {
+        /// Return a [`SatisfiesResult`] if the given [`RequiresDist`] does not match the [`Package`].
+        fn satisfies_requires_dist<'lock>(
+            metadata: RequiresDist,
+            package: &'lock Package,
+            root: &Path,
+        ) -> Result<SatisfiesResult<'lock>, LockError> {
+            // Validate the `requires-dist` metadata.
+            let expected: BTreeSet<_> = metadata
+                .requires_dist
+                .into_iter()
+                .map(|requirement| normalize_requirement(requirement, root))
+                .collect::<Result<_, _>>()?;
+            let actual: BTreeSet<_> = package
+                .metadata
+                .requires_dist
+                .iter()
+                .cloned()
+                .map(|requirement| normalize_requirement(requirement, root))
+                .collect::<Result<_, _>>()?;
+
+            if expected != actual {
+                return Ok(SatisfiesResult::MismatchedPackageRequirements(
+                    &package.id.name,
+                    package.id.version.as_ref(),
+                    expected,
+                    actual,
+                ));
+            }
+
+            // Validate the `dependency-groups` metadata.
+            let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = metadata
+                .dependency_groups
+                .into_iter()
+                .filter(|(_, requirements)| !requirements.is_empty())
+                .map(|(group, requirements)| {
+                    Ok::<_, LockError>((
+                        group,
+                        requirements
+                            .into_iter()
+                            .map(|requirement| normalize_requirement(requirement, root))
+                            .collect::<Result<_, _>>()?,
+                    ))
+                })
+                .collect::<Result<_, _>>()?;
+            let actual: BTreeMap<GroupName, BTreeSet<Requirement>> = package
+                .metadata
+                .dependency_groups
+                .iter()
+                .filter(|(_, requirements)| !requirements.is_empty())
+                .map(|(group, requirements)| {
+                    Ok::<_, LockError>((
+                        group.clone(),
+                        requirements
+                            .iter()
+                            .cloned()
+                            .map(|requirement| normalize_requirement(requirement, root))
+                            .collect::<Result<_, _>>()?,
+                    ))
+                })
+                .collect::<Result<_, _>>()?;
+
+            if expected != actual {
+                return Ok(SatisfiesResult::MismatchedPackageDependencyGroups(
+                    &package.id.name,
+                    package.id.version.as_ref(),
+                    expected,
+                    actual,
+                ));
+            }
+
+            Ok(SatisfiesResult::Satisfied)
+        }
+
         let mut queue: VecDeque<&Package> = VecDeque::new();
         let mut seen = FxHashSet::default();
 
@@ -1219,9 +1293,29 @@ impl Lock {
                 None
             };
 
-            let metadata = if let Some(metadata) = metadata {
-                metadata
-            } else {
+            let satisfied = metadata.is_some_and(|metadata| {
+                match satisfies_requires_dist(metadata, package, root) {
+                    Ok(SatisfiesResult::Satisfied) => {
+                        trace!("Static `Requires-Dist` for `{}` is up-to-date", package.id);
+                        true
+                    },
+                    Ok(..) => {
+                        trace!("Static `Requires-Dist` for `{}` is out-of-date; falling back to distribution database", package.id);
+                        false
+                    },
+                    Err(..) => {
+                        trace!("Static `Requires-Dist` for `{}` is invalid; falling back to distribution database", package.id);
+                        false
+                    },
+                }
+            });
+
+            // If the `requires-dist` metadata matches the requirements, we're done; otherwise,
+            // fetch the "full" metadata, which may involve invoking the build system. In some
+            // cases, build backends return metadata that does _not_ match the `pyproject.toml`
+            // exactly. For example, `hatchling` will flatten any recursive (or self-referential)
+            // extras, while `setuptools` will not.
+            if !satisfied {
                 // Get the metadata for the distribution.
                 let dist = package.to_dist(
                     root,
@@ -1272,74 +1366,9 @@ impl Lock {
                     }
                 };
 
-                RequiresDist::from(metadata)
-            };
-
-            // Validate the `requires-dist` metadata.
-            {
-                let expected: BTreeSet<_> = metadata
-                    .requires_dist
-                    .into_iter()
-                    .map(|requirement| normalize_requirement(requirement, root))
-                    .collect::<Result<_, _>>()?;
-                let actual: BTreeSet<_> = package
-                    .metadata
-                    .requires_dist
-                    .iter()
-                    .cloned()
-                    .map(|requirement| normalize_requirement(requirement, root))
-                    .collect::<Result<_, _>>()?;
-
-                if expected != actual {
-                    return Ok(SatisfiesResult::MismatchedPackageRequirements(
-                        &package.id.name,
-                        package.id.version.as_ref(),
-                        expected,
-                        actual,
-                    ));
-                }
-            }
-
-            // Validate the `dependency-groups` metadata.
-            {
-                let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = metadata
-                    .dependency_groups
-                    .into_iter()
-                    .filter(|(_, requirements)| !requirements.is_empty())
-                    .map(|(group, requirements)| {
-                        Ok::<_, LockError>((
-                            group,
-                            requirements
-                                .into_iter()
-                                .map(|requirement| normalize_requirement(requirement, root))
-                                .collect::<Result<_, _>>()?,
-                        ))
-                    })
-                    .collect::<Result<_, _>>()?;
-                let actual: BTreeMap<GroupName, BTreeSet<Requirement>> = package
-                    .metadata
-                    .dependency_groups
-                    .iter()
-                    .filter(|(_, requirements)| !requirements.is_empty())
-                    .map(|(group, requirements)| {
-                        Ok::<_, LockError>((
-                            group.clone(),
-                            requirements
-                                .iter()
-                                .cloned()
-                                .map(|requirement| normalize_requirement(requirement, root))
-                                .collect::<Result<_, _>>()?,
-                        ))
-                    })
-                    .collect::<Result<_, _>>()?;
-
-                if expected != actual {
-                    return Ok(SatisfiesResult::MismatchedPackageDependencyGroups(
-                        &package.id.name,
-                        package.id.version.as_ref(),
-                        expected,
-                        actual,
-                    ));
+                match satisfies_requires_dist(RequiresDist::from(metadata), package, root)? {
+                    SatisfiesResult::Satisfied => {}
+                    result => return Ok(result),
                 }
             }
 
