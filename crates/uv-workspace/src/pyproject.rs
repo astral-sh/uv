@@ -1423,7 +1423,7 @@ impl Source {
             } => {
                 if rev.is_none() && tag.is_none() && branch.is_none() {
                     let rev = match reference {
-                        GitReference::FullCommit(ref mut rev) => Some(mem::take(rev)),
+                        GitReference::FullCommit(ref mut rev) => Some(rev.to_string()),
                         GitReference::Branch(ref mut rev) => Some(mem::take(rev)),
                         GitReference::Tag(ref mut rev) => Some(mem::take(rev)),
                         GitReference::BranchOrTag(ref mut rev) => Some(mem::take(rev)),

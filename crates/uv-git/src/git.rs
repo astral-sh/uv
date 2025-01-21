@@ -4,7 +4,7 @@
 use std::env;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
-use std::str::{self, FromStr};
+use std::str::{self};
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
@@ -54,7 +54,7 @@ pub enum GitReference {
     /// From a named reference, like `refs/pull/493/head`.
     NamedRef(String),
     /// From a specific revision, using a full 40-character commit hash.
-    FullCommit(String),
+    FullCommit(GitOid),
     /// The default branch of the repository, the reference named `HEAD`.
     DefaultBranch,
 }
@@ -87,7 +87,7 @@ impl GitReference {
             Self::Branch(rev) => Some(rev),
             Self::BranchOrTag(rev) => Some(rev),
             Self::BranchOrTagOrCommit(rev) => Some(rev),
-            Self::FullCommit(rev) => Some(rev),
+            Self::FullCommit(rev) => Some(rev.as_str()),
             Self::NamedRef(rev) => Some(rev),
             Self::DefaultBranch => None,
         }
@@ -100,7 +100,7 @@ impl GitReference {
             Self::Branch(rev) => rev,
             Self::BranchOrTag(rev) => rev,
             Self::BranchOrTagOrCommit(rev) => rev,
-            Self::FullCommit(rev) => rev,
+            Self::FullCommit(rev) => rev.as_str(),
             Self::NamedRef(rev) => rev,
             Self::DefaultBranch => "HEAD",
         }
@@ -122,7 +122,7 @@ impl GitReference {
     /// Returns the precise [`GitOid`] of this reference, if it's a full commit.
     pub(crate) fn as_sha(&self) -> Option<GitOid> {
         if let Self::FullCommit(rev) = self {
-            Some(GitOid::from_str(rev).expect("Full commit should be exactly 40 characters"))
+            Some(*rev)
         } else {
             None
         }
@@ -241,7 +241,7 @@ impl GitRemote {
         locked_rev: Option<GitOid>,
         client: &ClientWithMiddleware,
     ) -> Result<(GitDatabase, GitOid)> {
-        let locked_ref = locked_rev.map(|oid| GitReference::FullCommit(oid.to_string()));
+        let locked_ref = locked_rev.map(GitReference::FullCommit);
         let reference = locked_ref.as_ref().unwrap_or(reference);
         let enable_lfs_fetch = env::var(EnvVars::UV_GIT_LFS).is_ok();
 
@@ -362,8 +362,11 @@ impl GitReference {
             // We'll be using the HEAD commit.
             Self::DefaultBranch => repo.rev_parse("refs/remotes/origin/HEAD"),
 
+            // Resolve a named reference.
+            Self::NamedRef(s) => repo.rev_parse(&format!("{s}^0")),
+
             // Resolve a direct commit reference.
-            Self::FullCommit(s) | Self::NamedRef(s) => repo.rev_parse(&format!("{s}^0")),
+            Self::FullCommit(s) => repo.rev_parse(&format!("{s}^0")),
         };
 
         result.with_context(|| anyhow::format_err!("failed to find {refkind} `{self}`"))
@@ -543,17 +546,7 @@ pub(crate) fn fetch(
         }
 
         GitReference::FullCommit(rev) => {
-            if let Some(oid_to_fetch) = oid_to_fetch {
-                refspecs.push(format!("+{oid_to_fetch}:refs/commit/{oid_to_fetch}"));
-            } else {
-                // There is a specific commit to fetch and we will do so in shallow-mode only
-                // to not disturb the previous logic.
-                // Note that with typical settings for shallowing, we will just fetch a single `rev`
-                // as single commit.
-                // The reason we write to `refs/remotes/origin/HEAD` is that it's of special significance
-                // when during `GitReference::resolve()`, but otherwise it shouldn't matter.
-                refspecs.push(format!("+{rev}:refs/remotes/origin/HEAD"));
-            }
+            refspecs.push(format!("+{rev}:refs/commit/{rev}"));
         }
     }
 
@@ -753,16 +746,15 @@ fn github_fast_path(
         GitReference::FullCommit(rev) => {
             debug!("Skipping GitHub fast path; full commit hash provided: {rev}");
 
-            let rev = GitOid::from_str(rev)?;
             if let Some(ref local_object) = local_object {
-                if rev == *local_object {
+                if rev == local_object {
                     return Ok(FastPathRev::UpToDate);
                 }
             }
 
             // If we know the reference is a full commit hash, we can just return it without
             // querying GitHub.
-            return Ok(FastPathRev::NeedsFetch(rev));
+            return Ok(FastPathRev::NeedsFetch(*rev));
         }
     };
 
