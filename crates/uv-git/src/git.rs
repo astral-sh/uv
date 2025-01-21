@@ -241,8 +241,6 @@ impl GitRemote {
         locked_rev: Option<GitOid>,
         client: &ClientWithMiddleware,
     ) -> Result<(GitDatabase, GitOid)> {
-        // So, if we have FullCommit, then we should be assuming it's actually a commit. We don't
-        // need to hit GitHub.
         let locked_ref = locked_rev.map(|oid| GitReference::FullCommit(oid.to_string()));
         let reference = locked_ref.as_ref().unwrap_or(reference);
         let enable_lfs_fetch = env::var(EnvVars::UV_GIT_LFS).is_ok();
@@ -765,13 +763,8 @@ fn github_fast_path(
             // If we know the reference is a full commit hash, we can just return it without
             // querying GitHub.
             return Ok(FastPathRev::NeedsFetch(rev));
-        },
+        }
     };
-
-    // TODO(charlie): If we _know_ that we have a full commit SHA, there's no need to perform this
-    // request. We can just return `FastPathRev::NeedsFetch`. However, we need to audit all uses of
-    // `GitReference::FullCommit` to ensure that we _know_ it's a SHA, as opposed to (e.g.) a Git
-    // tag that just "looks like" a commit (i.e., a tag composed of 40 hex characters).
 
     let url = format!("https://api.github.com/repos/{owner}/{repo}/commits/{github_branch_name}");
 
