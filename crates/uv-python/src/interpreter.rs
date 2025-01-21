@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::env::consts::ARCH;
+use std::fmt::{Display, Formatter};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
@@ -7,6 +8,7 @@ use std::sync::OnceLock;
 
 use configparser::ini::Ini;
 use fs_err as fs;
+use owo_colors::OwoColorize;
 use same_file::is_same_file;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -551,6 +553,81 @@ impl ExternallyManaged {
 }
 
 #[derive(Debug, Error)]
+pub struct UnexpectedResponseError {
+    #[source]
+    pub(super) err: serde_json::Error,
+    pub(super) stdout: String,
+    pub(super) stderr: String,
+    pub(super) path: PathBuf,
+}
+
+impl Display for UnexpectedResponseError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Querying Python at `{}` returned an invalid response: {}",
+            self.path.display(),
+            self.err
+        )?;
+
+        let mut non_empty = false;
+
+        if !self.stdout.trim().is_empty() {
+            write!(f, "\n\n{}\n{}", "[stdout]".red(), self.stdout)?;
+            non_empty = true;
+        }
+
+        if !self.stderr.trim().is_empty() {
+            write!(f, "\n\n{}\n{}", "[stderr]".red(), self.stderr)?;
+            non_empty = true;
+        }
+
+        if non_empty {
+            writeln!(f)?;
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Error)]
+pub struct StatusCodeError {
+    pub(super) code: ExitStatus,
+    pub(super) stdout: String,
+    pub(super) stderr: String,
+    pub(super) path: PathBuf,
+}
+
+impl Display for StatusCodeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Querying Python at `{}` failed with exit status {}",
+            self.path.display(),
+            self.code
+        )?;
+
+        let mut non_empty = false;
+
+        if !self.stdout.trim().is_empty() {
+            write!(f, "\n\n{}\n{}", "[stdout]".red(), self.stdout)?;
+            non_empty = true;
+        }
+
+        if !self.stderr.trim().is_empty() {
+            write!(f, "\n\n{}\n{}", "[stderr]".red(), self.stderr)?;
+            non_empty = true;
+        }
+
+        if non_empty {
+            writeln!(f)?;
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Error)]
 pub enum Error {
     #[error("Failed to query Python interpreter")]
     Io(#[from] io::Error),
@@ -562,20 +639,10 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
-    #[error("Querying Python at `{}` did not return the expected data\n{err}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---", path.display())]
-    UnexpectedResponse {
-        err: serde_json::Error,
-        stdout: String,
-        stderr: String,
-        path: PathBuf,
-    },
-    #[error("Querying Python at `{}` failed with exit status {code}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---", path.display())]
-    StatusCode {
-        code: ExitStatus,
-        stdout: String,
-        stderr: String,
-        path: PathBuf,
-    },
+    #[error("{0}")]
+    UnexpectedResponse(UnexpectedResponseError),
+    #[error("{0}")]
+    StatusCode(StatusCodeError),
     #[error("Can't use Python at `{path}`")]
     QueryScript {
         #[source]
@@ -665,12 +732,12 @@ impl InterpreterInfo {
                 });
             }
 
-            return Err(Error::StatusCode {
+            return Err(Error::StatusCode(StatusCodeError {
                 code: output.status,
                 stderr,
                 stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
                 path: interpreter.to_path_buf(),
-            });
+            }));
         }
 
         let result: InterpreterInfoResult =
@@ -684,12 +751,12 @@ impl InterpreterInfo {
                         path: interpreter.to_path_buf(),
                     }
                 } else {
-                    Error::UnexpectedResponse {
+                    Error::UnexpectedResponse(UnexpectedResponseError {
                         err,
                         stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
                         stderr,
                         path: interpreter.to_path_buf(),
-                    }
+                    })
                 }
             })?;
 
