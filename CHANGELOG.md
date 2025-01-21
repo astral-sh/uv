@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.5.22
+
+### Enhancements
+
+- Include version and contact information in GitHub User Agent ([#10785](https://github.com/astral-sh/uv/pull/10785))
+
+### Performance
+
+- Add fast-path for recursive extras in dynamic validation ([#10823](https://github.com/astral-sh/uv/pull/10823))
+- Fetch `pyproject.toml` from GitHub API ([#10765](https://github.com/astral-sh/uv/pull/10765))
+- Remove allocation in Git SHA truncation ([#10801](https://github.com/astral-sh/uv/pull/10801))
+- Skip GitHub fast path when full commit is already known ([#10800](https://github.com/astral-sh/uv/pull/10800))
+
+### Bug fixes
+
+- Add fallback to build backend when `Requires-Dist` mismatches ([#10797](https://github.com/astral-sh/uv/pull/10797))
+- Avoid deserialization error for paths above the root ([#10789](https://github.com/astral-sh/uv/pull/10789))
+- Avoid respecting preferences from other indexes ([#10782](https://github.com/astral-sh/uv/pull/10782))
+- Disable the distutils setuptools shim during interpreter query ([#10819](https://github.com/astral-sh/uv/pull/10819))
+- Omit variant when detecting compatible Python installs ([#10722](https://github.com/astral-sh/uv/pull/10722))
+- Remove TOCTOU errors in Git clone ([#10758](https://github.com/astral-sh/uv/pull/10758))
+- Validate metadata under GitHub fast path ([#10796](https://github.com/astral-sh/uv/pull/10796))
+- Include conflict markers in fork markers ([#10818](https://github.com/astral-sh/uv/pull/10818))
+
+### Error messages
+
+- Add tag incompatibility hints to sync failures ([#10739](https://github.com/astral-sh/uv/pull/10739))
+- Improve log when distutils is missing ([#10713](https://github.com/astral-sh/uv/pull/10713))
+- Show non-critical Python discovery errors if no other interpreter is found ([#10716](https://github.com/astral-sh/uv/pull/10716))
+- Use colors for lock errors ([#10736](https://github.com/astral-sh/uv/pull/10736))
+
+### Documentation
+
+- Add testing instructions to the AWS Lambda guide ([#10805](https://github.com/astral-sh/uv/pull/10805))
+
 ## 0.5.21
 
 ### Enhancements
