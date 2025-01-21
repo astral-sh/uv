@@ -8,6 +8,7 @@ use std::sync::OnceLock;
 
 use configparser::ini::Ini;
 use fs_err as fs;
+use owo_colors::OwoColorize;
 use same_file::is_same_file;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -553,6 +554,7 @@ impl ExternallyManaged {
 
 #[derive(Debug, Error)]
 pub struct UnexpectedResponseError {
+    #[source]
     pub(super) err: serde_json::Error,
     pub(super) stdout: String,
     pub(super) stderr: String,
@@ -561,24 +563,29 @@ pub struct UnexpectedResponseError {
 
 impl Display for UnexpectedResponseError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        writeln!(
+        write!(
             f,
             "Querying Python at `{}` did not return the expected data\n{}",
             self.path.display(),
             self.err
         )?;
-        let delim = "---";
+
+        let mut non_empty = false;
+
         if !self.stdout.trim().is_empty() {
-            writeln!(f, "{} stdout:\n{}", delim, self.stdout)?;
+            write!(f, "\n\n{}\n{}", "[stdout]".red(), self.stdout)?;
+            non_empty = true;
         }
+
         if !self.stderr.trim().is_empty() {
-            writeln!(
-                f,
-                "{delim} stderr:\n{err}\n{delim}",
-                delim = delim,
-                err = self.stderr
-            )?;
+            write!(f, "\n\n{}\n{}", "[stderr]".red(), self.stderr)?;
+            non_empty = true;
         }
+
+        if non_empty {
+            writeln!(f)?;
+        }
+
         Ok(())
     }
 }
@@ -593,25 +600,29 @@ pub struct StatusCodeError {
 
 impl Display for StatusCodeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        writeln!(
+        write!(
             f,
             "Querying Python at `{}` failed with exit status {}",
             self.path.display(),
             self.code
         )?;
 
-        let delim = "---";
+        let mut non_empty = false;
+
         if !self.stdout.trim().is_empty() {
-            writeln!(f, "{} stdout:\n{}", delim, self.stdout)?;
+            write!(f, "\n\n{}\n{}", "[stdout]".red(), self.stdout)?;
+            non_empty = true;
         }
+
         if !self.stderr.trim().is_empty() {
-            write!(
-                f,
-                "{delim} stderr:\n{err}\n{delim}",
-                delim = delim,
-                err = self.stderr
-            )?;
+            write!(f, "\n\n{}\n{}", "[stderr]".red(), self.stderr)?;
+            non_empty = true;
         }
+
+        if non_empty {
+            writeln!(f)?;
+        }
+
         Ok(())
     }
 }
