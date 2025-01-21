@@ -1426,7 +1426,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::SourceDistributions,
-            WheelCache::Git(resource.url, &git_sha.to_short_string()).root(),
+            WheelCache::Git(resource.url, git_sha.as_short_str()).root(),
         );
         let metadata_entry = cache_shard.entry(METADATA);
 
@@ -1564,7 +1564,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::SourceDistributions,
-            WheelCache::Git(resource.url, &git_sha.to_short_string()).root(),
+            WheelCache::Git(resource.url, git_sha.as_short_str()).root(),
         );
         let metadata_entry = cache_shard.entry(METADATA);
 
