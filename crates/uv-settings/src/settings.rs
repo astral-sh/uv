@@ -1,4 +1,4 @@
-use std::{fmt::Debug, num::NonZeroUsize, path::PathBuf};
+use std::{fmt::Debug, num::NonZeroUsize, path::PathBuf, path::Path};
 
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -143,6 +143,10 @@ impl Options {
             top_level,
             ..Default::default()
         }
+    }
+
+    pub fn adjust_relative_paths(&mut self, root_dir: &Path) {
+        self.top_level.adjust_relative_paths(root_dir);
     }
 }
 
@@ -721,6 +725,16 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub no_binary_package: Option<Vec<PackageName>>,
+}
+
+impl ResolverInstallerOptions {
+    pub fn adjust_relative_paths(&mut self, root_dir: &Path) {
+        if let Some(find_links) = &mut self.find_links {
+            for find_link in find_links {
+                find_link.adjust_relative_paths(root_dir);
+            }
+        }
+    }
 }
 
 /// Shared settings, relevant to all operations that might create managed python installations.

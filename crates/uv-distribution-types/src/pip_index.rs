@@ -3,6 +3,7 @@
 //! flags set.
 
 use serde::{Deserialize, Deserializer, Serialize};
+use std::path::Path;
 
 use crate::{Index, IndexUrl};
 
@@ -10,6 +11,12 @@ macro_rules! impl_index {
     ($name:ident, $from:expr) => {
         #[derive(Debug, Clone, Eq, PartialEq)]
         pub struct $name(Index);
+
+        impl $name {
+            pub fn adjust_relative_paths(&mut self, root_dir: &Path) {
+                self.0.adjust_relative_paths(root_dir);
+            }
+        }
 
         impl From<$name> for Index {
             fn from(value: $name) -> Self {

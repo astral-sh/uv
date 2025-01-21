@@ -108,8 +108,9 @@ impl FilesystemOptions {
         let path = dir.join("uv.toml");
         match fs_err::read_to_string(&path) {
             Ok(content) => {
-                let options: Options = toml::from_str(&content)
+                let mut options: Options = toml::from_str(&content)
                     .map_err(|err| Error::UvToml(path.clone(), Box::new(err)))?;
+                options.adjust_relative_paths(dir);
 
                 // If the directory also contains a `[tool.uv]` table in a `pyproject.toml` file,
                 // warn.
@@ -147,7 +148,7 @@ impl FilesystemOptions {
                     );
                     return Ok(None);
                 };
-                let Some(options) = tool.uv else {
+                let Some(mut options) = tool.uv else {
                     tracing::debug!(
                         "Skipping `pyproject.toml` in `{}` (no `[tool.uv]` section)",
                         dir.display()
@@ -156,6 +157,7 @@ impl FilesystemOptions {
                 };
 
                 tracing::debug!("Found workspace configuration at `{}`", path.display());
+                options.adjust_relative_paths(dir);
                 return Ok(Some(Self(options)));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -252,8 +254,20 @@ fn system_config_file() -> Option<PathBuf> {
 /// Load [`Options`] from a `uv.toml` file.
 fn read_file(path: &Path) -> Result<Options, Error> {
     let content = fs_err::read_to_string(path)?;
-    let options: Options =
+    let mut options: Options =
         toml::from_str(&content).map_err(|err| Error::UvToml(path.to_path_buf(), Box::new(err)))?;
+    if let Some(parent_dir) = path.parent() {
+        options.adjust_relative_paths(parent_dir);
+    } else {
+        return Err(Error::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!(
+                "Configuration path '{}' has no parent directory",
+                path.display()
+            ),
+        )));
+    }
+
     Ok(options)
 }
 

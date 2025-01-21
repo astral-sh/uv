@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::str::FromStr;
 
 use thiserror::Error;
@@ -165,6 +166,16 @@ impl Index {
 
         // Otherwise, extract the credentials from the URL.
         Credentials::from_url(self.url.url())
+    }
+
+    pub fn adjust_relative_paths(&mut self, root_dir: &Path) {
+        if let IndexUrl::Path(ref url) = self.url {
+            if let Some(given) = url.given() {
+                if let Ok(new_url) = IndexUrl::parse(given, Some(root_dir)) {
+                    self.url = new_url;
+                }
+            }
+        }
     }
 }
 
