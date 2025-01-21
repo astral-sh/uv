@@ -1,4 +1,4 @@
-use std::{fmt::Debug, num::NonZeroUsize, path::PathBuf, path::Path};
+use std::{fmt::Debug, num::NonZeroUsize, path::Path, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 use url::Url;
