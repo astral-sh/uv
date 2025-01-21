@@ -20,7 +20,7 @@ use url::Url;
 
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::BuildOptions;
-use uv_distribution::{DistributionDatabase, RequiresDist};
+use uv_distribution::{DistributionDatabase, FlatRequiresDist, RequiresDist};
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
@@ -973,6 +973,21 @@ impl Lock {
             package: &'lock Package,
             root: &Path,
         ) -> Result<SatisfiesResult<'lock>, LockError> {
+            // Special-case: if the version is dynamic, compare the flattened requirements.
+            let flattened = if package.is_dynamic() {
+                Some(
+                    FlatRequiresDist::from_requirements(
+                        metadata.requires_dist.clone(),
+                        &package.id.name,
+                    )
+                    .into_iter()
+                    .map(|requirement| normalize_requirement(requirement, root))
+                    .collect::<Result<BTreeSet<_>, _>>()?,
+                )
+            } else {
+                None
+            };
+
             // Validate the `requires-dist` metadata.
             let expected: BTreeSet<_> = metadata
                 .requires_dist
@@ -987,7 +1002,7 @@ impl Lock {
                 .map(|requirement| normalize_requirement(requirement, root))
                 .collect::<Result<_, _>>()?;
 
-            if expected != actual {
+            if expected != actual && flattened.is_none_or(|expected| expected != actual) {
                 return Ok(SatisfiesResult::MismatchedPackageRequirements(
                     &package.id.name,
                     package.id.version.as_ref(),

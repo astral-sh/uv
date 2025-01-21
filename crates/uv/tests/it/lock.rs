@@ -20723,20 +20723,14 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
 
     fs_err::remove_dir_all(&context.cache_dir)?;
 
-    // However, running with `--offline` should fail, since we _do_ need to invoke `hatchling` to
-    // resolve the metadata when recursive extras are present.
+    // Running with `--offline` should also succeed.
     uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to generate package metadata for `project @ editable+.`
-      Caused by: Failed to resolve requirements from `build-system.requires`
-      Caused by: No solution found when resolving: `hatchling`
-      Caused by: Because hatchling was not found in the cache and you require hatchling, we can conclude that your requirements are unsatisfiable.
-
-    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    Resolved 5 packages in [TIME]
     "###);
 
     Ok(())
