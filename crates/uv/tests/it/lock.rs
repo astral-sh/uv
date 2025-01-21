@@ -22900,10 +22900,11 @@ fn lock_pytorch_cpu() -> Result<()> {
         version = 1
         requires-python = ">=3.12.[X]"
         resolution-markers = [
-            "platform_machine != 'aarch64' or sys_platform != 'linux'",
-            "platform_machine == 'aarch64' and sys_platform == 'linux'",
-            "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')",
-            "(platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'",
+            "(platform_machine != 'aarch64' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (sys_platform != 'linux' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')",
+            "platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu124'",
+            "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124')",
+            "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (sys_platform == 'darwin' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124')",
+            "extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124'",
         ]
         conflicts = [[
             { package = "project", extra = "cpu" },
@@ -23547,10 +23548,12 @@ fn lock_pytorch_preferences() -> Result<()> {
         version = 1
         requires-python = ">=3.10.0"
         resolution-markers = [
-            "sys_platform != 'darwin'",
-            "sys_platform == 'darwin'",
-            "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')",
-            "platform_machine == 'aarch64' and sys_platform == 'linux'",
+            "sys_platform != 'darwin' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu118'",
+            "sys_platform == 'darwin' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu118'",
+            "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu118') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu118')",
+            "platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu118'",
+            "sys_platform == 'darwin' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu118'",
+            "extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu118'",
         ]
         conflicts = [[
             { package = "project", extra = "cpu" },
