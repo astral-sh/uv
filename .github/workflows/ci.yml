@@ -193,6 +193,9 @@ jobs:
         with:
           tool: cargo-nextest
 
+      - name: "Cargo build"
+        run: cargo build --profile test --bin uv --bin uvx
+
       - name: "Cargo test"
         run: |
           cargo nextest run \
@@ -237,6 +240,9 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
+
+      - name: "Cargo build"
+        run: cargo build --profile test --bin uv --bin uvx
 
       - name: "Cargo test"
         run: |
@@ -284,6 +290,9 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
+
+      - name: "Cargo build"
+        run: cargo build --profile test --bin uv --bin uvx
 
       - name: "Cargo test"
         working-directory: ${{ env.UV_WORKSPACE }}
@@ -451,7 +460,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
       - name: "Build"
-        run: cargo build --target x86_64-unknown-linux-musl
+        run: cargo build --target x86_64-unknown-linux-musl --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
@@ -473,13 +482,15 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
       - name: "Build"
-        run: cargo build
+        run: cargo build --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
           name: uv-macos-aarch64-${{ github.sha }}
-          path: ./target/debug/uv
+          path: |
+            ./target/debug/uv
+            ./target/debug/uvx
           retention-days: 1
 
   build-binary-macos-x86_64:
@@ -495,13 +506,15 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
       - name: "Build"
-        run: cargo build
+        run: cargo build --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
           name: uv-macos-x86_64-${{ github.sha }}
-          path: ./target/debug/uv
+          path: |
+            ./target/debug/uv
+            ./target/debug/uvx
           retention-days: 1
 
   build-binary-windows:
@@ -527,13 +540,15 @@ jobs:
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build
+        run: cargo build --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
           name: uv-windows-${{ github.sha }}
-          path: ${{ env.UV_WORKSPACE }}/target/debug/uv.exe
+          path: |
+            ${{ env.UV_WORKSPACE }}/target/debug/uv.exe
+            ${{ env.UV_WORKSPACE }}/target/debug/uvx.exe
           retention-days: 1
 
   cargo-build-msrv:
