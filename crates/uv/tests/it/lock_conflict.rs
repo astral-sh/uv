@@ -250,8 +250,8 @@ fn extra_basic_three_extras() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because project[project3] depends on sortedcontainers==2.4.0 and project[extra2] depends on sortedcontainers==2.3.0, we can conclude that project[extra2] and project[project3] are incompatible.
-          And because your project requires project[extra2] and project[project3], we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because project[extra2] depends on sortedcontainers==2.3.0 and project[extra1] depends on sortedcontainers==2.2.0, we can conclude that project[extra1] and project[extra2] are incompatible.
+          And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
     "###);
 
     // And now with the same extra configuration, we tell uv about
@@ -538,8 +538,8 @@ fn extra_multiple_not_conflicting2() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because project[project4] depends on sortedcontainers==2.4.0 and project[project3] depends on sortedcontainers==2.3.0, we can conclude that project[project3] and project[project4] are incompatible.
-          And because your project requires project[project3] and project[project4], we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
+          And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
     "###);
 
     // If we define extra1/extra2 as conflicting and project3/project4
@@ -715,8 +715,8 @@ fn extra_multiple_independent() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because project[project4] depends on anyio==4.2.0 and project[project3] depends on anyio==4.1.0, we can conclude that project[project3] and project[project4] are incompatible.
-          And because your project requires project[project3] and project[project4], we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
+          And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
     "###);
 
     // OK, responding to the error, we declare our anyio extras
@@ -1289,8 +1289,10 @@ fn extra_nested_across_workspace() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because dummy[extra2] depends on proxy1[extra2] and only proxy1[extra2]==0.1.0 is available, we can conclude that dummy[extra2] depends on proxy1[extra2]==0.1.0.
-          And because proxy1[extra2]==0.1.0 depends on anyio==4.2.0 and proxy1[extra1]==0.1.0 depends on anyio==4.1.0, we can conclude that proxy1[extra1]==0.1.0 and dummy[extra2] are incompatible.
+      ╰─▶ Because dummy[extra2] depends on proxy1[extra2] and only proxy1[extra2]==0.1.0 is available, we can conclude that dummy[extra2] depends on proxy1[extra2]==0.1.0. (1)
+
+          Because proxy1[extra1]==0.1.0 depends on anyio==4.1.0 and proxy1[extra2]==0.1.0 depends on anyio==4.2.0, we can conclude that proxy1[extra1]==0.1.0 and proxy1[extra2]==0.1.0 are incompatible.
+          And because we know from (1) that dummy[extra2] depends on proxy1[extra2]==0.1.0, we can conclude that dummy[extra2] and proxy1[extra1]==0.1.0 are incompatible.
           And because only proxy1[extra1]==0.1.0 is available and dummysub[extra1] depends on proxy1[extra1], we can conclude that dummysub[extra1] and dummy[extra2] are incompatible.
           And because your workspace requires dummy[extra2] and dummysub[extra1], we can conclude that your workspace's requirements are unsatisfiable.
     "###);
@@ -1793,7 +1795,7 @@ fn mixed() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because project:group1 depends on sortedcontainers==2.3.0 and project[extra1] depends on sortedcontainers==2.4.0, we can conclude that project[extra1] and project:group1 are incompatible.
+      ╰─▶ Because project:group1 depends on sortedcontainers==2.3.0 and project[extra1] depends on sortedcontainers==2.4.0, we can conclude that project:group1 and project[extra1] are incompatible.
           And because your project requires project[extra1] and project:group1, we can conclude that your project's requirements are unsatisfiable.
     "###);
 
@@ -7126,8 +7128,8 @@ fn overlapping_resolution_markers() -> Result<()> {
             "sys_platform == 'linux' and extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118'",
             "sys_platform != 'linux' and extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118'",
             "platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
-            "sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
             "platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
+            "sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
             "sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
             "sys_platform == 'linux' and extra != 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
             "sys_platform != 'linux' and extra != 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
