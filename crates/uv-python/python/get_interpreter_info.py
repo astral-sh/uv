@@ -176,6 +176,9 @@ def get_virtualenv():
             "data": expand_path(sysconfig_paths["data"]),
         }
     else:
+        # Use distutils primarily because that's what pip does.
+        # https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/locations/__init__.py#L249
+
         # Disable the use of the setuptools shim, if it's injected. Per pip:
         #
         # > If pip's going to use distutils, it should not be using the copy that setuptools
@@ -189,8 +192,6 @@ def get_virtualenv():
         except (ImportError, AttributeError):
             pass
 
-        # Use distutils primarily because that's what pip does.
-        # https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/locations/__init__.py#L249
         import warnings
 
         with warnings.catch_warnings():  # disable warning for PEP-632
@@ -337,19 +338,6 @@ def get_scheme(use_sysconfig_scheme: bool):
         Based on (with default arguments):
             https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/locations/_distutils.py#L115
         """
-        # Disable the use of the setuptools shim, if it's injected. Per pip:
-        #
-        # > If pip's going to use distutils, it should not be using the copy that setuptools
-        # > might have injected into the environment. This is done by removing the injected
-        # > shim, if it's injected.
-        #
-        # > See https://github.com/pypa/pip/issues/8761 for the original discussion and
-        # > rationale for why this is done within pip.
-        try:
-            __import__("_distutils_hack").remove_shim()
-        except (ImportError, AttributeError):
-            pass
-
         import warnings
 
         with warnings.catch_warnings():  # disable warning for PEP-632
@@ -575,6 +563,19 @@ def main() -> None:
     # If we're not using sysconfig, make sure distutils is available.
     if not use_sysconfig_scheme:
         try:
+            # Disable the use of the setuptools shim, if it's injected. Per pip:
+            #
+            # > If pip's going to use distutils, it should not be using the copy that setuptools
+            # > might have injected into the environment. This is done by removing the injected
+            # > shim, if it's injected.
+            #
+            # > See https://github.com/pypa/pip/issues/8761 for the original discussion and
+            # > rationale for why this is done within pip.
+            try:
+                __import__("_distutils_hack").remove_shim()
+            except (ImportError, AttributeError):
+                pass
+            
             import distutils.dist
         except ImportError:
             # We require distutils, but it's not installed; this is fairly
