@@ -107,6 +107,7 @@ nav:
           - Jupyter: guides/integration/jupyter.md
           - GitHub Actions: guides/integration/github.md
           - GitLab CI/CD: guides/integration/gitlab.md
+          - Bitbucket Pipelines: guides/integration/bitbucket.md
           - Pre-commit: guides/integration/pre-commit.md
           - PyTorch: guides/integration/pytorch.md
           - FastAPI: guides/integration/fastapi.md
