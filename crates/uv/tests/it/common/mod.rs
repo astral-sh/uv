@@ -636,7 +636,7 @@ impl TestContext {
             .env(EnvVars::UV_PREVIEW, "1")
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
             .current_dir(&self.temp_dir);
-        self.add_shared_args(&mut command, true);
+        self.add_shared_args(&mut command, false);
         command
     }
 
