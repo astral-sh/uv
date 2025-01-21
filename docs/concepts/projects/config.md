@@ -170,8 +170,8 @@ environment. If an environment is not present at the provided path, uv will crea
 
 This option can be used to write to the system Python environment, though it is not recommended.
 `uv sync` will remove extraneous packages from the environment by default and, as such, may leave
-the system in a broken state. To use the system Python environment, set
-`UV_PROJECT_ENVIRONMENT=/usr/local`.
+the system in a broken state. As an example, you can use `UV_PROJECT_ENVIRONMENT=/usr/local` on
+most Debian-based systems.
 
 !!! important
 
