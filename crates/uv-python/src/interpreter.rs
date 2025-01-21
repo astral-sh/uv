@@ -565,7 +565,7 @@ impl Display for UnexpectedResponseError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Querying Python at `{}` did not return the expected data\n{}",
+            "Querying Python at `{}` returned an invalid response: {}",
             self.path.display(),
             self.err
         )?;
