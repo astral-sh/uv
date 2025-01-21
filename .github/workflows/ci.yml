@@ -268,18 +268,9 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
 
-      # We do not test with Python patch versions on Windows
-      # so we can use `setup-python` instead of our bootstrapping code
-      # this is much faster on the extremely slow GitHub Windows runners.
-      - uses: actions/setup-python@v5
-        with:
-          python-version: |
-            3.8
-            3.9
-            3.10
-            3.11
-            3.12
-            3.13
+      - uses: astral-sh/setup-uv@v5
+      - name: "Install required Python versions"
+        run: uv python install
 
       - uses: Swatinem/rust-cache@v2
         with:
