@@ -8,9 +8,14 @@ use thiserror::Error;
 pub struct GitSha(GitOid);
 
 impl GitSha {
-    /// Convert the SHA to a truncated representation, i.e., the first 16 characters of the SHA.
-    pub fn to_short_string(&self) -> String {
-        self.0.to_string()[0..16].to_string()
+    /// Return the Git SHA as a string.
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    /// Return a truncated representation, i.e., the first 16 characters of the SHA.
+    pub fn as_short_str(&self) -> &str {
+        &self.0.as_str()[..16]
     }
 }
 
