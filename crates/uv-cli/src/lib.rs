@@ -2716,6 +2716,12 @@ pub struct RunArgs {
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
+    /// Exclude dependencies from default groups.
+    ///
+    /// `--group` can be used to include specific groups.
+    #[arg(long, conflicts_with_all = ["no_group", "only_group"])]
+    pub no_default_groups: bool,
+
     /// Only include dependencies from the specified dependency group.
     ///
     /// May be provided multiple times.
@@ -2980,6 +2986,12 @@ pub struct SyncArgs {
     /// May be provided multiple times.
     #[arg(long)]
     pub no_group: Vec<GroupName>,
+
+    /// Exclude dependencies from default groups.
+    ///
+    /// `--group` can be used to include specific groups.
+    #[arg(long, conflicts_with_all = ["no_group", "only_group"])]
+    pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
     ///
@@ -3426,6 +3438,12 @@ pub struct TreeArgs {
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
+    /// Exclude dependencies from default groups.
+    ///
+    /// `--group` can be used to include specific groups.
+    #[arg(long, conflicts_with_all = ["no_group", "only_group"])]
+    pub no_default_groups: bool,
+
     /// Only include dependencies from the specified dependency group.
     ///
     /// May be provided multiple times.
@@ -3589,6 +3607,12 @@ pub struct ExportArgs {
     /// May be provided multiple times.
     #[arg(long)]
     pub no_group: Vec<GroupName>,
+
+    /// Exclude dependencies from default groups.
+    ///
+    /// `--group` can be used to include specific groups.
+    #[arg(long, conflicts_with_all = ["no_group", "only_group"])]
+    pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
     ///

@@ -320,6 +320,10 @@ uv run [OPTIONS] [COMMAND]
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
+</dd><dt><code>--no-default-groups</code></dt><dd><p>Exclude dependencies from default groups.</p>
+
+<p><code>--group</code> can be used to include specific groups.</p>
+
 </dd><dt><code>--no-dev</code></dt><dd><p>Omit the development dependency group.</p>
 
 <p>This option is an alias of <code>--no-group dev</code>.</p>
@@ -1685,6 +1689,10 @@ uv sync [OPTIONS]
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
+</dd><dt><code>--no-default-groups</code></dt><dd><p>Exclude dependencies from default groups.</p>
+
+<p><code>--group</code> can be used to include specific groups.</p>
+
 </dd><dt><code>--no-dev</code></dt><dd><p>Omit the development dependency group.</p>
 
 <p>This option is an alias for <code>--no-group dev</code>.</p>
@@ -2391,6 +2399,10 @@ uv export [OPTIONS]
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
+</dd><dt><code>--no-default-groups</code></dt><dd><p>Exclude dependencies from default groups.</p>
+
+<p><code>--group</code> can be used to include specific groups.</p>
+
 </dd><dt><code>--no-dev</code></dt><dd><p>Omit the development dependency group.</p>
 
 <p>This option is an alias for <code>--no-group dev</code>.</p>
@@ -2764,6 +2776,10 @@ uv tree [OPTIONS]
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
 </dd><dt><code>--no-dedupe</code></dt><dd><p>Do not de-duplicate repeated dependencies. Usually, when a package has already displayed its dependencies, further occurrences will not re-display its dependencies, and will include a (*) to indicate it has already been shown. This flag will cause those duplicates to be repeated</p>
+
+</dd><dt><code>--no-default-groups</code></dt><dd><p>Exclude dependencies from default groups.</p>
+
+<p><code>--group</code> can be used to include specific groups.</p>
 
 </dd><dt><code>--no-dev</code></dt><dd><p>Omit the development dependency group.</p>
 
