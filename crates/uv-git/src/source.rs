@@ -14,8 +14,7 @@ use url::Url;
 use uv_cache_key::{cache_digest, RepositoryUrl};
 
 use crate::git::GitRemote;
-use crate::sha::GitOid;
-use crate::{GitSha, GitUrl, GIT_STORE};
+use crate::{GitOid, GitUrl, GIT_STORE};
 
 /// A remote Git source that can be checked out locally.
 pub struct GitSource {
@@ -74,7 +73,7 @@ impl GitSource {
         let (db, actual_rev, task) = match (self.git.precise, remote.db_at(&db_path).ok()) {
             // If we have a locked revision, and we have a preexisting database
             // which has that revision, then no update needs to happen.
-            (Some(rev), Some(db)) if db.contains(rev.into()) => {
+            (Some(rev), Some(db)) if db.contains(rev) => {
                 debug!("Using existing Git source `{}`", self.git.repository);
                 (db, rev, None)
             }
@@ -99,13 +98,13 @@ impl GitSource {
                     &self.client,
                 )?;
 
-                (db, GitSha::from(actual_rev), task)
+                (db, actual_rev, task)
             }
         };
 
         // Don’t use the full hash, in order to contribute less to reaching the
         // path length limit on Windows.
-        let short_id = db.to_short_id(actual_rev.into())?;
+        let short_id = db.to_short_id(actual_rev)?;
 
         // Check out `actual_rev` from the database to a scoped location on the
         // filesystem. This will use hard links and such to ideally make the
@@ -116,7 +115,7 @@ impl GitSource {
             .join(&ident)
             .join(short_id.as_str());
 
-        db.copy_to(actual_rev.into(), &checkout_path)?;
+        db.copy_to(actual_rev, &checkout_path)?;
 
         // Report the checkout operation to the reporter.
         if let Some(task) = task {

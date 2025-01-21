@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use tracing::debug;
 
-use crate::{Fetch, GitHubRepository, GitReference, GitSha, GitSource, GitUrl, Reporter};
+use crate::{Fetch, GitHubRepository, GitOid, GitReference, GitSource, GitUrl, Reporter};
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
 use fs_err::tokio as fs;
@@ -30,28 +30,28 @@ pub enum GitResolverError {
 
 /// A resolver for Git repositories.
 #[derive(Default, Clone)]
-pub struct GitResolver(Arc<DashMap<RepositoryReference, GitSha>>);
+pub struct GitResolver(Arc<DashMap<RepositoryReference, GitOid>>);
 
 impl GitResolver {
-    /// Inserts a new [`GitSha`] for the given [`RepositoryReference`].
-    pub fn insert(&self, reference: RepositoryReference, sha: GitSha) {
+    /// Inserts a new [`GitOid`] for the given [`RepositoryReference`].
+    pub fn insert(&self, reference: RepositoryReference, sha: GitOid) {
         self.0.insert(reference, sha);
     }
 
-    /// Returns the [`GitSha`] for the given [`RepositoryReference`], if it exists.
-    fn get(&self, reference: &RepositoryReference) -> Option<Ref<RepositoryReference, GitSha>> {
+    /// Returns the [`GitOid`] for the given [`RepositoryReference`], if it exists.
+    fn get(&self, reference: &RepositoryReference) -> Option<Ref<RepositoryReference, GitOid>> {
         self.0.get(reference)
     }
 
     /// Resolve a Git URL to a specific commit without performing any Git operations.
     ///
-    /// Returns a [`GitSha`] if the URL has already been resolved (i.e., is available in the cache),
+    /// Returns a [`GitOid`] if the URL has already been resolved (i.e., is available in the cache),
     /// or if it can be fetched via the GitHub API. Otherwise, returns `None`.
     pub async fn github_fast_path(
         &self,
         url: &GitUrl,
         client: ClientWithMiddleware,
-    ) -> Result<Option<GitSha>, GitResolverError> {
+    ) -> Result<Option<GitOid>, GitResolverError> {
         let reference = RepositoryReference::from(url);
 
         // If we know the precise commit already, return it.
@@ -92,7 +92,7 @@ impl GitResolver {
         // Parse the response as a Git SHA.
         let precise = response.text().await?;
         let precise =
-            GitSha::from_str(&precise).map_err(|err| GitResolverError::Git(err.into()))?;
+            GitOid::from_str(&precise).map_err(|err| GitResolverError::Git(err.into()))?;
 
         // Insert the resolved URL into the in-memory cache. This ensures that subsequent fetches
         // resolve to the same precise commit.
@@ -207,7 +207,7 @@ pub struct ResolvedRepositoryReference {
     /// tag, or revision).
     pub reference: RepositoryReference,
     /// The precise commit SHA of the reference.
-    pub sha: GitSha,
+    pub sha: GitOid,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

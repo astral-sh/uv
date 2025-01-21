@@ -3,17 +3,17 @@ use url::Url;
 pub use crate::credentials::{store_credentials_from_url, GIT_STORE};
 pub use crate::git::{GitReference, GIT};
 pub use crate::github::GitHubRepository;
+pub use crate::oid::{GitOid, OidParseError};
 pub use crate::resolver::{
     GitResolver, GitResolverError, RepositoryReference, ResolvedRepositoryReference,
 };
-pub use crate::sha::{GitSha, OidParseError};
 pub use crate::source::{Fetch, GitSource, Reporter};
 
 mod credentials;
 mod git;
 mod github;
+mod oid;
 mod resolver;
-mod sha;
 mod source;
 
 /// A URL reference to a Git repository.
@@ -25,7 +25,7 @@ pub struct GitUrl {
     /// The reference to the commit to use, which could be a branch, tag or revision.
     reference: GitReference,
     /// The precise commit to use, if known.
-    precise: Option<GitSha>,
+    precise: Option<GitOid>,
 }
 
 impl GitUrl {
@@ -40,7 +40,7 @@ impl GitUrl {
     }
 
     /// Create a new [`GitUrl`] from a repository URL and a precise commit.
-    pub fn from_commit(repository: Url, reference: GitReference, precise: GitSha) -> Self {
+    pub fn from_commit(repository: Url, reference: GitReference, precise: GitOid) -> Self {
         Self {
             repository,
             reference,
@@ -48,9 +48,9 @@ impl GitUrl {
         }
     }
 
-    /// Set the precise [`GitSha`] to use for this Git URL.
+    /// Set the precise [`GitOid`] to use for this Git URL.
     #[must_use]
-    pub fn with_precise(mut self, precise: GitSha) -> Self {
+    pub fn with_precise(mut self, precise: GitOid) -> Self {
         self.precise = Some(precise);
         self
     }
@@ -73,7 +73,7 @@ impl GitUrl {
     }
 
     /// Return the precise commit, if known.
-    pub fn precise(&self) -> Option<GitSha> {
+    pub fn precise(&self) -> Option<GitOid> {
         self.precise
     }
 }
