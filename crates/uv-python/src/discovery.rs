@@ -720,25 +720,43 @@ impl Error {
                 InterpreterError::Encode(_)
                 | InterpreterError::Io(_)
                 | InterpreterError::SpawnFailed { .. } => true,
-                InterpreterError::UnexpectedResponse { .. }
-                | InterpreterError::StatusCode { .. } => false,
-                InterpreterError::QueryScript { .. } => false,
+                InterpreterError::UnexpectedResponse { path, .. }
+                | InterpreterError::StatusCode { path, .. } => {
+                    debug!(
+                        "Skipping bad interpreter at {} from {source}: {err}",
+                        path.display()
+                    );
+                    false
+                }
+                InterpreterError::QueryScript { path, err } => {
+                    debug!(
+                        "Skipping bad interpreter at {} from {source}: {err}",
+                        path.display()
+                    );
+                    false
+                }
                 InterpreterError::NotFound(path) => {
                     // If the interpreter is from an active, valid virtual environment, we should
                     // fail because it's broken
-                    matches!(
-                        matches!(source, PythonSource::ActiveEnvironment)
-                            .then(|| {
-                                path.parent()
-                                    .and_then(Path::parent)
-                                    .map(|path| path.join("pyvenv.cfg").try_exists())
-                            })
-                            .flatten(),
-                        Some(Ok(true)),
-                    )
+                    if let Some(Ok(true)) = matches!(source, PythonSource::ActiveEnvironment)
+                        .then(|| {
+                            path.parent()
+                                .and_then(Path::parent)
+                                .map(|path| path.join("pyvenv.cfg").try_exists())
+                        })
+                        .flatten()
+                    {
+                        true
+                    } else {
+                        trace!("Skipping missing interpreter at {}", path.display());
+                        false
+                    }
                 }
             },
-            Error::VirtualEnv(VirtualEnvError::MissingPyVenvCfg(_)) => false,
+            Error::VirtualEnv(VirtualEnvError::MissingPyVenvCfg(path)) => {
+                trace!("Skipping broken virtualenv at {}", path.display());
+                false
+            }
             _ => true,
         }
     }
@@ -947,30 +965,6 @@ pub fn find_python_installations<'a>(
     }
 }
 
-/// Show a debug log for an error causing us to skip an interpreter
-fn debug_show_skipped(err: &Error) {
-    // Display that we're skipping the interpreter
-    match err {
-        Error::Query(err, path, source) => match &**err {
-            InterpreterError::NotFound(_) => {
-                trace!("Skipping missing interpreter at {}", path.display());
-            }
-            _ => {
-                debug!(
-                    "Skipping bad interpreter at {} from {source}: {err}",
-                    path.display()
-                );
-            }
-        },
-        Error::VirtualEnv(VirtualEnvError::MissingPyVenvCfg(path)) => {
-            trace!("Skipping broken virtualenv at {}", path.display());
-        }
-        _ => {
-            debug!("Skipping interpreter: {err}");
-        }
-    }
-}
-
 /// Find a Python installation that satisfies the given request.
 ///
 /// If an error is encountered while locating or inspecting a candidate installation,
@@ -984,33 +978,19 @@ pub(crate) fn find_python_installation(
     let installations = find_python_installations(request, environments, preference, cache);
     let mut first_prerelease = None;
     let mut first_error = None;
-    let mut show_first_error = true;
     for result in installations {
-        // Skip non-critical errors
+        // Iterate until the first critical error or happy result
         if !result.as_ref().err().map_or(true, Error::is_critical) {
             // Track the first non-critical error
-            if let Err(err) = result {
-                if let Some(ref first) = first_error {
-                    if show_first_error {
-                        debug_show_skipped(first);
-                        show_first_error = false;
-                    }
-                    debug_show_skipped(&err);
-                } else {
+            if first_error.is_none() {
+                if let Err(err) = result {
                     first_error = Some(err);
                 }
             }
             continue;
         }
 
-        if let Some(ref first) = first_error {
-            if show_first_error {
-                debug_show_skipped(first);
-                show_first_error = false;
-            }
-        }
-
-        // If it's a critical error, we're done.
+        // If it's an error, we're done.
         let Ok(Ok(ref installation)) = result else {
             return result;
         };
