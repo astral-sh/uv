@@ -7,7 +7,7 @@ use futures::stream::FuturesOrdered;
 use futures::TryStreamExt;
 use url::Url;
 
-use uv_configuration::ExtrasSpecification;
+use uv_configuration::{DevGroupsSpecification, ExtrasSpecification};
 use uv_distribution::{DistributionDatabase, FlatRequiresDist, Reporter, RequiresDist};
 use uv_distribution_types::{
     BuildableSource, DirectorySourceUrl, HashGeneration, HashPolicy, SourceUrl, VersionId,
@@ -36,6 +36,8 @@ pub struct SourceTreeResolution {
 pub struct SourceTreeResolver<'a, Context: BuildContext> {
     /// The extras to include when resolving requirements.
     extras: &'a ExtrasSpecification,
+    /// The groups to include when resolving requirements.
+    groups: &'a DevGroupsSpecification,
     /// The hash policy to enforce.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -48,12 +50,14 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
     /// Instantiate a new [`SourceTreeResolver`] for a given set of `source_trees`.
     pub fn new(
         extras: &'a ExtrasSpecification,
+        groups: &'a DevGroupsSpecification,
         hasher: &'a HashStrategy,
         index: &'a InMemoryIndex,
         database: DistributionDatabase<'a, Context>,
     ) -> Self {
         Self {
             extras,
+            groups,
             hasher,
             index,
             database,
@@ -85,7 +89,6 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
     /// Infer the dependencies for a directory dependency.
     async fn resolve_source_tree(&self, path: &Path) -> Result<SourceTreeResolution> {
         let metadata = self.resolve_requires_dist(path).await?;
-
         let origin = RequirementOrigin::Project(path.to_path_buf(), metadata.name.clone());
 
         // Determine the extras to include when resolving the requirements.
@@ -96,7 +99,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             .collect::<Vec<_>>();
 
         // Flatten any transitive extras.
-        let requirements =
+        let mut requirements =
             FlatRequiresDist::from_requirements(metadata.requires_dist, &metadata.name)
                 .into_iter()
                 .map(|requirement| Requirement {
@@ -105,6 +108,13 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
                     ..requirement
                 })
                 .collect::<Vec<_>>();
+
+        // Apply dependency-groups
+        for (group_name, group) in &metadata.dependency_groups {
+            if self.groups.contains(group_name) {
+                requirements.extend(group.iter().cloned());
+            }
+        }
 
         let project = metadata.name;
         let extras = metadata.provides_extras;

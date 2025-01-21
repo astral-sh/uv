@@ -13,8 +13,8 @@ use uv_tool::InstalledTools;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, Overrides,
-    Reinstall, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification,
+    ExtrasSpecification, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -54,6 +54,7 @@ pub(crate) async fn read_requirements(
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     extras: &ExtrasSpecification,
+    groups: &DevGroupsSpecification,
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
@@ -61,6 +62,12 @@ pub(crate) async fn read_requirements(
     if !extras.is_empty() && !requirements.iter().any(RequirementsSource::allows_extras) {
         return Err(anyhow!(
             "Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file."
+        )
+        .into());
+    }
+    if !groups.is_empty() && !requirements.iter().any(RequirementsSource::allows_groups) {
+        return Err(anyhow!(
+            "Requesting groups requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file."
         )
         .into());
     }
@@ -96,6 +103,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     mut project: Option<PackageName>,
     workspace_members: BTreeSet<PackageName>,
     extras: &ExtrasSpecification,
+    groups: &DevGroupsSpecification,
     preferences: Vec<Preference>,
     installed_packages: InstalledPackages,
     hasher: &HashStrategy,
@@ -149,6 +157,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         if !source_trees.is_empty() {
             let resolutions = SourceTreeResolver::new(
                 extras,
+                groups,
                 hasher,
                 index,
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads),

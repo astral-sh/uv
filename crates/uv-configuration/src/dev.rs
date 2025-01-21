@@ -133,7 +133,7 @@ impl GroupsSpecification {
         }
     }
 
-    /// Iterate over all groups referenced in the [`DevGroupsSpecification`].
+    /// Iterate over all groups referenced in the [`GroupsSpecification`].
     pub fn names(&self) -> impl Iterator<Item = &GroupName> {
         match self {
             GroupsSpecification::Include { include, exclude } => {
@@ -156,6 +156,18 @@ impl GroupsSpecification {
             GroupsSpecification::Only { include, .. } => include.contains(group),
             GroupsSpecification::Explicit { include } => include.contains(group),
         }
+    }
+
+    /// Returns `true` if the specification will have no effect.
+    pub fn is_empty(&self) -> bool {
+        let GroupsSpecification::Include {
+            include: IncludeGroups::Some(includes),
+            exclude,
+        } = self
+        else {
+            return false;
+        };
+        includes.is_empty() && exclude.is_empty()
     }
 }
 
@@ -315,6 +327,17 @@ impl DevGroupsSpecification {
         self.groups
             .as_ref()
             .is_some_and(|groups| groups.contains(group))
+    }
+
+    /// Returns `true` if the specification will have no effect.
+    pub fn is_empty(&self) -> bool {
+        let groups_empty = self
+            .groups
+            .as_ref()
+            .map(GroupsSpecification::is_empty)
+            .unwrap_or(true);
+        let dev_empty = self.dev_mode().is_none();
+        groups_empty && dev_empty
     }
 }
 
