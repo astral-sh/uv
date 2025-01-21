@@ -822,7 +822,7 @@ jobs:
         run: |
           ./uv run python -c ""
           ./uv run -p 3.13t python -c ""
-  
+
   integration-test-free-threaded-windows-aarch64:
     timeout-minutes: 10
     needs: build-binary-windows-aarch64
@@ -870,7 +870,6 @@ jobs:
         run: |
           ./uv run python -c ""
           ./uv run -p 3.13t python -c ""
-
 
   integration-test-pypy-linux:
     timeout-minutes: 10
@@ -998,7 +997,7 @@ jobs:
           UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: |
           .\uv.exe pip install anyio
-  
+
   integration-test-pypy-windows-aarch64:
     timeout-minutes: 10
     needs: build-binary-windows-aarch64
@@ -1193,7 +1192,7 @@ jobs:
           UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: |
           .\uv.exe pip install anyio
- 
+
   integration-test-graalpy-windows-aarch64:
     timeout-minutes: 10
     needs: build-binary-windows-aarch64
@@ -1818,7 +1817,7 @@ jobs:
 
       - name: "Validate global Python install"
         run: python ./scripts/check_system_python.py --uv ./uv.exe
-  
+
   system-test-windows-aarch64-python-310:
     timeout-minutes: 10
     needs: build-binary-windows-aarch64
@@ -1873,7 +1872,7 @@ jobs:
 
       - name: "Validate global Python install"
         run: py -3.13 ./scripts/check_system_python.py --uv ./uv.exe
-  
+
   system-test-windows-aarch64-python-313:
     timeout-minutes: 10
     needs: build-binary-windows-aarch64
@@ -1952,7 +1951,6 @@ jobs:
       - name: "Validate global Python install"
         run: py -3.9 ./scripts/check_system_python.py --uv ./uv.exe
 
-
   system-test-pyenv:
     timeout-minutes: 10
     needs: build-binary-linux
@@ -2024,7 +2022,12 @@ jobs:
   system-test-conda:
     timeout-minutes: 10
     needs:
-      [build-binary-windows-x86_64, build-binary-windows-aarch64, build-binary-macos-aarch64, build-binary-linux]
+      [
+        build-binary-windows-x86_64,
+        build-binary-windows-aarch64,
+        build-binary-macos-aarch64,
+        build-binary-linux,
+      ]
     name: check system | conda${{ matrix.python-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -2034,8 +2037,16 @@ jobs:
         python-version: ["3.8", "3.11"]
         include:
           - { os: "linux", target: "linux", runner: "ubuntu-latest" }
-          - { os: "windows", target: "windows-x86_64", runner: "windows-latest" }
-          - { os: "windows", target: "windows-aarch64", runner: "github-windows-11-aarch64-4" }
+          - {
+              os: "windows",
+              target: "windows-x86_64",
+              runner: "windows-latest",
+            }
+          - {
+              os: "windows",
+              target: "windows-aarch64",
+              runner: "github-windows-11-aarch64-4",
+            }
           - { os: "macos", target: "macos-aarch64", runner: "macos-14" }
     steps:
       - uses: actions/checkout@v4
