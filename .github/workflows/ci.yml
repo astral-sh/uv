@@ -699,7 +699,7 @@ jobs:
 
   smoke-test-windows:
     timeout-minutes: 10
-    needs: build-binary-windows
+    needs: build-binary-windows-x86_64
     name: "smoke test | windows x86_64"
     runs-on: windows-latest
     steps:
