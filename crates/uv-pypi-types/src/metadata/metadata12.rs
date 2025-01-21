@@ -6,7 +6,8 @@ use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 
 /// A subset of the full cure metadata specification, only including the
-/// fields that have been consistent across all versions of the specification later than 1.2.
+/// fields that have been consistent across all versions of the specification later than 1.2, with
+/// the exception of `Dynamic`, which is optional (but introduced in Metadata 2.2).
 ///
 /// Python Package Metadata 1.2 is specified in <https://peps.python.org/pep-0345/>.
 #[derive(Deserialize, Debug, Clone)]
@@ -15,6 +16,7 @@ pub struct Metadata12 {
     pub name: PackageName,
     pub version: Version,
     pub requires_python: Option<VersionSpecifiers>,
+    pub dynamic: Vec<String>,
 }
 
 impl Metadata12 {
@@ -54,11 +56,13 @@ impl Metadata12 {
             .map(|requires_python| LenientVersionSpecifiers::from_str(&requires_python))
             .transpose()?
             .map(VersionSpecifiers::from);
+        let dynamic = headers.get_all_values("Dynamic").collect::<Vec<_>>();
 
         Ok(Self {
             name,
             version,
             requires_python,
+            dynamic,
         })
     }
 }

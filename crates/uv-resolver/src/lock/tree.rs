@@ -369,9 +369,11 @@ impl<'env> TreeDisplay<'env> {
                 }
             }
 
-            line.push(' ');
-            line.push('v');
-            line.push_str(&format!("{}", package_id.version));
+            if let Some(version) = package_id.version.as_ref() {
+                line.push(' ');
+                line.push('v');
+                line.push_str(&format!("{version}"));
+            }
 
             if let Some(edge) = edge {
                 match edge {

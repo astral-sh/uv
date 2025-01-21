@@ -1725,7 +1725,7 @@ fn install_git_public_https_missing_commit() {
 
     let mut filters = context.filters();
     // Windows does not style the command the same as Unix, so we must omit it from the snapshot
-    filters.push(("`.*/git(.exe)? fetch .*`", "`git fetch [...]`"));
+    filters.push(("`.*/git(.exe)? rev-parse .*`", "`git rev-parse [...]`"));
     filters.push(("exit status", "exit code"));
 
     // There are flakes on Windows where this irrelevant error is appended
@@ -1745,11 +1745,15 @@ fn install_git_public_https_missing_commit() {
     ----- stderr -----
       × Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
       ├─▶ Git operation failed
-      ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
-      ├─▶ failed to fetch commit `79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
-      ╰─▶ process didn't exit successfully: `git fetch [...]` (exit code: 128)
+      ├─▶ failed to find branch, tag, or commit `79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
+      ╰─▶ process didn't exit successfully: `git rev-parse [...]` (exit code: 128)
+          --- stdout
+          79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b^0
+
           --- stderr
-          fatal: remote error: upload-pack: not our ref 79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b
+          fatal: ambiguous argument '79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b^0': unknown revision or path not in the working tree.
+          Use '--' to separate paths from revisions, like this:
+          'git <command> [<revision>...] -- [<file>...]'
     "###);
 }
 
@@ -6827,7 +6831,7 @@ fn tool_uv_sources() -> Result<()> {
 
         [project.optional-dependencies]
         utils = [
-            "boltons==24.0.0"
+            "charset-normalizer==3.4.0"
         ]
         dont_install_me = [
             "broken @ https://example.org/does/not/exist.tar.gz"
@@ -6835,7 +6839,7 @@ fn tool_uv_sources() -> Result<()> {
 
         [tool.uv.sources]
         tqdm = { url = "https://files.pythonhosted.org/packages/a5/d6/502a859bac4ad5e274255576cd3e15ca273cdb91731bc39fb840dd422ee9/tqdm-4.66.0-py3-none-any.whl" }
-        boltons = { git = "https://github.com/mahmoud/boltons", rev = "57fbaa9b673ed85b32458b31baeeae230520e4a0" }
+        charset-normalizer = { git = "https://github.com/jawah/charset_normalizer", rev = "ffdf7f5f08beb0ceb92dc0637e97382ba27cecfa" }
         poetry_editable = { path = "../poetry_editable", editable = true }
     "#})?;
 
@@ -6867,7 +6871,7 @@ fn tool_uv_sources() -> Result<()> {
     Prepared 9 packages in [TIME]
     Installed 9 packages in [TIME]
      + anyio==4.3.0
-     + boltons==24.0.1.dev0 (from git+https://github.com/mahmoud/boltons@57fbaa9b673ed85b32458b31baeeae230520e4a0)
+     + charset-normalizer==3.4.1 (from git+https://github.com/jawah/charset_normalizer@ffdf7f5f08beb0ceb92dc0637e97382ba27cecfa)
      + colorama==0.4.6
      + idna==3.6
      + packaging==24.1.dev0 (from git+https://github.com/pypa/packaging@32deafe8668a2130a3366b98154914d188f3718e)

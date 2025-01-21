@@ -7,13 +7,15 @@ pub use build_tag::{BuildTag, BuildTagError};
 pub use egg::{EggInfoFilename, EggInfoFilenameError};
 pub use extension::{DistExtension, ExtensionError, SourceDistExtension};
 pub use source_dist::{SourceDistFilename, SourceDistFilenameError};
-pub use wheel::{TagSet, WheelFilename, WheelFilenameError};
+pub use wheel::{WheelFilename, WheelFilenameError};
 
 mod build_tag;
 mod egg;
 mod extension;
 mod source_dist;
+mod splitter;
 mod wheel;
+mod wheel_tag;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DistFilename {

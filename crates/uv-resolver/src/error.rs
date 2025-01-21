@@ -447,6 +447,7 @@ impl std::fmt::Display for NoSolutionError {
             &self.fork_urls,
             &self.fork_indexes,
             &self.env,
+            self.tags.as_ref(),
             &self.workspace_members,
             &self.options,
             &mut additional_hints,

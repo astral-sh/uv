@@ -14,7 +14,7 @@ use uv_workspace::WorkspaceError;
 pub use crate::metadata::build_requires::BuildRequires;
 pub use crate::metadata::lowering::LoweredRequirement;
 use crate::metadata::lowering::LoweringError;
-pub use crate::metadata::requires_dist::RequiresDist;
+pub use crate::metadata::requires_dist::{FlatRequiresDist, RequiresDist};
 
 mod build_requires;
 mod lowering;
@@ -50,6 +50,7 @@ pub struct Metadata {
     pub requires_python: Option<VersionSpecifiers>,
     pub provides_extras: Vec<ExtraName>,
     pub dependency_groups: BTreeMap<GroupName, Vec<uv_pypi_types::Requirement>>,
+    pub dynamic: bool,
 }
 
 impl Metadata {
@@ -67,6 +68,7 @@ impl Metadata {
             requires_python: metadata.requires_python,
             provides_extras: metadata.provides_extras,
             dependency_groups: BTreeMap::default(),
+            dynamic: metadata.dynamic,
         }
     }
 
@@ -109,6 +111,7 @@ impl Metadata {
             requires_python: metadata.requires_python,
             provides_extras,
             dependency_groups,
+            dynamic: metadata.dynamic,
         })
     }
 }

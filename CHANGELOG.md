@@ -1,5 +1,131 @@
 # Changelog
 
+## 0.5.22
+
+### Enhancements
+
+- Include version and contact information in GitHub User Agent ([#10785](https://github.com/astral-sh/uv/pull/10785))
+
+### Performance
+
+- Add fast-path for recursive extras in dynamic validation ([#10823](https://github.com/astral-sh/uv/pull/10823))
+- Fetch `pyproject.toml` from GitHub API ([#10765](https://github.com/astral-sh/uv/pull/10765))
+- Remove allocation in Git SHA truncation ([#10801](https://github.com/astral-sh/uv/pull/10801))
+- Skip GitHub fast path when full commit is already known ([#10800](https://github.com/astral-sh/uv/pull/10800))
+
+### Bug fixes
+
+- Add fallback to build backend when `Requires-Dist` mismatches ([#10797](https://github.com/astral-sh/uv/pull/10797))
+- Avoid deserialization error for paths above the root ([#10789](https://github.com/astral-sh/uv/pull/10789))
+- Avoid respecting preferences from other indexes ([#10782](https://github.com/astral-sh/uv/pull/10782))
+- Disable the distutils setuptools shim during interpreter query ([#10819](https://github.com/astral-sh/uv/pull/10819))
+- Omit variant when detecting compatible Python installs ([#10722](https://github.com/astral-sh/uv/pull/10722))
+- Remove TOCTOU errors in Git clone ([#10758](https://github.com/astral-sh/uv/pull/10758))
+- Validate metadata under GitHub fast path ([#10796](https://github.com/astral-sh/uv/pull/10796))
+- Include conflict markers in fork markers ([#10818](https://github.com/astral-sh/uv/pull/10818))
+
+### Error messages
+
+- Add tag incompatibility hints to sync failures ([#10739](https://github.com/astral-sh/uv/pull/10739))
+- Improve log when distutils is missing ([#10713](https://github.com/astral-sh/uv/pull/10713))
+- Show non-critical Python discovery errors if no other interpreter is found ([#10716](https://github.com/astral-sh/uv/pull/10716))
+- Use colors for lock errors ([#10736](https://github.com/astral-sh/uv/pull/10736))
+
+### Documentation
+
+- Add testing instructions to the AWS Lambda guide ([#10805](https://github.com/astral-sh/uv/pull/10805))
+
+## 0.5.21
+
+### Enhancements
+
+- Avoid building dynamic versions when validating lockfile ([#10703](https://github.com/astral-sh/uv/pull/10703))
+
+### Configuration
+
+- Add `UV_VENV_SEED` environment variable ([#10715](https://github.com/astral-sh/uv/pull/10715))
+
+### Performance
+
+- Store unsupported tags in wheel filename ([#10665](https://github.com/astral-sh/uv/pull/10665))
+
+### Bug fixes
+
+- Avoid attempting to patch macOS dylib for non-macOS installs ([#10721](https://github.com/astral-sh/uv/pull/10721))
+- Avoid narrowing `requires-python` marker with disjunctions ([#10704](https://github.com/astral-sh/uv/pull/10704))
+- Respect environment variable credentials for indexes outside root ([#10688](https://github.com/astral-sh/uv/pull/10688))
+- Respect preferences for explicit index dependencies from `requirements.txt` ([#10690](https://github.com/astral-sh/uv/pull/10690))
+- Sort preferences by environment, then index ([#10700](https://github.com/astral-sh/uv/pull/10700))
+- Ignore permission errors when looking for user-level configuration file ([#10697](https://github.com/astral-sh/uv/pull/10697))
+
+### Documentation
+
+- Add `SyntaxWarning` compatibility note to bytecode compilation docs ([#10701](https://github.com/astral-sh/uv/pull/10701))
+- Add `MACOSX_DEPLOYMENT_TARGET` to the `--python-platform` documentation ([#10698](https://github.com/astral-sh/uv/pull/10698))
+
+## 0.5.20
+
+### Bug fixes
+
+- Avoid failing when deserializing unknown tags ([#10655](https://github.com/astral-sh/uv/pull/10655))
+
+## 0.5.19
+
+### Enhancements
+
+- Filter wheels from lockfile based on architecture ([#10584](https://github.com/astral-sh/uv/pull/10584))
+- Omit dynamic versions from the lockfile ([#10622](https://github.com/astral-sh/uv/pull/10622))
+- Add support for `pip freeze --path` ([#10488](https://github.com/astral-sh/uv/pull/10488))
+- Reduce verbosity of inline-metadata message when using `uv run <script.py>` ([#10588](https://github.com/astral-sh/uv/pull/10588))
+- Add opt-in Git LFS support ([#10335](https://github.com/astral-sh/uv/pull/10335))
+- Recommend `--native-tls` on SSL errors ([#10605](https://github.com/astral-sh/uv/pull/10605))
+- Show expected and available ABI tags in resolver errors ([#10527](https://github.com/astral-sh/uv/pull/10527))
+- Show target Python version in error messages ([#10582](https://github.com/astral-sh/uv/pull/10582))
+- Add `--output-format=json` support to `uv python list` ([#10596](https://github.com/astral-sh/uv/pull/10596))
+
+### Python
+
+The managed Python distributions have been updated, including:
+
+- Python 3.14 support on Windows
+- Python 3.14.0a4 support
+- 64-bit RISC-V Linux support
+- Bundled `libedit` updated from 20210910-3.1 -> 20240808-3.1
+- Bundled `tcl/tk` updated from 8.6.12 -> 8.6.14 (for all Python versions on Unix, only for Python 3.14 on Windows)
+
+See the [`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250115) for more details.
+
+### Performance
+
+- Avoid allocating when stripping source distribution extension ([#10625](https://github.com/astral-sh/uv/pull/10625))
+- Reduce `WheelFilename` to 48 bytes ([#10583](https://github.com/astral-sh/uv/pull/10583))
+- Reduce distribution size to 200 bytes ([#10601](https://github.com/astral-sh/uv/pull/10601))
+- Remove `import re` from entrypoint wrapper scripts ([#10627](https://github.com/astral-sh/uv/pull/10627))
+- Shrink size of platform tag enum ([#10546](https://github.com/astral-sh/uv/pull/10546))
+- Use `ArcStr` in verbatim URL ([#10600](https://github.com/astral-sh/uv/pull/10600))
+- Use `memchr` for wheel parsing ([#10620](https://github.com/astral-sh/uv/pull/10620))
+
+### Bug fixes
+
+- Avoid reading symlinks during `uv python install` on Windows ([#10639](https://github.com/astral-sh/uv/pull/10639))
+- Correct Pyston tag format ([#10580](https://github.com/astral-sh/uv/pull/10580))
+- Provide `pyproject.toml` path for parse errors in `uv venv` ([#10553](https://github.com/astral-sh/uv/pull/10553))
+- Don't treat `setuptools` and `wheel` as seed packages in uv sync on Python 3.12 ([#10572](https://github.com/astral-sh/uv/pull/10572))
+- Fix git-tag cache-key reader in case of slashes (#10467) ([#10500](https://github.com/astral-sh/uv/pull/10500))
+- Include build tag in rendered wheel filenames ([#10599](https://github.com/astral-sh/uv/pull/10599))
+- Patch embedded install path for Python dylib on macOS during `python install` ([#10629](https://github.com/astral-sh/uv/pull/10629))
+- Read cached registry distributions when `--config-settings` are present ([#10578](https://github.com/astral-sh/uv/pull/10578))
+- Show resolver hints for packages with markers ([#10607](https://github.com/astral-sh/uv/pull/10607))
+
+### Documentation
+
+- Add meta titles to documents in guides, excluding integration documents ([#10539](https://github.com/astral-sh/uv/pull/10539))
+- Remove `build-system` from example workspace rot ([#10636](https://github.com/astral-sh/uv/pull/10636))
+
+### Preview features
+
+- Make build backend type annotations more generic ([#10549](https://github.com/astral-sh/uv/pull/10549))
+
 ## 0.5.18
 
 ### Bug fixes

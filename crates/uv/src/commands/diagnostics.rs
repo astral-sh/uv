@@ -296,52 +296,86 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
             range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
         {
             if let Some(extra) = &step.extra {
-                // Ex) `flask[dotenv]>=1.0.0` (v1.2.3)
-                format!(
-                    "`{}{}` ({})",
-                    format!("{}[{}]", step.name, extra).cyan(),
-                    range.cyan(),
-                    format!("v{}", step.version).cyan(),
-                )
+                if let Some(version) = step.version.as_ref() {
+                    // Ex) `flask[dotenv]>=1.0.0` (v1.2.3)
+                    format!(
+                        "`{}{}` ({})",
+                        format!("{}[{}]", step.name, extra).cyan(),
+                        range.cyan(),
+                        format!("v{version}").cyan(),
+                    )
+                } else {
+                    // Ex) `flask[dotenv]>=1.0.0`
+                    format!(
+                        "`{}{}`",
+                        format!("{}[{}]", step.name, extra).cyan(),
+                        range.cyan(),
+                    )
+                }
             } else if let Some(group) = &step.group {
-                // Ex) `flask:dev>=1.0.0` (v1.2.3)
-                format!(
-                    "`{}{}` ({})",
-                    format!("{}:{}", step.name, group).cyan(),
-                    range.cyan(),
-                    format!("v{}", step.version).cyan(),
-                )
+                if let Some(version) = step.version.as_ref() {
+                    // Ex) `flask:dev>=1.0.0` (v1.2.3)
+                    format!(
+                        "`{}{}` ({})",
+                        format!("{}:{}", step.name, group).cyan(),
+                        range.cyan(),
+                        format!("v{version}").cyan(),
+                    )
+                } else {
+                    // Ex) `flask:dev>=1.0.0`
+                    format!(
+                        "`{}{}`",
+                        format!("{}:{}", step.name, group).cyan(),
+                        range.cyan(),
+                    )
+                }
             } else {
-                // Ex) `flask>=1.0.0` (v1.2.3)
-                format!(
-                    "`{}{}` ({})",
-                    step.name.cyan(),
-                    range.cyan(),
-                    format!("v{}", step.version).cyan(),
-                )
+                if let Some(version) = step.version.as_ref() {
+                    // Ex) `flask>=1.0.0` (v1.2.3)
+                    format!(
+                        "`{}{}` ({})",
+                        step.name.cyan(),
+                        range.cyan(),
+                        format!("v{version}").cyan(),
+                    )
+                } else {
+                    // Ex) `flask>=1.0.0`
+                    format!("`{}{}`", step.name.cyan(), range.cyan())
+                }
             }
         } else {
             if let Some(extra) = &step.extra {
-                // Ex) `flask[dotenv]` (v1.2.3)
-                format!(
-                    "`{}` ({})",
-                    format!("{}[{}]", step.name, extra).cyan(),
-                    format!("v{}", step.version).cyan(),
-                )
+                if let Some(version) = step.version.as_ref() {
+                    // Ex) `flask[dotenv]` (v1.2.3)
+                    format!(
+                        "`{}` ({})",
+                        format!("{}[{}]", step.name, extra).cyan(),
+                        format!("v{version}").cyan(),
+                    )
+                } else {
+                    // Ex) `flask[dotenv]`
+                    format!("`{}`", format!("{}[{}]", step.name, extra).cyan())
+                }
             } else if let Some(group) = &step.group {
-                // Ex) `flask:dev` (v1.2.3)
-                format!(
-                    "`{}` ({})",
-                    format!("{}:{}", step.name, group).cyan(),
-                    format!("v{}", step.version).cyan(),
-                )
+                if let Some(version) = step.version.as_ref() {
+                    // Ex) `flask:dev` (v1.2.3)
+                    format!(
+                        "`{}` ({})",
+                        format!("{}:{}", step.name, group).cyan(),
+                        format!("v{version}").cyan(),
+                    )
+                } else {
+                    // Ex) `flask:dev`
+                    format!("`{}`", format!("{}:{}", step.name, group).cyan())
+                }
             } else {
-                // Ex) `flask` (v1.2.3)
-                format!(
-                    "`{}` ({})",
-                    step.name.cyan(),
-                    format!("v{}", step.version).cyan()
-                )
+                if let Some(version) = step.version.as_ref() {
+                    // Ex) `flask` (v1.2.3)
+                    format!("`{}` ({})", step.name.cyan(), format!("v{version}").cyan())
+                } else {
+                    // Ex) `flask`
+                    format!("`{}`", step.name.cyan())
+                }
             }
         }
     }

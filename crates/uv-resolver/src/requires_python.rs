@@ -115,7 +115,12 @@ impl RequiresPython {
     }
 
     /// Narrow the [`RequiresPython`] by computing the intersection with the given range.
+    ///
+    /// Returns `None` if the given range is not narrower than the current range.
     pub fn narrow(&self, range: &RequiresPythonRange) -> Option<Self> {
+        if *range == self.range {
+            return None;
+        }
         let lower = if range.0 >= self.range.0 {
             Some(&range.0)
         } else {
@@ -464,7 +469,7 @@ impl RequiresPython {
                     python_version: (2, ..),
                     ..
                 } | AbiTag::PyPy {
-                    python_version: (2, ..),
+                    python_version: None | Some((2, ..)),
                     ..
                 } | AbiTag::GraalPy {
                     python_version: (2, ..),
@@ -478,7 +483,7 @@ impl RequiresPython {
                 ..
             }
             | AbiTag::PyPy {
-                python_version: (3, minor),
+                python_version: Some((3, minor)),
                 ..
             }
             | AbiTag::GraalPy {

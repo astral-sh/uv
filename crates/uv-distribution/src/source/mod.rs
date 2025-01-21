@@ -22,7 +22,7 @@ use crate::source::revision::Revision;
 use crate::{Reporter, RequiresDist};
 use fs_err::tokio as fs;
 use futures::{FutureExt, TryStreamExt};
-use reqwest::Response;
+use reqwest::{Response, StatusCode};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, info_span, instrument, warn, Instrument};
 use url::Url;
@@ -40,12 +40,14 @@ use uv_distribution_types::{
 };
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic, LockedFile};
+use uv_git::{GitHubRepository, GitOid};
 use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
 use uv_pep440::{release_specifiers_to_ranges, Version};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata12, RequiresTxt, ResolutionMetadata};
 use uv_types::{BuildContext, BuildStack, SourceBuildTrait};
+use uv_workspace::pyproject::ToolUvSources;
 use zip::ZipArchive;
 
 mod built_wheel_metadata;
@@ -535,14 +537,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // If the metadata is static, return it.
-        if let Some(metadata) =
-            Self::read_static_metadata(source, source_dist_entry.path(), subdirectory).await?
-        {
-            return Ok(ArchiveMetadata {
-                metadata: Metadata::from_metadata23(metadata),
-                hashes: revision.into_hashes(),
-            });
-        }
+        let dynamic =
+            match StaticMetadata::read(source, source_dist_entry.path(), subdirectory).await? {
+                StaticMetadata::Some(metadata) => {
+                    return Ok(ArchiveMetadata {
+                        metadata: Metadata::from_metadata23(metadata),
+                        hashes: revision.into_hashes(),
+                    });
+                }
+                StaticMetadata::Dynamic => true,
+                StaticMetadata::None => false,
+            };
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
@@ -593,6 +598,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .boxed_local()
             .await?
         {
+            // If necessary, mark the metadata as dynamic.
+            let metadata = if dynamic {
+                ResolutionMetadata {
+                    dynamic: true,
+                    ..metadata
+                }
+            } else {
+                metadata
+            };
+
             // Store the metadata.
             fs::create_dir_all(metadata_entry.dir())
                 .await
@@ -623,16 +638,26 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             )
             .await?;
 
-        // Store the metadata.
-        write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
-            .await
-            .map_err(Error::CacheWrite)?;
-
         if let Some(task) = task {
             if let Some(reporter) = self.reporter.as_ref() {
                 reporter.on_build_complete(source, task);
             }
         }
+
+        // If necessary, mark the metadata as dynamic.
+        let metadata = if dynamic {
+            ResolutionMetadata {
+                dynamic: true,
+                ..metadata
+            }
+        } else {
+            metadata
+        };
+
+        // Store the metadata.
+        write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
+            .await
+            .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadata {
             metadata: Metadata::from_metadata23(metadata),
@@ -844,14 +869,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let source_entry = cache_shard.entry(SOURCE);
 
         // If the metadata is static, return it.
-        if let Some(metadata) =
-            Self::read_static_metadata(source, source_entry.path(), None).await?
-        {
-            return Ok(ArchiveMetadata {
-                metadata: Metadata::from_metadata23(metadata),
-                hashes: revision.into_hashes(),
-            });
-        }
+        let dynamic = match StaticMetadata::read(source, source_entry.path(), None).await? {
+            StaticMetadata::Some(metadata) => {
+                return Ok(ArchiveMetadata {
+                    metadata: Metadata::from_metadata23(metadata),
+                    hashes: revision.into_hashes(),
+                });
+            }
+            StaticMetadata::Dynamic => true,
+            StaticMetadata::None => false,
+        };
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
@@ -880,6 +907,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .boxed_local()
             .await?
         {
+            // If necessary, mark the metadata as dynamic.
+            let metadata = if dynamic {
+                ResolutionMetadata {
+                    dynamic: true,
+                    ..metadata
+                }
+            } else {
+                metadata
+            };
+
             // Store the metadata.
             fs::create_dir_all(metadata_entry.dir())
                 .await
@@ -923,6 +960,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 reporter.on_build_complete(source, task);
             }
         }
+
+        // If necessary, mark the metadata as dynamic.
+        let metadata = if dynamic {
+            ResolutionMetadata {
+                dynamic: true,
+                ..metadata
+            }
+        } else {
+            metadata
+        };
 
         // Store the metadata.
         write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
@@ -1093,21 +1140,24 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Err(Error::HashesNotSupportedSourceTree(source.to_string()));
         }
 
-        if let Some(metadata) =
-            Self::read_static_metadata(source, &resource.install_path, None).await?
-        {
-            return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(
-                    metadata,
-                    resource.install_path.as_ref(),
-                    None,
-                    self.build_context.locations(),
-                    self.build_context.sources(),
-                    self.build_context.bounds(),
-                )
-                .await?,
-            ));
-        }
+        // If the metadata is static, return it.
+        let dynamic = match StaticMetadata::read(source, &resource.install_path, None).await? {
+            StaticMetadata::Some(metadata) => {
+                return Ok(ArchiveMetadata::from(
+                    Metadata::from_workspace(
+                        metadata,
+                        resource.install_path.as_ref(),
+                        None,
+                        self.build_context.locations(),
+                        self.build_context.sources(),
+                        self.build_context.bounds(),
+                    )
+                    .await?,
+                ));
+            }
+            StaticMetadata::Dynamic => true,
+            StaticMetadata::None => false,
+        };
 
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::SourceDistributions,
@@ -1160,6 +1210,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .boxed_local()
             .await?
         {
+            // If necessary, mark the metadata as dynamic.
+            let metadata = if dynamic {
+                ResolutionMetadata {
+                    dynamic: true,
+                    ..metadata
+                }
+            } else {
+                metadata
+            };
+
             // Store the metadata.
             fs::create_dir_all(metadata_entry.dir())
                 .await
@@ -1210,6 +1270,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 reporter.on_build_complete(source, task);
             }
         }
+
+        // If necessary, mark the metadata as dynamic.
+        let metadata = if dynamic {
+            ResolutionMetadata {
+                dynamic: true,
+                ..metadata
+            }
+        } else {
+            metadata
+        };
 
         // Store the metadata.
         write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
@@ -1276,18 +1346,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
     pub(crate) async fn source_tree_requires_dist(
         &self,
-        project_root: &Path,
+        source_tree: &Path,
     ) -> Result<Option<RequiresDist>, Error> {
         // Attempt to read static metadata from the `pyproject.toml`.
-        match read_requires_dist(project_root).await {
+        match read_requires_dist(source_tree).await {
             Ok(requires_dist) => {
                 debug!(
                     "Found static `requires-dist` for: {}",
-                    project_root.display()
+                    source_tree.display()
                 );
                 let requires_dist = RequiresDist::from_project_maybe_workspace(
                     requires_dist,
-                    project_root,
+                    source_tree,
                     None,
                     self.build_context.locations(),
                     self.build_context.sources(),
@@ -1307,7 +1377,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             ) => {
                 debug!(
                     "No static `requires-dist` available for: {} ({err:?})",
-                    project_root.display()
+                    source_tree.display()
                 );
                 Ok(None)
             }
@@ -1356,7 +1426,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::SourceDistributions,
-            WheelCache::Git(resource.url, &git_sha.to_short_string()).root(),
+            WheelCache::Git(resource.url, git_sha.as_short_str()).root(),
         );
         let metadata_entry = cache_shard.entry(METADATA);
 
@@ -1428,6 +1498,45 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Err(Error::HashesNotSupportedGit(source.to_string()));
         }
 
+        // If this is GitHub URL, attempt to resolve to a precise commit using the GitHub API.
+        if let Some(precise) = self
+            .build_context
+            .git()
+            .github_fast_path(
+                resource.git,
+                client.unmanaged.uncached_client(resource.url).clone(),
+            )
+            .await?
+        {
+            // There's no need to check the cache, since we can't use cached metadata if there are
+            // sources, and we can't know if there are sources without fetching the
+            // `pyproject.toml`.
+            //
+            // For the same reason, there's no need to write to the cache, since we won't be able to
+            // use it on subsequent runs.
+            if let Some(metadata) = self
+                .github_metadata(precise, source, resource, client)
+                .await?
+            {
+                // Validate the metadata, but ignore it if the metadata doesn't match.
+                match validate_metadata(source, &metadata) {
+                    Ok(()) => {
+                        debug!("Found static metadata via GitHub fast path for: {source}");
+                        return Ok(ArchiveMetadata {
+                            metadata: Metadata::from_metadata23(metadata),
+                            hashes: vec![],
+                        });
+                    }
+                    Err(Error::WheelMetadataNameMismatch { metadata, given }) => {
+                        debug!(
+                            "Ignoring `pyproject.toml` from GitHub for: {source} (metadata: {metadata}, given: {given})"
+                        );
+                    }
+                    Err(err) => return Err(err),
+                }
+            }
+        }
+
         // Fetch the Git repository.
         let fetch = self
             .build_context
@@ -1455,7 +1564,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::SourceDistributions,
-            WheelCache::Git(resource.url, &git_sha.to_short_string()).root(),
+            WheelCache::Git(resource.url, git_sha.as_short_str()).root(),
         );
         let metadata_entry = cache_shard.entry(METADATA);
 
@@ -1472,21 +1581,25 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             git_source: resource,
         };
 
-        if let Some(metadata) =
-            Self::read_static_metadata(source, fetch.path(), resource.subdirectory).await?
-        {
-            return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(
-                    metadata,
-                    &path,
-                    Some(&git_member),
-                    self.build_context.locations(),
-                    self.build_context.sources(),
-                    self.build_context.bounds(),
-                )
-                .await?,
-            ));
-        }
+        // If the metadata is static, return it.
+        let dynamic =
+            match StaticMetadata::read(source, fetch.path(), resource.subdirectory).await? {
+                StaticMetadata::Some(metadata) => {
+                    return Ok(ArchiveMetadata::from(
+                        Metadata::from_workspace(
+                            metadata,
+                            &path,
+                            Some(&git_member),
+                            self.build_context.locations(),
+                            self.build_context.sources(),
+                            self.build_context.bounds(),
+                        )
+                        .await?,
+                    ));
+                }
+                StaticMetadata::Dynamic => true,
+                StaticMetadata::None => false,
+            };
 
         // If the cache contains compatible metadata, return it.
         if self
@@ -1531,6 +1644,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .boxed_local()
             .await?
         {
+            // If necessary, mark the metadata as dynamic.
+            let metadata = if dynamic {
+                ResolutionMetadata {
+                    dynamic: true,
+                    ..metadata
+                }
+            } else {
+                metadata
+            };
+
             // Store the metadata.
             fs::create_dir_all(metadata_entry.dir())
                 .await
@@ -1582,6 +1705,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         }
 
+        // If necessary, mark the metadata as dynamic.
+        let metadata = if dynamic {
+            ResolutionMetadata {
+                dynamic: true,
+                ..metadata
+            }
+        } else {
+            metadata
+        };
+
         // Store the metadata.
         write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
             .await
@@ -1606,36 +1739,137 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<(), Error> {
-        match source {
-            BuildableSource::Dist(SourceDist::Git(source)) => {
-                self.build_context
-                    .git()
-                    .fetch(
-                        &source.git,
-                        client.unmanaged.uncached_client(&source.url).clone(),
-                        self.build_context.cache().bucket(CacheBucket::Git),
-                        self.reporter
-                            .clone()
-                            .map(|reporter| reporter.into_git_reporter()),
-                    )
-                    .await?;
+        let git = match source {
+            BuildableSource::Dist(SourceDist::Git(source)) => &*source.git,
+            BuildableSource::Url(SourceUrl::Git(source)) => source.git,
+            _ => {
+                return Ok(());
             }
-            BuildableSource::Url(SourceUrl::Git(source)) => {
-                self.build_context
-                    .git()
-                    .fetch(
-                        source.git,
-                        client.unmanaged.uncached_client(source.url).clone(),
-                        self.build_context.cache().bucket(CacheBucket::Git),
-                        self.reporter
-                            .clone()
-                            .map(|reporter| reporter.into_git_reporter()),
-                    )
-                    .await?;
-            }
-            _ => {}
+        };
+
+        // If this is GitHub URL, attempt to resolve to a precise commit using the GitHub API.
+        if self
+            .build_context
+            .git()
+            .github_fast_path(
+                git,
+                client.unmanaged.uncached_client(git.repository()).clone(),
+            )
+            .await?
+            .is_some()
+        {
+            debug!("Resolved to precise commit via GitHub fast path: {source}");
+            return Ok(());
         }
+
+        // Otherwise, fetch the Git repository.
+        self.build_context
+            .git()
+            .fetch(
+                git,
+                client.unmanaged.uncached_client(git.repository()).clone(),
+                self.build_context.cache().bucket(CacheBucket::Git),
+                self.reporter
+                    .clone()
+                    .map(|reporter| reporter.into_git_reporter()),
+            )
+            .await?;
+
         Ok(())
+    }
+
+    /// Fetch static [`ResolutionMetadata`] from a GitHub repository, if possible.
+    ///
+    /// Attempts to fetch the `pyproject.toml` from the resolved commit using the GitHub API.
+    async fn github_metadata(
+        &self,
+        commit: GitOid,
+        source: &BuildableSource<'_>,
+        resource: &GitSourceUrl<'_>,
+        client: &ManagedClient<'_>,
+    ) -> Result<Option<ResolutionMetadata>, Error> {
+        let GitSourceUrl {
+            git, subdirectory, ..
+        } = resource;
+
+        // The fast path isn't available for subdirectories. If a `pyproject.toml` is in a
+        // subdirectory, it could be part of a workspace; and if it's part of a workspace, it could
+        // have `tool.uv.sources` entries that it inherits from the workspace root.
+        if subdirectory.is_some() {
+            return Ok(None);
+        }
+
+        let Some(GitHubRepository { owner, repo }) = GitHubRepository::parse(git.repository())
+        else {
+            return Ok(None);
+        };
+
+        // Fetch the `pyproject.toml` from the resolved commit.
+        let url =
+            format!("https://raw.githubusercontent.com/{owner}/{repo}/{commit}/pyproject.toml");
+
+        debug!("Attempting to fetch `pyproject.toml` from: {url}");
+
+        let content = client
+            .managed(|client| async {
+                let response = client
+                    .uncached_client(git.repository())
+                    .get(&url)
+                    .send()
+                    .await?;
+
+                // If the `pyproject.toml` does not exist, the GitHub API will return a 404.
+                if response.status() == StatusCode::NOT_FOUND {
+                    return Ok::<Option<String>, Error>(None);
+                }
+                response.error_for_status_ref()?;
+
+                let content = response.text().await?;
+                Ok::<Option<String>, Error>(Some(content))
+            })
+            .await?;
+
+        let Some(content) = content else {
+            debug!("GitHub API returned a 404 for: {url}");
+            return Ok(None);
+        };
+
+        // Parse the metadata.
+        let metadata = match ResolutionMetadata::parse_pyproject_toml(&content, source.version()) {
+            Ok(metadata) => metadata,
+            Err(
+                uv_pypi_types::MetadataError::Pep508Error(_)
+                | uv_pypi_types::MetadataError::DynamicField(_)
+                | uv_pypi_types::MetadataError::FieldNotFound(_)
+                | uv_pypi_types::MetadataError::PoetrySyntax,
+            ) => {
+                debug!("Failed to extract static metadata from GitHub API for: {url}");
+                return Ok(None);
+            }
+            Err(err) => return Err(err.into()),
+        };
+
+        // Determine whether the project has `tool.uv.sources`. If the project has sources, it must
+        // be lowered, which requires access to the workspace. For example, it could have workspace
+        // members that need to be translated to concrete paths on disk.
+        //
+        // TODO(charlie): We could still use the `pyproject.toml` if the sources are all `git` or
+        // `url` sources; this is only applicable to `workspace` and `path` sources. It's awkward,
+        // though, because we'd need to pass a path into the lowering routine, and that path would
+        // be incorrect (we'd just be relying on it not being used).
+        match has_sources(&content) {
+            Ok(false) => {}
+            Ok(true) => {
+                debug!("Skipping GitHub fast path; `pyproject.toml` has sources: {url}");
+                return Ok(None);
+            }
+            Err(err) => {
+                debug!("Failed to parse `tool.uv.sources` from GitHub API for: {url} ({err})");
+                return Ok(None);
+            }
+        }
+
+        Ok(Some(metadata))
     }
 
     /// Heal a [`Revision`] for a local archive.
@@ -2025,122 +2259,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok(Some(metadata))
     }
 
-    async fn read_static_metadata(
-        source: &BuildableSource<'_>,
-        source_root: &Path,
-        subdirectory: Option<&Path>,
-    ) -> Result<Option<ResolutionMetadata>, Error> {
-        // Attempt to read static metadata from the `pyproject.toml`.
-        match read_pyproject_toml(source_root, subdirectory, source.version()).await {
-            Ok(metadata) => {
-                debug!("Found static `pyproject.toml` for: {source}");
-
-                // Validate the metadata, but ignore it if the metadata doesn't match.
-                match validate_metadata(source, &metadata) {
-                    Ok(()) => {
-                        return Ok(Some(metadata));
-                    }
-                    Err(Error::WheelMetadataNameMismatch { metadata, given }) => {
-                        debug!(
-                            "Ignoring `pyproject.toml` for: {source} (metadata: {metadata}, given: {given})"
-                        );
-                    }
-                    Err(err) => return Err(err),
-                }
-            }
-            Err(
-                err @ (Error::MissingPyprojectToml
-                | Error::PyprojectToml(
-                    uv_pypi_types::MetadataError::Pep508Error(_)
-                    | uv_pypi_types::MetadataError::DynamicField(_)
-                    | uv_pypi_types::MetadataError::FieldNotFound(_)
-                    | uv_pypi_types::MetadataError::PoetrySyntax,
-                )),
-            ) => {
-                debug!("No static `pyproject.toml` available for: {source} ({err:?})");
-            }
-            Err(err) => return Err(err),
-        }
-
-        // If the source distribution is a source tree, avoid reading `PKG-INFO` or `egg-info`,
-        // since they could be out-of-date.
-        if source.is_source_tree() {
-            return Ok(None);
-        }
-
-        // Attempt to read static metadata from the `PKG-INFO` file.
-        match read_pkg_info(source_root, subdirectory).await {
-            Ok(metadata) => {
-                debug!("Found static `PKG-INFO` for: {source}");
-
-                // Validate the metadata, but ignore it if the metadata doesn't match.
-                match validate_metadata(source, &metadata) {
-                    Ok(()) => {
-                        return Ok(Some(metadata));
-                    }
-                    Err(Error::WheelMetadataNameMismatch { metadata, given }) => {
-                        debug!(
-                            "Ignoring `PKG-INFO` for: {source} (metadata: {metadata}, given: {given})"
-                        );
-                    }
-                    Err(err) => return Err(err),
-                }
-            }
-            Err(
-                err @ (Error::MissingPkgInfo
-                | Error::PkgInfo(
-                    uv_pypi_types::MetadataError::Pep508Error(_)
-                    | uv_pypi_types::MetadataError::DynamicField(_)
-                    | uv_pypi_types::MetadataError::FieldNotFound(_)
-                    | uv_pypi_types::MetadataError::UnsupportedMetadataVersion(_),
-                )),
-            ) => {
-                debug!("No static `PKG-INFO` available for: {source} ({err:?})");
-            }
-            Err(err) => return Err(err),
-        }
-
-        // Attempt to read static metadata from the `egg-info` directory.
-        match read_egg_info(source_root, subdirectory, source.name(), source.version()).await {
-            Ok(metadata) => {
-                debug!("Found static `egg-info` for: {source}");
-
-                // Validate the metadata, but ignore it if the metadata doesn't match.
-                match validate_metadata(source, &metadata) {
-                    Ok(()) => {
-                        return Ok(Some(metadata));
-                    }
-                    Err(Error::WheelMetadataNameMismatch { metadata, given }) => {
-                        debug!(
-                            "Ignoring `egg-info` for: {source} (metadata: {metadata}, given: {given})"
-                        );
-                    }
-                    Err(err) => return Err(err),
-                }
-            }
-            Err(
-                err @ (Error::MissingEggInfo
-                | Error::MissingRequiresTxt
-                | Error::MissingPkgInfo
-                | Error::RequiresTxt(
-                    uv_pypi_types::MetadataError::Pep508Error(_)
-                    | uv_pypi_types::MetadataError::RequiresTxtContents(_),
-                )
-                | Error::PkgInfo(
-                    uv_pypi_types::MetadataError::Pep508Error(_)
-                    | uv_pypi_types::MetadataError::DynamicField(_)
-                    | uv_pypi_types::MetadataError::FieldNotFound(_)
-                    | uv_pypi_types::MetadataError::UnsupportedMetadataVersion(_),
-                )),
-            ) => {
-                debug!("No static `egg-info` available for: {source} ({err:?})");
-            }
-            Err(err) => return Err(err),
-        }
-
-        Ok(None)
-    }
-
     /// Returns a GET [`reqwest::Request`] for the given URL.
     fn request(url: Url, client: &RegistryClient) -> Result<reqwest::Request, reqwest::Error> {
         client
@@ -2223,6 +2341,177 @@ pub fn prune(cache: &Cache) -> Result<Removal, Error> {
     }
 
     Ok(removal)
+}
+
+/// The result of extracting statically available metadata from a source distribution.
+#[derive(Debug)]
+enum StaticMetadata {
+    /// The metadata was found and successfully read.
+    Some(ResolutionMetadata),
+    /// The metadata was found, but it was ignored due to a dynamic version.
+    Dynamic,
+    /// The metadata was not found.
+    None,
+}
+
+impl StaticMetadata {
+    /// Read the [`ResolutionMetadata`] from a source distribution.
+    async fn read(
+        source: &BuildableSource<'_>,
+        source_root: &Path,
+        subdirectory: Option<&Path>,
+    ) -> Result<Self, Error> {
+        // Attempt to read static metadata from the `pyproject.toml`.
+        match read_pyproject_toml(source_root, subdirectory, source.version()).await {
+            Ok(metadata) => {
+                debug!("Found static `pyproject.toml` for: {source}");
+
+                // Validate the metadata, but ignore it if the metadata doesn't match.
+                match validate_metadata(source, &metadata) {
+                    Ok(()) => {
+                        return Ok(Self::Some(metadata));
+                    }
+                    Err(Error::WheelMetadataNameMismatch { metadata, given }) => {
+                        debug!(
+                            "Ignoring `pyproject.toml` for: {source} (metadata: {metadata}, given: {given})"
+                        );
+                    }
+                    Err(err) => return Err(err),
+                }
+            }
+            Err(
+                err @ Error::PyprojectToml(uv_pypi_types::MetadataError::DynamicField("version")),
+            ) if source.is_source_tree() => {
+                // In Metadata 2.2, `Dynamic` was introduced to Core Metadata to indicate that a
+                // given field was marked as dynamic in the originating source tree. However, we may
+                // be looking at a distribution with a build backend that doesn't support Metadata 2.2. In that case,
+                // we want to infer the `Dynamic` status from the `pyproject.toml` file, if available.
+                debug!("No static `pyproject.toml` available for: {source} ({err:?})");
+                return Ok(Self::Dynamic);
+            }
+            Err(
+                err @ (Error::MissingPyprojectToml
+                | Error::PyprojectToml(
+                    uv_pypi_types::MetadataError::Pep508Error(_)
+                    | uv_pypi_types::MetadataError::DynamicField(_)
+                    | uv_pypi_types::MetadataError::FieldNotFound(_)
+                    | uv_pypi_types::MetadataError::PoetrySyntax,
+                )),
+            ) => {
+                debug!("No static `pyproject.toml` available for: {source} ({err:?})");
+            }
+            Err(err) => return Err(err),
+        }
+
+        // If the source distribution is a source tree, avoid reading `PKG-INFO` or `egg-info`,
+        // since they could be out-of-date.
+        if source.is_source_tree() {
+            return Ok(Self::None);
+        }
+
+        // Attempt to read static metadata from the `PKG-INFO` file.
+        match read_pkg_info(source_root, subdirectory).await {
+            Ok(metadata) => {
+                debug!("Found static `PKG-INFO` for: {source}");
+
+                // Validate the metadata, but ignore it if the metadata doesn't match.
+                match validate_metadata(source, &metadata) {
+                    Ok(()) => {
+                        return Ok(Self::Some(metadata));
+                    }
+                    Err(Error::WheelMetadataNameMismatch { metadata, given }) => {
+                        debug!(
+                            "Ignoring `PKG-INFO` for: {source} (metadata: {metadata}, given: {given})"
+                        );
+                    }
+                    Err(err) => return Err(err),
+                }
+            }
+            Err(
+                err @ (Error::MissingPkgInfo
+                | Error::PkgInfo(
+                    uv_pypi_types::MetadataError::Pep508Error(_)
+                    | uv_pypi_types::MetadataError::DynamicField(_)
+                    | uv_pypi_types::MetadataError::FieldNotFound(_)
+                    | uv_pypi_types::MetadataError::UnsupportedMetadataVersion(_),
+                )),
+            ) => {
+                debug!("No static `PKG-INFO` available for: {source} ({err:?})");
+            }
+            Err(err) => return Err(err),
+        }
+
+        // Attempt to read static metadata from the `egg-info` directory.
+        match read_egg_info(source_root, subdirectory, source.name(), source.version()).await {
+            Ok(metadata) => {
+                debug!("Found static `egg-info` for: {source}");
+
+                // Validate the metadata, but ignore it if the metadata doesn't match.
+                match validate_metadata(source, &metadata) {
+                    Ok(()) => {
+                        return Ok(Self::Some(metadata));
+                    }
+                    Err(Error::WheelMetadataNameMismatch { metadata, given }) => {
+                        debug!(
+                            "Ignoring `egg-info` for: {source} (metadata: {metadata}, given: {given})"
+                        );
+                    }
+                    Err(err) => return Err(err),
+                }
+            }
+            Err(
+                err @ (Error::MissingEggInfo
+                | Error::MissingRequiresTxt
+                | Error::MissingPkgInfo
+                | Error::RequiresTxt(
+                    uv_pypi_types::MetadataError::Pep508Error(_)
+                    | uv_pypi_types::MetadataError::RequiresTxtContents(_),
+                )
+                | Error::PkgInfo(
+                    uv_pypi_types::MetadataError::Pep508Error(_)
+                    | uv_pypi_types::MetadataError::DynamicField(_)
+                    | uv_pypi_types::MetadataError::FieldNotFound(_)
+                    | uv_pypi_types::MetadataError::UnsupportedMetadataVersion(_),
+                )),
+            ) => {
+                debug!("No static `egg-info` available for: {source} ({err:?})");
+            }
+            Err(err) => return Err(err),
+        }
+
+        Ok(Self::None)
+    }
+}
+
+/// Returns `true` if a `pyproject.toml` has `tool.uv.sources`.
+fn has_sources(content: &str) -> Result<bool, toml::de::Error> {
+    #[derive(serde::Deserialize)]
+    struct PyProjectToml {
+        tool: Option<Tool>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct Tool {
+        uv: Option<ToolUv>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct ToolUv {
+        sources: Option<ToolUvSources>,
+    }
+
+    let PyProjectToml { tool } = toml::from_str(content)?;
+    if let Some(tool) = tool {
+        if let Some(uv) = tool.uv {
+            if let Some(sources) = uv.sources {
+                if !sources.inner().is_empty() {
+                    return Ok(true);
+                }
+            }
+        }
+    }
+
+    Ok(false)
 }
 
 /// Validate that the source distribution matches the built metadata.
@@ -2464,6 +2753,9 @@ async fn read_egg_info(
     // Parse the metadata.
     let metadata = Metadata12::parse_metadata(&content).map_err(Error::PkgInfo)?;
 
+    // Determine whether the version is dynamic.
+    let dynamic = metadata.dynamic.iter().any(|field| field == "version");
+
     // Combine the sources.
     Ok(ResolutionMetadata {
         name: metadata.name,
@@ -2471,6 +2763,7 @@ async fn read_egg_info(
         requires_python: metadata.requires_python,
         requires_dist: requires_txt.requires_dist,
         provides_extras: requires_txt.provides_extras,
+        dynamic,
     })
 }
 

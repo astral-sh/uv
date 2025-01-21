@@ -100,6 +100,8 @@ impl PythonRequirement {
 
     /// Narrow the [`PythonRequirement`] to the given version, if it's stricter (i.e., greater)
     /// than the current `Requires-Python` minimum.
+    ///
+    /// Returns `None` if the given range is not narrower than the current range.
     pub fn narrow(&self, target: &RequiresPythonRange) -> Option<Self> {
         Some(Self {
             exact: self.exact.clone(),

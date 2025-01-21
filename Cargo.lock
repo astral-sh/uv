@@ -4490,7 +4490,7 @@ checksum = "f8c5f0a0af699448548ad1a2fbf920fb4bee257eae39953ba95cb84891a0446a"
 
 [[package]]
 name = "uv"
-version = "0.5.18"
+version = "0.5.22"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4972,6 +4972,7 @@ dependencies = [
  "thiserror 2.0.11",
  "tokio",
  "tokio-util",
+ "toml",
  "tracing",
  "url",
  "uv-cache",
@@ -5002,6 +5003,7 @@ name = "uv-distribution-filename"
 version = "0.0.1"
 dependencies = [
  "insta",
+ "memchr",
  "rkyv",
  "serde",
  "smallvec",
@@ -5115,6 +5117,7 @@ dependencies = [
  "uv-cache-key",
  "uv-fs",
  "uv-static",
+ "uv-version",
  "which",
 ]
 
@@ -5537,6 +5540,7 @@ dependencies = [
  "same-file",
  "schemars",
  "serde",
+ "smallvec",
  "textwrap",
  "thiserror 2.0.11",
  "tokio",
@@ -5720,7 +5724,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.5.18"
+version = "0.5.22"
 
 [[package]]
 name = "uv-virtualenv"

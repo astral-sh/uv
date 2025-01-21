@@ -42,7 +42,9 @@ Ok(
                     name: PackageName(
                         "a",
                     ),
-                    version: "0.1.0",
+                    version: Some(
+                        "0.1.0",
+                    ),
                     source: Registry(
                         Url(
                             UrlString(
@@ -86,7 +88,9 @@ Ok(
                     name: PackageName(
                         "b",
                     ),
-                    version: "0.1.0",
+                    version: Some(
+                        "0.1.0",
+                    ),
                     source: Registry(
                         Url(
                             UrlString(
@@ -123,7 +127,9 @@ Ok(
                             name: PackageName(
                                 "a",
                             ),
-                            version: "0.1.0",
+                            version: Some(
+                                "0.1.0",
+                            ),
                             source: Registry(
                                 Url(
                                     UrlString(
@@ -150,22 +156,11 @@ Ok(
         by_id: {
             PackageId {
                 name: PackageName(
-                    "a",
-                ),
-                version: "0.1.0",
-                source: Registry(
-                    Url(
-                        UrlString(
-                            "https://pypi.org/simple",
-                        ),
-                    ),
-                ),
-            }: 0,
-            PackageId {
-                name: PackageName(
                     "b",
                 ),
-                version: "0.1.0",
+                version: Some(
+                    "0.1.0",
+                ),
                 source: Registry(
                     Url(
                         UrlString(
@@ -174,6 +169,21 @@ Ok(
                     ),
                 ),
             }: 1,
+            PackageId {
+                name: PackageName(
+                    "a",
+                ),
+                version: Some(
+                    "0.1.0",
+                ),
+                source: Registry(
+                    Url(
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
+                    ),
+                ),
+            }: 0,
         },
         manifest: ResolverManifest {
             members: {},

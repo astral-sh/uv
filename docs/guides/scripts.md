@@ -1,3 +1,10 @@
+---
+title: Running scripts
+description:
+  A guide to using uv to run Python scripts, including support for inline dependency metadata,
+  reproducible scripts, and more.
+---
+
 # Running scripts
 
 A Python script is a file intended for standalone execution, e.g., with `python <script>.py`. Using

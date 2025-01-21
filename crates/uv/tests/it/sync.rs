@@ -1259,6 +1259,20 @@ fn sync_dev() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
+    // Using `--no-default-groups` should remove dev dependencies
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+     - anyio==4.3.0
+     - idna==3.6
+     - sniffio==1.3.1
+    "###);
+
     Ok(())
 }
 
@@ -1427,6 +1441,74 @@ fn sync_group() -> Result<()> {
     Audited 1 package in [TIME]
     "###);
 
+    uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + iniconfig==2.0.0
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + urllib3==2.2.1
+    "###);
+
+    // Using `--no-default-groups` should exclude all groups
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 8 packages in [TIME]
+     - anyio==4.3.0
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - idna==3.6
+     - iniconfig==2.0.0
+     - requests==2.31.0
+     - sniffio==1.3.1
+     - urllib3==2.2.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + iniconfig==2.0.0
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + urllib3==2.2.1
+    "###);
+
+    // Using `--no-default-groups` with `--group foo` and `--group bar` should include those groups,
+    // excluding the remaining `dev` group.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups").arg("--group").arg("foo").arg("--group").arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - iniconfig==2.0.0
+    "###);
+
     Ok(())
 }
 
@@ -1526,6 +1608,44 @@ fn sync_include_group() -> Result<()> {
     Resolved 6 packages in [TIME]
     Installed 1 package in [TIME]
      + typing-extensions==4.10.0
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Uninstalled 4 packages in [TIME]
+     - anyio==4.3.0
+     - idna==3.6
+     - iniconfig==2.0.0
+     - sniffio==1.3.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups").arg("--group").arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Audited 5 packages in [TIME]
     "###);
 
     Ok(())
@@ -1921,6 +2041,74 @@ fn sync_default_groups() -> Result<()> {
      - sniffio==1.3.1
      - typing-extensions==4.10.0
      - urllib3==2.2.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+     + urllib3==2.2.1
+    "###);
+
+    // Using `--no-default-groups` should exclude all groups
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 8 packages in [TIME]
+     - anyio==4.3.0
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - idna==3.6
+     - iniconfig==2.0.0
+     - requests==2.31.0
+     - sniffio==1.3.1
+     - urllib3==2.2.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + iniconfig==2.0.0
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + urllib3==2.2.1
+    "###);
+
+    // Using `--no-default-groups` with `--group foo` and `--group bar` should include those groups,
+    // excluding the remaining `dev` group.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups").arg("--group").arg("foo").arg("--group").arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - iniconfig==2.0.0
     "###);
 
     Ok(())
@@ -3640,7 +3828,9 @@ fn sync_wheel_url_source_error() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    error: distribution `cffi==1.17.1 @ direct+https://files.pythonhosted.org/packages/08/fd/cc2fedbd887223f9f5d170c96e57cbf655df9831a6546c1727ae13fa977a/cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl` can't be installed because the binary distribution is incompatible with the current platform
+    error: Distribution `cffi==1.17.1 @ direct+https://files.pythonhosted.org/packages/08/fd/cc2fedbd887223f9f5d170c96e57cbf655df9831a6546c1727ae13fa977a/cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl` can't be installed because the binary distribution is incompatible with the current platform
+
+    hint: You're using CPython 3.12 (`cp312`), but  `cffi` (v1.17.1) only has wheels with the following Python ABI tag: `cp310`
     "###);
 
     Ok(())
@@ -3689,7 +3879,9 @@ fn sync_wheel_path_source_error() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    error: distribution `cffi==1.17.1 @ path+cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl` can't be installed because the binary distribution is incompatible with the current platform
+    error: Distribution `cffi==1.17.1 @ path+cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl` can't be installed because the binary distribution is incompatible with the current platform
+
+    hint: You're using CPython 3.12 (`cp312`), but  `cffi` (v1.17.1) only has wheels with the following Python ABI tag: `cp310`
     "###);
 
     Ok(())

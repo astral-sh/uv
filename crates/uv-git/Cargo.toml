@@ -20,6 +20,7 @@ uv-cache-key = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
 uv-auth = { workspace = true }
 uv-static = { workspace = true}
+uv-version = { workspace = true }
 
 anyhow = { workspace = true }
 cargo-util = { workspace = true }

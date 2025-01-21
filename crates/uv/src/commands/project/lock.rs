@@ -468,6 +468,12 @@ async fn do_lock(
         }
     }
 
+    for index in target.indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
+    }
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
         .native_tls(native_tls)
@@ -631,15 +637,10 @@ async fn do_lock(
             let resolver_env = ResolverEnvironment::universal(
                 forks_lock
                     .map(|lock| {
-                        // TODO(ag): Consider whether we should be capturing
-                        // conflicting extras/groups for every fork. If
-                        // we did, then we'd be able to use them here,
-                        // which would in turn flow into construction of
-                        // `ResolverEnvironment`.
                         lock.fork_markers()
                             .iter()
                             .copied()
-                            .map(UniversalMarker::pep508)
+                            .map(UniversalMarker::combined)
                             .collect()
                     })
                     .unwrap_or_else(|| {
@@ -930,7 +931,7 @@ impl ValidatedLock {
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedSources(name, expected) => {
+            SatisfiesResult::MismatchedVirtual(name, expected) => {
                 if expected {
                     debug!(
                         "Ignoring existing lockfile due to mismatched source: `{name}` (expected: `virtual`)"
@@ -938,6 +939,18 @@ impl ValidatedLock {
                 } else {
                     debug!(
                         "Ignoring existing lockfile due to mismatched source: `{name}` (expected: `editable`)"
+                    );
+                }
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedDynamic(name, expected) => {
+                if expected {
+                    debug!(
+                        "Ignoring existing lockfile due to static version: `{name}` (expected a dynamic version)"
+                    );
+                } else {
+                    debug!(
+                        "Ignoring existing lockfile due to dynamic version: `{name}` (expected a static version)"
                     );
                 }
                 Ok(Self::Preferable(lock))
@@ -1006,17 +1019,31 @@ impl ValidatedLock {
                 Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedPackageRequirements(name, version, expected, actual) => {
-                debug!(
-                    "Ignoring existing lockfile due to mismatched `requires-dist` for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
-                    expected, actual
-                );
+                if let Some(version) = version {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched requirements for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
+                        expected, actual
+                    );
+                } else {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched requirements for: `{name}`\n  Requested: {:?}\n  Existing: {:?}",
+                        expected, actual
+                    );
+                }
                 Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedPackageDependencyGroups(name, version, expected, actual) => {
-                debug!(
-                    "Ignoring existing lockfile due to mismatched dev dependencies for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
-                    expected, actual
-                );
+                if let Some(version) = version {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched dependency groups for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
+                        expected, actual
+                    );
+                } else {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched dependency groups for: `{name}`\n  Requested: {:?}\n  Existing: {:?}",
+                        expected, actual
+                    );
+                }
                 Ok(Self::Preferable(lock))
             }
         }
@@ -1048,9 +1075,9 @@ fn report_upgrades(
             existing_lock.packages().iter().fold(
                 FxHashMap::with_capacity_and_hasher(existing_lock.packages().len(), FxBuildHasher),
                 |mut acc, package| {
-                    acc.entry(package.name())
-                        .or_default()
-                        .insert(package.version());
+                    if let Some(version) = package.version() {
+                        acc.entry(package.name()).or_default().insert(version);
+                    }
                     acc
                 },
             )
@@ -1062,9 +1089,9 @@ fn report_upgrades(
         new_lock.packages().iter().fold(
             FxHashMap::with_capacity_and_hasher(new_lock.packages().len(), FxBuildHasher),
             |mut acc, package| {
-                acc.entry(package.name())
-                    .or_default()
-                    .insert(package.version());
+                if let Some(version) = package.version() {
+                    acc.entry(package.name()).or_default().insert(version);
+                }
                 acc
             },
         );

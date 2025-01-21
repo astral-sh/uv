@@ -320,6 +320,10 @@ uv run [OPTIONS] [COMMAND]
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
+</dd><dt><code>--no-default-groups</code></dt><dd><p>Exclude dependencies from default groups.</p>
+
+<p><code>--group</code> can be used to include specific groups.</p>
+
 </dd><dt><code>--no-dev</code></dt><dd><p>Omit the development dependency group.</p>
 
 <p>This option is an alias of <code>--no-group dev</code>.</p>
@@ -1685,6 +1689,10 @@ uv sync [OPTIONS]
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
+</dd><dt><code>--no-default-groups</code></dt><dd><p>Exclude dependencies from default groups.</p>
+
+<p><code>--group</code> can be used to include specific groups.</p>
+
 </dd><dt><code>--no-dev</code></dt><dd><p>Omit the development dependency group.</p>
 
 <p>This option is an alias for <code>--no-group dev</code>.</p>
@@ -2391,6 +2399,10 @@ uv export [OPTIONS]
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
+</dd><dt><code>--no-default-groups</code></dt><dd><p>Exclude dependencies from default groups.</p>
+
+<p><code>--group</code> can be used to include specific groups.</p>
+
 </dd><dt><code>--no-dev</code></dt><dd><p>Omit the development dependency group.</p>
 
 <p>This option is an alias for <code>--no-group dev</code>.</p>
@@ -2764,6 +2776,10 @@ uv tree [OPTIONS]
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
 </dd><dt><code>--no-dedupe</code></dt><dd><p>Do not de-duplicate repeated dependencies. Usually, when a package has already displayed its dependencies, further occurrences will not re-display its dependencies, and will include a (*) to indicate it has already been shown. This flag will cause those duplicates to be repeated</p>
+
+</dd><dt><code>--no-default-groups</code></dt><dd><p>Exclude dependencies from default groups.</p>
+
+<p><code>--group</code> can be used to include specific groups.</p>
 
 </dd><dt><code>--no-dev</code></dt><dd><p>Omit the development dependency group.</p>
 
@@ -5782,6 +5798,8 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
 
+<p>When targeting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -6184,6 +6202,8 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 </dd><dt><code>--python-platform</code> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
 
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
+
+<p>When targeting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
 
 <p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
 
@@ -6642,6 +6662,8 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 </dd><dt><code>--python-platform</code> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
 
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
+
+<p>When targeting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
 
 <p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
 
@@ -8035,7 +8057,7 @@ uv venv [OPTIONS] [PATH]
 
 <p>By default, the prompt is dependent on whether a path was provided to <code>uv venv</code>. If provided (e.g, <code>uv venv project</code>), the prompt is set to the directory name. If not provided (<code>uv venv</code>), the prompt is set to the current directory&#8217;s name.</p>
 
-<p>If &quot;.&quot; is provided, the the current directory name will be used regardless of whether a path was provided to <code>uv venv</code>.</p>
+<p>If &quot;.&quot; is provided, the current directory name will be used regardless of whether a path was provided to <code>uv venv</code>.</p>
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for the virtual environment.</p>
 
@@ -8072,8 +8094,9 @@ uv venv [OPTIONS] [PATH]
 
 </dd><dt><code>--seed</code></dt><dd><p>Install seed packages (one or more of: <code>pip</code>, <code>setuptools</code>, and <code>wheel</code>) into the virtual environment.</p>
 
-<p>Note <code>setuptools</code> and <code>wheel</code> are not included in Python 3.12+ environments.</p>
+<p>Note that <code>setuptools</code> and <code>wheel</code> are not included in Python 3.12+ environments.</p>
 
+<p>May also be set with the <code>UV_VENV_SEED</code> environment variable.</p>
 </dd><dt><code>--system-site-packages</code></dt><dd><p>Give the virtual environment access to the system site packages directory.</p>
 
 <p>Unlike <code>pip</code>, when a virtual environment is created with <code>--system-site-packages</code>, uv will <em>not</em> take system site packages into account when running commands like <code>uv pip list</code> or <code>uv pip install</code>. The <code>--system-site-packages</code> flag will provide the virtual environment with access to the system site packages directory at runtime, but will not affect the behavior of uv commands.</p>

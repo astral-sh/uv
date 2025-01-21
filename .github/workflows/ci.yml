@@ -116,12 +116,12 @@ jobs:
     timeout-minutes: 15
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on: github-windows-2025-x86_64-16
+    runs-on: windows-latest
     name: "cargo clippy | windows"
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create Dev Drive using ReFS
+      - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
@@ -200,19 +200,6 @@ jobs:
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
-      - name: "Smoke test"
-        run: |
-          uv="./target/debug/uv"
-          $uv venv -v
-          $uv pip install ruff -v
-
-      - name: "Smoke test completion"
-        run: |
-          uv="./target/debug/uv"
-          uvx="./target/debug/uvx"
-          eval "$($uv generate-shell-completion bash)"
-          eval "$($uvx --generate-shell-completion bash)"
-
   cargo-test-macos:
     timeout-minutes: 10
     needs: determine_changes
@@ -245,12 +232,6 @@ jobs:
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
-      - name: "Smoke test"
-        run: |
-          uv="./target/debug/uv"
-          $uv venv -v
-          $uv pip install ruff -v
-
   cargo-test-windows:
     timeout-minutes: 15
     needs: determine_changes
@@ -260,7 +241,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create Dev Drive using ReFS
+      - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
@@ -268,18 +249,9 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
 
-      # We do not test with Python patch versions on Windows
-      # so we can use `setup-python` instead of our bootstrapping code
-      # this is much faster on the extremely slow GitHub Windows runners.
-      - uses: actions/setup-python@v5
-        with:
-          python-version: |
-            3.8
-            3.9
-            3.10
-            3.11
-            3.12
-            3.13
+      - uses: astral-sh/setup-uv@v5
+      - name: "Install required Python versions"
+        run: uv python install
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -303,34 +275,12 @@ jobs:
         run: |
           cargo nextest run --no-default-features --features python,pypi,python-managed --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
-      - name: "Smoke test"
-        working-directory: ${{ env.UV_WORKSPACE }}
-        env:
-          # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
-        run: |
-          Set-Alias -Name uv -Value ./target/debug/uv
-          uv venv -v
-          uv pip install ruff -v
-
-      - name: "Smoke test completion"
-        working-directory: ${{ env.UV_WORKSPACE }}
-        shell: powershell
-        env:
-          # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
-        run: |
-          Set-Alias -Name uv -Value ./target/debug/uv
-          Set-Alias -Name uvx -Value ./target/debug/uvx
-          (& uv generate-shell-completion powershell) | Out-String | Invoke-Expression
-          (& uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
-
   # Separate jobs for the nightly crate
   windows-trampoline-check:
     timeout-minutes: 15
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on: github-windows-2025-x86_64-16
+    runs-on: windows-latest
     name: "check windows trampoline | ${{ matrix.target-arch }}"
     strategy:
       fail-fast: false
@@ -339,7 +289,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create Dev Drive using ReFS
+      - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
@@ -466,13 +416,15 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
       - name: "Build"
-        run: cargo build --target x86_64-unknown-linux-musl
+        run: cargo build --target x86_64-unknown-linux-musl --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
           name: uv-linux-${{ github.sha }}
-          path: ./target/x86_64-unknown-linux-musl/debug/uv
+          path: |
+            ./target/x86_64-unknown-linux-musl/debug/uv
+            ./target/x86_64-unknown-linux-musl/debug/uvx
           retention-days: 1
 
   build-binary-macos-aarch64:
@@ -488,13 +440,15 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
       - name: "Build"
-        run: cargo build
+        run: cargo build --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
           name: uv-macos-aarch64-${{ github.sha }}
-          path: ./target/debug/uv
+          path: |
+            ./target/debug/uv
+            ./target/debug/uvx
           retention-days: 1
 
   build-binary-macos-x86_64:
@@ -510,25 +464,27 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
       - name: "Build"
-        run: cargo build
+        run: cargo build --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
           name: uv-macos-x86_64-${{ github.sha }}
-          path: ./target/debug/uv
+          path: |
+            ./target/debug/uv
+            ./target/debug/uvx
           retention-days: 1
 
   build-binary-windows-x86_64:
     needs: determine_changes
     timeout-minutes: 10
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on: github-windows-2025-x86_64-8
+    runs-on: windows-latest
     name: "build binary | windows x86_64"
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create Dev Drive using ReFS
+      - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
@@ -542,13 +498,15 @@ jobs:
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build
+        run: cargo build --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
           name: uv-windows-x86_64-${{ github.sha }}
-          path: ${{ env.UV_WORKSPACE }}/target/debug/uv.exe
+          path: |
+            ${{ env.UV_WORKSPACE }}/target/debug/uv.exe
+            ${{ env.UV_WORKSPACE }}/target/debug/uvx.exe
           retention-days: 1
 
   build-binary-windows-aarch64:
@@ -691,6 +649,74 @@ jobs:
           ./uv venv
           ./${{ matrix.command }}
 
+  smoke-test-linux:
+    timeout-minutes: 10
+    needs: build-binary-linux
+    name: "smoke test | linux"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: |
+          chmod +x ./uv
+          chmod +x ./uvx
+
+      - name: "Smoke test"
+        run: |
+          ./uv venv -v
+          ./uv pip install ruff -v
+          ./uvx -v ruff --version
+          eval "$(./uv generate-shell-completion bash)"
+          eval "$(./uvx --generate-shell-completion bash)"
+
+  smoke-test-macos:
+    timeout-minutes: 10
+    needs: build-binary-macos-x86_64
+    name: "smoke test | macos"
+    runs-on: macos-latest
+    steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-macos-x86_64-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: |
+          chmod +x ./uv
+          chmod +x ./uvx
+
+      - name: "Smoke test"
+        run: |
+          ./uv venv -v
+          ./uv pip install ruff -v
+          ./uvx -v ruff --version
+          eval "$(./uv generate-shell-completion bash)"
+          eval "$(./uvx --generate-shell-completion bash)"
+
+  smoke-test-windows:
+    timeout-minutes: 10
+    needs: build-binary-windows
+    name: "smoke test | windows x86_64"
+    runs-on: windows-latest
+    steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-x86_64-${{ github.sha }}
+
+      - name: "Smoke test"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
+          ./uv venv -v
+          ./uv pip install ruff -v
+          ./uvx -v ruff --version
+          (& ./uv generate-shell-completion powershell) | Out-String | Invoke-Expression
+          (& ./uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
+
   integration-test-conda:
     timeout-minutes: 10
     needs: build-binary-linux
@@ -722,13 +748,55 @@ jobs:
           echo "$CONDA_PREFIX"
           ./uv pip install anyio
 
+  integration-test-deadsnakes-39-linux:
+    timeout-minutes: 5
+    needs: build-binary-linux
+    name: "integration test | deadsnakes python3.9 on ubuntu"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Install python3.9"
+        run: |
+          sudo add-apt-repository ppa:deadsnakes
+          sudo apt-get update
+          sudo apt-get install python3.9
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Check missing distutils"
+        run: |
+          ./uv venv -p 3.9 --python-preference only-system -v 2>&1 | tee log.txt || true
+          # We should report that distutils is missing
+          grep 'Python installation is missing `distutils`' log.txt
+
+      - name: "Install distutils"
+        run: |
+          sudo apt-get install python3.9-distutils
+
+      - name: "Create a virtualenv"
+        run: |
+          ./uv venv -p 3.9 --python-preference only-system -v
+
+      - name: "Check version"
+        run: |
+          .venv/bin/python --version
+
+      - name: "Check install"
+        run: |
+          ./uv pip install -v anyio
+
   integration-test-free-threaded-linux:
     timeout-minutes: 5
     needs: build-binary-linux
     name: "integration test | free-threaded on linux"
     runs-on: ubuntu-latest
     steps:
-      - name: "install python3.13-nogil"
+      - name: "Install python3.13-nogil"
         run: |
           sudo add-apt-repository ppa:deadsnakes
           sudo apt-get update
@@ -780,9 +848,6 @@ jobs:
     needs: build-binary-windows-x86_64
     name: "integration test | free-threaded on windows"
     runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
 
     steps:
       - name: "Download binary"
@@ -1055,9 +1120,6 @@ jobs:
           & .venv\Scripts\python.exe --version
 
       - name: "Check install"
-        env:
-          # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: |
           .\uv.exe pip install anyio
 
@@ -1250,9 +1312,6 @@ jobs:
           & .venv\Scripts\python.exe --version
 
       - name: "Check install"
-        env:
-          # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: |
           .\uv.exe pip install anyio
 
@@ -1744,9 +1803,6 @@ jobs:
     needs: build-binary-windows-x86_64
     name: "check system | python3.10 on windows x86_64"
     runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -1796,9 +1852,6 @@ jobs:
     needs: build-binary-windows-x86_64
     name: "check system | python3.10 on windows x86"
     runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -1850,9 +1903,6 @@ jobs:
     needs: build-binary-windows-x86_64
     name: "check system | python3.13 on windows x86_64"
     runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -1906,9 +1956,6 @@ jobs:
     needs: build-binary-windows-x86_64
     name: "check system | python3.12 via chocolatey"
     runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -2080,9 +2127,6 @@ jobs:
 
       - name: "Validate global Python install"
         shell: bash -el {0}
-        env:
-          # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: python ./scripts/check_system_python.py --uv ./uv
 
   system-test-amazonlinux:
@@ -2119,9 +2163,6 @@ jobs:
     needs: build-binary-windows-x86_64
     name: "check system | embedded python3.10 on windows x86_64"
     runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
     steps:
       - uses: actions/checkout@v4
 
