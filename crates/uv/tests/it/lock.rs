@@ -582,7 +582,7 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "example-pkg-a", git = "https://github.com/pypa/sample-namespace-packages.git?subdirectory=pkg_resources%2Fpkg_a&rev=df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45" }]
+        requires-dist = [{ name = "example-pkg-a", git = "https://github.com/pypa/sample-namespace-packages.git?subdirectory=pkg_resources%2Fpkg_a&rev=df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45" }]
         "###
         );
     });
@@ -742,7 +742,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }]
+        requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }]
 
         [[package]]
         name = "uv-public-pypackage"
@@ -799,7 +799,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage.git?rev=b270df1a2fb5d012294e9aaf05e7e0bab1e6a389#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }]
+        requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage.git?rev=b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }]
 
         [[package]]
         name = "uv-public-pypackage"
