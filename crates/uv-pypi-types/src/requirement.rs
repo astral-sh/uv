@@ -745,9 +745,6 @@ impl From<RequirementSource> for RequirementSourceWire {
                     | GitReference::NamedRef(rev) => {
                         url.query_pairs_mut().append_pair("rev", rev.as_str());
                     }
-                    GitReference::FullCommit(rev) => {
-                        url.query_pairs_mut().append_pair("rev", rev.as_str());
-                    }
                     GitReference::DefaultBranch => {}
                 }
 

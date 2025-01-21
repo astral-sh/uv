@@ -3511,7 +3511,6 @@ impl From<GitReference> for GitSourceKind {
             GitReference::BranchOrTag(rev) => GitSourceKind::Rev(rev.to_string()),
             GitReference::BranchOrTagOrCommit(rev) => GitSourceKind::Rev(rev.to_string()),
             GitReference::NamedRef(rev) => GitSourceKind::Rev(rev.to_string()),
-            GitReference::FullCommit(rev) => GitSourceKind::Rev(rev.to_string()),
             GitReference::DefaultBranch => GitSourceKind::DefaultBranch,
         }
     }
@@ -3562,9 +3561,6 @@ fn locked_git_url(git_dist: &GitSourceDist) -> Url {
         GitReference::BranchOrTag(rev)
         | GitReference::BranchOrTagOrCommit(rev)
         | GitReference::NamedRef(rev) => {
-            url.query_pairs_mut().append_pair("rev", rev.as_str());
-        }
-        GitReference::FullCommit(rev) => {
             url.query_pairs_mut().append_pair("rev", rev.as_str());
         }
         GitReference::DefaultBranch => {}
