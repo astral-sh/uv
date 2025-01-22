@@ -2,7 +2,7 @@ use anyhow::{bail, Result};
 use tracing::{debug, warn};
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
-use uv_cache_info::{CacheInfo, Timestamp};
+use uv_cache_info::Timestamp;
 use uv_configuration::{BuildOptions, ConfigSettings, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, LocalArchivePointer, RegistryWheelIndex,
@@ -13,7 +13,7 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_platform_tags::Tags;
-use uv_pypi_types::RequirementSource;
+use uv_pypi_types::{RequirementSource, VerbatimParsedUrl};
 use uv_python::PythonEnvironment;
 use uv_types::HashStrategy;
 
@@ -163,18 +163,21 @@ impl<'a> Planner<'a> {
 
                     // Read the HTTP pointer.
                     if let Some(pointer) = HttpArchivePointer::read_from(&cache_entry)? {
+                        let cache_info = pointer.to_cache_info();
                         let archive = pointer.into_archive();
                         if archive.satisfies(hasher.get(dist)) {
-                            let cached_dist = CachedDirectUrlDist::from_url(
-                                wheel.filename.clone(),
-                                wheel.url.clone(),
-                                archive.hashes,
-                                CacheInfo::default(),
-                                cache.archive(&archive.id),
-                            );
+                            let cached_dist = CachedDirectUrlDist {
+                                filename: wheel.filename.clone(),
+                                url: VerbatimParsedUrl {
+                                    parsed_url: wheel.parsed_url(),
+                                    verbatim: wheel.url.clone(),
+                                },
+                                hashes: archive.hashes,
+                                cache_info,
+                                path: cache.archive(&archive.id),
+                            };
 
                             debug!("URL wheel requirement already cached: {cached_dist}");
-                            // STOPSHIP(charlie): If these are mismatched, skip and warn.
                             cached.push(CachedDist::Url(cached_dist));
                             continue;
                         }
@@ -215,13 +218,16 @@ impl<'a> Planner<'a> {
                             let cache_info = pointer.to_cache_info();
                             let archive = pointer.into_archive();
                             if archive.satisfies(hasher.get(dist)) {
-                                let cached_dist = CachedDirectUrlDist::from_url(
-                                    wheel.filename.clone(),
-                                    wheel.url.clone(),
-                                    archive.hashes,
+                                let cached_dist = CachedDirectUrlDist {
+                                    filename: wheel.filename.clone(),
+                                    url: VerbatimParsedUrl {
+                                        parsed_url: wheel.parsed_url(),
+                                        verbatim: wheel.url.clone(),
+                                    },
+                                    hashes: archive.hashes,
                                     cache_info,
-                                    cache.archive(&archive.id),
-                                );
+                                    path: cache.archive(&archive.id),
+                                };
 
                                 debug!("Path wheel requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
@@ -259,7 +265,7 @@ impl<'a> Planner<'a> {
                     // the filename in advance.
                     if let Some(wheel) = built_index.url(sdist)? {
                         if wheel.filename.name == sdist.name {
-                            let cached_dist = wheel.into_url_dist(sdist.url.clone());
+                            let cached_dist = wheel.into_url_dist(sdist);
                             debug!("URL source requirement already cached: {cached_dist}");
                             cached.push(CachedDist::Url(cached_dist));
                             continue;
@@ -277,7 +283,7 @@ impl<'a> Planner<'a> {
                     // the filename in advance.
                     if let Some(wheel) = built_index.git(sdist) {
                         if wheel.filename.name == sdist.name {
-                            let cached_dist = wheel.into_url_dist(sdist.url.clone());
+                            let cached_dist = wheel.into_git_dist(sdist);
                             debug!("Git source requirement already cached: {cached_dist}");
                             cached.push(CachedDist::Url(cached_dist));
                             continue;
@@ -300,7 +306,7 @@ impl<'a> Planner<'a> {
                     // the filename in advance.
                     if let Some(wheel) = built_index.path(sdist)? {
                         if wheel.filename.name == sdist.name {
-                            let cached_dist = wheel.into_url_dist(sdist.url.clone());
+                            let cached_dist = wheel.into_path_dist(sdist);
                             debug!("Path source requirement already cached: {cached_dist}");
                             cached.push(CachedDist::Url(cached_dist));
                             continue;
@@ -323,11 +329,7 @@ impl<'a> Planner<'a> {
                     // the filename in advance.
                     if let Some(wheel) = built_index.directory(sdist)? {
                         if wheel.filename.name == sdist.name {
-                            let cached_dist = if sdist.editable {
-                                wheel.into_editable(sdist.url.clone())
-                            } else {
-                                wheel.into_url_dist(sdist.url.clone())
-                            };
+                            let cached_dist = wheel.into_directory_dist(sdist);
                             debug!("Directory source requirement already cached: {cached_dist}");
                             cached.push(CachedDist::Url(cached_dist));
                             continue;

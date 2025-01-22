@@ -166,10 +166,8 @@ fn install(
             wheel.path(),
             wheel.filename(),
             wheel
-                .parsed_url()?
-                .as_ref()
-                .map(uv_pypi_types::DirectUrl::try_from)
-                .transpose()?
+                .parsed_url()
+                .map(uv_pypi_types::DirectUrl::from)
                 .as_ref(),
             if wheel.cache_info().is_empty() {
                 None

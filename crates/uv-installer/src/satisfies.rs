@@ -7,6 +7,7 @@ use url::Url;
 use uv_cache_info::CacheInfo;
 use uv_cache_key::{CanonicalUrl, RepositoryUrl};
 use uv_distribution_types::{InstalledDirectUrlDist, InstalledDist};
+use uv_git::GitOid;
 use uv_pypi_types::{DirInfo, DirectUrl, RequirementSource, VcsInfo, VcsKind};
 
 #[derive(Debug, Copy, Clone)]
@@ -97,7 +98,7 @@ impl RequirementSatisfaction {
             RequirementSource::Git {
                 url: _,
                 repository: requested_repository,
-                reference: requested_reference,
+                reference: _,
                 precise: requested_precise,
                 subdirectory: requested_subdirectory,
             } => {
@@ -110,8 +111,8 @@ impl RequirementSatisfaction {
                     vcs_info:
                         VcsInfo {
                             vcs: VcsKind::Git,
-                            requested_revision: installed_reference,
-                            commit_id: _,
+                            requested_revision: _,
+                            commit_id: installed_precise,
                         },
                     subdirectory: installed_subdirectory,
                 } = direct_url.as_ref()
@@ -137,12 +138,12 @@ impl RequirementSatisfaction {
                     return Ok(Self::Mismatch);
                 }
 
-                if installed_reference.as_deref() != requested_reference.as_str()
-                    && installed_reference != &requested_precise.map(|git_sha| git_sha.to_string())
-                {
+                // TODO(charlie): It would be more consistent for us to compare the requested
+                // revisions here.
+                if installed_precise.as_deref() != requested_precise.as_ref().map(GitOid::as_str) {
                     debug!(
-                        "Reference mismatch: {:?} vs. {:?} and {:?}",
-                        installed_reference, requested_reference, requested_precise
+                        "Precise mismatch: {:?} vs. {:?}",
+                        installed_precise, requested_precise
                     );
                     return Ok(Self::OutOfDate);
                 }
