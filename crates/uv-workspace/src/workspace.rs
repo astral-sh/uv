@@ -8,7 +8,7 @@ use rustc_hash::FxHashSet;
 use tracing::{debug, trace, warn};
 use uv_distribution_types::Index;
 use uv_fs::{Simplified, CWD};
-use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl};
 use uv_pypi_types::{
@@ -522,6 +522,29 @@ impl Workspace {
                 } else {
                     None
                 },
+            )
+            .collect()
+    }
+
+    /// Returns the set of all non-dynamic extras defined in the workspace.
+    pub fn extras(&self) -> BTreeSet<&ExtraName> {
+        self.pyproject_toml
+            .project
+            .as_ref()
+            .and_then(|project| project.optional_dependencies.as_ref())
+            .iter()
+            .flat_map(|extras| extras.keys())
+            .chain(
+                self.packages
+                    .values()
+                    .filter_map(|member| {
+                        member
+                            .pyproject_toml
+                            .project
+                            .as_ref()
+                            .map_or_else(|| None, |project| project.optional_dependencies.as_ref())
+                    })
+                    .flat_map(|extras| extras.keys()),
             )
             .collect()
     }
