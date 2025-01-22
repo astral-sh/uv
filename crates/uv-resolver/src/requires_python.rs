@@ -75,6 +75,11 @@ impl RequiresPython {
                 }
             })?;
 
+        // If the intersection is empty, return `None`.
+        if range.is_empty() {
+            return None;
+        }
+
         // Convert back to PEP 440 specifiers.
         let specifiers = VersionSpecifiers::from_release_only_bounds(range.iter());
 
