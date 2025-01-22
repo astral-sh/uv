@@ -1067,32 +1067,17 @@ impl Lock {
             }
         }
 
-        // Validate that the member sources have not changed.
-        {
-            // E.g., that they've switched from virtual to non-virtual or vice versa.
-            for (name, member) in packages {
-                let expected = !member.pyproject_toml().is_package();
-                let actual = self
-                    .find_by_name(name)
-                    .ok()
-                    .flatten()
-                    .map(|package| matches!(package.id.source, Source::Virtual(_)));
-                if actual != Some(expected) {
-                    return Ok(SatisfiesResult::MismatchedVirtual(name.clone(), expected));
-                }
-            }
-
-            // E.g., that they've switched from dynamic to non-dynamic or vice versa.
-            for (name, member) in packages {
-                let expected = member.pyproject_toml().is_dynamic();
-                let actual = self
-                    .find_by_name(name)
-                    .ok()
-                    .flatten()
-                    .map(Package::is_dynamic);
-                if actual != Some(expected) {
-                    return Ok(SatisfiesResult::MismatchedDynamic(name.clone(), expected));
-                }
+        // Validate that the member sources have not changed (e.g., that they've switched from
+        // virtual to non-virtual or vice versa).
+        for (name, member) in packages {
+            let expected = !member.pyproject_toml().is_package();
+            let actual = self
+                .find_by_name(name)
+                .ok()
+                .flatten()
+                .map(|package| matches!(package.id.source, Source::Virtual(_)));
+            if actual != Some(expected) {
+                return Ok(SatisfiesResult::MismatchedVirtual(name.clone(), expected));
             }
         }
 
@@ -1287,60 +1272,10 @@ impl Lock {
                 continue;
             }
 
-            // Fetch the metadata for the distribution.
-            //
-            // If the distribution is a source tree, attempt to extract the requirements from the
-            // `pyproject.toml` directly. The distribution database will do this too, but we can be
-            // even more aggressive here since we _only_ need the requirements. So, for example,
-            // even if the version is dynamic, we can still extract the requirements without
-            // performing a build, unlike in the database where we typically construct a "complete"
-            // metadata object.
-            let metadata = if let Some(source_tree) = package.id.source.as_source_tree() {
-                database
-                    .requires_dist(root.join(source_tree))
-                    .await
-                    .map_err(|err| LockErrorKind::Resolution {
-                        id: package.id.clone(),
-                        err,
-                    })?
-            } else {
-                None
-            };
-
-            let satisfied = metadata.is_some_and(|metadata| {
-                match satisfies_requires_dist(metadata, package, root) {
-                    Ok(SatisfiesResult::Satisfied) => {
-                        debug!("Static `requires-dist` for `{}` is up-to-date", package.id);
-                        true
-                    },
-                    Ok(..) => {
-                        debug!("Static `requires-dist` for `{}` is out-of-date; falling back to distribution database", package.id);
-                        false
-                    },
-                    Err(..) => {
-                        debug!("Static `requires-dist` for `{}` is invalid; falling back to distribution database", package.id);
-                        false
-                    },
-                }
-            });
-
-            // If the `requires-dist` metadata matches the requirements, we're done; otherwise,
-            // fetch the "full" metadata, which may involve invoking the build system. In some
-            // cases, build backends return metadata that does _not_ match the `pyproject.toml`
-            // exactly. For example, `hatchling` will flatten any recursive (or self-referential)
-            // extras, while `setuptools` will not.
-            if !satisfied {
-                // Get the metadata for the distribution.
-                let dist = package.to_dist(
-                    root,
-                    // When validating, it's okay to use wheels that don't match the current platform.
-                    TagPolicy::Preferred(tags),
-                    // When validating, it's okay to use (e.g.) a source distribution with `--no-build`.
-                    // We're just trying to determine whether the lockfile is up-to-date. If we end
-                    // up needing to build a source distribution in order to do so, below, we'll error
-                    // there.
-                    &BuildOptions::default(),
-                )?;
+            if let Some(version) = package.id.version.as_ref() {
+                // For a non-dynamic package, fetch the metadata from the distribution database.
+                let dist =
+                    package.to_dist(root, TagPolicy::Preferred(tags), &BuildOptions::default())?;
 
                 let metadata = {
                     let id = dist.version_id();
@@ -1380,10 +1315,139 @@ impl Lock {
                     }
                 };
 
+                // If this is a local package, validate that it hasn't become dynamic (in which
+                // case, we'd expect the version to be omitted).
+                if package.id.source.is_source_tree() {
+                    if metadata.dynamic {
+                        return Ok(SatisfiesResult::MismatchedDynamic(
+                            package.id.name.clone(),
+                            false,
+                        ));
+                    }
+                }
+
+                // Validate the `version` metadata.
+                if metadata.version != *version {
+                    return Ok(SatisfiesResult::MismatchedVersion(
+                        package.id.name.clone(),
+                        version.clone(),
+                        Some(metadata.version.clone()),
+                    ));
+                }
+
+                // Validate that the requirements are unchanged.
                 match satisfies_requires_dist(RequiresDist::from(metadata), package, root)? {
                     SatisfiesResult::Satisfied => {}
                     result => return Ok(result),
                 }
+            } else if let Some(source_tree) = package.id.source.as_source_tree() {
+                // For dynamic packages, we don't need the version. We only need to know that the
+                // package is still dynamic, and that the requirements are unchanged.
+                //
+                // If the distribution is a source tree, attempt to extract the requirements from the
+                // `pyproject.toml` directly. The distribution database will do this too, but we can be
+                // even more aggressive here since we _only_ need the requirements. So, for example,
+                // even if the version is dynamic, we can still extract the requirements without
+                // performing a build, unlike in the database where we typically construct a "complete"
+                // metadata object.
+                let metadata = database
+                    .requires_dist(root.join(source_tree))
+                    .await
+                    .map_err(|err| LockErrorKind::Resolution {
+                        id: package.id.clone(),
+                        err,
+                    })?;
+
+                let satisfied = metadata.is_some_and(|metadata| {
+                    // Validate that the package is still dynamic.
+                    if !metadata.dynamic {
+                        debug!("Static `requires-dist` for `{}` is out-of-date; falling back to distribution database", package.id);
+                        return false;
+                    }
+
+                    // Validate that the requirements are unchanged.
+                    match satisfies_requires_dist(metadata, package, root) {
+                        Ok(SatisfiesResult::Satisfied) => {
+                            debug!("Static `requires-dist` for `{}` is up-to-date", package.id);
+                            true
+                        },
+                        Ok(..) => {
+                            debug!("Static `requires-dist` for `{}` is out-of-date; falling back to distribution database", package.id);
+                            false
+                        },
+                        Err(..) => {
+                            debug!("Static `requires-dist` for `{}` is invalid; falling back to distribution database", package.id);
+                            false
+                        },
+                    }
+                });
+
+                // If the `requires-dist` metadata matches the requirements, we're done; otherwise,
+                // fetch the "full" metadata, which may involve invoking the build system. In some
+                // cases, build backends return metadata that does _not_ match the `pyproject.toml`
+                // exactly. For example, `hatchling` will flatten any recursive (or self-referential)
+                // extras, while `setuptools` will not.
+                if !satisfied {
+                    let dist = package.to_dist(
+                        root,
+                        TagPolicy::Preferred(tags),
+                        &BuildOptions::default(),
+                    )?;
+
+                    let metadata = {
+                        let id = dist.version_id();
+                        if let Some(archive) =
+                            index
+                                .distributions()
+                                .get(&id)
+                                .as_deref()
+                                .and_then(|response| {
+                                    if let MetadataResponse::Found(archive, ..) = response {
+                                        Some(archive)
+                                    } else {
+                                        None
+                                    }
+                                })
+                        {
+                            // If the metadata is already in the index, return it.
+                            archive.metadata.clone()
+                        } else {
+                            // Run the PEP 517 build process to extract metadata from the source distribution.
+                            let archive = database
+                                .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
+                                .await
+                                .map_err(|err| LockErrorKind::Resolution {
+                                    id: package.id.clone(),
+                                    err,
+                                })?;
+
+                            let metadata = archive.metadata.clone();
+
+                            // Insert the metadata into the index.
+                            index
+                                .distributions()
+                                .done(id, Arc::new(MetadataResponse::Found(archive)));
+
+                            metadata
+                        }
+                    };
+
+                    // Validate that the package is still dynamic.
+                    if !metadata.dynamic {
+                        return Ok(SatisfiesResult::MismatchedDynamic(
+                            package.id.name.clone(),
+                            true,
+                        ));
+                    }
+
+                    // Validate that the requirements are unchanged.
+                    match satisfies_requires_dist(RequiresDist::from(metadata), package, root)? {
+                        SatisfiesResult::Satisfied => {}
+                        result => return Ok(result),
+                    }
+                }
+            } else {
+                return Ok(SatisfiesResult::MissingVersion(package.id.name.clone()));
             }
 
             // Recurse.
@@ -1446,7 +1510,7 @@ pub enum SatisfiesResult<'lock> {
     MismatchedMembers(BTreeSet<PackageName>, &'lock BTreeSet<PackageName>),
     /// A workspace member switched from virtual to non-virtual or vice versa.
     MismatchedVirtual(PackageName, bool),
-    /// A workspace member switched from dynamic to non-dynamic or vice versa.
+    /// A source tree switched from dynamic to non-dynamic or vice versa.
     MismatchedDynamic(PackageName, bool),
     /// The lockfile uses a different set of version for its workspace members.
     MismatchedVersion(PackageName, Version, Option<Version>),
@@ -1483,6 +1547,8 @@ pub enum SatisfiesResult<'lock> {
         BTreeMap<GroupName, BTreeSet<Requirement>>,
         BTreeMap<GroupName, BTreeSet<Requirement>>,
     ),
+    /// The lockfile is missing a version.
+    MissingVersion(PackageName),
 }
 
 /// We discard the lockfile if these options match.
