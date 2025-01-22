@@ -1,15 +1,15 @@
 use std::cmp::Reverse;
 
 use hashbrown::hash_map::{EntryRef, OccupiedEntry};
-use pubgrub::Range;
+use pubgrub::{DependencyProvider, Range};
 use rustc_hash::FxBuildHasher;
 
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
+use crate::dependency_provider::UvDependencyProvider;
 use crate::fork_urls::ForkUrls;
-use crate::pubgrub::package::PubGrubPackage;
-use crate::pubgrub::PubGrubPackageInner;
+use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
 use crate::{FxHashbrownMap, SentinelRange};
 
 /// A prioritization map to guide the PubGrub resolution process.
@@ -21,6 +21,10 @@ use crate::{FxHashbrownMap, SentinelRange};
 /// version over packages that are constrained in some way over packages that are unconstrained.
 ///
 /// See: <https://github.com/pypa/pip/blob/ef78c129b1a966dbbbdb8ebfffc43723e89110d1/src/pip/_internal/resolution/resolvelib/provider.py#L120>
+///
+/// Our main priority is the package name, the earlier we encounter a package, the higher its
+/// priority. This way, all virtual packages of the same name will be applied in a batch. To ensure
+/// determinism, we also track the discovery order of virtual packages as secondary order.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PubGrubPriorities {
     package_priority: FxHashbrownMap<PackageName, PubGrubPriority>,
@@ -113,17 +117,36 @@ impl PubGrubPriorities {
     pub(crate) fn get(
         &self,
         package: &PubGrubPackage,
-    ) -> (Option<PubGrubPriority>, Option<PubGrubTiebreaker>) {
-        let package_priority = match &**package {
-            PubGrubPackageInner::Root(_) => Some(PubGrubPriority::Root),
-            PubGrubPackageInner::Python(_) => Some(PubGrubPriority::Root),
-            PubGrubPackageInner::Marker { name, .. } => self.package_priority.get(name).copied(),
-            PubGrubPackageInner::Extra { name, .. } => self.package_priority.get(name).copied(),
-            PubGrubPackageInner::Dev { name, .. } => self.package_priority.get(name).copied(),
-            PubGrubPackageInner::Package { name, .. } => self.package_priority.get(name).copied(),
-        };
-        let package_tiebreaker = self.virtual_package_tiebreaker.get(package).copied();
-        (package_priority, package_tiebreaker)
+    ) -> <UvDependencyProvider as DependencyProvider>::Priority {
+        match &**package {
+            // There is only a single root package despite the value. The priorities on root don't
+            // matter for the resolution output, since the Pythons don't have dependencies
+            // themselves and are only used when the package is incompatible.
+            PubGrubPackageInner::Root(_) => (PubGrubPriority::Root, PubGrubTiebreaker::from(0)),
+            PubGrubPackageInner::Python(PubGrubPython::Installed) => {
+                (PubGrubPriority::Root, PubGrubTiebreaker::from(1))
+            }
+            PubGrubPackageInner::Python(PubGrubPython::Target) => {
+                (PubGrubPriority::Root, PubGrubTiebreaker::from(2))
+            }
+            PubGrubPackageInner::Marker { name, .. }
+            | PubGrubPackageInner::Extra { name, .. }
+            | PubGrubPackageInner::Dev { name, .. }
+            | PubGrubPackageInner::Package { name, .. } => {
+                // To ensure deterministic resolution, each (virtual) package needs to be registered
+                // on discovery (as dependency of another package), before we query it for
+                // prioritization.
+                let package_priority = *self
+                    .package_priority
+                    .get(name)
+                    .unwrap_or_else(|| panic!("Package not known: {name} from {package:?}"));
+                let package_tiebreaker = self
+                    .virtual_package_tiebreaker
+                    .get(package)
+                    .unwrap_or_else(|| panic!("Virtual package not known: {package:?}"));
+                (package_priority, *package_tiebreaker)
+            }
+        }
     }
 
     /// Mark a package as prioritized by setting it to [`PubGrubPriority::ConflictEarly`], if it

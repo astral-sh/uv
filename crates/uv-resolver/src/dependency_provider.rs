@@ -18,7 +18,7 @@ impl DependencyProvider for UvDependencyProvider {
     type VS = Range<Version>;
     type M = UnavailableReason;
     /// Main priority and tiebreak for virtual packages.
-    type Priority = (Option<PubGrubPriority>, Option<PubGrubTiebreaker>);
+    type Priority = (PubGrubPriority, PubGrubTiebreaker);
     type Err = Infallible;
 
     fn prioritize(
