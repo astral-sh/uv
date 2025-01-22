@@ -621,6 +621,7 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
 /// ]
 /// ```
 #[test]
+#[cfg(feature = "git")]
 fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -703,6 +704,7 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
 /// ]
 /// ```
 #[test]
+#[cfg(feature = "git")]
 fn branching_urls_of_different_sources_conflict() -> Result<()> {
     let context = TestContext::new("3.12");
 

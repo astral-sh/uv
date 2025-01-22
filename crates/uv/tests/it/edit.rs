@@ -4545,6 +4545,7 @@ fn add_repeat() -> Result<()> {
 
 /// Add from requirement file.
 #[test]
+#[cfg(feature = "git")]
 fn add_requirements_file() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_counts();
 
