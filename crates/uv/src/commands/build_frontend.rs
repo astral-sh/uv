@@ -11,7 +11,7 @@ use thiserror::Error;
 use tracing::instrument;
 
 use crate::commands::pip::operations;
-use crate::commands::project::find_requires_python;
+use crate::commands::project::{find_requires_python, ProjectError};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -69,6 +69,8 @@ enum Error {
     BuildDispatch(AnyErrorBuild),
     #[error(transparent)]
     BuildFrontend(#[from] uv_build_frontend::Error),
+    #[error(transparent)]
+    Project(#[from] ProjectError),
     #[error("Failed to write message")]
     Fmt(#[from] fmt::Error),
     #[error("Can't use `--force-pep517` with `--list`")]
@@ -464,7 +466,7 @@ async fn build_package(
     // (3) `Requires-Python` in `pyproject.toml`
     if interpreter_request.is_none() {
         if let Ok(workspace) = workspace {
-            interpreter_request = find_requires_python(workspace)
+            interpreter_request = find_requires_python(workspace)?
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {

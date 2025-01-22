@@ -14,7 +14,7 @@ use uv_workspace::WorkspaceError;
 pub use crate::metadata::build_requires::BuildRequires;
 pub use crate::metadata::lowering::LoweredRequirement;
 use crate::metadata::lowering::LoweringError;
-pub use crate::metadata::requires_dist::RequiresDist;
+pub use crate::metadata::requires_dist::{FlatRequiresDist, RequiresDist};
 
 mod build_requires;
 mod lowering;
@@ -87,12 +87,14 @@ impl Metadata {
             name: metadata.name,
             requires_dist: metadata.requires_dist,
             provides_extras: metadata.provides_extras,
+            dynamic: metadata.dynamic,
         };
         let RequiresDist {
             name,
             requires_dist,
             provides_extras,
             dependency_groups,
+            dynamic,
         } = RequiresDist::from_project_maybe_workspace(
             requires_dist,
             install_path,
@@ -111,7 +113,7 @@ impl Metadata {
             requires_python: metadata.requires_python,
             provides_extras,
             dependency_groups,
-            dynamic: metadata.dynamic,
+            dynamic,
         })
     }
 }

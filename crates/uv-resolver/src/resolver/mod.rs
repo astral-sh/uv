@@ -1605,7 +1605,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 );
 
                 requirements
-                    .iter()
                     .flat_map(|requirement| {
                         PubGrubDependency::from_requirement(
                             &self.conflicts,
@@ -1704,7 +1703,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 );
 
                 requirements
-                    .iter()
                     .flat_map(|requirement| {
                         PubGrubDependency::from_requirement(
                             &self.conflicts,
@@ -1800,116 +1798,118 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         name: Option<&PackageName>,
         env: &'a ResolverEnvironment,
         python_requirement: &'a PythonRequirement,
-    ) -> Vec<Cow<'a, Requirement>> {
-        // Start with the requirements for the current extra of the package (for an extra
-        // requirement) or the non-extra (regular) dependencies (if extra is None), plus
-        // the constraints for the current package.
-        let regular_and_dev_dependencies = if let Some(dev) = dev {
-            Either::Left(dev_dependencies.get(dev).into_iter().flatten())
-        } else {
-            Either::Right(dependencies.iter())
-        };
+    ) -> impl Iterator<Item = Cow<'a, Requirement>> {
         let python_marker = python_requirement.to_marker_tree();
-        let mut requirements = self
-            .requirements_for_extra(
-                regular_and_dev_dependencies,
+
+        if let Some(dev) = dev {
+            // Dependency groups can include the project itself, so no need to flatten recursive
+            // dependencies.
+            Either::Left(Either::Left(self.requirements_for_extra(
+                dev_dependencies.get(dev).into_iter().flatten(),
                 extra,
                 env,
                 python_marker,
                 python_requirement,
-            )
-            .collect::<Vec<_>>();
-
-        // Dependency groups can include the project itself, so no need to flatten recursive
-        // dependencies.
-        if dev.is_some() {
-            return requirements;
-        }
-
-        // Check if there are recursive self inclusions; if so, we need to go into the expensive
-        // branch.
-        if !requirements
+            )))
+        } else if !dependencies
             .iter()
             .any(|req| name == Some(&req.name) && !req.extras.is_empty())
         {
-            return requirements;
-        }
-
-        // Transitively process all extras that are recursively included, starting with the current
-        // extra.
-        let mut seen = FxHashSet::<(ExtraName, MarkerTree)>::default();
-        let mut queue: VecDeque<_> = requirements
-            .iter()
-            .filter(|req| name == Some(&req.name))
-            .flat_map(|req| req.extras.iter().cloned().map(|extra| (extra, req.marker)))
-            .collect();
-        while let Some((extra, marker)) = queue.pop_front() {
-            if !seen.insert((extra.clone(), marker)) {
-                continue;
-            }
-            for requirement in self.requirements_for_extra(
-                dependencies,
-                Some(&extra),
+            // If the project doesn't define any recursive dependencies, take the fast path.
+            Either::Left(Either::Right(self.requirements_for_extra(
+                dependencies.iter(),
+                extra,
                 env,
                 python_marker,
                 python_requirement,
-            ) {
-                let requirement = match requirement {
-                    Cow::Owned(mut requirement) => {
-                        requirement.marker.and(marker);
-                        requirement
-                    }
-                    Cow::Borrowed(requirement) => {
-                        let mut marker = marker;
-                        marker.and(requirement.marker);
-                        Requirement {
-                            name: requirement.name.clone(),
-                            extras: requirement.extras.clone(),
-                            groups: requirement.groups.clone(),
-                            source: requirement.source.clone(),
-                            origin: requirement.origin.clone(),
-                            marker: marker.simplify_extras(slice::from_ref(&extra)),
+            )))
+        } else {
+            let mut requirements = self
+                .requirements_for_extra(
+                    dependencies.iter(),
+                    extra,
+                    env,
+                    python_marker,
+                    python_requirement,
+                )
+                .collect::<Vec<_>>();
+
+            // Transitively process all extras that are recursively included, starting with the current
+            // extra.
+            let mut seen = FxHashSet::<(ExtraName, MarkerTree)>::default();
+            let mut queue: VecDeque<_> = requirements
+                .iter()
+                .filter(|req| name == Some(&req.name))
+                .flat_map(|req| req.extras.iter().cloned().map(|extra| (extra, req.marker)))
+                .collect();
+            while let Some((extra, marker)) = queue.pop_front() {
+                if !seen.insert((extra.clone(), marker)) {
+                    continue;
+                }
+                for requirement in self.requirements_for_extra(
+                    dependencies,
+                    Some(&extra),
+                    env,
+                    python_marker,
+                    python_requirement,
+                ) {
+                    let requirement = match requirement {
+                        Cow::Owned(mut requirement) => {
+                            requirement.marker.and(marker);
+                            requirement
                         }
+                        Cow::Borrowed(requirement) => {
+                            let mut marker = marker;
+                            marker.and(requirement.marker);
+                            Requirement {
+                                name: requirement.name.clone(),
+                                extras: requirement.extras.clone(),
+                                groups: requirement.groups.clone(),
+                                source: requirement.source.clone(),
+                                origin: requirement.origin.clone(),
+                                marker: marker.simplify_extras(slice::from_ref(&extra)),
+                            }
+                        }
+                    };
+                    if name == Some(&requirement.name) {
+                        // Add each transitively included extra.
+                        queue.extend(
+                            requirement
+                                .extras
+                                .iter()
+                                .cloned()
+                                .map(|extra| (extra, requirement.marker)),
+                        );
+                    } else {
+                        // Add the requirements for that extra.
+                        requirements.push(Cow::Owned(requirement));
                     }
-                };
-                if name == Some(&requirement.name) {
-                    // Add each transitively included extra.
-                    queue.extend(
-                        requirement
-                            .extras
-                            .iter()
-                            .cloned()
-                            .map(|extra| (extra, requirement.marker)),
-                    );
-                } else {
-                    // Add the requirements for that extra.
-                    requirements.push(Cow::Owned(requirement));
                 }
             }
-        }
 
-        // Retain any self-constraints for that extra, e.g., if `project[foo]` includes
-        // `project[bar]>1.0`, as a dependency, we need to propagate `project>1.0`, in addition to
-        // transitively expanding `project[bar]`.
-        let mut self_constraints = vec![];
-        for req in &requirements {
-            if name == Some(&req.name) && !req.source.is_empty() {
-                self_constraints.push(Requirement {
-                    name: req.name.clone(),
-                    extras: vec![],
-                    groups: req.groups.clone(),
-                    source: req.source.clone(),
-                    origin: req.origin.clone(),
-                    marker: req.marker,
-                });
+            // Retain any self-constraints for that extra, e.g., if `project[foo]` includes
+            // `project[bar]>1.0`, as a dependency, we need to propagate `project>1.0`, in addition to
+            // transitively expanding `project[bar]`.
+            let mut self_constraints = vec![];
+            for req in &requirements {
+                if name == Some(&req.name) && !req.source.is_empty() {
+                    self_constraints.push(Requirement {
+                        name: req.name.clone(),
+                        extras: vec![],
+                        groups: req.groups.clone(),
+                        source: req.source.clone(),
+                        origin: req.origin.clone(),
+                        marker: req.marker,
+                    });
+                }
             }
+
+            // Drop all the self-requirements now that we flattened them out.
+            requirements.retain(|req| name != Some(&req.name) || req.extras.is_empty());
+            requirements.extend(self_constraints.into_iter().map(Cow::Owned));
+
+            Either::Right(requirements.into_iter())
         }
-
-        // Drop all the self-requirements now that we flattened them out.
-        requirements.retain(|req| name != Some(&req.name) || req.extras.is_empty());
-        requirements.extend(self_constraints.into_iter().map(Cow::Owned));
-
-        requirements
     }
 
     /// The set of the regular and dev dependencies, filtered by Python version,
@@ -2301,16 +2301,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 }
 
+                // Verify that the package is allowed under the hash-checking policy.
+                if !self
+                    .hasher
+                    .allows_package(candidate.name(), candidate.version())
+                {
+                    return Ok(None);
+                }
+
                 // Emit a request to fetch the metadata for this version.
                 if self.index.distributions().register(candidate.version_id()) {
-                    // Verify that the package is allowed under the hash-checking policy.
-                    if !self
-                        .hasher
-                        .allows_package(candidate.name(), candidate.version())
-                    {
-                        return Err(ResolveError::UnhashedPackage(candidate.name().clone()));
-                    }
-
                     let dist = dist.for_resolution().to_owned();
 
                     let response = match dist {
@@ -2600,9 +2600,7 @@ impl ForkState {
                 }
             }
 
-            let for_package = &self.pubgrub.package_store[for_package];
-
-            if let Some(name) = for_package
+            if let Some(name) = self.pubgrub.package_store[for_package]
                 .name_no_root()
                 .filter(|name| !workspace_members.contains(name))
             {
@@ -2633,9 +2631,7 @@ impl ForkState {
             }
 
             // Update the package priorities.
-            if !for_package.is_proxy() {
-                self.priorities.insert(package, version, &self.fork_urls);
-            }
+            self.priorities.insert(package, version, &self.fork_urls);
         }
 
         let conflict = self.pubgrub.add_package_version_dependencies(

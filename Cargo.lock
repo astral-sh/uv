@@ -4490,7 +4490,7 @@ checksum = "f8c5f0a0af699448548ad1a2fbf920fb4bee257eae39953ba95cb84891a0446a"
 
 [[package]]
 name = "uv"
-version = "0.5.21"
+version = "0.5.22"
 dependencies = [
  "anstream",
  "anyhow",
@@ -5019,7 +5019,6 @@ dependencies = [
 name = "uv-distribution-types"
 version = "0.0.1"
 dependencies = [
- "anyhow",
  "arcstr",
  "bitflags 2.8.0",
  "fs-err 3.0.0",
@@ -5200,6 +5199,7 @@ dependencies = [
  "uv-distribution",
  "uv-distribution-types",
  "uv-fs",
+ "uv-git",
  "uv-install-wheel",
  "uv-normalize",
  "uv-pep440",
@@ -5724,7 +5724,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.5.21"
+version = "0.5.22"
 
 [[package]]
 name = "uv-virtualenv"

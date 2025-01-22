@@ -499,7 +499,12 @@ async fn init_project(
         };
 
         (requires_python, python_request)
-    } else if let Some(requires_python) = workspace.as_ref().and_then(find_requires_python) {
+    } else if let Some(requires_python) = workspace
+        .as_ref()
+        .map(find_requires_python)
+        .transpose()?
+        .flatten()
+    {
         // (3) `requires-python` from the workspace
         debug!("Using Python version from project workspace");
         let python_request = PythonRequest::Version(VersionRequest::Range(

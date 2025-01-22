@@ -1499,41 +1499,54 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // If this is GitHub URL, attempt to resolve to a precise commit using the GitHub API.
-        if let Some(precise) = self
+        match self
             .build_context
             .git()
             .github_fast_path(
                 resource.git,
                 client.unmanaged.uncached_client(resource.url).clone(),
             )
-            .await?
+            .await
         {
-            // There's no need to check the cache, since we can't use cached metadata if there are
-            // sources, and we can't know if there are sources without fetching the
-            // `pyproject.toml`.
-            //
-            // For the same reason, there's no need to write to the cache, since we won't be able to
-            // use it on subsequent runs.
-            if let Some(metadata) = self
-                .github_metadata(precise, source, resource, client)
-                .await?
-            {
-                // Validate the metadata, but ignore it if the metadata doesn't match.
-                match validate_metadata(source, &metadata) {
-                    Ok(()) => {
-                        debug!("Found static metadata via GitHub fast path for: {source}");
-                        return Ok(ArchiveMetadata {
-                            metadata: Metadata::from_metadata23(metadata),
-                            hashes: vec![],
-                        });
+            Ok(Some(precise)) => {
+                // There's no need to check the cache, since we can't use cached metadata if there are
+                // sources, and we can't know if there are sources without fetching the
+                // `pyproject.toml`.
+                //
+                // For the same reason, there's no need to write to the cache, since we won't be able to
+                // use it on subsequent runs.
+                match self
+                    .github_metadata(precise, source, resource, client)
+                    .await
+                {
+                    Ok(Some(metadata)) => {
+                        // Validate the metadata, but ignore it if the metadata doesn't match.
+                        match validate_metadata(source, &metadata) {
+                            Ok(()) => {
+                                debug!("Found static metadata via GitHub fast path for: {source}");
+                                return Ok(ArchiveMetadata {
+                                    metadata: Metadata::from_metadata23(metadata),
+                                    hashes: vec![],
+                                });
+                            }
+                            Err(err) => {
+                                debug!("Ignoring `pyproject.toml` from GitHub for {source}: {err}");
+                            }
+                        }
                     }
-                    Err(Error::WheelMetadataNameMismatch { metadata, given }) => {
-                        debug!(
-                            "Ignoring `pyproject.toml` from GitHub for: {source} (metadata: {metadata}, given: {given})"
-                        );
+                    Ok(None) => {
+                        // Nothing to do.
                     }
-                    Err(err) => return Err(err),
+                    Err(err) => {
+                        debug!("Failed to fetch `pyproject.toml` via GitHub fast path for: {source} ({err})");
+                    }
                 }
+            }
+            Ok(None) => {
+                // Nothing to do.
+            }
+            Err(err) => {
+                debug!("Failed to resolve commit via GitHub fast path for: {source} ({err})");
             }
         }
 
@@ -2371,12 +2384,9 @@ impl StaticMetadata {
                     Ok(()) => {
                         return Ok(Self::Some(metadata));
                     }
-                    Err(Error::WheelMetadataNameMismatch { metadata, given }) => {
-                        debug!(
-                            "Ignoring `pyproject.toml` for: {source} (metadata: {metadata}, given: {given})"
-                        );
+                    Err(err) => {
+                        debug!("Ignoring `pyproject.toml` for {source}: {err}");
                     }
-                    Err(err) => return Err(err),
                 }
             }
             Err(
@@ -2419,12 +2429,9 @@ impl StaticMetadata {
                     Ok(()) => {
                         return Ok(Self::Some(metadata));
                     }
-                    Err(Error::WheelMetadataNameMismatch { metadata, given }) => {
-                        debug!(
-                            "Ignoring `PKG-INFO` for: {source} (metadata: {metadata}, given: {given})"
-                        );
+                    Err(err) => {
+                        debug!("Ignoring `PKG-INFO` for {source}: {err}");
                     }
-                    Err(err) => return Err(err),
                 }
             }
             Err(
@@ -2451,12 +2458,9 @@ impl StaticMetadata {
                     Ok(()) => {
                         return Ok(Self::Some(metadata));
                     }
-                    Err(Error::WheelMetadataNameMismatch { metadata, given }) => {
-                        debug!(
-                            "Ignoring `egg-info` for: {source} (metadata: {metadata}, given: {given})"
-                        );
+                    Err(err) => {
+                        debug!("Ignoring `egg-info` for {source}: {err}");
                     }
-                    Err(err) => return Err(err),
                 }
             }
             Err(

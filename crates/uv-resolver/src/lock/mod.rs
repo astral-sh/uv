@@ -15,12 +15,12 @@ use petgraph::visit::EdgeRef;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::Serializer;
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
-use tracing::trace;
+use tracing::debug;
 use url::Url;
 
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::BuildOptions;
-use uv_distribution::{DistributionDatabase, RequiresDist};
+use uv_distribution::{DistributionDatabase, FlatRequiresDist, RequiresDist};
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
@@ -665,8 +665,7 @@ impl Lock {
 
         if !self.fork_markers.is_empty() {
             let fork_markers = each_element_on_its_line_array(
-                deduplicated_simplified_pep508_markers(&self.fork_markers, &self.requires_python)
-                    .into_iter(),
+                simplified_universal_markers(&self.fork_markers, &self.requires_python).into_iter(),
             );
             if !fork_markers.is_empty() {
                 doc.insert("resolution-markers", value(fork_markers));
@@ -974,6 +973,21 @@ impl Lock {
             package: &'lock Package,
             root: &Path,
         ) -> Result<SatisfiesResult<'lock>, LockError> {
+            // Special-case: if the version is dynamic, compare the flattened requirements.
+            let flattened = if package.is_dynamic() {
+                Some(
+                    FlatRequiresDist::from_requirements(
+                        metadata.requires_dist.clone(),
+                        &package.id.name,
+                    )
+                    .into_iter()
+                    .map(|requirement| normalize_requirement(requirement, root))
+                    .collect::<Result<BTreeSet<_>, _>>()?,
+                )
+            } else {
+                None
+            };
+
             // Validate the `requires-dist` metadata.
             let expected: BTreeSet<_> = metadata
                 .requires_dist
@@ -988,7 +1002,7 @@ impl Lock {
                 .map(|requirement| normalize_requirement(requirement, root))
                 .collect::<Result<_, _>>()?;
 
-            if expected != actual {
+            if expected != actual && flattened.is_none_or(|expected| expected != actual) {
                 return Ok(SatisfiesResult::MismatchedPackageRequirements(
                     &package.id.name,
                     package.id.version.as_ref(),
@@ -1053,32 +1067,17 @@ impl Lock {
             }
         }
 
-        // Validate that the member sources have not changed.
-        {
-            // E.g., that they've switched from virtual to non-virtual or vice versa.
-            for (name, member) in packages {
-                let expected = !member.pyproject_toml().is_package();
-                let actual = self
-                    .find_by_name(name)
-                    .ok()
-                    .flatten()
-                    .map(|package| matches!(package.id.source, Source::Virtual(_)));
-                if actual != Some(expected) {
-                    return Ok(SatisfiesResult::MismatchedVirtual(name.clone(), expected));
-                }
-            }
-
-            // E.g., that they've switched from dynamic to non-dynamic or vice versa.
-            for (name, member) in packages {
-                let expected = member.pyproject_toml().is_dynamic();
-                let actual = self
-                    .find_by_name(name)
-                    .ok()
-                    .flatten()
-                    .map(Package::is_dynamic);
-                if actual != Some(expected) {
-                    return Ok(SatisfiesResult::MismatchedDynamic(name.clone(), expected));
-                }
+        // Validate that the member sources have not changed (e.g., that they've switched from
+        // virtual to non-virtual or vice versa).
+        for (name, member) in packages {
+            let expected = !member.pyproject_toml().is_package();
+            let actual = self
+                .find_by_name(name)
+                .ok()
+                .flatten()
+                .map(|package| matches!(package.id.source, Source::Virtual(_)));
+            if actual != Some(expected) {
+                return Ok(SatisfiesResult::MismatchedVirtual(name.clone(), expected));
             }
         }
 
@@ -1273,60 +1272,10 @@ impl Lock {
                 continue;
             }
 
-            // Fetch the metadata for the distribution.
-            //
-            // If the distribution is a source tree, attempt to extract the requirements from the
-            // `pyproject.toml` directly. The distribution database will do this too, but we can be
-            // even more aggressive here since we _only_ need the requirements. So, for example,
-            // even if the version is dynamic, we can still extract the requirements without
-            // performing a build, unlike in the database where we typically construct a "complete"
-            // metadata object.
-            let metadata = if let Some(source_tree) = package.id.source.as_source_tree() {
-                database
-                    .requires_dist(root.join(source_tree))
-                    .await
-                    .map_err(|err| LockErrorKind::Resolution {
-                        id: package.id.clone(),
-                        err,
-                    })?
-            } else {
-                None
-            };
-
-            let satisfied = metadata.is_some_and(|metadata| {
-                match satisfies_requires_dist(metadata, package, root) {
-                    Ok(SatisfiesResult::Satisfied) => {
-                        trace!("Static `Requires-Dist` for `{}` is up-to-date", package.id);
-                        true
-                    },
-                    Ok(..) => {
-                        trace!("Static `Requires-Dist` for `{}` is out-of-date; falling back to distribution database", package.id);
-                        false
-                    },
-                    Err(..) => {
-                        trace!("Static `Requires-Dist` for `{}` is invalid; falling back to distribution database", package.id);
-                        false
-                    },
-                }
-            });
-
-            // If the `requires-dist` metadata matches the requirements, we're done; otherwise,
-            // fetch the "full" metadata, which may involve invoking the build system. In some
-            // cases, build backends return metadata that does _not_ match the `pyproject.toml`
-            // exactly. For example, `hatchling` will flatten any recursive (or self-referential)
-            // extras, while `setuptools` will not.
-            if !satisfied {
-                // Get the metadata for the distribution.
-                let dist = package.to_dist(
-                    root,
-                    // When validating, it's okay to use wheels that don't match the current platform.
-                    TagPolicy::Preferred(tags),
-                    // When validating, it's okay to use (e.g.) a source distribution with `--no-build`.
-                    // We're just trying to determine whether the lockfile is up-to-date. If we end
-                    // up needing to build a source distribution in order to do so, below, we'll error
-                    // there.
-                    &BuildOptions::default(),
-                )?;
+            if let Some(version) = package.id.version.as_ref() {
+                // For a non-dynamic package, fetch the metadata from the distribution database.
+                let dist =
+                    package.to_dist(root, TagPolicy::Preferred(tags), &BuildOptions::default())?;
 
                 let metadata = {
                     let id = dist.version_id();
@@ -1366,10 +1315,139 @@ impl Lock {
                     }
                 };
 
+                // If this is a local package, validate that it hasn't become dynamic (in which
+                // case, we'd expect the version to be omitted).
+                if package.id.source.is_source_tree() {
+                    if metadata.dynamic {
+                        return Ok(SatisfiesResult::MismatchedDynamic(
+                            package.id.name.clone(),
+                            false,
+                        ));
+                    }
+                }
+
+                // Validate the `version` metadata.
+                if metadata.version != *version {
+                    return Ok(SatisfiesResult::MismatchedVersion(
+                        package.id.name.clone(),
+                        version.clone(),
+                        Some(metadata.version.clone()),
+                    ));
+                }
+
+                // Validate that the requirements are unchanged.
                 match satisfies_requires_dist(RequiresDist::from(metadata), package, root)? {
                     SatisfiesResult::Satisfied => {}
                     result => return Ok(result),
                 }
+            } else if let Some(source_tree) = package.id.source.as_source_tree() {
+                // For dynamic packages, we don't need the version. We only need to know that the
+                // package is still dynamic, and that the requirements are unchanged.
+                //
+                // If the distribution is a source tree, attempt to extract the requirements from the
+                // `pyproject.toml` directly. The distribution database will do this too, but we can be
+                // even more aggressive here since we _only_ need the requirements. So, for example,
+                // even if the version is dynamic, we can still extract the requirements without
+                // performing a build, unlike in the database where we typically construct a "complete"
+                // metadata object.
+                let metadata = database
+                    .requires_dist(root.join(source_tree))
+                    .await
+                    .map_err(|err| LockErrorKind::Resolution {
+                        id: package.id.clone(),
+                        err,
+                    })?;
+
+                let satisfied = metadata.is_some_and(|metadata| {
+                    // Validate that the package is still dynamic.
+                    if !metadata.dynamic {
+                        debug!("Static `requires-dist` for `{}` is out-of-date; falling back to distribution database", package.id);
+                        return false;
+                    }
+
+                    // Validate that the requirements are unchanged.
+                    match satisfies_requires_dist(metadata, package, root) {
+                        Ok(SatisfiesResult::Satisfied) => {
+                            debug!("Static `requires-dist` for `{}` is up-to-date", package.id);
+                            true
+                        },
+                        Ok(..) => {
+                            debug!("Static `requires-dist` for `{}` is out-of-date; falling back to distribution database", package.id);
+                            false
+                        },
+                        Err(..) => {
+                            debug!("Static `requires-dist` for `{}` is invalid; falling back to distribution database", package.id);
+                            false
+                        },
+                    }
+                });
+
+                // If the `requires-dist` metadata matches the requirements, we're done; otherwise,
+                // fetch the "full" metadata, which may involve invoking the build system. In some
+                // cases, build backends return metadata that does _not_ match the `pyproject.toml`
+                // exactly. For example, `hatchling` will flatten any recursive (or self-referential)
+                // extras, while `setuptools` will not.
+                if !satisfied {
+                    let dist = package.to_dist(
+                        root,
+                        TagPolicy::Preferred(tags),
+                        &BuildOptions::default(),
+                    )?;
+
+                    let metadata = {
+                        let id = dist.version_id();
+                        if let Some(archive) =
+                            index
+                                .distributions()
+                                .get(&id)
+                                .as_deref()
+                                .and_then(|response| {
+                                    if let MetadataResponse::Found(archive, ..) = response {
+                                        Some(archive)
+                                    } else {
+                                        None
+                                    }
+                                })
+                        {
+                            // If the metadata is already in the index, return it.
+                            archive.metadata.clone()
+                        } else {
+                            // Run the PEP 517 build process to extract metadata from the source distribution.
+                            let archive = database
+                                .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
+                                .await
+                                .map_err(|err| LockErrorKind::Resolution {
+                                    id: package.id.clone(),
+                                    err,
+                                })?;
+
+                            let metadata = archive.metadata.clone();
+
+                            // Insert the metadata into the index.
+                            index
+                                .distributions()
+                                .done(id, Arc::new(MetadataResponse::Found(archive)));
+
+                            metadata
+                        }
+                    };
+
+                    // Validate that the package is still dynamic.
+                    if !metadata.dynamic {
+                        return Ok(SatisfiesResult::MismatchedDynamic(
+                            package.id.name.clone(),
+                            true,
+                        ));
+                    }
+
+                    // Validate that the requirements are unchanged.
+                    match satisfies_requires_dist(RequiresDist::from(metadata), package, root)? {
+                        SatisfiesResult::Satisfied => {}
+                        result => return Ok(result),
+                    }
+                }
+            } else {
+                return Ok(SatisfiesResult::MissingVersion(package.id.name.clone()));
             }
 
             // Recurse.
@@ -1432,7 +1510,7 @@ pub enum SatisfiesResult<'lock> {
     MismatchedMembers(BTreeSet<PackageName>, &'lock BTreeSet<PackageName>),
     /// A workspace member switched from virtual to non-virtual or vice versa.
     MismatchedVirtual(PackageName, bool),
-    /// A workspace member switched from dynamic to non-dynamic or vice versa.
+    /// A source tree switched from dynamic to non-dynamic or vice versa.
     MismatchedDynamic(PackageName, bool),
     /// The lockfile uses a different set of version for its workspace members.
     MismatchedVersion(PackageName, Version, Option<Version>),
@@ -1469,6 +1547,8 @@ pub enum SatisfiesResult<'lock> {
         BTreeMap<GroupName, BTreeSet<Requirement>>,
         BTreeMap<GroupName, BTreeSet<Requirement>>,
     ),
+    /// The lockfile is missing a version.
+    MissingVersion(PackageName),
 }
 
 /// We discard the lockfile if these options match.
@@ -1636,11 +1716,7 @@ impl TryFrom<LockWire> for Lock {
             .fork_markers
             .into_iter()
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
-            // TODO(ag): Consider whether this should also deserialize a conflict marker.
-            // We currently aren't serializing. Dropping it completely is likely to be wrong.
-            .map(|complexified_marker| {
-                UniversalMarker::new(complexified_marker, ConflictMarker::TRUE)
-            })
+            .map(UniversalMarker::from_combined)
             .collect();
         let lock = Lock::new(
             wire.version,
@@ -2262,8 +2338,7 @@ impl Package {
 
         if !self.fork_markers.is_empty() {
             let fork_markers = each_element_on_its_line_array(
-                deduplicated_simplified_pep508_markers(&self.fork_markers, requires_python)
-                    .into_iter(),
+                simplified_universal_markers(&self.fork_markers, requires_python).into_iter(),
             );
             if !fork_markers.is_empty() {
                 table.insert("resolution-markers", value(fork_markers));
@@ -2585,11 +2660,7 @@ impl PackageWire {
                 .fork_markers
                 .into_iter()
                 .map(|simplified_marker| simplified_marker.into_marker(requires_python))
-                // TODO(ag): Consider whether this should also deserialize a conflict marker.
-                // We currently aren't serializing. Dropping it completely is likely to be wrong.
-                .map(|complexified_marker| {
-                    UniversalMarker::new(complexified_marker, ConflictMarker::TRUE)
-                })
+                .map(UniversalMarker::from_combined)
                 .collect(),
             dependencies: unwire_deps(self.dependencies)?,
             optional_dependencies: self
@@ -3521,7 +3592,6 @@ impl From<GitReference> for GitSourceKind {
             GitReference::BranchOrTag(rev) => GitSourceKind::Rev(rev.to_string()),
             GitReference::BranchOrTagOrCommit(rev) => GitSourceKind::Rev(rev.to_string()),
             GitReference::NamedRef(rev) => GitSourceKind::Rev(rev.to_string()),
-            GitReference::FullCommit(rev) => GitSourceKind::Rev(rev.to_string()),
             GitReference::DefaultBranch => GitSourceKind::DefaultBranch,
         }
     }
@@ -3564,19 +3634,15 @@ fn locked_git_url(git_dist: &GitSourceDist) -> Url {
     // Put the requested reference in the query.
     match git_dist.git.reference() {
         GitReference::Branch(branch) => {
-            url.query_pairs_mut()
-                .append_pair("branch", branch.to_string().as_str());
+            url.query_pairs_mut().append_pair("branch", branch.as_str());
         }
         GitReference::Tag(tag) => {
-            url.query_pairs_mut()
-                .append_pair("tag", tag.to_string().as_str());
+            url.query_pairs_mut().append_pair("tag", tag.as_str());
         }
         GitReference::BranchOrTag(rev)
         | GitReference::BranchOrTagOrCommit(rev)
-        | GitReference::NamedRef(rev)
-        | GitReference::FullCommit(rev) => {
-            url.query_pairs_mut()
-                .append_pair("rev", rev.to_string().as_str());
+        | GitReference::NamedRef(rev) => {
+            url.query_pairs_mut().append_pair("rev", rev.as_str());
         }
         GitReference::DefaultBranch => {}
     }
@@ -4131,7 +4197,15 @@ fn normalize_url(mut url: Url) -> UrlString {
 /// 2. Ensures that the lock and install paths are appropriately framed with respect to the
 ///    current [`Workspace`].
 /// 3. Removes the `origin` field, which is only used in `requirements.txt`.
-fn normalize_requirement(requirement: Requirement, root: &Path) -> Result<Requirement, LockError> {
+fn normalize_requirement(
+    mut requirement: Requirement,
+    root: &Path,
+) -> Result<Requirement, LockError> {
+    // Sort the extras and groups for consistency.
+    requirement.extras.sort();
+    requirement.groups.sort();
+
+    // Normalize the requirement source.
     match requirement.source {
         RequirementSource::Git {
             mut repository,
@@ -4898,42 +4972,40 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
 
 /// Returns the simplified string-ified version of each marker given.
 ///
-/// If a marker is a duplicate of a previous marker or is always true after
-/// simplification, then it is omitted from the `Vec` returned. (And indeed,
-/// the `Vec` returned may be empty.)
-fn deduplicated_simplified_pep508_markers(
+/// Note that the marker strings returned will include conflict markers if they
+/// are present.
+fn simplified_universal_markers(
     markers: &[UniversalMarker],
     requires_python: &RequiresPython,
 ) -> Vec<String> {
-    // NOTE(ag): It's possible that `resolution-markers` should actually
-    // include conflicting marker info. In which case, we should serialize
-    // the entire `UniversalMarker` (taking care to still make the PEP 508
-    // simplified). At present, we don't include that info. And as a result,
-    // this can lead to duplicate markers, since each represents a fork with
-    // the same PEP 508 marker but a different conflict marker. We strip the
-    // conflict marker, which can leave duplicate PEP 508 markers.
-    //
-    // So if we did include the conflict marker, then we wouldn't need to do
-    // deduplication.
-    //
-    // Why don't we include conflict markers though? At present, it's just
-    // not clear that they are necessary. So by the principle of being
-    // conservative, we don't write them. In particular, I believe the original
-    // reason for `resolution-markers` is to prevent non-deterministic locking.
-    // But it's not clear that that can occur for conflict markers.
-    let mut simplified = vec![];
-    // Deduplicate without changing order.
+    let mut pep508_only = vec![];
     let mut seen = FxHashSet::default();
     for marker in markers {
-        let simplified_marker = SimplifiedMarkerTree::new(requires_python, marker.pep508());
-        let Some(simplified_string) = simplified_marker.try_to_string() else {
-            continue;
-        };
-        if seen.insert(simplified_string.clone()) {
-            simplified.push(simplified_string);
+        let simplified =
+            SimplifiedMarkerTree::new(requires_python, marker.pep508()).as_simplified_marker_tree();
+        if seen.insert(simplified) {
+            pep508_only.push(simplified);
         }
     }
-    simplified
+    let any_overlap = pep508_only
+        .iter()
+        .tuple_combinations()
+        .any(|(&marker1, &marker2)| !marker1.is_disjoint(marker2));
+    let markers = if !any_overlap {
+        pep508_only
+    } else {
+        markers
+            .iter()
+            .map(|marker| {
+                SimplifiedMarkerTree::new(requires_python, marker.combined())
+                    .as_simplified_marker_tree()
+            })
+            .collect()
+    };
+    markers
+        .into_iter()
+        .filter_map(MarkerTree::try_to_string)
+        .collect()
 }
 
 #[cfg(test)]

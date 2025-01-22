@@ -4,7 +4,7 @@
 use std::env;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
-use std::str::{self, FromStr};
+use std::str::{self};
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
@@ -40,6 +40,14 @@ pub static GIT: LazyLock<Result<PathBuf, GitError>> = LazyLock::new(|| {
     })
 });
 
+/// Strategy when fetching refspecs for a [`GitReference`]
+enum RefspecStrategy {
+    /// All refspecs should be fetched, if any fail then the fetch will fail.
+    All,
+    /// Stop after the first successful fetch, if none succeed then the fetch will fail.
+    First,
+}
+
 /// A reference to commit or commit-ish.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum GitReference {
@@ -49,22 +57,12 @@ pub enum GitReference {
     Tag(String),
     /// From a reference that's ambiguously a branch or tag.
     BranchOrTag(String),
-    /// From a reference that's ambiguously a short commit, a branch, or a tag.
+    /// From a reference that's ambiguously a commit, branch, or tag.
     BranchOrTagOrCommit(String),
     /// From a named reference, like `refs/pull/493/head`.
     NamedRef(String),
-    /// From a specific revision, using a full 40-character commit hash.
-    FullCommit(String),
     /// The default branch of the repository, the reference named `HEAD`.
     DefaultBranch,
-}
-
-/// Strategy when fetching refspecs for a [`GitReference`]
-enum RefspecStrategy {
-    // All refspecs should be fetched, if any fail then the fetch will fail
-    All,
-    // Stop after the first successful fetch, if none succeed then the fetch will fail
-    First,
 }
 
 impl GitReference {
@@ -74,11 +72,7 @@ impl GitReference {
         if rev.starts_with("refs/") {
             Self::NamedRef(rev)
         } else if looks_like_commit_hash(&rev) {
-            if rev.len() == 40 {
-                Self::FullCommit(rev)
-            } else {
-                Self::BranchOrTagOrCommit(rev)
-            }
+            Self::BranchOrTagOrCommit(rev)
         } else {
             Self::BranchOrTag(rev)
         }
@@ -91,7 +85,6 @@ impl GitReference {
             Self::Branch(rev) => Some(rev),
             Self::BranchOrTag(rev) => Some(rev),
             Self::BranchOrTagOrCommit(rev) => Some(rev),
-            Self::FullCommit(rev) => Some(rev),
             Self::NamedRef(rev) => Some(rev),
             Self::DefaultBranch => None,
         }
@@ -104,7 +97,6 @@ impl GitReference {
             Self::Branch(rev) => rev,
             Self::BranchOrTag(rev) => rev,
             Self::BranchOrTagOrCommit(rev) => rev,
-            Self::FullCommit(rev) => rev,
             Self::NamedRef(rev) => rev,
             Self::DefaultBranch => "HEAD",
         }
@@ -116,19 +108,9 @@ impl GitReference {
             Self::Branch(_) => "branch",
             Self::Tag(_) => "tag",
             Self::BranchOrTag(_) => "branch or tag",
-            Self::FullCommit(_) => "commit",
             Self::BranchOrTagOrCommit(_) => "branch, tag, or commit",
             Self::NamedRef(_) => "ref",
             Self::DefaultBranch => "default branch",
-        }
-    }
-
-    /// Returns the precise [`GitOid`] of this reference, if it's a full commit.
-    pub(crate) fn as_sha(&self) -> Option<GitOid> {
-        if let Self::FullCommit(rev) = self {
-            Some(GitOid::from_str(rev).expect("Full commit should be exactly 40 characters"))
-        } else {
-            None
         }
     }
 }
@@ -136,6 +118,83 @@ impl GitReference {
 impl Display for GitReference {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_str().unwrap_or("HEAD"))
+    }
+}
+
+/// A Git reference (like a tag or branch) or a specific commit.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+enum ReferenceOrOid<'reference> {
+    /// A Git reference, like a tag or branch.
+    Reference(&'reference GitReference),
+    /// A specific commit.
+    Oid(GitOid),
+}
+
+impl ReferenceOrOid<'_> {
+    /// Resolves the [`ReferenceOrOid`] to an object ID with objects the `repo` currently has.
+    fn resolve(&self, repo: &GitRepository) -> Result<GitOid> {
+        let refkind = self.kind_str();
+        let result = match self {
+            // Resolve the commit pointed to by the tag.
+            //
+            // `^0` recursively peels away from the revision to the underlying commit object.
+            // This also verifies that the tag indeed refers to a commit.
+            Self::Reference(GitReference::Tag(s)) => {
+                repo.rev_parse(&format!("refs/remotes/origin/tags/{s}^0"))
+            }
+
+            // Resolve the commit pointed to by the branch.
+            Self::Reference(GitReference::Branch(s)) => repo.rev_parse(&format!("origin/{s}^0")),
+
+            // Attempt to resolve the branch, then the tag.
+            Self::Reference(GitReference::BranchOrTag(s)) => repo
+                .rev_parse(&format!("origin/{s}^0"))
+                .or_else(|_| repo.rev_parse(&format!("refs/remotes/origin/tags/{s}^0"))),
+
+            // Attempt to resolve the branch, then the tag, then the commit.
+            Self::Reference(GitReference::BranchOrTagOrCommit(s)) => repo
+                .rev_parse(&format!("origin/{s}^0"))
+                .or_else(|_| repo.rev_parse(&format!("refs/remotes/origin/tags/{s}^0")))
+                .or_else(|_| repo.rev_parse(&format!("{s}^0"))),
+
+            // We'll be using the HEAD commit.
+            Self::Reference(GitReference::DefaultBranch) => {
+                repo.rev_parse("refs/remotes/origin/HEAD")
+            }
+
+            // Resolve a named reference.
+            Self::Reference(GitReference::NamedRef(s)) => repo.rev_parse(&format!("{s}^0")),
+
+            // Resolve a specific commit.
+            Self::Oid(s) => repo.rev_parse(&format!("{s}^0")),
+        };
+
+        result.with_context(|| anyhow::format_err!("failed to find {refkind} `{self}`"))
+    }
+
+    /// Returns the kind of this [`ReferenceOrOid`].
+    fn kind_str(&self) -> &str {
+        match self {
+            Self::Reference(reference) => reference.kind_str(),
+            Self::Oid(_) => "commit",
+        }
+    }
+
+    /// Converts the [`ReferenceOrOid`] to a `str` that can be used as a revision.
+    fn as_rev(&self) -> &str {
+        match self {
+            Self::Reference(r) => r.as_rev(),
+            Self::Oid(rev) => rev.as_str(),
+        }
+    }
+}
+
+impl Display for ReferenceOrOid<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Reference(reference) => write!(f, "{reference}"),
+            Self::Oid(oid) => write!(f, "{oid}"),
+        }
     }
 }
 
@@ -245,8 +304,9 @@ impl GitRemote {
         locked_rev: Option<GitOid>,
         client: &ClientWithMiddleware,
     ) -> Result<(GitDatabase, GitOid)> {
-        let locked_ref = locked_rev.map(|oid| GitReference::FullCommit(oid.to_string()));
-        let reference = locked_ref.as_ref().unwrap_or(reference);
+        let reference = locked_rev
+            .map(ReferenceOrOid::Oid)
+            .unwrap_or(ReferenceOrOid::Reference(reference));
         let enable_lfs_fetch = env::var(EnvVars::UV_GIT_LFS).is_ok();
 
         if let Some(mut db) = db {
@@ -335,42 +395,6 @@ impl GitDatabase {
     /// Checks if `oid` resolves to a commit in this database.
     pub(crate) fn contains(&self, oid: GitOid) -> bool {
         self.repo.rev_parse(&format!("{oid}^0")).is_ok()
-    }
-}
-
-impl GitReference {
-    /// Resolves self to an object ID with objects the `repo` currently has.
-    pub(crate) fn resolve(&self, repo: &GitRepository) -> Result<GitOid> {
-        let refkind = self.kind_str();
-        let result = match self {
-            // Resolve the commit pointed to by the tag.
-            //
-            // `^0` recursively peels away from the revision to the underlying commit object.
-            // This also verifies that the tag indeed refers to a commit.
-            Self::Tag(s) => repo.rev_parse(&format!("refs/remotes/origin/tags/{s}^0")),
-
-            // Resolve the commit pointed to by the branch.
-            Self::Branch(s) => repo.rev_parse(&format!("origin/{s}^0")),
-
-            // Attempt to resolve the branch, then the tag.
-            Self::BranchOrTag(s) => repo
-                .rev_parse(&format!("origin/{s}^0"))
-                .or_else(|_| repo.rev_parse(&format!("refs/remotes/origin/tags/{s}^0"))),
-
-            // Attempt to resolve the branch, then the tag, then the commit.
-            Self::BranchOrTagOrCommit(s) => repo
-                .rev_parse(&format!("origin/{s}^0"))
-                .or_else(|_| repo.rev_parse(&format!("refs/remotes/origin/tags/{s}^0")))
-                .or_else(|_| repo.rev_parse(&format!("{s}^0"))),
-
-            // We'll be using the HEAD commit.
-            Self::DefaultBranch => repo.rev_parse("refs/remotes/origin/HEAD"),
-
-            // Resolve a direct commit reference.
-            Self::FullCommit(s) | Self::NamedRef(s) => repo.rev_parse(&format!("{s}^0")),
-        };
-
-        result.with_context(|| anyhow::format_err!("failed to find {refkind} `{self}`"))
     }
 }
 
@@ -473,10 +497,10 @@ impl GitCheckout {
 /// * Dispatches `git fetch` using the git CLI.
 ///
 /// The `remote_url` argument is the git remote URL where we want to fetch from.
-pub(crate) fn fetch(
+fn fetch(
     repo: &mut GitRepository,
     remote_url: &Url,
-    reference: &GitReference,
+    reference: ReferenceOrOid<'_>,
     client: &ClientWithMiddleware,
 ) -> Result<()> {
     let oid_to_fetch = match github_fast_path(repo, remote_url, reference, client) {
@@ -500,15 +524,15 @@ pub(crate) fn fetch(
     match reference {
         // For branches and tags we can fetch simply one reference and copy it
         // locally, no need to fetch other branches/tags.
-        GitReference::Branch(branch) => {
+        ReferenceOrOid::Reference(GitReference::Branch(branch)) => {
             refspecs.push(format!("+refs/heads/{branch}:refs/remotes/origin/{branch}"));
         }
 
-        GitReference::Tag(tag) => {
+        ReferenceOrOid::Reference(GitReference::Tag(tag)) => {
             refspecs.push(format!("+refs/tags/{tag}:refs/remotes/origin/tags/{tag}"));
         }
 
-        GitReference::BranchOrTag(branch_or_tag) => {
+        ReferenceOrOid::Reference(GitReference::BranchOrTag(branch_or_tag)) => {
             refspecs.push(format!(
                 "+refs/heads/{branch_or_tag}:refs/remotes/origin/{branch_or_tag}"
             ));
@@ -520,7 +544,7 @@ pub(crate) fn fetch(
 
         // For ambiguous references, we can fetch the exact commit (if known); otherwise,
         // we fetch all branches and tags.
-        GitReference::BranchOrTagOrCommit(branch_or_tag_or_commit) => {
+        ReferenceOrOid::Reference(GitReference::BranchOrTagOrCommit(branch_or_tag_or_commit)) => {
             // The `oid_to_fetch` is the exact commit we want to fetch. But it could be the exact
             // commit of a branch or tag. We should only fetch it directly if it's the exact commit
             // of a short commit hash.
@@ -538,26 +562,16 @@ pub(crate) fn fetch(
             }
         }
 
-        GitReference::DefaultBranch => {
+        ReferenceOrOid::Reference(GitReference::DefaultBranch) => {
             refspecs.push(String::from("+HEAD:refs/remotes/origin/HEAD"));
         }
 
-        GitReference::NamedRef(rev) => {
+        ReferenceOrOid::Reference(GitReference::NamedRef(rev)) => {
             refspecs.push(format!("+{rev}:{rev}"));
         }
 
-        GitReference::FullCommit(rev) => {
-            if let Some(oid_to_fetch) = oid_to_fetch {
-                refspecs.push(format!("+{oid_to_fetch}:refs/commit/{oid_to_fetch}"));
-            } else {
-                // There is a specific commit to fetch and we will do so in shallow-mode only
-                // to not disturb the previous logic.
-                // Note that with typical settings for shallowing, we will just fetch a single `rev`
-                // as single commit.
-                // The reason we write to `refs/remotes/origin/HEAD` is that it's of special significance
-                // when during `GitReference::resolve()`, but otherwise it shouldn't matter.
-                refspecs.push(format!("+{rev}:refs/remotes/origin/HEAD"));
-            }
+        ReferenceOrOid::Oid(rev) => {
+            refspecs.push(format!("+{rev}:refs/commit/{rev}"));
         }
     }
 
@@ -598,7 +612,7 @@ pub(crate) fn fetch(
     };
     match reference {
         // With the default branch, adding context is confusing
-        GitReference::DefaultBranch => result,
+        ReferenceOrOid::Reference(GitReference::DefaultBranch) => result,
         _ => result.with_context(|| {
             format!(
                 "failed to fetch {} `{}`",
@@ -714,7 +728,7 @@ enum FastPathRev {
 fn github_fast_path(
     git: &mut GitRepository,
     url: &Url,
-    reference: &GitReference,
+    reference: ReferenceOrOid<'_>,
     client: &ClientWithMiddleware,
 ) -> Result<FastPathRev> {
     let Some(GitHubRepository { owner, repo }) = GitHubRepository::parse(url) else {
@@ -724,12 +738,12 @@ fn github_fast_path(
     let local_object = reference.resolve(git).ok();
 
     let github_branch_name = match reference {
-        GitReference::Branch(branch) => branch,
-        GitReference::Tag(tag) => tag,
-        GitReference::BranchOrTag(branch_or_tag) => branch_or_tag,
-        GitReference::DefaultBranch => "HEAD",
-        GitReference::NamedRef(rev) => rev,
-        GitReference::FullCommit(rev) | GitReference::BranchOrTagOrCommit(rev) => {
+        ReferenceOrOid::Reference(GitReference::DefaultBranch) => "HEAD",
+        ReferenceOrOid::Reference(GitReference::Branch(branch)) => branch,
+        ReferenceOrOid::Reference(GitReference::Tag(tag)) => tag,
+        ReferenceOrOid::Reference(GitReference::BranchOrTag(branch_or_tag)) => branch_or_tag,
+        ReferenceOrOid::Reference(GitReference::NamedRef(rev)) => rev,
+        ReferenceOrOid::Reference(GitReference::BranchOrTagOrCommit(rev)) => {
             // `revparse_single` (used by `resolve`) is the only way to turn
             // short hash -> long hash, but it also parses other things,
             // like branch and tag names, which might coincidentally be
@@ -754,12 +768,20 @@ fn github_fast_path(
             }
             rev
         }
-    };
+        ReferenceOrOid::Oid(rev) => {
+            debug!("Skipping GitHub fast path; full commit hash provided: {rev}");
 
-    // TODO(charlie): If we _know_ that we have a full commit SHA, there's no need to perform this
-    // request. We can just return `FastPathRev::NeedsFetch`. However, we need to audit all uses of
-    // `GitReference::FullCommit` to ensure that we _know_ it's a SHA, as opposed to (e.g.) a Git
-    // tag that just "looks like" a commit (i.e., a tag composed of 40 hex characters).
+            if let Some(local_object) = local_object {
+                if rev == local_object {
+                    return Ok(FastPathRev::UpToDate);
+                }
+            }
+
+            // If we know the reference is a full commit hash, we can just return it without
+            // querying GitHub.
+            return Ok(FastPathRev::NeedsFetch(rev));
+        }
+    };
 
     let url = format!("https://api.github.com/repos/{owner}/{repo}/commits/{github_branch_name}");
 

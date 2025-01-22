@@ -31,11 +31,10 @@ pub struct GitUrl {
 impl GitUrl {
     /// Create a new [`GitUrl`] from a repository URL and a reference.
     pub fn from_reference(repository: Url, reference: GitReference) -> Self {
-        let precise = reference.as_sha();
         Self {
             repository,
             reference,
-            precise,
+            precise: None,
         }
     }
 
@@ -117,7 +116,6 @@ impl From<GitUrl> for Url {
                 | GitReference::Tag(rev)
                 | GitReference::BranchOrTag(rev)
                 | GitReference::NamedRef(rev)
-                | GitReference::FullCommit(rev)
                 | GitReference::BranchOrTagOrCommit(rev) => {
                     url.set_path(&format!("{}@{}", url.path(), rev));
                 }

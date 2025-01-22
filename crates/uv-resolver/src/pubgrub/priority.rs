@@ -24,7 +24,7 @@ use crate::SentinelRange;
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PubGrubPriorities {
     package_priority: FxHashMap<PackageName, PubGrubPriority>,
-    virtual_package_tiebreaker: FxHashMap<PubGrubPackage, u32>,
+    virtual_package_tiebreaker: FxHashMap<PubGrubPackage, PubGrubTiebreaker>,
 }
 
 impl PubGrubPriorities {
@@ -38,8 +38,10 @@ impl PubGrubPriorities {
         if !self.virtual_package_tiebreaker.contains_key(package) {
             self.virtual_package_tiebreaker.insert(
                 package.clone(),
-                u32::try_from(self.virtual_package_tiebreaker.len())
-                    .expect("Less than 2**32 packages"),
+                PubGrubTiebreaker::from(
+                    u32::try_from(self.virtual_package_tiebreaker.len())
+                        .expect("Less than 2**32 packages"),
+                ),
             );
         }
 
@@ -104,26 +106,25 @@ impl PubGrubPriorities {
             | PubGrubPriority::ConflictEarly(Reverse(index))
             | PubGrubPriority::Singleton(Reverse(index))
             | PubGrubPriority::DirectUrl(Reverse(index)) => Some(*index),
-            PubGrubPriority::Proxy | PubGrubPriority::Root => None,
+            PubGrubPriority::Root => None,
         }
     }
 
     /// Return the [`PubGrubPriority`] of the given package, if it exists.
-    pub(crate) fn get(&self, package: &PubGrubPackage) -> (Option<PubGrubPriority>, u32) {
+    pub(crate) fn get(
+        &self,
+        package: &PubGrubPackage,
+    ) -> (Option<PubGrubPriority>, Option<PubGrubTiebreaker>) {
         let package_priority = match &**package {
             PubGrubPackageInner::Root(_) => Some(PubGrubPriority::Root),
             PubGrubPackageInner::Python(_) => Some(PubGrubPriority::Root),
-            PubGrubPackageInner::Marker { .. } => Some(PubGrubPriority::Proxy),
-            PubGrubPackageInner::Extra { .. } => Some(PubGrubPriority::Proxy),
-            PubGrubPackageInner::Dev { .. } => Some(PubGrubPriority::Proxy),
+            PubGrubPackageInner::Marker { name, .. } => self.package_priority.get(name).copied(),
+            PubGrubPackageInner::Extra { name, .. } => self.package_priority.get(name).copied(),
+            PubGrubPackageInner::Dev { name, .. } => self.package_priority.get(name).copied(),
             PubGrubPackageInner::Package { name, .. } => self.package_priority.get(name).copied(),
         };
-        let virtual_package_tiebreaker = self
-            .virtual_package_tiebreaker
-            .get(package)
-            .copied()
-            .unwrap_or_default();
-        (package_priority, virtual_package_tiebreaker)
+        let package_tiebreaker = self.virtual_package_tiebreaker.get(package).copied();
+        (package_priority, package_tiebreaker)
     }
 
     /// Mark a package as prioritized by setting it to [`PubGrubPriority::ConflictEarly`], if it
@@ -225,13 +226,15 @@ pub(crate) enum PubGrubPriority {
     /// [`ForkUrls`].
     DirectUrl(Reverse<usize>),
 
-    /// The package is a proxy package.
-    ///
-    /// We process proxy packages eagerly since each proxy package expands into two "regular"
-    /// [`PubGrubPackage`] packages, which gives us additional constraints while not affecting the
-    /// priorities (since the expanded dependencies are all linked to the same package name).
-    Proxy,
-
     /// The package is the root package.
     Root,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct PubGrubTiebreaker(Reverse<u32>);
+
+impl From<u32> for PubGrubTiebreaker {
+    fn from(value: u32) -> Self {
+        Self(Reverse(value))
+    }
 }

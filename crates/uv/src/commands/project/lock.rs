@@ -418,7 +418,7 @@ async fn do_lock(
 
     // Determine the supported Python range. If no range is defined, and warn and default to the
     // current minor version.
-    let requires_python = target.requires_python();
+    let requires_python = target.requires_python()?;
 
     let requires_python = if let Some(requires_python) = requires_python {
         if requires_python.is_unbounded() {
@@ -637,15 +637,10 @@ async fn do_lock(
             let resolver_env = ResolverEnvironment::universal(
                 forks_lock
                     .map(|lock| {
-                        // TODO(ag): Consider whether we should be capturing
-                        // conflicting extras/groups for every fork. If
-                        // we did, then we'd be able to use them here,
-                        // which would in turn flow into construction of
-                        // `ResolverEnvironment`.
                         lock.fork_markers()
                             .iter()
                             .copied()
-                            .map(UniversalMarker::pep508)
+                            .map(UniversalMarker::combined)
                             .collect()
                     })
                     .unwrap_or_else(|| {
@@ -1051,6 +1046,10 @@ impl ValidatedLock {
                 }
                 Ok(Self::Preferable(lock))
             }
+            SatisfiesResult::MissingVersion(name) => {
+                debug!("Ignoring existing lockfile due to missing version: `{name}`");
+                Ok(Self::Preferable(lock))
+            }
         }
     }
 
@@ -1075,14 +1074,14 @@ fn report_upgrades(
     printer: Printer,
     dry_run: bool,
 ) -> anyhow::Result<bool> {
-    let existing_packages: FxHashMap<&PackageName, BTreeSet<&Version>> =
+    let existing_packages: FxHashMap<&PackageName, BTreeSet<Option<&Version>>> =
         if let Some(existing_lock) = existing_lock {
             existing_lock.packages().iter().fold(
                 FxHashMap::with_capacity_and_hasher(existing_lock.packages().len(), FxBuildHasher),
                 |mut acc, package| {
-                    if let Some(version) = package.version() {
-                        acc.entry(package.name()).or_default().insert(version);
-                    }
+                    acc.entry(package.name())
+                        .or_default()
+                        .insert(package.version());
                     acc
                 },
             )
@@ -1090,13 +1089,13 @@ fn report_upgrades(
             FxHashMap::default()
         };
 
-    let new_distributions: FxHashMap<&PackageName, BTreeSet<&Version>> =
+    let new_distributions: FxHashMap<&PackageName, BTreeSet<Option<&Version>>> =
         new_lock.packages().iter().fold(
             FxHashMap::with_capacity_and_hasher(new_lock.packages().len(), FxBuildHasher),
             |mut acc, package| {
-                if let Some(version) = package.version() {
-                    acc.entry(package.name()).or_default().insert(version);
-                }
+                acc.entry(package.name())
+                    .or_default()
+                    .insert(package.version());
                 acc
             },
         );
@@ -1107,18 +1106,25 @@ fn report_upgrades(
         .chain(new_distributions.keys())
         .collect::<BTreeSet<_>>()
     {
+        /// Format a version for inclusion in the upgrade report.
+        fn format_version(version: Option<&Version>) -> String {
+            version
+                .map(|version| format!("v{version}"))
+                .unwrap_or_else(|| "(dynamic)".to_string())
+        }
+
         updated = true;
         match (existing_packages.get(name), new_distributions.get(name)) {
             (Some(existing_versions), Some(new_versions)) => {
                 if existing_versions != new_versions {
                     let existing_versions = existing_versions
                         .iter()
-                        .map(|version| format!("v{version}"))
+                        .map(|version| format_version(*version))
                         .collect::<Vec<_>>()
                         .join(", ");
                     let new_versions = new_versions
                         .iter()
-                        .map(|version| format!("v{version}"))
+                        .map(|version| format_version(*version))
                         .collect::<Vec<_>>()
                         .join(", ");
                     writeln!(
@@ -1131,7 +1137,7 @@ fn report_upgrades(
             (Some(existing_versions), None) => {
                 let existing_versions = existing_versions
                     .iter()
-                    .map(|version| format!("v{version}"))
+                    .map(|version| format_version(*version))
                     .collect::<Vec<_>>()
                     .join(", ");
                 writeln!(
@@ -1143,7 +1149,7 @@ fn report_upgrades(
             (None, Some(new_versions)) => {
                 let new_versions = new_versions
                     .iter()
-                    .map(|version| format!("v{version}"))
+                    .map(|version| format_version(*version))
                     .collect::<Vec<_>>()
                     .join(", ");
                 writeln!(

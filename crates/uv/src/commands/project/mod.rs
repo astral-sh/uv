@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -154,6 +154,9 @@ pub(crate) enum ProjectError {
 
     #[error("Environment markers `{0}` don't overlap with Python requirement `{1}`")]
     DisjointEnvironment(MarkerTreeContents, VersionSpecifiers),
+
+    #[error("The workspace contains conflicting Python requirements:\n{}", _0.iter().map(|(name, specifiers)| format!("- `{name}`: `{specifiers}`")).join("\n"))]
+    DisjointRequiresPython(BTreeMap<PackageName, VersionSpecifiers>),
 
     #[error("Environment marker is empty")]
     EmptyEnvironment,
@@ -317,14 +320,27 @@ impl std::error::Error for ConflictError {}
 ///
 /// For a [`Workspace`] with multiple packages, the `Requires-Python` bound is the union of the
 /// `Requires-Python` bounds of all the packages.
-pub(crate) fn find_requires_python(workspace: &Workspace) -> Option<RequiresPython> {
-    RequiresPython::intersection(workspace.packages().values().filter_map(|member| {
-        member
-            .pyproject_toml()
-            .project
-            .as_ref()
-            .and_then(|project| project.requires_python.as_ref())
-    }))
+#[allow(clippy::result_large_err)]
+pub(crate) fn find_requires_python(
+    workspace: &Workspace,
+) -> Result<Option<RequiresPython>, ProjectError> {
+    // If there are no `Requires-Python` specifiers in the workspace, return `None`.
+    if workspace.requires_python().next().is_none() {
+        return Ok(None);
+    }
+    match RequiresPython::intersection(
+        workspace
+            .requires_python()
+            .map(|(.., specifiers)| specifiers),
+    ) {
+        Some(requires_python) => Ok(Some(requires_python)),
+        None => Err(ProjectError::DisjointRequiresPython(
+            workspace
+                .requires_python()
+                .map(|(name, specifiers)| (name.clone(), specifiers.clone()))
+                .collect(),
+        )),
+    }
 }
 
 /// Returns an error if the [`Interpreter`] does not satisfy the [`Workspace`] `requires-python`.
@@ -732,7 +748,7 @@ impl WorkspacePython {
         project_dir: &Path,
         no_config: bool,
     ) -> Result<Self, ProjectError> {
-        let requires_python = workspace.and_then(find_requires_python);
+        let requires_python = workspace.map(find_requires_python).transpose()?.flatten();
 
         let workspace_root = workspace.map(Workspace::install_path);
 
