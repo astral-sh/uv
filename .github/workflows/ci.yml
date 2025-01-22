@@ -542,7 +542,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: uv-windows-aarch64-${{ github.sha }}
-          path: ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/debug/uv.exe
+          path: |
+            ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/debug/uv.exe
+            ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/debug/uvx.exe
           retention-days: 1
 
   cargo-build-msrv:
