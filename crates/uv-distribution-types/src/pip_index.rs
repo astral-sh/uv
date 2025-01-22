@@ -13,8 +13,8 @@ macro_rules! impl_index {
         pub struct $name(Index);
 
         impl $name {
-            pub fn adjust_relative_paths(&mut self, root_dir: &Path) {
-                self.0.adjust_relative_paths(root_dir);
+            pub fn relative_to(self, root_dir: &Path) -> Result<Self, crate::IndexUrlError> {
+                Ok(Self(self.0.relative_to(root_dir)?))
             }
         }
 

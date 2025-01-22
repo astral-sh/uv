@@ -9,7 +9,7 @@ use uv_configuration::{
     TargetTriple, TrustedHost, TrustedPublishing,
 };
 use uv_distribution_types::{
-    Index, IndexUrl, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
+    Index, IndexUrl, IndexUrlError, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
 };
 use uv_install_wheel::linker::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
@@ -145,8 +145,12 @@ impl Options {
         }
     }
 
-    pub fn adjust_relative_paths(&mut self, root_dir: &Path) {
-        self.top_level.adjust_relative_paths(root_dir);
+    /// Resolve the [`Options`] relative to the given root directory.
+    pub fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        Ok(Self {
+            top_level: self.top_level.relative_to(root_dir)?,
+            ..self
+        })
     }
 }
 
@@ -728,12 +732,20 @@ pub struct ResolverInstallerOptions {
 }
 
 impl ResolverInstallerOptions {
-    pub fn adjust_relative_paths(&mut self, root_dir: &Path) {
-        if let Some(find_links) = &mut self.find_links {
-            for find_link in find_links {
-                find_link.adjust_relative_paths(root_dir);
-            }
-        }
+    /// Resolve the [`ResolverInstallerOptions`] relative to the given root directory.
+    pub fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        Ok(Self {
+            find_links: self
+                .find_links
+                .map(|find_links| {
+                    find_links
+                        .into_iter()
+                        .map(|find_link| find_link.relative_to(root_dir))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()?,
+            ..self
+        })
     }
 }
 

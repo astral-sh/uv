@@ -168,14 +168,14 @@ impl Index {
         Credentials::from_url(self.url.url())
     }
 
-    pub fn adjust_relative_paths(&mut self, root_dir: &Path) {
+    /// Resolve the index relative to the given root directory.
+    pub fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
         if let IndexUrl::Path(ref url) = self.url {
             if let Some(given) = url.given() {
-                if let Ok(new_url) = IndexUrl::parse(given, Some(root_dir)) {
-                    self.url = new_url;
-                }
+                self.url = IndexUrl::parse(given, Some(root_dir))?;
             }
         }
+        Ok(self)
     }
 }
 
