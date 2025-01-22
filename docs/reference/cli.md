@@ -378,9 +378,9 @@ uv run [OPTIONS] [COMMAND]
 
 </dd><dt><code>--only-group</code> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 
-<p>May be provided multiple times.</p>
-
 <p>The project itself will also be omitted.</p>
+
+<p>May be provided multiple times.</p>
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Run the command in a specific package in the workspace.</p>
 
@@ -1743,9 +1743,9 @@ uv sync [OPTIONS]
 
 </dd><dt><code>--only-group</code> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 
-<p>May be provided multiple times.</p>
-
 <p>The project itself will also be omitted.</p>
+
+<p>May be provided multiple times.</p>
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Sync for a specific package in the workspace.</p>
 
@@ -2457,9 +2457,9 @@ uv export [OPTIONS]
 
 </dd><dt><code>--only-group</code> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 
-<p>May be provided multiple times.</p>
-
 <p>The project itself will also be omitted.</p>
+
+<p>May be provided multiple times.</p>
 
 </dd><dt><code>--output-file</code>, <code>-o</code> <i>output-file</i></dt><dd><p>Write the exported requirements to the given file</p>
 
@@ -2813,9 +2813,9 @@ uv tree [OPTIONS]
 
 </dd><dt><code>--only-group</code> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 
-<p>May be provided multiple times.</p>
-
 <p>The project itself will also be omitted.</p>
+
+<p>May be provided multiple times.</p>
 
 </dd><dt><code>--outdated</code></dt><dd><p>Show the latest available version of each package in the tree</p>
 

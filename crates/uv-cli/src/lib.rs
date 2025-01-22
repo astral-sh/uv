@@ -2795,9 +2795,9 @@ pub struct RunArgs {
 
     /// Only include dependencies from the specified dependency group.
     ///
-    /// May be provided multiple times.
-    ///
     /// The project itself will also be omitted.
+    ///
+    /// May be provided multiple times.
     #[arg(long, conflicts_with("group"))]
     pub only_group: Vec<GroupName>,
 
@@ -3066,9 +3066,9 @@ pub struct SyncArgs {
 
     /// Only include dependencies from the specified dependency group.
     ///
-    /// May be provided multiple times.
-    ///
     /// The project itself will also be omitted.
+    ///
+    /// May be provided multiple times.
     #[arg(long, conflicts_with("group"))]
     pub only_group: Vec<GroupName>,
 
@@ -3517,9 +3517,9 @@ pub struct TreeArgs {
 
     /// Only include dependencies from the specified dependency group.
     ///
-    /// May be provided multiple times.
-    ///
     /// The project itself will also be omitted.
+    ///
+    /// May be provided multiple times.
     #[arg(long, conflicts_with("group"))]
     pub only_group: Vec<GroupName>,
 
@@ -3687,9 +3687,9 @@ pub struct ExportArgs {
 
     /// Only include dependencies from the specified dependency group.
     ///
-    /// May be provided multiple times.
-    ///
     /// The project itself will also be omitted.
+    ///
+    /// May be provided multiple times.
     #[arg(long, conflicts_with("group"))]
     pub only_group: Vec<GroupName>,
 
