@@ -6812,6 +6812,7 @@ fn verify_hashes_editable() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn tool_uv_sources() -> Result<()> {
     let context = TestContext::new("3.12");
     // Use a subdir to test path normalization.
@@ -8262,6 +8263,7 @@ fn cyclic_build_dependency() {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn direct_url_json_git_default() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -8299,6 +8301,7 @@ fn direct_url_json_git_default() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn direct_url_json_git_tag() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");

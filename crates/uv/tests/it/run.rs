@@ -581,6 +581,7 @@ fn run_pythonw_script() -> Result<()> {
 
 /// Run a PEP 723-compatible script with `tool.uv` metadata.
 #[test]
+#[cfg(feature = "git")]
 fn run_pep723_script_metadata() -> Result<()> {
     let context = TestContext::new("3.12");
 
