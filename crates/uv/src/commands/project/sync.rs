@@ -87,7 +87,7 @@ pub(crate) async fn sync(
         VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
     };
 
-    // Validate that any referenced dependency groups are defined in the workspace.
+    // Validate that any referenced dependency groups and extras are defined in the workspace.
     if !frozen {
         let target = match &project {
             VirtualProject::Project(project) => {
@@ -100,6 +100,7 @@ pub(crate) async fn sync(
             VirtualProject::NonProject(workspace) => SpecificationTarget::Workspace(workspace),
         };
         target.validate_dependency_groups(&dev)?;
+        target.validate_extras(&extras)?;
     }
 
     // Determine the default groups to include.

@@ -683,7 +683,8 @@ pub(crate) async fn run(
                         .map(|lock| (lock, project.workspace().install_path().to_owned()));
                 }
             } else {
-                // Validate that any referenced dependency groups are defined in the workspace.
+                // Validate that any referenced dependency groups and extras are defined in the
+                // workspace.
                 if !frozen {
                     let target = match &project {
                         VirtualProject::Project(project) => {
@@ -698,6 +699,7 @@ pub(crate) async fn run(
                         }
                     };
                     target.validate_dependency_groups(&dev)?;
+                    target.validate_extras(&extras)?;
                 }
 
                 // Determine the default groups to include.

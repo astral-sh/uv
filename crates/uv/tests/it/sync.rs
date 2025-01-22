@@ -2402,6 +2402,88 @@ fn sync_group_self() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn sync_non_existent_extra() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        types = ["sniffio>1"]
+        async = ["anyio>3"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Requesting a non-existent extra should fail.
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("baz"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Extra `baz` is not defined in the project's `optional-dependencies` table
+    "###);
+
+    // Excluding a non-existing extra when requesting all extras should fail.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-extras").arg("--no-extra").arg("baz"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Extra `baz` is not defined in the project's `optional-dependencies` table
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn sync_non_existent_extra_no_optional_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Requesting a non-existent extra should fail.
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("baz"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Extra `baz` is not defined in the project's `optional-dependencies` table
+    "###);
+
+    // Excluding a non-existing extra when requesting all extras should fail.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-extras").arg("--no-extra").arg("baz"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Extra `baz` is not defined in the project's `optional-dependencies` table
+    "###);
+
+    Ok(())
+}
+
 /// Regression test for <https://github.com/astral-sh/uv/issues/6316>.
 ///
 /// Previously, we would read metadata statically from pyproject.toml and write that to `uv.lock`. In
@@ -4888,7 +4970,7 @@ fn sync_all_extras() -> Result<()> {
      + typing-extensions==4.10.0
     "###);
 
-    // Sync all extras.
+    // Sync all extras excluding an extra that exists in both the parent and child.
     uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--all-extras").arg("--no-extra").arg("types"), @r###"
     success: true
     exit_code: 0
@@ -4898,6 +4980,26 @@ fn sync_all_extras() -> Result<()> {
     Resolved 8 packages in [TIME]
     Uninstalled 1 package in [TIME]
      - typing-extensions==4.10.0
+    "###);
+
+    // Sync an extra that doesn't exist.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--extra").arg("foo"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Extra `foo` is not defined in any project's `optional-dependencies` table
+    "###);
+
+    // Sync all extras excluding an extra that doesn't exist.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--all-extras").arg("--no-extra").arg("foo"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Extra `foo` is not defined in any project's `optional-dependencies` table
     "###);
 
     Ok(())
