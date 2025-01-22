@@ -1311,7 +1311,6 @@ pub fn make_project(dir: &Path, name: &str, body: &str) -> anyhow::Result<()> {
         [build-system]
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
-
         "#
     };
     fs_err::create_dir_all(dir)?;

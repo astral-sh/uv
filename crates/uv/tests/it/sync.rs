@@ -22,26 +22,21 @@ fn sync() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
     // Running `uv sync` should generate a lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
-    ");
+    "###);
 
     assert!(context.temp_dir.child("uv.lock").exists());
 
@@ -60,10 +55,6 @@ fn locked() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -90,10 +81,6 @@ fn locked() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -128,10 +115,6 @@ fn frozen() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -155,10 +138,6 @@ fn frozen() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -169,11 +148,10 @@ fn frozen() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     "###);
 
@@ -234,10 +212,6 @@ fn package() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["child", "anyio>3"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
         child = { workspace = true }
@@ -313,10 +287,6 @@ fn mixed_requires_python() -> Result<()> {
 
         [tool.uv.workspace]
         members = ["packages/*"]
-
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
         "#,
     )?;
 
@@ -360,9 +330,8 @@ fn mixed_requires_python() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 5 packages in [TIME]
-    Prepared 5 packages in [TIME]
-    Installed 5 packages in [TIME]
-     + albatross==0.1.0 (from file://[TEMP_DIR]/)
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.3.0
      + bird-feeder==0.1.0 (from file://[TEMP_DIR]/packages/bird-feeder)
      + idna==3.6
@@ -724,10 +693,6 @@ fn sync_build_isolation() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -766,14 +731,13 @@ fn sync_build_isolation() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 7 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Installed 1 package in [TIME]
      - hatchling==1.22.4
      - packaging==24.0
      - pathspec==0.12.1
      - pluggy==1.4.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      - setuptools==69.2.0
      + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
      - trove-classifiers==2024.3.3
@@ -1167,10 +1131,6 @@ fn sync_environment() -> Result<()> {
         requires-python = ">=3.10"
         dependencies = ["iniconfig"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv]
         environments = ["python_version < '3.11'"]
         "#,
@@ -1206,10 +1166,6 @@ fn sync_dev() -> Result<()> {
 
         [tool.uv]
         dev-dependencies = ["anyio"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -1236,12 +1192,11 @@ fn sync_dev() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Prepared 2 packages in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 3 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Installed 1 package in [TIME]
      - anyio==4.3.0
      - idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      - sniffio==1.3.1
      + typing-extensions==4.10.0
     "###);
@@ -2129,10 +2084,6 @@ fn sync_group_member() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["iniconfig>=2"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [dependency-groups]
         foo = ["child", "typing-extensions>=4"]
 
@@ -2454,8 +2405,8 @@ fn sync_group_self() -> Result<()> {
 /// Regression test for <https://github.com/astral-sh/uv/issues/6316>.
 ///
 /// Previously, we would read metadata statically from pyproject.toml and write that to `uv.lock`. In
-/// this sync pass, we had also built the project with hatchling, which sorts specifiers by python
-/// string sort through packaging. On the second run, we read the cache that now has the hatchling
+/// this sync pass, we had also built the project with setuptools, which sorts specifiers by python
+/// string sort through packaging. On the second run, we read the cache that now has the setuptools
 /// sorting, changing the lockfile.
 #[test]
 fn read_metadata_statically_over_the_cache() -> Result<()> {
@@ -3553,10 +3504,6 @@ fn sync_update_project() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -3569,10 +3516,9 @@ fn sync_update_project() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + iniconfig==2.0.0
-     + my-project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     // Bump the project version.
@@ -3598,9 +3544,7 @@ fn sync_update_project() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - my-project==0.1.0 (from file://[TEMP_DIR]/)
      + my-project==0.2.0 (from file://[TEMP_DIR]/)
     "###);
 
@@ -3657,10 +3601,6 @@ fn no_binary() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -3673,10 +3613,9 @@ fn no_binary() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     assert!(context.temp_dir.child("uv.lock").exists());
@@ -3696,10 +3635,6 @@ fn no_binary_error() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["odrive"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -3732,10 +3667,6 @@ fn no_build() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -3748,10 +3679,9 @@ fn no_build() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     assert!(context.temp_dir.child("uv.lock").exists());
@@ -3771,10 +3701,6 @@ fn no_build_error() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["django_allauth==0.51.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -3901,10 +3827,6 @@ fn transitive_dev() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["child"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv]
         dev-dependencies = ["anyio>3"]
 
@@ -3955,12 +3877,11 @@ fn transitive_dev() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Prepared 5 packages in [TIME]
-    Installed 5 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.3.0
      + child==0.1.0 (from file://[TEMP_DIR]/child)
      + idna==3.6
-     + root==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     "###);
 
@@ -4573,10 +4494,6 @@ fn sync_no_sources_missing_member() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["anyio"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv.sources]
         anyio = { workspace = true }
 
@@ -4598,11 +4515,10 @@ fn sync_no_sources_missing_member() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + root==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     "###);
 
@@ -4882,10 +4798,6 @@ fn sync_all_extras() -> Result<()> {
         types = ["sniffio>1"]
         async = ["anyio>3"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv.workspace]
         members = ["child"]
 
@@ -4936,11 +4848,10 @@ fn sync_all_extras() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Prepared 5 packages in [TIME]
-    Installed 5 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + child==0.1.0 (from file://[TEMP_DIR]/child)
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
      + typing-extensions==4.10.0
     "###);
@@ -5010,10 +4921,6 @@ fn sync_all_groups() -> Result<()> {
         types = ["sniffio>=1"]
         async = ["anyio>=3"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv.workspace]
         members = ["child"]
 
@@ -5064,11 +4971,10 @@ fn sync_all_groups() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Prepared 5 packages in [TIME]
-    Installed 5 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + child==0.1.0 (from file://[TEMP_DIR]/child)
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
      + typing-extensions==4.10.0
     "###);
@@ -5143,10 +5049,6 @@ fn sync_multiple_sources_index_disjoint_extras() -> Result<()> {
         name = "torch-cu124"
         url = "https://download.pytorch.org/whl/cu124"
         explicit = true
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -5164,11 +5066,10 @@ fn sync_multiple_sources_index_disjoint_extras() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
      + jinja2==3.1.3
      + markupsafe==2.1.5
-     + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     Ok(())
@@ -5793,10 +5694,6 @@ fn mismatched_name_self_editable() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["foo"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv.sources]
         foo = { path = ".", editable = true }
         "#,
@@ -6093,10 +5990,6 @@ fn url_hash_mismatch() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv.sources]
         iniconfig = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz" }
         "#,
@@ -6119,7 +6012,7 @@ fn url_hash_mismatch() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -6170,10 +6063,6 @@ fn path_hash_mismatch() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv.sources]
         iniconfig = { path = "iniconfig-2.0.0.tar.gz" }
         "#,
@@ -6196,7 +6085,7 @@ fn path_hash_mismatch() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]

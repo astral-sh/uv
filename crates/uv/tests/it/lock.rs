@@ -25,10 +25,6 @@ fn lock_wheel_registry() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -79,7 +75,7 @@ fn lock_wheel_registry() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -127,11 +123,10 @@ fn lock_wheel_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     "###);
 
@@ -142,7 +137,7 @@ fn lock_wheel_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 4 packages in [TIME]
+    Audited 3 packages in [TIME]
     "###);
 
     Ok(())
@@ -161,10 +156,6 @@ fn lock_sdist_registry() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["source-distribution==0.0.1"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -190,7 +181,7 @@ fn lock_sdist_registry() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "source-distribution" },
         ]
@@ -224,9 +215,8 @@ fn lock_sdist_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + source-distribution==0.0.1
     "###);
 
@@ -237,7 +227,7 @@ fn lock_sdist_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 2 packages in [TIME]
+    Audited 1 package in [TIME]
     "###);
 
     Ok(())
@@ -257,10 +247,6 @@ fn lock_sdist_git() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["uv-public-pypackage"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
         uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", tag = "0.0.1" }
@@ -292,7 +278,7 @@ fn lock_sdist_git() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "uv-public-pypackage" },
         ]
@@ -336,9 +322,8 @@ fn lock_sdist_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
 
@@ -351,10 +336,6 @@ fn lock_sdist_git() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["uv-public-pypackage"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
         uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", rev = "0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
@@ -386,7 +367,7 @@ fn lock_sdist_git() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "uv-public-pypackage" },
         ]
@@ -411,10 +392,6 @@ fn lock_sdist_git() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["uv-public-pypackage"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
         uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", rev = "b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
@@ -446,7 +423,7 @@ fn lock_sdist_git() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "uv-public-pypackage" },
         ]
@@ -471,10 +448,6 @@ fn lock_sdist_git() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["uv-public-pypackage"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
         uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", tag = "0.0.2" }
@@ -506,7 +479,7 @@ fn lock_sdist_git() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "uv-public-pypackage" },
         ]
@@ -539,10 +512,6 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -576,7 +545,7 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "example-pkg-a" },
         ]
@@ -604,10 +573,9 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + example-pkg-a==1 (from git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     // Re-install from the lockfile.
@@ -617,7 +585,7 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 2 packages in [TIME]
+    Audited 1 package in [TIME]
     "###);
 
     Ok(())
@@ -637,10 +605,6 @@ fn lock_sdist_git_pep508() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git@0.0.1"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -669,7 +633,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "uv-public-pypackage" },
         ]
@@ -704,10 +668,6 @@ fn lock_sdist_git_pep508() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git@0dacfd662c64cb4ceb16e6cf65a157a8b715b979"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -736,7 +696,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "uv-public-pypackage" },
         ]
@@ -761,10 +721,6 @@ fn lock_sdist_git_pep508() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -793,7 +749,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "uv-public-pypackage" },
         ]
@@ -818,10 +774,6 @@ fn lock_sdist_git_pep508() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git@0.0.2"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -850,7 +802,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "uv-public-pypackage" },
         ]
@@ -884,10 +836,6 @@ fn lock_sdist_git_short_rev() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["uv-public-pypackage"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv.sources]
         uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", rev = "0dacfd6" }
         "#,
@@ -918,7 +866,7 @@ fn lock_sdist_git_short_rev() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "uv-public-pypackage" },
         ]
@@ -962,9 +910,8 @@ fn lock_sdist_git_short_rev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
 
@@ -975,7 +922,7 @@ fn lock_sdist_git_short_rev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 2 packages in [TIME]
+    Audited 1 package in [TIME]
     "###);
 
     Ok(())
@@ -994,10 +941,6 @@ fn lock_wheel_url() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio @ https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -1069,7 +1012,7 @@ fn lock_wheel_url() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -1117,11 +1060,10 @@ fn lock_wheel_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 3 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 3 packages in [TIME]
      + anyio==4.3.0 (from https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl)
      + idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     "###);
 
@@ -1132,7 +1074,7 @@ fn lock_wheel_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 4 packages in [TIME]
+    Audited 3 packages in [TIME]
     "###);
 
     Ok(())
@@ -1151,10 +1093,6 @@ fn lock_sdist_url() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -1224,7 +1162,7 @@ fn lock_sdist_url() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -1261,11 +1199,10 @@ fn lock_sdist_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
      + anyio==4.3.0 (from https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz)
      + idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     "###);
 
@@ -1276,7 +1213,7 @@ fn lock_sdist_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 4 packages in [TIME]
+    Audited 3 packages in [TIME]
     "###);
 
     Ok(())
@@ -1295,10 +1232,6 @@ fn lock_sdist_url_subdirectory() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["root"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
         root = { url = "https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz", subdirectory = "packages/root" }
@@ -1352,7 +1285,7 @@ fn lock_sdist_url_subdirectory() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "root" },
         ]
@@ -1401,11 +1334,10 @@ fn lock_sdist_url_subdirectory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 5 packages in [TIME]
-    Installed 5 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + root==0.0.1 (from https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root)
      + sniffio==1.3.1
     "###);
@@ -1417,7 +1349,7 @@ fn lock_sdist_url_subdirectory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 5 packages in [TIME]
+    Audited 4 packages in [TIME]
     "###);
 
     Ok(())
@@ -1436,10 +1368,6 @@ fn lock_sdist_url_subdirectory_pep508() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["root @ https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -1490,7 +1418,7 @@ fn lock_sdist_url_subdirectory_pep508() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "root" },
         ]
@@ -1539,11 +1467,10 @@ fn lock_sdist_url_subdirectory_pep508() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 5 packages in [TIME]
-    Installed 5 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + root==0.0.1 (from https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root)
      + sniffio==1.3.1
     "###);
@@ -1555,7 +1482,7 @@ fn lock_sdist_url_subdirectory_pep508() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 5 packages in [TIME]
+    Audited 4 packages in [TIME]
     "###);
 
     Ok(())
@@ -1574,10 +1501,6 @@ fn lock_project_extra() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [project.optional-dependencies]
         test = ["iniconfig"]
@@ -1640,7 +1563,7 @@ fn lock_project_extra() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -1685,11 +1608,10 @@ fn lock_project_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     "###);
 
@@ -1722,10 +1644,6 @@ fn lock_project_with_overrides() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["flask==3.0.0"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv]
         override-dependencies = ["werkzeug==2.3.8"]
         "#,
@@ -1757,15 +1675,14 @@ fn lock_project_with_overrides() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 8 packages in [TIME]
-    Installed 8 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
      + blinker==1.7.0
      + click==8.1.7
      + flask==3.0.0
      + itsdangerous==2.1.2
      + jinja2==3.1.3
      + markupsafe==2.1.5
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + werkzeug==2.3.8
     "###);
 
@@ -1785,10 +1702,6 @@ fn lock_project_with_override_sources() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv]
         override-dependencies = ["idna==3.2"]
@@ -1824,11 +1737,10 @@ fn lock_project_with_override_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 3 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 3 packages in [TIME]
      + anyio==3.7.0
      + idna==3.2 (from https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     "###);
 
@@ -1848,10 +1760,6 @@ fn lock_project_with_constraints() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv]
         constraint-dependencies = ["idna<3.4"]
@@ -1884,11 +1792,10 @@ fn lock_project_with_constraints() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
      + anyio==3.7.0
      + idna==3.3
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     "###);
 
@@ -1908,10 +1815,6 @@ fn lock_project_with_constraint_sources() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv]
         constraint-dependencies = ["idna<3.4"]
@@ -1947,11 +1850,10 @@ fn lock_project_with_constraint_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 3 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 3 packages in [TIME]
      + anyio==3.7.0
      + idna==3.2 (from https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     "###);
 
@@ -1971,10 +1873,6 @@ fn lock_dependency_extra() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["flask[dotenv]"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -2093,7 +1991,7 @@ fn lock_dependency_extra() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "flask", extra = ["dotenv"] },
         ]
@@ -2142,15 +2040,14 @@ fn lock_dependency_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 9 packages in [TIME]
-    Installed 9 packages in [TIME]
+    Prepared 8 packages in [TIME]
+    Installed 8 packages in [TIME]
      + blinker==1.7.0
      + click==8.1.7
      + flask==3.0.2
      + itsdangerous==2.1.2
      + jinja2==3.1.3
      + markupsafe==2.1.5
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + python-dotenv==1.0.1
      + werkzeug==3.0.1
     "###);
@@ -2171,10 +2068,6 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.7"
         dependencies = ["requests", "requests[socks] ; python_version < '3.10'"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -2325,7 +2218,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "requests" },
             { name = "requests", extra = ["socks"], marker = "python_full_version < '3.10'" },
@@ -2415,12 +2308,11 @@ fn lock_conditional_dependency_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 6 packages in [TIME]
-    Installed 6 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
      + certifi==2024.2.2
      + charset-normalizer==3.3.2
      + idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + requests==2.31.0
      + urllib3==2.2.1
     "###);
@@ -2448,12 +2340,11 @@ fn lock_conditional_dependency_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 7 packages in [TIME]
-    Installed 7 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
      + certifi==2024.2.2
      + charset-normalizer==3.3.2
      + idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + pysocks==1.7.1
      + requests==2.31.0
      + urllib3==2.2.1
@@ -2475,10 +2366,6 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["flask[foo]"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -2593,7 +2480,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "flask" },
         ]
@@ -2633,15 +2520,14 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 8 packages in [TIME]
-    Installed 8 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
      + blinker==1.7.0
      + click==8.1.7
      + flask==3.0.2
      + itsdangerous==2.1.2
      + jinja2==3.1.3
      + markupsafe==2.1.5
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + werkzeug==3.0.1
     "###);
 
@@ -2661,10 +2547,6 @@ fn lock_upgrade_log() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["markupsafe<2", "iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -2708,7 +2590,7 @@ fn lock_upgrade_log() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
             { name = "markupsafe" },
@@ -2742,10 +2624,6 @@ fn lock_upgrade_log() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["markupsafe", "typing-extensions"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -2796,7 +2674,7 @@ fn lock_upgrade_log() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "markupsafe" },
             { name = "typing-extensions" },
@@ -2837,10 +2715,6 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["markupsafe<2 ; sys_platform != 'win32'", "markupsafe==2.0.0 ; sys_platform == 'win32'"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -2891,7 +2765,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "markupsafe", version = "1.1.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" },
             { name = "markupsafe", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'win32'" },
@@ -2924,10 +2798,6 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["markupsafe"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -2976,7 +2846,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -3003,10 +2873,6 @@ fn lock_preference() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig<2"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -3044,7 +2910,7 @@ fn lock_preference() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -3063,10 +2929,6 @@ fn lock_preference() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -3107,7 +2969,7 @@ fn lock_preference() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -3153,7 +3015,7 @@ fn lock_preference() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -3181,10 +3043,6 @@ fn lock_git_plus_prefix() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["uv-public-pypackage"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
         uv-public-pypackage = { git = "git+https://github.com/astral-test/uv-public-pypackage" }
@@ -3216,7 +3074,7 @@ fn lock_git_plus_prefix() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "uv-public-pypackage" },
         ]
@@ -3249,9 +3107,8 @@ fn lock_git_plus_prefix() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###);
 
@@ -3274,10 +3131,6 @@ fn lock_partial_git() -> Result<()> {
            "anyio @ git+https://github.com/agronholm/anyio@4.6.2 ; python_version < '3.12'",
            "anyio ; python_version >= '3.12'"
         ]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -3358,7 +3211,7 @@ fn lock_partial_git() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio", version = "4.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
             { name = "anyio", version = "4.6.2", source = { git = "https://github.com/agronholm/anyio?rev=4.6.2#c4844254e6db0cb804c240ba07405db73d810e0b" }, marker = "python_full_version < '3.12'" },
@@ -3408,11 +3261,10 @@ fn lock_partial_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     "###);
 
@@ -3516,10 +3368,6 @@ fn lock_git_sha() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@main"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -3536,7 +3384,7 @@ fn lock_git_sha() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "uv-public-pypackage" },
         ]
@@ -3559,10 +3407,6 @@ fn lock_git_sha() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@main"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -3604,7 +3448,7 @@ fn lock_git_sha() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "uv-public-pypackage" },
         ]
@@ -3639,10 +3483,6 @@ fn lock_requires_python() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.7"
         dependencies = ["pygls>=1.1.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -3679,10 +3519,6 @@ fn lock_requires_python() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.7"
         dependencies = ["pygls"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -3822,7 +3658,7 @@ fn lock_requires_python() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "pygls", version = "1.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.7.4'" },
             { name = "pygls", version = "1.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.7.4' and python_full_version < '3.7.9'" },
@@ -3973,10 +3809,6 @@ fn lock_requires_python() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.7.9"
         dependencies = ["pygls"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -4109,7 +3941,7 @@ fn lock_requires_python() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "pygls", version = "1.2.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.8'" },
             { name = "pygls", version = "1.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.8'" },
@@ -4196,10 +4028,6 @@ fn lock_requires_python() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["pygls"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -4262,7 +4090,7 @@ fn lock_requires_python() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "pygls" },
         ]
@@ -4333,10 +4161,6 @@ fn lock_requires_python_upper() -> Result<()> {
         version = "1.0.0"
         requires-python = "==3.11.*"
         dependencies = ["pydantic"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -4420,7 +4244,7 @@ fn lock_requires_python_upper() -> Result<()> {
         [[package]]
         name = "warehouse"
         version = "1.0.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "pydantic" },
         ]
@@ -4460,10 +4284,6 @@ fn lock_requires_python_exact() -> Result<()> {
         version = "1.0.0"
         requires-python = "==3.13"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -4502,7 +4322,7 @@ fn lock_requires_python_exact() -> Result<()> {
         [[package]]
         name = "warehouse"
         version = "1.0.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -4542,10 +4362,6 @@ fn lock_requires_python_fork() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.9"
         dependencies = ["uv ; python_version>='3.8'"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -4599,7 +4415,7 @@ fn lock_requires_python_fork() -> Result<()> {
         [[package]]
         name = "warehouse"
         version = "1.0.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "uv" },
         ]
@@ -4639,10 +4455,6 @@ fn lock_requires_python_wheels() -> Result<()> {
         version = "0.1.0"
         requires-python = "==3.12.*"
         dependencies = ["frozenlist"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -4696,7 +4508,7 @@ fn lock_requires_python_wheels() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "frozenlist" },
         ]
@@ -4726,10 +4538,6 @@ fn lock_requires_python_wheels() -> Result<()> {
         version = "0.1.0"
         requires-python = "==3.11.*"
         dependencies = ["frozenlist"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -4783,7 +4591,7 @@ fn lock_requires_python_wheels() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "frozenlist" },
         ]
@@ -4824,10 +4632,6 @@ fn lock_requires_python_star() -> Result<()> {
         version = "0.1.0"
         requires-python = "==3.11.*"
         dependencies = ["linehaul"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -4900,7 +4704,7 @@ fn lock_requires_python_star() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "linehaul" },
         ]
@@ -4949,10 +4753,6 @@ fn lock_requires_python_not_equal() -> Result<()> {
         version = "0.1.0"
         requires-python = ">3.10, !=3.10.9, !=3.10.10, !=3.11.*, <3.13"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -4990,7 +4790,7 @@ fn lock_requires_python_not_equal() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -5031,10 +4831,6 @@ fn lock_requires_python_pre() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.11b1"
         dependencies = ["linehaul"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -5107,7 +4903,7 @@ fn lock_requires_python_pre() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "linehaul" },
         ]
@@ -5155,10 +4951,6 @@ fn lock_requires_python_unbounded() -> Result<()> {
         version = "0.1.0"
         requires-python = "<=3.12"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -5216,7 +5008,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig", version = "1.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.7'" },
             { name = "iniconfig", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.7'" },
@@ -5256,10 +5048,6 @@ fn lock_requires_python_disjoint() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = []
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv.workspace]
         members = ["child"]
         "#,
@@ -5273,10 +5061,6 @@ fn lock_requires_python_disjoint() -> Result<()> {
         version = "0.1.0"
         requires-python = "==3.10"
         dependencies = []
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -5308,10 +5092,6 @@ fn lock_requires_python_maximum_version() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.8"
         dependencies = ["numpy"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -5428,7 +5208,7 @@ fn lock_requires_python_maximum_version() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "numpy", version = "1.24.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
             { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
@@ -5470,10 +5250,6 @@ fn lock_requires_python_fewest_versions() -> Result<()> {
 
         [tool.uv]
         fork-strategy = "fewest"
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -5538,7 +5314,7 @@ fn lock_requires_python_fewest_versions() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "numpy" },
         ]
@@ -5590,10 +5366,6 @@ fn lock_python_version_marker_complement() -> Result<()> {
             "typing-extensions ; python_full_version > '3.10'",
             "typing-extensions ; python_full_version <= '3.10'",
         ]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -5646,7 +5418,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "attrs" },
             { name = "iniconfig" },
@@ -5704,10 +5476,6 @@ fn lock_dev() -> Result<()> {
 
         [tool.uv]
         dev-dependencies = ["typing-extensions @ https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -5745,7 +5513,7 @@ fn lock_dev() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -5789,10 +5557,9 @@ fn lock_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     // Install from the lockfile, including development dependencies (the default).
@@ -5822,10 +5589,6 @@ fn lock_conditional_unconditional() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig", "iniconfig ; python_version < '3.12'"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -5863,7 +5626,7 @@ fn lock_conditional_unconditional() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -5903,10 +5666,6 @@ fn lock_multiple_markers() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig ; implementation_name == 'cpython'", "iniconfig ; python_version < '3.12'"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -5944,7 +5703,7 @@ fn lock_multiple_markers() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig", marker = "implementation_name == 'cpython'" },
         ]
@@ -5987,10 +5746,6 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         [tool.uv.sources]
         b = {{ path = "b" }}
         c = {{ path = '{}' }}
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
         context.temp_dir.join("c").display()
     })?;
@@ -6026,7 +5781,6 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         [build-system]
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
-
     "#})?;
     context.temp_dir.child("c/c/__init__.py").touch()?;
 
@@ -6055,7 +5809,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         [[package]]
         name = "a"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "b" },
             { name = "c" },
@@ -6106,10 +5860,6 @@ fn lock_cycles() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["testtools==2.3.0", "fixtures==3.0.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -6188,7 +5938,7 @@ fn lock_cycles() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "fixtures" },
             { name = "testtools" },
@@ -6282,14 +6032,13 @@ fn lock_cycles() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 11 packages in [TIME]
-    Installed 11 packages in [TIME]
+    Prepared 10 packages in [TIME]
+    Installed 10 packages in [TIME]
      + argparse==1.4.0
      + extras==1.0.0
      + fixtures==3.0.0
      + linecache2==1.0.0
      + pbr==6.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + python-mimeparse==1.6.0
      + six==1.16.0
      + testtools==2.3.0
@@ -6313,11 +6062,6 @@ fn lock_new_extras() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["requests==2.31.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
     "#,
     )?;
 
@@ -6388,7 +6132,7 @@ fn lock_new_extras() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "requests" },
         ]
@@ -6441,11 +6185,6 @@ fn lock_new_extras() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["requests[socks]==2.31.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
     "#,
     )?;
 
@@ -6517,7 +6256,7 @@ fn lock_new_extras() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "requests", extra = ["socks"] },
         ]
@@ -6594,10 +6333,6 @@ fn lock_invalid_hash() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -6694,10 +6429,6 @@ fn lock_resolution_mode() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio>=3"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -6748,7 +6479,7 @@ fn lock_resolution_mode() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -6829,7 +6560,7 @@ fn lock_resolution_mode() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -6876,10 +6607,6 @@ fn lock_requires_python_no_wheels() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["dearpygui==1.9.1"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -6914,10 +6641,6 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         version = "0.0.1"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -6931,10 +6654,6 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         version = "0.0.1"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.0.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -6949,10 +6668,6 @@ fn lock_same_version_multiple_urls() -> Result<()> {
           "dependency @ {} ; sys_platform == 'darwin'",
           "dependency @ {} ; sys_platform != 'darwin'",
         ]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
         Url::from_file_path(context.temp_dir.join("v1")).unwrap(),
         Url::from_file_path(context.temp_dir.join("v2")).unwrap(),
@@ -7056,7 +6771,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "dependency", version = "0.0.1", source = { directory = "v1" }, marker = "sys_platform == 'darwin'" },
             { name = "dependency", version = "0.0.1", source = { directory = "v2" }, marker = "sys_platform != 'darwin'" },
@@ -7111,10 +6826,6 @@ fn lock_unsafe_lowest() -> Result<()> {
         [project.optional-dependencies]
         dev = ["iniconfig"]
         all = ["project[dev]"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -7154,10 +6865,6 @@ fn lock_exclusion() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv.workspace]
         members = []
@@ -7218,12 +6925,12 @@ fn lock_exclusion() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "project", directory = "../" }]
+        requires-dist = [{ name = "project", virtual = "../" }]
 
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { directory = "../" }
+        source = { virtual = "../" }
         "###
         );
     });
@@ -7261,10 +6968,6 @@ fn lock_relative_lock_deserialization() -> Result<()> {
         [tool.uv.workspace]
         members = ["packages/*"]
         exclude = ["packages/child"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -7715,10 +7418,6 @@ fn lock_dev_transitive() -> Result<()> {
 
         [tool.uv]
         dev-dependencies = ["anyio"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -7810,7 +7509,7 @@ fn lock_dev_transitive() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "baz", editable = "baz" },
-            { name = "foo", directory = "../foo" },
+            { name = "foo", virtual = "../foo" },
             { name = "iniconfig", specifier = ">1" },
         ]
 
@@ -7832,7 +7531,7 @@ fn lock_dev_transitive() -> Result<()> {
         [[package]]
         name = "foo"
         version = "0.1.0"
-        source = { directory = "../foo" }
+        source = { virtual = "../foo" }
 
         [package.metadata]
 
@@ -7897,10 +7596,6 @@ fn lock_redact_https() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -7930,7 +7625,7 @@ fn lock_redact_https() -> Result<()> {
         [[package]]
         name = "foo"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -7994,9 +7689,8 @@ fn lock_redact_https() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/)
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
 
@@ -8007,10 +7701,9 @@ fn lock_redact_https() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Uninstalled 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     ~ foo==0.1.0 (from file://[TEMP_DIR]/)
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
      ~ iniconfig==2.0.0
     "###);
 
@@ -8034,10 +7727,9 @@ fn lock_redact_https() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Uninstalled 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     ~ foo==0.1.0 (from file://[TEMP_DIR]/)
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
      ~ iniconfig==2.0.0
     "###);
 
@@ -8049,10 +7741,6 @@ fn lock_redact_https() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv]
         index-url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"
@@ -8067,10 +7755,9 @@ fn lock_redact_https() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Uninstalled 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     ~ foo==0.1.0 (from file://[TEMP_DIR]/)
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
      ~ iniconfig==2.0.0
     "###);
 
@@ -8095,10 +7782,6 @@ fn lock_redact_git_pep508() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
         token = token,
     })?;
@@ -8128,7 +7811,7 @@ fn lock_redact_git_pep508() -> Result<()> {
         [[package]]
         name = "foo"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "uv-private-pypackage" },
         ]
@@ -8161,9 +7844,8 @@ fn lock_redact_git_pep508() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/)
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
     "###);
 
@@ -8188,10 +7870,6 @@ fn lock_redact_git_sources() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["uv-private-pypackage"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
         uv-private-pypackage = {{ git = "https://{token}@github.com/astral-test/uv-private-pypackage" }}
@@ -8224,7 +7902,7 @@ fn lock_redact_git_sources() -> Result<()> {
         [[package]]
         name = "foo"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "uv-private-pypackage" },
         ]
@@ -8257,9 +7935,8 @@ fn lock_redact_git_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/)
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
     "###);
 
@@ -8369,10 +8046,6 @@ fn lock_redact_index_sources() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["iniconfig>=2"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [[tool.uv.index]]
         name = "private"
         url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"
@@ -8407,7 +8080,7 @@ fn lock_redact_index_sources() -> Result<()> {
         [[package]]
         name = "foo"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -8444,9 +8117,8 @@ fn lock_redact_index_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/)
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
 
@@ -8470,10 +8142,6 @@ fn lock_redact_url_sources() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig>=2"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
         iniconfig = { url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
@@ -8504,7 +8172,7 @@ fn lock_redact_url_sources() -> Result<()> {
         [[package]]
         name = "foo"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -8540,9 +8208,8 @@ fn lock_redact_url_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/)
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + iniconfig==2.0.0 (from https://public:heron@pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
     "###);
 
@@ -8562,10 +8229,6 @@ fn lock_env_credentials() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [[tool.uv.index]]
         name = "internal-proxy"
@@ -8616,7 +8279,7 @@ fn lock_env_credentials() -> Result<()> {
         [[package]]
         name = "foo"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -8653,10 +8316,6 @@ fn lock_relative_index() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv]
         index-url = "https://pypi-proxy.fly.dev/relative/simple"
         "#,
@@ -8687,7 +8346,7 @@ fn lock_relative_index() -> Result<()> {
         [[package]]
         name = "foo"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -8724,9 +8383,8 @@ fn lock_relative_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/)
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
 
@@ -8746,10 +8404,6 @@ fn lock_no_sources() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv]
         dev-dependencies = ["typing-extensions>4"]
@@ -8823,7 +8477,7 @@ fn lock_no_sources() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -8913,7 +8567,7 @@ fn lock_no_sources() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -8976,10 +8630,6 @@ fn lock_migrate() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -9085,7 +8735,7 @@ fn lock_migrate() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -9122,10 +8772,6 @@ fn lock_upgrade_package() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio<=2", "idna<=3"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -9187,7 +8833,7 @@ fn lock_upgrade_package() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
             { name = "idna" },
@@ -9220,10 +8866,6 @@ fn lock_upgrade_package() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio", "idna"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -9286,7 +8928,7 @@ fn lock_upgrade_package() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
             { name = "idna" },
@@ -9369,7 +9011,7 @@ fn lock_upgrade_package() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
             { name = "idna" },
@@ -9452,10 +9094,6 @@ fn lock_warn_missing_transitive_lower_bounds() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["pytest>8"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -9508,10 +9146,6 @@ fn lock_find_links_local_wheel() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["tqdm==1000.0.0"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv]
         find-links = ["{}"]
         "#,
@@ -9544,7 +9178,7 @@ fn lock_find_links_local_wheel() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "tqdm" },
         ]
@@ -9583,9 +9217,8 @@ fn lock_find_links_local_wheel() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/workspace)
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + tqdm==1000.0.0
     "###);
 
@@ -9626,10 +9259,6 @@ fn lock_find_links_local_sdist() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["tqdm==999.0.0"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv]
         find-links = ["{}"]
         "#,
@@ -9662,7 +9291,7 @@ fn lock_find_links_local_sdist() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "tqdm" },
         ]
@@ -9699,9 +9328,8 @@ fn lock_find_links_local_sdist() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/workspace)
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + tqdm==999.0.0
     "###);
 
@@ -9720,10 +9348,6 @@ fn lock_find_links_http_wheel() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["packaging==23.2"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv]
         find-links = ["{}"]
@@ -9766,7 +9390,7 @@ fn lock_find_links_http_wheel() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "packaging" },
         ]
@@ -9794,10 +9418,9 @@ fn lock_find_links_http_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + packaging==23.2
-     + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     Ok(())
@@ -9815,10 +9438,6 @@ fn lock_find_links_http_sdist() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["packaging==23.2"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv]
         find-links = ["{}"]
@@ -9861,7 +9480,7 @@ fn lock_find_links_http_sdist() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "packaging" },
         ]
@@ -9889,10 +9508,9 @@ fn lock_find_links_http_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + packaging==23.2
-     + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     Ok(())
@@ -9946,10 +9564,6 @@ fn lock_local_index() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["tqdm"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv]
         extra-index-url = ["{}"]
         "#,
@@ -9984,7 +9598,7 @@ fn lock_local_index() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "tqdm" },
         ]
@@ -10020,9 +9634,8 @@ fn lock_local_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + tqdm==1000.0.0
     "###);
 
@@ -10046,10 +9659,6 @@ fn lock_sources_url() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["workspace @ https://github.com/user-attachments/files/16592193/workspace.zip"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -10100,7 +9709,7 @@ fn lock_sources_url() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "workspace" },
         ]
@@ -10149,11 +9758,10 @@ fn lock_sources_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 5 packages in [TIME]
-    Installed 5 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
      + workspace==0.1.0 (from https://github.com/user-attachments/files/16592193/workspace.zip)
     "###);
@@ -10185,10 +9793,6 @@ fn lock_sources_archive() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["workspace @ {}"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
         Url::from_file_path(&workspace_archive).unwrap(),
     })?;
@@ -10240,7 +9844,7 @@ fn lock_sources_archive() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "workspace" },
         ]
@@ -10289,11 +9893,10 @@ fn lock_sources_archive() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 5 packages in [TIME]
-    Installed 5 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
      + workspace==0.1.0 (from file://[TEMP_DIR]/workspace.zip)
     "###);
@@ -10440,10 +10043,6 @@ fn lock_editable() -> Result<()> {
         dependencies = ["library"]
         requires-python = ">=3.12"
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv.sources]
         library = { path = "./library" }
 
@@ -10531,7 +10130,7 @@ fn lock_editable() -> Result<()> {
         [[package]]
         name = "workspace"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "library" },
         ]
@@ -10614,7 +10213,7 @@ fn lock_editable() -> Result<()> {
         [[package]]
         name = "workspace"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "library" },
         ]
@@ -10642,10 +10241,9 @@ fn lock_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + library==0.1.0 (from file://[TEMP_DIR]/library)
-     + workspace==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     Ok(())
@@ -10665,10 +10263,6 @@ fn lock_mixed_extras() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["leaf1", "workspace2"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [project.optional-dependencies]
         async = ["typing-extensions>=4"]
@@ -10809,7 +10403,7 @@ fn lock_mixed_extras() -> Result<()> {
         [[package]]
         name = "workspace1"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "leaf1" },
             { name = "workspace2" },
@@ -10862,11 +10456,10 @@ fn lock_mixed_extras() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
      + leaf1==0.1.0 (from file://[TEMP_DIR]/workspace1/packages/leaf1)
      + leaf2==0.1.0 (from file://[TEMP_DIR]/workspace2/packages/leaf2)
-     + workspace1==0.1.0 (from file://[TEMP_DIR]/workspace1)
      + workspace2==0.1.0 (from file://[TEMP_DIR]/workspace2)
     "###);
 
@@ -10901,10 +10494,6 @@ fn lock_transitive_extra() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["leaf"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [project.optional-dependencies]
         async = ["typing-extensions>=4", "leaf[async]"]
@@ -10999,7 +10588,7 @@ fn lock_transitive_extra() -> Result<()> {
         [[package]]
         name = "workspace"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "leaf" },
         ]
@@ -11041,10 +10630,9 @@ fn lock_transitive_extra() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + leaf==0.1.0 (from file://[TEMP_DIR]/workspace/packages/leaf)
-     + workspace==0.1.0 (from file://[TEMP_DIR]/workspace)
     "###);
 
     // Install from the lockfile with the `async` extra. This should include `typing-extensions`
@@ -11189,10 +10777,6 @@ fn lock_mismatched_versions() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["uv-public-pypackage==0.0.2"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv.sources]
         uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", tag = "0.0.1" }
         "#,
@@ -11223,7 +10807,7 @@ fn lock_mismatched_versions() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "uv-public-pypackage" },
         ]
@@ -11256,9 +10840,8 @@ fn lock_mismatched_versions() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
 
@@ -11282,10 +10865,6 @@ fn unconditional_overlapping_marker_disjoint_version_constraints() -> Result<()>
             "datasets < 2.19",
             "datasets >= 2.19 ; python_version > '3.10'"
         ]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -11315,10 +10894,6 @@ fn lock_change_index() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -11356,7 +10931,7 @@ fn lock_change_index() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -11402,7 +10977,7 @@ fn lock_change_index() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -11441,10 +11016,6 @@ fn lock_remove_member() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio>3"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -11522,7 +11093,7 @@ fn lock_remove_member() -> Result<()> {
         [[package]]
         name = "leaf"
         version = "0.1.0"
-        source = { editable = "leaf" }
+        source = { virtual = "leaf" }
         dependencies = [
             { name = "anyio" },
         ]
@@ -11539,7 +11110,7 @@ fn lock_remove_member() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "leaf", editable = "leaf" }]
+        requires-dist = [{ name = "leaf", virtual = "leaf" }]
 
         [[package]]
         name = "sniffio"
@@ -11642,10 +11213,6 @@ fn lock_add_member() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = []
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv.workspace]
         members = []
         "#,
@@ -11676,7 +11243,7 @@ fn lock_add_member() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         "###
         );
     });
@@ -11715,10 +11282,6 @@ fn lock_add_member() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv.workspace]
         members = ["leaf"]
@@ -11829,7 +11392,7 @@ fn lock_add_member() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
 
         [[package]]
         name = "sniffio"
@@ -11862,10 +11425,6 @@ fn lock_redundant_add_member() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv.workspace]
         members = []
@@ -11919,7 +11478,7 @@ fn lock_redundant_add_member() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -11957,10 +11516,6 @@ fn lock_redundant_add_member() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio", "idna"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv.workspace]
         members = []
@@ -12027,7 +11582,7 @@ fn lock_redundant_add_member() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
             { name = "idna" },
@@ -12068,10 +11623,6 @@ fn lock_new_constraints() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -12122,7 +11673,7 @@ fn lock_new_constraints() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -12160,10 +11711,6 @@ fn lock_new_constraints() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv]
         constraint-dependencies = [
@@ -12235,7 +11782,7 @@ fn lock_new_constraints() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -12270,10 +11817,6 @@ fn lock_remove_member_non_project() -> Result<()> {
         r#"
         [tool.uv.workspace]
         members = ["leaf"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -12444,10 +11987,6 @@ fn lock_rename_project() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -12485,7 +12024,7 @@ fn lock_rename_project() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -12514,10 +12053,6 @@ fn lock_rename_project() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -12569,7 +12104,7 @@ fn lock_rename_project() -> Result<()> {
         [[package]]
         name = "renamed"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -12596,10 +12131,6 @@ fn lock_missing_metadata() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -12701,7 +12232,7 @@ fn lock_missing_metadata() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -12883,10 +12414,6 @@ fn lock_reorder() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio", "iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -12946,7 +12473,7 @@ fn lock_reorder() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
             { name = "iniconfig" },
@@ -12988,10 +12515,6 @@ fn lock_reorder() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig", "anyio"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -13021,10 +12544,6 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.10"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -13078,7 +12597,7 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
         [[package]]
         name = "dependency"
         version = "0.1.0"
-        source = { directory = "dependency" }
+        source = { virtual = "dependency" }
         dependencies = [
             { name = "iniconfig", marker = "python_full_version >= '3.10'" },
         ]
@@ -13104,7 +12623,7 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "dependency", marker = "python_full_version >= '3.10'", directory = "dependency" }]
+        requires-dist = [{ name = "dependency", marker = "python_full_version >= '3.10'", virtual = "dependency" }]
         "###
         );
     });
@@ -13149,10 +12668,6 @@ fn lock_narrowed_python_version() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.7"
         dependencies = ["dependency ; python_version < '3.9'", "dependency ; python_version > '3.10'"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
         dependency = { path = "./dependency" }
@@ -13211,7 +12726,7 @@ fn lock_narrowed_python_version() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "dependency", marker = "python_full_version < '3.9' or python_full_version >= '3.11'" },
         ]
@@ -13257,9 +12772,6 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
             "anyio ; sys_platform == 'darwin'",
             "anyio ; python_version > '3.10'"
         ]
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -13305,7 +12817,7 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
         [[package]]
         name = "foo"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -13363,10 +12875,6 @@ fn lock_constrained_environment() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["black"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv]
         environments = "platform_system != 'Windows'"
@@ -13469,7 +12977,7 @@ fn lock_constrained_environment() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "black", marker = "sys_platform != 'win32'" },
         ]
@@ -13511,10 +13019,6 @@ fn lock_constrained_environment() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["black"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv]
         environments = ["platform_system != 'Windows'"]
         "#,
@@ -13539,10 +13043,6 @@ fn lock_constrained_environment() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["black"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -13661,7 +13161,7 @@ fn lock_constrained_environment() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "black" },
         ]
@@ -13852,10 +13352,6 @@ fn lock_overlapping_environment() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.8"
         dependencies = ["black"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv]
         environments = ["platform_system != 'Windows'", "python_version > '3.10'"]
@@ -14413,10 +13909,6 @@ fn lock_dropped_dev_extra() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv]
         dev-dependencies = ["coverage[toml]"]
         "#,
@@ -14465,7 +13957,7 @@ fn lock_dropped_dev_extra() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
 
         [package.dev-dependencies]
         dev = [
@@ -14508,10 +14000,9 @@ fn lock_dropped_dev_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + coverage==7.4.4
-     + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     Ok(())
@@ -14530,10 +14021,6 @@ fn lock_empty_dev_dependencies() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv]
         dev-dependencies = []
@@ -14574,7 +14061,7 @@ fn lock_empty_dev_dependencies() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -14616,10 +14103,9 @@ fn lock_empty_dev_dependencies() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     Ok(())
@@ -14638,10 +14124,6 @@ fn lock_empty_dependency_group() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [dependency-groups]
         empty = []
@@ -14682,7 +14164,7 @@ fn lock_empty_dependency_group() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -14724,10 +14206,9 @@ fn lock_empty_dependency_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     Ok(())
@@ -14746,10 +14227,6 @@ fn lock_trailing_slash() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv]
         index-url = "https://pypi.org/simple/"
@@ -14803,7 +14280,7 @@ fn lock_trailing_slash() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -14851,11 +14328,10 @@ fn lock_trailing_slash() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     "###);
 
@@ -14875,10 +14351,6 @@ fn lock_invalid_index() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0", "iniconfig==2.0.0"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv.sources]
         iniconfig = { index = "internal proxy" }
 
@@ -14896,17 +14368,17 @@ fn lock_invalid_index() -> Result<()> {
 
     ----- stderr -----
     warning: Failed to parse `pyproject.toml` during settings discovery:
-      TOML parse error at line 16, column 16
+      TOML parse error at line 12, column 16
          |
-      16 |         name = "internal proxy"
+      12 |         name = "internal proxy"
          |                ^^^^^^^^^^^^^^^^
       Index names may only contain letters, digits, hyphens, underscores, and periods, but found unsupported character (` `) in: `internal proxy`
 
     error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 13, column 31
-       |
-    13 |         iniconfig = { index = "internal proxy" }
-       |                               ^^^^^^^^^^^^^^^^
+      Caused by: TOML parse error at line 9, column 31
+      |
+    9 |         iniconfig = { index = "internal proxy" }
+      |                               ^^^^^^^^^^^^^^^^
     Index names may only contain letters, digits, hyphens, underscores, and periods, but found unsupported character (` `) in: `internal proxy`
     "###);
 
@@ -14925,10 +14397,6 @@ fn lock_explicit_index() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0", "iniconfig==2.0.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
         iniconfig = { index = "test" }
@@ -14996,7 +14464,7 @@ fn lock_explicit_index() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
             { name = "iniconfig" },
@@ -15035,10 +14503,6 @@ fn lock_explicit_default_index() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig==2.0.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
         iniconfig = { index = "test" }
@@ -15085,7 +14549,7 @@ fn lock_explicit_default_index() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -15103,10 +14567,6 @@ fn lock_explicit_default_index() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [[tool.uv.index]]
         name = "test"
@@ -15174,7 +14634,7 @@ fn lock_explicit_default_index() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -16326,10 +15786,6 @@ fn lock_conflicting_environment() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["anyio"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv]
         environments = ["python_version < '3.11'"]
         "#,
@@ -16476,10 +15932,6 @@ fn lock_python_upper_bound() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.8"
         dependencies = ["magika; python_version < '3.13'"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -16728,7 +16180,7 @@ fn lock_python_upper_bound() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "magika", marker = "python_full_version < '3.13'" },
         ]
@@ -16956,10 +16408,6 @@ fn lock_dependency_metadata() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [[tool.uv.dependency-metadata]]
         name = "anyio"
         version = "3.7.0"
@@ -17020,7 +16468,7 @@ fn lock_dependency_metadata() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -17059,11 +16507,10 @@ fn lock_dependency_metadata() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
      + anyio==3.7.0
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     // Update the static metadata.
@@ -17074,10 +16521,6 @@ fn lock_dependency_metadata() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [[tool.uv.dependency-metadata]]
         name = "anyio"
@@ -17106,10 +16549,6 @@ fn lock_dependency_metadata() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -17134,10 +16573,6 @@ fn lock_dependency_metadata() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [[tool.uv.dependency-metadata]]
         name = "anyio"
@@ -17176,10 +16611,6 @@ fn lock_dependency_metadata_git() -> Result<()> {
 
         [tool.uv.sources]
         anyio = { git = "https://github.com/agronholm/anyio", tag = "4.6.2" }
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [[tool.uv.dependency-metadata]]
         name = "anyio"
@@ -17237,7 +16668,7 @@ fn lock_dependency_metadata_git() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -17276,11 +16707,10 @@ fn lock_dependency_metadata_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
      + anyio==4.6.2 (from git+https://github.com/agronholm/anyio@c4844254e6db0cb804c240ba07405db73d810e0b)
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     Ok(())
@@ -17298,10 +16728,6 @@ fn lock_strip_fragment() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -17338,7 +16764,7 @@ fn lock_strip_fragment() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -17366,10 +16792,8 @@ fn lock_strip_fragment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 1 package in [TIME]
-    Installed 2 packages in [TIME]
+    Installed 1 package in [TIME]
      + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     Ok(())
@@ -17387,10 +16811,6 @@ fn lock_request_requires_python() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.8, <=3.10"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -17613,10 +17033,6 @@ fn lock_unsupported_version() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig==2.0.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -17950,10 +17366,6 @@ fn lock_keyring_credentials() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv]
         keyring-provider = "subprocess"
 
@@ -17996,7 +17408,7 @@ fn lock_keyring_credentials() -> Result<()> {
         [[package]]
         name = "foo"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -19751,10 +19163,6 @@ fn lock_group_workspace() -> Result<()> {
         types = ["sniffio>1"]
         async = ["anyio>3"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv.workspace]
         members = ["child"]
 
@@ -19895,7 +19303,7 @@ fn lock_group_workspace() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "child" },
         ]
@@ -22701,10 +22109,6 @@ fn lock_missing_git_prefix() -> Result<()> {
 
         [tool.uv.sources]
         workspace-in-root-test = { url = "https://github.com/astral-sh/workspace-in-root-test" }
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -22737,10 +22141,6 @@ fn lock_arm() -> Result<()> {
 
         [tool.uv]
         environments = ["platform_machine == 'arm64'"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -22786,7 +22186,7 @@ fn lock_arm() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "numpy", marker = "platform_machine == 'arm64'" },
         ]
@@ -22815,10 +22215,6 @@ fn lock_x86_64() -> Result<()> {
 
         [tool.uv]
         environments = ["platform_machine == 'x86_64'"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -22865,7 +22261,7 @@ fn lock_x86_64() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "numpy", marker = "platform_machine == 'x86_64'" },
         ]
@@ -22894,10 +22290,6 @@ fn lock_x86() -> Result<()> {
 
         [tool.uv]
         environments = ["platform_machine == 'i686'"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -22941,7 +22333,7 @@ fn lock_x86() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "numpy", marker = "platform_machine == 'i686'" },
         ]

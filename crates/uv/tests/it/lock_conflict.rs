@@ -36,10 +36,6 @@ fn extra_basic() -> Result<()> {
         [project.optional-dependencies]
         extra1 = ["sortedcontainers==2.3.0"]
         extra2 = ["sortedcontainers==2.4.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -76,10 +72,6 @@ fn extra_basic() -> Result<()> {
         [project.optional-dependencies]
         extra1 = ["sortedcontainers==2.3.0"]
         extra2 = ["sortedcontainers==2.4.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -112,7 +104,7 @@ fn extra_basic() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
 
         [package.optional-dependencies]
         extra1 = [
@@ -166,9 +158,7 @@ fn extra_basic() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+    Audited in [TIME]
     "###);
     // Another install, but with one of the extras enabled.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=extra1"), @r###"
@@ -236,10 +226,6 @@ fn extra_basic_three_extras() -> Result<()> {
         extra1 = ["sortedcontainers==2.2.0"]
         extra2 = ["sortedcontainers==2.3.0"]
         project3 = ["sortedcontainers==2.4.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -278,10 +264,6 @@ fn extra_basic_three_extras() -> Result<()> {
         extra1 = ["sortedcontainers==2.2.0"]
         extra2 = ["sortedcontainers==2.3.0"]
         project3 = ["sortedcontainers==2.4.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -315,7 +297,7 @@ fn extra_basic_three_extras() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
 
         [package.optional-dependencies]
         extra1 = [
@@ -399,10 +381,6 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
         extra2 = []
         project3 = []
         project4 = []
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -422,9 +400,7 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+    Audited in [TIME]
     "###);
     // extra1/extra2 conflict!
     uv_snapshot!(
@@ -460,7 +436,7 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Audited in [TIME]
     "###);
     // ... and neither does extra2/project3.
     uv_snapshot!(
@@ -472,7 +448,7 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Audited in [TIME]
     "###);
     // And similarly, with project 4.
     uv_snapshot!(
@@ -484,7 +460,7 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Audited in [TIME]
     "###);
     // ... and neither does extra2/project3.
     uv_snapshot!(
@@ -496,7 +472,7 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Audited in [TIME]
     "###);
 
     Ok(())
@@ -523,10 +499,6 @@ fn extra_multiple_not_conflicting2() -> Result<()> {
         extra2 = ["sortedcontainers==2.4.0"]
         project3 = ["sortedcontainers==2.3.0"]
         project4 = ["sortedcontainers==2.4.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -569,10 +541,6 @@ fn extra_multiple_not_conflicting2() -> Result<()> {
         extra2 = ["sortedcontainers==2.4.0"]
         project3 = ["sortedcontainers==2.3.0"]
         project4 = ["sortedcontainers==2.4.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -623,10 +591,6 @@ fn extra_multiple_not_conflicting2() -> Result<()> {
         extra2 = ["sortedcontainers==2.4.0"]
         project3 = ["sortedcontainers==2.3.0"]
         project4 = ["sortedcontainers==2.4.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -663,10 +627,6 @@ fn extra_multiple_not_conflicting2() -> Result<()> {
         extra2 = ["sortedcontainers==2.4.0"]
         project3 = ["sortedcontainers==2.3.0"]
         project4 = ["sortedcontainers==2.4.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -702,10 +662,6 @@ fn extra_multiple_independent() -> Result<()> {
         extra2 = ["sortedcontainers==2.4.0"]
         project3 = ["anyio==4.1.0"]
         project4 = ["anyio==4.2.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -742,10 +698,6 @@ fn extra_multiple_independent() -> Result<()> {
         extra2 = ["sortedcontainers==2.4.0"]
         project3 = ["anyio==4.1.0"]
         project4 = ["anyio==4.2.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -785,10 +737,6 @@ fn extra_multiple_independent() -> Result<()> {
         extra2 = ["sortedcontainers==2.4.0"]
         project3 = ["anyio==4.1.0"]
         project4 = ["anyio==4.2.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -859,7 +807,7 @@ fn extra_multiple_independent() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
 
         [package.optional-dependencies]
         extra1 = [
@@ -939,10 +887,6 @@ fn extra_config_change_ignore_lockfile() -> Result<()> {
         [project.optional-dependencies]
         extra1 = ["sortedcontainers==2.3.0"]
         extra2 = ["sortedcontainers==2.4.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -973,7 +917,7 @@ fn extra_config_change_ignore_lockfile() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
 
         [package.optional-dependencies]
         extra1 = [
@@ -1032,10 +976,6 @@ fn extra_config_change_ignore_lockfile() -> Result<()> {
         [project.optional-dependencies]
         extra1 = ["sortedcontainers==2.3.0"]
         extra2 = ["sortedcontainers==2.4.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
     // Re-run with `--locked`, which should now fail because of
@@ -1403,10 +1343,6 @@ fn group_basic() -> Result<()> {
         [dependency-groups]
         group1 = ["sortedcontainers==2.3.0"]
         group2 = ["sortedcontainers==2.4.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -1444,10 +1380,6 @@ fn group_basic() -> Result<()> {
         [dependency-groups]
         group1 = ["sortedcontainers==2.3.0"]
         group2 = ["sortedcontainers==2.4.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -1480,7 +1412,7 @@ fn group_basic() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
 
         [package.dev-dependencies]
         group1 = [
@@ -1534,9 +1466,7 @@ fn group_basic() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+    Audited in [TIME]
     "###);
     // Another install, but with one of the groups enabled.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1"), @r###"
@@ -1604,10 +1534,6 @@ fn group_default() -> Result<()> {
         [dependency-groups]
         group1 = ["sortedcontainers==2.3.0"]
         group2 = ["sortedcontainers==2.4.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -1640,7 +1566,7 @@ fn group_default() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
 
         [package.dev-dependencies]
         group1 = [
@@ -1694,9 +1620,8 @@ fn group_default() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + sortedcontainers==2.3.0
     "###);
 
@@ -1707,7 +1632,7 @@ fn group_default() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 2 packages in [TIME]
+    Audited 1 package in [TIME]
     "###);
 
     // Another install, but with the other group enabled. This should error, since `group1` is
@@ -1781,10 +1706,6 @@ fn mixed() -> Result<()> {
 
         [project.optional-dependencies]
         extra1 = ["sortedcontainers==2.4.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -1824,10 +1745,6 @@ fn mixed() -> Result<()> {
 
         [project.optional-dependencies]
         extra1 = ["sortedcontainers==2.4.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -1860,7 +1777,7 @@ fn mixed() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
 
         [package.optional-dependencies]
         extra1 = [
@@ -1916,9 +1833,7 @@ fn mixed() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+    Audited in [TIME]
     "###);
     // Another install, but with the group enabled.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1"), @r###"
