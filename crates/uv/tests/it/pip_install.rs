@@ -7675,7 +7675,7 @@ fn switch_platform() -> Result<()> {
 
 /// See: <https://github.com/astral-sh/uv/pull/6714>
 #[test]
-#[cfg(unix)]
+#[cfg(feature = "slow-tests")]
 fn stale_egg_info() -> Result<()> {
     let context = TestContext::new("3.12");
 
