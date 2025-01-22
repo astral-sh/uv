@@ -1191,7 +1191,11 @@ fn extra_unconditional_non_conflicting() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.1.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###);
 
     Ok(())
