@@ -8370,7 +8370,6 @@ fn direct_url_json_direct_url() -> Result<()> {
     Ok(())
 }
 
-
 #[test]
 fn install_group() -> Result<()> {
     fn new_context() -> Result<TestContext> {
