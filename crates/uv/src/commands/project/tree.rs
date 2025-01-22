@@ -25,8 +25,8 @@ use crate::commands::pip::resolution_markers;
 use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, DependencyGroupsTarget, ProjectError, ProjectInterpreter,
-    ScriptInterpreter,
+    default_dependency_groups, ProjectError, ProjectInterpreter, ScriptInterpreter,
+    SpecificationTarget,
 };
 use crate::commands::reporters::LatestVersionReporter;
 use crate::commands::{diagnostics, ExitStatus};
@@ -76,8 +76,8 @@ pub(crate) async fn tree(
     // Validate that any referenced dependency groups are defined in the target.
     if !frozen {
         let target = match &target {
-            LockTarget::Workspace(workspace) => DependencyGroupsTarget::Workspace(workspace),
-            LockTarget::Script(..) => DependencyGroupsTarget::Script,
+            LockTarget::Workspace(workspace) => SpecificationTarget::Workspace(workspace),
+            LockTarget::Script(..) => SpecificationTarget::Script,
         };
         target.validate_dependency_groups(&dev)?;
     }

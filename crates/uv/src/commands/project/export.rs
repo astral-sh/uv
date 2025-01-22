@@ -24,8 +24,8 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, detect_conflicts, DependencyGroupsTarget, ProjectError,
-    ProjectInterpreter, ScriptInterpreter,
+    default_dependency_groups, detect_conflicts, ProjectError, ProjectInterpreter,
+    ScriptInterpreter, SpecificationTarget,
 };
 use crate::commands::{diagnostics, ExitStatus, OutputWriter};
 use crate::printer::Printer;
@@ -113,15 +113,15 @@ pub(crate) async fn export(
         let target = match &target {
             ExportTarget::Project(VirtualProject::Project(project)) => {
                 if all_packages {
-                    DependencyGroupsTarget::Workspace(project.workspace())
+                    SpecificationTarget::Workspace(project.workspace())
                 } else {
-                    DependencyGroupsTarget::Project(project)
+                    SpecificationTarget::Project(project)
                 }
             }
             ExportTarget::Project(VirtualProject::NonProject(workspace)) => {
-                DependencyGroupsTarget::Workspace(workspace)
+                SpecificationTarget::Workspace(workspace)
             }
-            ExportTarget::Script(_) => DependencyGroupsTarget::Script,
+            ExportTarget::Script(_) => SpecificationTarget::Script,
         };
         target.validate_dependency_groups(&dev)?;
     }

@@ -47,8 +47,8 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, validate_project_requires_python, DependencyGroupsTarget,
-    EnvironmentSpecification, ProjectError, ScriptInterpreter, WorkspacePython,
+    default_dependency_groups, validate_project_requires_python, EnvironmentSpecification,
+    ProjectError, ScriptInterpreter, SpecificationTarget, WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{diagnostics, project, ExitStatus};
@@ -688,13 +688,13 @@ pub(crate) async fn run(
                     let target = match &project {
                         VirtualProject::Project(project) => {
                             if all_packages {
-                                DependencyGroupsTarget::Workspace(project.workspace())
+                                SpecificationTarget::Workspace(project.workspace())
                             } else {
-                                DependencyGroupsTarget::Project(project)
+                                SpecificationTarget::Project(project)
                             }
                         }
                         VirtualProject::NonProject(workspace) => {
-                            DependencyGroupsTarget::Workspace(workspace)
+                            SpecificationTarget::Workspace(workspace)
                         }
                     };
                     target.validate_dependency_groups(&dev)?;

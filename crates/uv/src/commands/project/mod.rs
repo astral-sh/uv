@@ -1744,16 +1744,16 @@ pub(crate) async fn init_script_python_requirement(
 }
 
 #[derive(Debug, Copy, Clone)]
-pub(crate) enum DependencyGroupsTarget<'env> {
-    /// The dependency groups can be defined in any workspace member.
+pub(crate) enum SpecificationTarget<'env> {
+    /// The specification applies to any workspace member.
     Workspace(&'env Workspace),
-    /// The dependency groups must be defined in the target project.
+    /// The specification only applies to the target project.
     Project(&'env ProjectWorkspace),
-    /// The dependency groups must be defined in the target script.
+    /// The specification only applies to the target script.
     Script,
 }
 
-impl DependencyGroupsTarget<'_> {
+impl SpecificationTarget<'_> {
     /// Validate the dependency groups requested by the [`DevGroupsSpecification`].
     #[allow(clippy::result_large_err)]
     pub(crate) fn validate_dependency_groups(
