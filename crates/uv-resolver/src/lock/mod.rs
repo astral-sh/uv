@@ -15,7 +15,7 @@ use petgraph::visit::EdgeRef;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::Serializer;
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
-use tracing::trace;
+use tracing::debug;
 use url::Url;
 
 use uv_cache_key::RepositoryUrl;
@@ -1310,15 +1310,15 @@ impl Lock {
             let satisfied = metadata.is_some_and(|metadata| {
                 match satisfies_requires_dist(metadata, package, root) {
                     Ok(SatisfiesResult::Satisfied) => {
-                        trace!("Static `Requires-Dist` for `{}` is up-to-date", package.id);
+                        debug!("Static `requires-dist` for `{}` is up-to-date", package.id);
                         true
                     },
                     Ok(..) => {
-                        trace!("Static `Requires-Dist` for `{}` is out-of-date; falling back to distribution database", package.id);
+                        debug!("Static `requires-dist` for `{}` is out-of-date; falling back to distribution database", package.id);
                         false
                     },
                     Err(..) => {
-                        trace!("Static `Requires-Dist` for `{}` is invalid; falling back to distribution database", package.id);
+                        debug!("Static `requires-dist` for `{}` is invalid; falling back to distribution database", package.id);
                         false
                     },
                 }
@@ -4131,7 +4131,15 @@ fn normalize_url(mut url: Url) -> UrlString {
 /// 2. Ensures that the lock and install paths are appropriately framed with respect to the
 ///    current [`Workspace`].
 /// 3. Removes the `origin` field, which is only used in `requirements.txt`.
-fn normalize_requirement(requirement: Requirement, root: &Path) -> Result<Requirement, LockError> {
+fn normalize_requirement(
+    mut requirement: Requirement,
+    root: &Path,
+) -> Result<Requirement, LockError> {
+    // Sort the extras and groups for consistency.
+    requirement.extras.sort();
+    requirement.groups.sort();
+
+    // Normalize the requirement source.
     match requirement.source {
         RequirementSource::Git {
             mut repository,
