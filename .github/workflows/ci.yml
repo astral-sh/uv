@@ -631,8 +631,6 @@ jobs:
 
       - name: "Smoke test"
         run: |
-          set -e
-
           ./uv venv -v
           ./uv pip install ruff -v
           ./uvx -v ruff --version
@@ -657,8 +655,6 @@ jobs:
 
       - name: "Smoke test"
         run: |
-          set -e
-
           ./uv venv -v
           ./uv pip install ruff -v
           ./uvx -v ruff --version
