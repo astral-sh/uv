@@ -401,7 +401,7 @@ fn run_pep723_script() -> Result<()> {
     Hello, world!
 
     ----- stderr -----
-    warning: `--locked` is a no-op for Python scripts with inline metadata, which always run in isolation
+    warning: No lockfile found for Python script (ignoring `--locked`); run `uv lock --script` to generate a lockfile
     "###);
 
     // If the script can't be resolved, we should reference the script.
@@ -784,6 +784,21 @@ fn run_pep723_script_lock() -> Result<()> {
        "#
     })?;
 
+    // Without a lockfile, running with `--locked` should warn.
+    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    warning: No lockfile found for Python script (ignoring `--locked`); run `uv lock --script` to generate a lockfile
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
     // Explicitly lock the script.
     uv_snapshot!(context.filters(), context.lock().arg("--script").arg("main.py"), @r###"
     success: true
@@ -822,6 +837,7 @@ fn run_pep723_script_lock() -> Result<()> {
         );
     });
 
+    // Run the script.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
     success: true
     exit_code: 0
@@ -830,9 +846,19 @@ fn run_pep723_script_lock() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
+    "###);
+
+    // With a lockfile, running with `--locked` should not warn.
+    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
     "###);
 
     // Modify the metadata.
@@ -868,7 +894,6 @@ fn run_pep723_script_lock() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation
     Traceback (most recent call last):
       File "[TEMP_DIR]/main.py", line 8, in <module>
         import anyio
