@@ -29,14 +29,10 @@ pub enum IndexUrl {
 }
 
 impl IndexUrl {
-    fn from_path(path: &str, root_dir: Option<&Path>) -> Result<VerbatimUrl, IndexUrlError> {
-        Ok(if let Some(root_dir) = root_dir {
-            VerbatimUrl::from_path(path, root_dir)?
-        } else {
-            VerbatimUrl::from_absolute_path(std::path::absolute(path)?)?
-        })
-    }
-
+    /// Parse an [`IndexUrl`] from a string, relative to an optional root directory.
+    ///
+    /// If no root directory is provided, relative paths are resolved against the current working
+    /// directory.
     pub fn parse(path: &str, root_dir: Option<&Path>) -> Result<Self, IndexUrlError> {
         let url = match split_scheme(path) {
             Some((scheme, ..)) => {
@@ -47,13 +43,21 @@ impl IndexUrl {
                     }
                     None => {
                         // Ex) `C:\Users\user\index`
-                        Self::from_path(path, root_dir)?
+                        if let Some(root_dir) = root_dir {
+                            VerbatimUrl::from_path(path, root_dir)?
+                        } else {
+                            VerbatimUrl::from_absolute_path(std::path::absolute(path)?)?
+                        }
                     }
                 }
             }
             None => {
                 // Ex) `/Users/user/index`
-                Self::from_path(path, root_dir)?
+                if let Some(root_dir) = root_dir {
+                    VerbatimUrl::from_path(path, root_dir)?
+                } else {
+                    VerbatimUrl::from_absolute_path(std::path::absolute(path)?)?
+                }
             }
         };
         Ok(Self::from(url.with_given(path)))
