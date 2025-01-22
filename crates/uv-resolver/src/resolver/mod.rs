@@ -2301,16 +2301,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 }
 
+                // Verify that the package is allowed under the hash-checking policy.
+                if !self
+                    .hasher
+                    .allows_package(candidate.name(), candidate.version())
+                {
+                    return Ok(None);
+                }
+
                 // Emit a request to fetch the metadata for this version.
                 if self.index.distributions().register(candidate.version_id()) {
-                    // Verify that the package is allowed under the hash-checking policy.
-                    if !self
-                        .hasher
-                        .allows_package(candidate.name(), candidate.version())
-                    {
-                        return Err(ResolveError::UnhashedPackage(candidate.name().clone()));
-                    }
-
                     let dist = dist.for_resolution().to_owned();
 
                     let response = match dist {
@@ -2600,9 +2600,7 @@ impl ForkState {
                 }
             }
 
-            let for_package = &self.pubgrub.package_store[for_package];
-
-            if let Some(name) = for_package
+            if let Some(name) = self.pubgrub.package_store[for_package]
                 .name_no_root()
                 .filter(|name| !workspace_members.contains(name))
             {
@@ -2633,9 +2631,7 @@ impl ForkState {
             }
 
             // Update the package priorities.
-            if !for_package.is_proxy() {
-                self.priorities.insert(package, version, &self.fork_urls);
-            }
+            self.priorities.insert(package, version, &self.fork_urls);
         }
 
         let conflict = self.pubgrub.add_package_version_dependencies(
