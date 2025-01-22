@@ -5242,6 +5242,58 @@ fn lock_requires_python_unbounded() -> Result<()> {
     Ok(())
 }
 
+/// Error if `Requires-Python` is disjoint across the workspace.
+#[test]
+fn lock_requires_python_disjoint() -> Result<()> {
+    let context = TestContext::new("3.11");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.workspace]
+        members = ["child"]
+        "#,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("child").child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = "==3.10"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The workspace contains conflicting Python requirements:
+    - `child`: `==3.10`
+    - `project`: `>=3.12`
+    "###);
+
+    Ok(())
+}
+
 #[test]
 fn lock_requires_python_maximum_version() -> Result<()> {
     let context = TestContext::new("3.11");
