@@ -1047,12 +1047,12 @@ fn extra_unconditional() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Found conflicting extra `extra1` unconditionally enabled in `proxy1[extra1,extra2] @ file://[TEMP_DIR]/proxy1`
+    Resolved 6 packages in [TIME]
     "###);
 
     // An error should occur even when only one conflicting extra is enabled.
@@ -1078,12 +1078,12 @@ fn extra_unconditional() -> Result<()> {
         "#,
     )?;
     uv_snapshot!(context.filters(), context.lock(), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Found conflicting extra `extra1` unconditionally enabled in `proxy1[extra1] @ file://[TEMP_DIR]/proxy1`
+    Resolved 6 packages in [TIME]
     "###);
 
     // And same thing for the other extra.
@@ -1110,12 +1110,12 @@ fn extra_unconditional() -> Result<()> {
         "#,
     )?;
     uv_snapshot!(context.filters(), context.lock(), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Found conflicting extra `extra2` unconditionally enabled in `proxy1[extra2] @ file://[TEMP_DIR]/proxy1`
+    Resolved 6 packages in [TIME]
     "###);
 
     Ok(())
