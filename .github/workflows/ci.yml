@@ -1828,14 +1828,24 @@ jobs:
         os: ["linux", "windows", "macos"]
         python-version: ["3.8", "3.11"]
         include:
-          - { os: "linux", target: "linux", runner: "ubuntu-latest", arch: "x86_64" }
+          - {
+              os: "linux",
+              target: "linux",
+              runner: "ubuntu-latest",
+              arch: "x86_64",
+            }
           - {
               os: "windows",
               target: "windows-x86_64",
               runner: "windows-latest",
-              arch: "x86_64"
+              arch: "x86_64",
             }
-          - { os: "macos", target: "macos-aarch64", runner: "macos-14", arch: "aarch64" }
+          - {
+              os: "macos",
+              target: "macos-aarch64",
+              runner: "macos-14",
+              arch: "aarch64",
+            }
     steps:
       - uses: actions/checkout@v4
 
