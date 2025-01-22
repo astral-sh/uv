@@ -675,6 +675,9 @@ jobs:
       - name: "Smoke test"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+
           ./uv venv -v
           ./uv pip install ruff -v
           ./uvx -v ruff --version
