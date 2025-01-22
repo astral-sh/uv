@@ -1749,6 +1749,21 @@
         "name"
       ],
       "properties": {
+        "classifiers": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "license": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "name": {
           "$ref": "#/definitions/PackageName"
         },

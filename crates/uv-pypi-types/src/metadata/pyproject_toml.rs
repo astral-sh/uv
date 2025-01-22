@@ -92,6 +92,13 @@ pub(super) fn parse_pyproject_toml(
         );
         provides_extras.push(extra);
     }
+    let classifiers = Some(
+        project
+            .classifiers
+            .unwrap_or_default()
+            .into_iter()
+            .collect::<Vec<_>>(),
+    );
 
     Ok(ResolutionMetadata {
         name,
@@ -100,6 +107,8 @@ pub(super) fn parse_pyproject_toml(
         requires_python,
         provides_extras,
         dynamic,
+        classifiers,
+        license: None, // TODO(RL): come back
     })
 }
 
@@ -143,6 +152,9 @@ pub(super) struct Project {
     /// Specifies which fields listed by PEP 621 were intentionally unspecified
     /// so another tool can/will provide such metadata dynamically.
     pub(super) dynamic: Option<Vec<String>>,
+    // Specifies zero or more "Trove Classifiers" to describe the project.
+    classifiers: Option<Vec<String>>,
+    // TODO(RL): handle license field properly
 }
 
 #[derive(Deserialize, Debug)]
@@ -154,6 +166,7 @@ struct PyprojectTomlWire {
     dependencies: Option<Vec<String>>,
     optional_dependencies: Option<IndexMap<ExtraName, Vec<String>>>,
     dynamic: Option<Vec<String>>,
+    classifiers: Option<Vec<String>>,
 }
 
 impl TryFrom<PyprojectTomlWire> for Project {
@@ -168,6 +181,7 @@ impl TryFrom<PyprojectTomlWire> for Project {
             dependencies: wire.dependencies,
             optional_dependencies: wire.optional_dependencies,
             dynamic: wire.dynamic,
+            classifiers: wire.classifiers,
         })
     }
 }

@@ -801,6 +801,8 @@ pub enum ProjectCommand {
     Export(ExportArgs),
     /// Display the project's dependency tree.
     Tree(TreeArgs),
+    /// Display the project's license information.
+    License(LicenseArgs),
 }
 
 /// A re-implementation of `Option`, used to avoid Clap's automatic `Option` flattening in
@@ -3487,6 +3489,137 @@ pub struct TreeArgs {
     /// adherence with PEP 723.
     #[arg(long)]
     pub script: Option<PathBuf>,
+
+    /// The Python version to use when filtering the tree.
+    ///
+    /// For example, pass `--python-version 3.10` to display the dependencies
+    /// that would be included when installing on Python 3.10.
+    ///
+    /// Defaults to the version of the discovered Python interpreter.
+    #[arg(long, conflicts_with = "universal")]
+    pub python_version: Option<PythonVersion>,
+
+    /// The platform to use when filtering the tree.
+    ///
+    /// For example, pass `--platform windows` to display the dependencies that
+    /// would be included when installing on Windows.
+    ///
+    /// Represented as a "target triple", a string that describes the target
+    /// platform in terms of its CPU, vendor, and operating system name, like
+    /// `x86_64-unknown-linux-gnu` or `aarch64-apple-darwin`.
+    #[arg(long, conflicts_with = "universal")]
+    pub python_platform: Option<TargetTriple>,
+
+    /// The Python interpreter to use for locking and filtering.
+    ///
+    /// By default, the tree is filtered to match the platform as reported by
+    /// the Python interpreter. Use `--universal` to display the tree for all
+    /// platforms, or use `--python-version` or `--python-platform` to override
+    /// a subset of markers.
+    ///
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
+    #[arg(
+        long,
+        short,
+        env = EnvVars::UV_PYTHON,
+        verbatim_doc_comment,
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
+    )]
+    pub python: Option<Maybe<String>>,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct LicenseArgs {
+    /// Show full list of platform-independent dependency licenses.
+    ///
+    /// Shows resolved package versions for all Python versions and platforms,
+    /// rather than filtering to those that are relevant for the current
+    /// environment.
+    ///
+    /// Multiple versions may be shown for a each package.
+    #[arg(long)]
+    pub universal: bool,
+
+    /// Include the development dependency group.
+    ///
+    /// Development dependencies are defined via `dependency-groups.dev` or
+    /// `tool.uv.dev-dependencies` in a `pyproject.toml`.
+    ///
+    /// This option is an alias for `--group dev`.
+    #[arg(long, overrides_with("no_dev"), hide = true)]
+    pub dev: bool,
+
+    /// Only include the development dependency group.
+    ///
+    /// Omit other dependencies. The project itself will also be omitted.
+    ///
+    /// This option is an alias for `--only-group dev`.
+    #[arg(long, conflicts_with("no_dev"))]
+    pub only_dev: bool,
+
+    /// Omit the development dependency group.
+    ///
+    /// This option is an alias for `--no-group dev`.
+    #[arg(long, overrides_with("dev"))]
+    pub no_dev: bool,
+
+    /// Include dependencies from the specified dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, conflicts_with("only_group"))]
+    pub group: Vec<GroupName>,
+
+    /// Exclude dependencies from the specified dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub no_group: Vec<GroupName>,
+
+    /// Exclude dependencies from default groups.
+    ///
+    /// `--group` can be used to include specific groups.
+    #[arg(long, conflicts_with_all = ["no_group", "only_group"])]
+    pub no_default_groups: bool,
+
+    /// Only include dependencies from the specified dependency group.
+    ///
+    /// May be provided multiple times.
+    ///
+    /// The project itself will also be omitted.
+    #[arg(long, conflicts_with("group"))]
+    pub only_group: Vec<GroupName>,
+
+    /// Include dependencies from all dependency groups.
+    ///
+    /// `--no-group` can be used to exclude specific groups.
+    #[arg(long, conflicts_with_all = [ "group", "only_group" ])]
+    pub all_groups: bool,
+
+    /// Display only direct dependencies (default false)
+    #[arg(long)]
+    pub direct_deps_only: bool,
+
+    /// Assert that the `uv.lock` will remain unchanged.
+    ///
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or
+    /// needs to be updated, uv will exit with an error.
+    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
+    pub locked: bool,
+
+    /// Display the requirements without locking the project.
+    ///
+    /// If the lockfile is missing, uv will exit with an error.
+    #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "locked")]
+    pub frozen: bool,
+
+    #[command(flatten)]
+    pub build: BuildOptionsArgs,
+
+    #[command(flatten)]
+    pub resolver: ResolverArgs,
 
     /// The Python version to use when filtering the tree.
     ///

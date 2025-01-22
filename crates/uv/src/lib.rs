@@ -1662,6 +1662,40 @@ async fn run_project(
             ))
             .await
         }
+        ProjectCommand::License(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::LicenseSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            Box::pin(commands::license(
+                project_dir,
+                args.dev,
+                args.locked,
+                args.frozen,
+                args.universal,
+                args.direct_only,
+                args.python_version,
+                args.python_platform,
+                args.python,
+                args.install_mirrors,
+                args.resolver,
+                globals.python_preference,
+                globals.python_downloads,
+                globals.connectivity,
+                globals.concurrency,
+                globals.native_tls,
+                &globals.allow_insecure_host,
+                no_config,
+                &cache,
+                printer,
+                globals.preview,
+            ))
+            .await
+        }
+
         ProjectCommand::Tree(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::TreeSettings::resolve(args, filesystem);

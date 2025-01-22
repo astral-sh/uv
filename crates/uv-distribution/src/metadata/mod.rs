@@ -51,6 +51,8 @@ pub struct Metadata {
     pub provides_extras: Vec<ExtraName>,
     pub dependency_groups: BTreeMap<GroupName, Vec<uv_pypi_types::Requirement>>,
     pub dynamic: bool,
+    pub license: Option<String>,
+    pub classifiers: Option<Vec<String>>,
 }
 
 impl Metadata {
@@ -69,6 +71,8 @@ impl Metadata {
             provides_extras: metadata.provides_extras,
             dependency_groups: BTreeMap::default(),
             dynamic: metadata.dynamic,
+            license: metadata.license,
+            classifiers: metadata.classifiers,
         }
     }
 
@@ -112,6 +116,8 @@ impl Metadata {
             provides_extras,
             dependency_groups,
             dynamic: metadata.dynamic,
+            classifiers: metadata.classifiers,
+            license: metadata.license,
         })
     }
 }

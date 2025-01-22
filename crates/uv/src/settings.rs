@@ -14,8 +14,8 @@ use uv_cli::{
     ToolUpgradeArgs,
 };
 use uv_cli::{
-    AddArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
-    PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
+    AddArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, LicenseArgs, ListFormat, LockArgs,
+    Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
     PythonListFormat, PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs,
     ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs,
@@ -1370,6 +1370,72 @@ impl TreeSettings {
             invert: tree.invert,
             outdated: tree.outdated,
             script,
+            python_version,
+            python_platform,
+            python: python.and_then(Maybe::into_option),
+            resolver: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            install_mirrors,
+        }
+    }
+}
+
+/// The resolved settings to use for a `tree` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct LicenseSettings {
+    pub(crate) dev: DevGroupsSpecification,
+    pub(crate) locked: bool,
+    pub(crate) frozen: bool,
+    pub(crate) universal: bool,
+    pub(crate) direct_only: bool,
+    pub(crate) python_version: Option<PythonVersion>,
+    pub(crate) python_platform: Option<TargetTriple>,
+    pub(crate) python: Option<String>,
+    pub(crate) install_mirrors: PythonInstallMirrors,
+    pub(crate) resolver: ResolverSettings,
+}
+
+impl LicenseSettings {
+    /// Resolve the [`LicenseSettings`] from the CLI and workspace configuration.
+    pub(crate) fn resolve(args: LicenseArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let LicenseArgs {
+            universal,
+            dev,
+            only_dev,
+            no_dev,
+            group,
+            no_group,
+            no_default_groups,
+            only_group,
+            all_groups,
+            direct_deps_only,
+            locked,
+            frozen,
+            build,
+            resolver,
+            python_version,
+            python_platform,
+            python,
+        } = args;
+        let install_mirrors = filesystem
+            .clone()
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
+        Self {
+            dev: DevGroupsSpecification::from_args(
+                dev,
+                no_dev,
+                only_dev,
+                group,
+                no_group,
+                no_default_groups,
+                only_group,
+                all_groups,
+            ),
+            locked,
+            frozen,
+            universal,
+            direct_only: direct_deps_only,
             python_version,
             python_platform,
             python: python.and_then(Maybe::into_option),
