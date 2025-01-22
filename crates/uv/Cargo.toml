@@ -133,7 +133,7 @@ ignored = [
 ]
 
 [features]
-default = ["python", "python-managed", "pypi", "git", "performance", "crates-io", "test-ecosystem"]
+default = ["python", "python-managed", "pypi", "git", "performance", "crates-io", "slow-tests", "test-ecosystem"]
 # Use better memory allocators, etc.
 performance = [
     "performance-memory-allocator",
@@ -156,6 +156,8 @@ pypi = []
 git = []
 # Introduces a dependency on crates.io.
 crates-io = []
+# Include "slow" test cases.
+slow-tests = []
 # Includes test cases that require ecosystem packages
 test-ecosystem = []
 # Adds self-update functionality.
