@@ -21,6 +21,7 @@ pub struct RequiresDist {
     pub requires_dist: Vec<uv_pypi_types::Requirement>,
     pub provides_extras: Vec<ExtraName>,
     pub dependency_groups: BTreeMap<GroupName, Vec<uv_pypi_types::Requirement>>,
+    pub dynamic: bool,
 }
 
 impl RequiresDist {
@@ -36,6 +37,7 @@ impl RequiresDist {
                 .collect(),
             provides_extras: metadata.provides_extras,
             dependency_groups: BTreeMap::default(),
+            dynamic: metadata.dynamic,
         }
     }
 
@@ -245,6 +247,7 @@ impl RequiresDist {
             requires_dist,
             dependency_groups,
             provides_extras: metadata.provides_extras,
+            dynamic: metadata.dynamic,
         })
     }
 
@@ -314,6 +317,7 @@ impl From<Metadata> for RequiresDist {
             requires_dist: metadata.requires_dist,
             provides_extras: metadata.provides_extras,
             dependency_groups: metadata.dependency_groups,
+            dynamic: metadata.dynamic,
         }
     }
 }

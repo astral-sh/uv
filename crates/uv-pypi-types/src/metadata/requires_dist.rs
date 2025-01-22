@@ -21,6 +21,7 @@ pub struct RequiresDist {
     pub name: PackageName,
     pub requires_dist: Vec<Requirement<VerbatimParsedUrl>>,
     pub provides_extras: Vec<ExtraName>,
+    pub dynamic: bool,
 }
 
 impl RequiresDist {
@@ -34,12 +35,15 @@ impl RequiresDist {
 
         // If any of the fields we need were declared as dynamic, we can't use the `pyproject.toml`
         // file.
-        let dynamic = project.dynamic.unwrap_or_default();
-        for field in dynamic {
+        let mut dynamic = false;
+        for field in project.dynamic.unwrap_or_default() {
             match field.as_str() {
                 "dependencies" => return Err(MetadataError::DynamicField("dependencies")),
                 "optional-dependencies" => {
                     return Err(MetadataError::DynamicField("optional-dependencies"))
+                }
+                "version" => {
+                    dynamic = true;
                 }
                 _ => (),
             }
@@ -83,6 +87,7 @@ impl RequiresDist {
             name,
             requires_dist,
             provides_extras,
+            dynamic,
         })
     }
 }

@@ -87,12 +87,14 @@ impl Metadata {
             name: metadata.name,
             requires_dist: metadata.requires_dist,
             provides_extras: metadata.provides_extras,
+            dynamic: metadata.dynamic,
         };
         let RequiresDist {
             name,
             requires_dist,
             provides_extras,
             dependency_groups,
+            dynamic,
         } = RequiresDist::from_project_maybe_workspace(
             requires_dist,
             install_path,
@@ -111,7 +113,7 @@ impl Metadata {
             requires_python: metadata.requires_python,
             provides_extras,
             dependency_groups,
-            dynamic: metadata.dynamic,
+            dynamic,
         })
     }
 }
