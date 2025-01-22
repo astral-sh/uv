@@ -78,11 +78,8 @@ impl ResolutionMetadata {
         let dynamic = headers
             .get_all_values("Dynamic")
             .any(|field| field == "Version");
-        let classifiers = Some(headers
-            .get_all_values("Classifier")
-            .collect::<Vec<_>>());
-        let license = headers
-            .get_first_value("License");
+        let classifiers = Some(headers.get_all_values("Classifier").collect::<Vec<_>>());
+        let license = headers.get_first_value("License");
 
         Ok(Self {
             name,

@@ -15,7 +15,7 @@ use petgraph::visit::EdgeRef;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::Serializer;
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
-use tracing::{trace, debug};
+use tracing::{debug, trace};
 use url::Url;
 
 use uv_cache_key::RepositoryUrl;

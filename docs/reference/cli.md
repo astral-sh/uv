@@ -3035,9 +3035,10 @@ uv license [OPTIONS]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
-<p>[default: auto]</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
 <p>Possible values:</p>
 
 <ul>
@@ -3214,6 +3215,10 @@ uv license [OPTIONS]
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
+</dd><dt><code>--no-default-groups</code></dt><dd><p>Exclude dependencies from default groups.</p>
+
+<p><code>--group</code> can be used to include specific groups.</p>
+
 </dd><dt><code>--no-dev</code></dt><dd><p>Omit the development dependency group.</p>
 
 <p>This option is an alias for <code>--no-group dev</code>.</p>

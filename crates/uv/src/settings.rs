@@ -1423,7 +1423,14 @@ impl LicenseSettings {
             .unwrap_or_default();
         Self {
             dev: DevGroupsSpecification::from_args(
-                dev, no_dev, only_dev, group, no_group, no_default_groups, only_group, all_groups,
+                dev,
+                no_dev,
+                only_dev,
+                group,
+                no_group,
+                no_default_groups,
+                only_group,
+                all_groups,
             ),
             locked,
             frozen,
