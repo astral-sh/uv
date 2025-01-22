@@ -1016,10 +1016,6 @@ fn extra_unconditional() -> Result<()> {
 
         [tool.uv.sources]
         proxy1 = { workspace = true }
-
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
         "#,
     )?;
 
@@ -1054,8 +1050,16 @@ fn extra_unconditional() -> Result<()> {
     ----- stderr -----
     Resolved 6 packages in [TIME]
     "###);
+    // This should error since we're enabling two conflicting extras.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
 
-    // An error should occur even when only one conflicting extra is enabled.
+    ----- stderr -----
+    error: Found conflicting extras `proxy1[extra1]` and `proxy1[extra2]` enabled simultaneously
+    "###);
+
     root_pyproject_toml.write_str(
         r#"
         [project]
@@ -1071,10 +1075,6 @@ fn extra_unconditional() -> Result<()> {
 
         [tool.uv.sources]
         proxy1 = { workspace = true }
-
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
         "#,
     )?;
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -1084,6 +1084,20 @@ fn extra_unconditional() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    "###);
+    // This is fine because we are only enabling one
+    // extra, and thus, there is no conflict.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.1.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###);
 
     // And same thing for the other extra.
@@ -1102,11 +1116,6 @@ fn extra_unconditional() -> Result<()> {
 
         [tool.uv.sources]
         proxy1 = { workspace = true }
-
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-
         "#,
     )?;
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -1116,6 +1125,20 @@ fn extra_unconditional() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    "###);
+    // This is fine because we are only enabling one
+    // extra, and thus, there is no conflict.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.1.0
+     + anyio==4.2.0
     "###);
 
     Ok(())
