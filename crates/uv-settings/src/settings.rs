@@ -149,6 +149,7 @@ impl Options {
     pub fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
         Ok(Self {
             top_level: self.top_level.relative_to(root_dir)?,
+            pip: self.pip.map(|pip| pip.relative_to(root_dir)).transpose()?,
             ..self
         })
     }
@@ -735,6 +736,28 @@ impl ResolverInstallerOptions {
     /// Resolve the [`ResolverInstallerOptions`] relative to the given root directory.
     pub fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
         Ok(Self {
+            index: self
+                .index
+                .map(|index| {
+                    index
+                        .into_iter()
+                        .map(|index| index.relative_to(root_dir))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()?,
+            index_url: self
+                .index_url
+                .map(|index_url| index_url.relative_to(root_dir))
+                .transpose()?,
+            extra_index_url: self
+                .extra_index_url
+                .map(|extra_index_url| {
+                    extra_index_url
+                        .into_iter()
+                        .map(|extra_index_url| extra_index_url.relative_to(root_dir))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()?,
             find_links: self
                 .find_links
                 .map(|find_links| {
@@ -1504,6 +1527,46 @@ pub struct PipOptions {
         "#
     )]
     pub reinstall_package: Option<Vec<PackageName>>,
+}
+
+impl PipOptions {
+    /// Resolve the [`PipOptions`] relative to the given root directory.
+    pub fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        Ok(Self {
+            index: self
+                .index
+                .map(|index| {
+                    index
+                        .into_iter()
+                        .map(|index| index.relative_to(root_dir))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()?,
+            index_url: self
+                .index_url
+                .map(|index_url| index_url.relative_to(root_dir))
+                .transpose()?,
+            extra_index_url: self
+                .extra_index_url
+                .map(|extra_index_url| {
+                    extra_index_url
+                        .into_iter()
+                        .map(|extra_index_url| extra_index_url.relative_to(root_dir))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()?,
+            find_links: self
+                .find_links
+                .map(|find_links| {
+                    find_links
+                        .into_iter()
+                        .map(|find_link| find_link.relative_to(root_dir))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()?,
+            ..self
+        })
+    }
 }
 
 impl From<ResolverInstallerOptions> for ResolverOptions {
