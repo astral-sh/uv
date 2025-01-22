@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::collections::VecDeque;
 use std::path::Path;
@@ -277,6 +278,14 @@ pub trait Installable<'lock> {
                 Either::Right(package.dependencies.iter())
             };
             for dep in deps {
+                let mut activated_extras = Cow::Borrowed(&*activated_extras);
+                if !dep.extra.is_empty() {
+                    let mut extended = activated_extras.to_vec();
+                    for extra in &dep.extra {
+                        extended.push((&dep.package_id.name, extra));
+                    }
+                    activated_extras = Cow::Owned(extended);
+                }
                 if !dep.complexified_marker.evaluate(
                     marker_env,
                     &activated_extras,
