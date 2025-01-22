@@ -8524,6 +8524,6 @@ fn group_needs_manifest() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Requesting groups requires a `pyproject.toml` file.
+    error: Requesting groups requires a `pyproject.toml`.
     "###);
 }
