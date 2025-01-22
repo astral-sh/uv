@@ -2206,6 +2206,7 @@ pub(crate) struct VenvSettings {
     pub(crate) system_site_packages: bool,
     pub(crate) relocatable: bool,
     pub(crate) no_project: bool,
+    pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
 }
 
@@ -2228,6 +2229,7 @@ impl VenvSettings {
             exclude_newer,
             no_project,
             link_mode,
+            refresh,
             compat_args: _,
         } = args;
 
@@ -2239,6 +2241,7 @@ impl VenvSettings {
             system_site_packages,
             no_project,
             relocatable,
+            refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
