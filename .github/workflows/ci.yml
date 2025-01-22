@@ -721,7 +721,7 @@ jobs:
     timeout-minutes: 10
     needs: build-binary-windows-aarch64
     name: "smoke test | windows aarch64"
-    runs-on: windows-latest
+    runs-on: github-windows-11-aarch64-4
     steps:
       - name: "Download binary"
         uses: actions/download-artifact@v4
@@ -1673,32 +1673,6 @@ jobs:
       - name: "Validate global Python install"
         run: py -3.10 ./scripts/check_system_python.py --uv ./uv.exe
 
-  system-test-windows-aarch64-python-313:
-    timeout-minutes: 10
-    needs: build-binary-windows-aarch64
-    name: "check system | python3.13 on windows aarch64"
-    runs-on: github-windows-11-aarch64-4
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-windows-aarch64-${{ github.sha }}
-
-      - name: "Print Python path"
-        run: echo $(which python)
-
-      - name: "Validate global Python install"
-        run: py -3.13 ./scripts/check_system_python.py --uv ./uv.exe
-
   system-test-windows-x86_64-python-310:
     timeout-minutes: 10
     needs: build-binary-windows-x86_64
@@ -1843,11 +1817,10 @@ jobs:
     needs:
       [
         build-binary-windows-x86_64,
-        build-binary-windows-aarch64,
         build-binary-macos-aarch64,
         build-binary-linux,
       ]
-    name: check system | conda${{ matrix.python-version }} on ${{ matrix.os }}
+    name: check system | conda${{ matrix.python-version }} on ${{ matrix.os }} {{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -1855,18 +1828,14 @@ jobs:
         os: ["linux", "windows", "macos"]
         python-version: ["3.8", "3.11"]
         include:
-          - { os: "linux", target: "linux", runner: "ubuntu-latest" }
+          - { os: "linux", target: "linux", runner: "ubuntu-latest", arch: "x86_64" }
           - {
               os: "windows",
               target: "windows-x86_64",
               runner: "windows-latest",
+              arch: "x86_64"
             }
-          - {
-              os: "windows",
-              target: "windows-aarch64",
-              runner: "github-windows-11-aarch64-4",
-            }
-          - { os: "macos", target: "macos-aarch64", runner: "macos-14" }
+          - { os: "macos", target: "macos-aarch64", runner: "macos-14", arch: "aarch64" }
     steps:
       - uses: actions/checkout@v4
 
@@ -1961,41 +1930,6 @@ jobs:
 
       - name: "Validate embedded Python install"
         run: python ./scripts/check_embedded_python.py --uv ./uv.exe
-
-  system-test-windows-embedded-python-310-aarch64:
-    timeout-minutes: 10
-    needs: build-binary-windows-aarch64
-    name: "check system | embedded python3.10 on windows aarch64"
-    runs-on: github-windows-11-aarch64-4
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-windows-aarch64-${{ github.sha }}
-
-      # Download embedded Python.
-      - name: "Download embedded Python"
-        run: curl -LsSf https://www.python.org/ftp/python/3.11.8/python-3.11.8-embed-arm64.zip -o python-3.11.8-embed-arm64.zip
-
-      - name: "Unzip embedded Python"
-        run: 7z x python-3.11.8-embed-arm64.zip -oembedded-python
-
-      - name: "Show embedded Python contents"
-        run: ls embedded-python
-
-      - name: "Set PATH"
-        run: echo "${{ github.workspace }}\embedded-python" >> $env:GITHUB_PATH
-
-      - name: "Print Python path"
-        run: echo "${{ github.workspace }}\embedded-python" >> $env:GITHUB_PATH; echo $(which python)
-
-      - name: "Validate embedded Python install"
-        run: echo "${{ github.workspace }}\embedded-python" >> $env:GITHUB_PATH; python ./scripts/check_embedded_python.py --uv ./uv.exe
 
   benchmarks:
     runs-on: ubuntu-latest
