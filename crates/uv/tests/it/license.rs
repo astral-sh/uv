@@ -19,15 +19,15 @@ fn project_with_no_license() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.license().arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.license().arg("--universal"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    project: 0.1.0, Unknown License
+    project v0.1.0 Unknown License
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     // `uv tree` should update the lockfile
@@ -54,15 +54,15 @@ fn project_with_trove_license() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.license().arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.license().arg("--universal"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    project: 0.1.0, Other/Proprietary License
+    project v0.1.0 Other/Proprietary License
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     // `uv tree` should update the lockfile
@@ -89,15 +89,15 @@ fn project_with_trove_osi_license() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.license().arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.license().arg("--universal"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    project: 0.1.0, OSI Approved
+    project v0.1.0 OSI Approved
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     // `uv tree` should update the lockfile
@@ -127,20 +127,20 @@ fn nested_dependencies() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.license().arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.license().arg("--universal"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    project: 0.1.0, MIT License
-    scikit-learn: 1.4.1.post1, BSD License
-    joblib: 1.3.2, BSD License
-    numpy: 1.26.4, BSD License
-    scipy: 1.12.0, BSD License
-    threadpoolctl: 3.4.0, BSD License
+    project v0.1.0 MIT License
+    scikit-learn v1.4.1.post1 BSD License
+    joblib v1.3.2 BSD License
+    numpy v1.26.4 BSD License
+    scipy v1.12.0 BSD License
+    threadpoolctl v3.4.0 BSD License
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     // `uv tree` should update the lockfile
@@ -171,15 +171,15 @@ fn nested_platform_dependencies() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    project: 0.1.0, Unknown License
-    jupyter-client: 8.6.1, BSD License
-    jupyter-core: 5.7.2, BSD License
-    platformdirs: 4.2.0, MIT License
-    traitlets: 5.14.2, BSD License
-    python-dateutil: 2.9.0.post0, BSD License, Apache Software License
-    six: 1.16.0, MIT License
-    pyzmq: 25.1.2, GNU Library or Lesser General Public License (LGPL), BSD License
-    tornado: 6.4, Apache Software License
+    project v0.1.0 Unknown License
+    jupyter-client v8.6.1 BSD License
+    jupyter-core v5.7.2 BSD License
+    platformdirs v4.2.0 MIT License
+    traitlets v5.14.2 BSD License
+    python-dateutil v2.9.0.post0 BSD License, Apache Software License
+    six v1.16.0 MIT License
+    pyzmq v25.1.2 GNU Library or Lesser General Public License (LGPL), BSD License
+    tornado v6.4 Apache Software License
 
     ----- stderr -----
     Resolved 12 packages in [TIME]
@@ -190,18 +190,18 @@ fn nested_platform_dependencies() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    project: 0.1.0, Unknown License
-    jupyter-client: 8.6.1, BSD License
-    jupyter-core: 5.7.2, BSD License
-    platformdirs: 4.2.0, MIT License
-    pywin32: 306, Python Software Foundation License
-    traitlets: 5.14.2, BSD License
-    python-dateutil: 2.9.0.post0, BSD License, Apache Software License
-    six: 1.16.0, MIT License
-    pyzmq: 25.1.2, GNU Library or Lesser General Public License (LGPL), BSD License
-    cffi: 1.16.0, MIT License
-    pycparser: 2.21, BSD License
-    tornado: 6.4, Apache Software License
+    project v0.1.0 Unknown License
+    jupyter-client v8.6.1 BSD License
+    jupyter-core v5.7.2 BSD License
+    platformdirs v4.2.0 MIT License
+    pywin32 v306 Python Software Foundation License
+    traitlets v5.14.2 BSD License
+    python-dateutil v2.9.0.post0 BSD License, Apache Software License
+    six v1.16.0 MIT License
+    pyzmq v25.1.2 GNU Library or Lesser General Public License (LGPL), BSD License
+    cffi v1.16.0 MIT License
+    pycparser v2.21 BSD License
+    tornado v6.4 Apache Software License
 
     ----- stderr -----
     Resolved 12 packages in [TIME]
@@ -234,10 +234,10 @@ fn frozen() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    project: 0.1.0, Unknown License
-    anyio: 4.3.0, MIT License
-    idna: 3.6, BSD License
-    sniffio: 1.3.1, MIT License, Apache Software License
+    project v0.1.0 Unknown License
+    anyio v4.3.0 MIT License
+    idna v3.6 BSD License
+    sniffio v1.3.1 MIT License, Apache Software License
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -265,10 +265,10 @@ fn frozen() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    project: 0.1.0, Unknown License
-    anyio: 4.3.0, MIT License
-    idna: 3.6, BSD License
-    sniffio: 1.3.1, MIT License, Apache Software License
+    project v0.1.0 Unknown License
+    anyio v4.3.0 MIT License
+    idna v3.6 BSD License
+    sniffio v1.3.1 MIT License, Apache Software License
 
     ----- stderr -----
     "
@@ -300,13 +300,13 @@ fn platform_dependencies() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    project: 0.1.0, Unknown License
-    black: 24.3.0, MIT License
-    click: 8.1.7, BSD License
-    mypy-extensions: 1.0.0, MIT License
-    packaging: 24.0, Apache Software License, BSD License
-    pathspec: 0.12.1, Mozilla Public License 2.0 (MPL 2.0)
-    platformdirs: 4.2.0, MIT License
+    project v0.1.0 Unknown License
+    black v24.3.0 MIT License
+    click v8.1.7 BSD License
+    mypy-extensions v1.0.0 MIT License
+    packaging v24.0 Apache Software License, BSD License
+    pathspec v0.12.1 Mozilla Public License 2.0 (MPL 2.0)
+    platformdirs v4.2.0 MIT License
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
@@ -317,14 +317,14 @@ fn platform_dependencies() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    project: 0.1.0, Unknown License
-    black: 24.3.0, MIT License
-    click: 8.1.7, BSD License
-    colorama: 0.4.6, BSD License
-    mypy-extensions: 1.0.0, MIT License
-    packaging: 24.0, Apache Software License, BSD License
-    pathspec: 0.12.1, Mozilla Public License 2.0 (MPL 2.0)
-    platformdirs: 4.2.0, MIT License
+    project v0.1.0 Unknown License
+    black v24.3.0 MIT License
+    click v8.1.7 BSD License
+    colorama v0.4.6 BSD License
+    mypy-extensions v1.0.0 MIT License
+    packaging v24.0 Apache Software License, BSD License
+    pathspec v0.12.1 Mozilla Public License 2.0 (MPL 2.0)
+    platformdirs v4.2.0 MIT License
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
@@ -336,14 +336,14 @@ fn platform_dependencies() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    project: 0.1.0, Unknown License
-    black: 24.3.0, MIT License
-    click: 8.1.7, BSD License
-    colorama: 0.4.6, BSD License
-    mypy-extensions: 1.0.0, MIT License
-    packaging: 24.0, Apache Software License, BSD License
-    pathspec: 0.12.1, Mozilla Public License 2.0 (MPL 2.0)
-    platformdirs: 4.2.0, MIT License
+    project v0.1.0 Unknown License
+    black v24.3.0 MIT License
+    click v8.1.7 BSD License
+    colorama v0.4.6 BSD License
+    mypy-extensions v1.0.0 MIT License
+    packaging v24.0 Apache Software License, BSD License
+    pathspec v0.12.1 Mozilla Public License 2.0 (MPL 2.0)
+    platformdirs v4.2.0 MIT License
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
@@ -380,12 +380,12 @@ fn repeated_dependencies() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    project: 0.1.0, Unknown License
-    anyio: 1.4.0, MIT License
-    async-generator: 1.10, MIT License, Apache Software License
-    idna: 3.6, BSD License
-    sniffio: 1.3.1, MIT License, Apache Software License
-    anyio: 4.3.0, MIT License
+    project v0.1.0 Unknown License
+    anyio v1.4.0 MIT License
+    async-generator v1.10 MIT License, Apache Software License
+    idna v3.6 BSD License
+    sniffio v1.3.1 MIT License, Apache Software License
+    anyio v4.3.0 MIT License
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -451,13 +451,13 @@ fn repeated_version() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    project: 0.1.0, Unknown License
-    dependency: 0.0.1, Unknown License
-    anyio: 3.7.0, MIT License
-    idna: 3.6, BSD License
-    sniffio: 1.3.1, MIT License, Apache Software License
-    dependency: 0.0.1, Unknown License
-    anyio: 3.0.0, MIT License
+    project v0.1.0 Unknown License
+    dependency v0.0.1 Unknown License
+    anyio v3.7.0 MIT License
+    idna v3.6 BSD License
+    sniffio v1.3.1 MIT License, Apache Software License
+    dependency v0.0.1 Unknown License
+    anyio v3.0.0 MIT License
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
@@ -511,12 +511,12 @@ fn workspace_dev() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    project: 0.1.0, Unknown License
-    anyio: 4.3.0, MIT License
-    idna: 3.6, BSD License
-    sniffio: 1.3.1, MIT License, Apache Software License
-    child: 0.1.0, Unknown License (group: dev)
-    iniconfig: 2.0.0, MIT License
+    project v0.1.0 Unknown License
+    anyio v4.3.0 MIT License
+    idna v3.6 BSD License
+    sniffio v1.3.1 MIT License, Apache Software License
+    child v0.1.0 Unknown License (group: dev)
+    iniconfig v2.0.0 MIT License
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -529,12 +529,12 @@ fn workspace_dev() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    child: 0.1.0, Unknown License
-    iniconfig: 2.0.0, MIT License
-    project: 0.1.0, Unknown License
-    anyio: 4.3.0, MIT License
-    idna: 3.6, BSD License
-    sniffio: 1.3.1, MIT License, Apache Software License
+    child v0.1.0 Unknown License
+    iniconfig v2.0.0 MIT License
+    project v0.1.0 Unknown License
+    anyio v4.3.0 MIT License
+    idna v3.6 BSD License
+    sniffio v1.3.1 MIT License, Apache Software License
 
     ----- stderr -----
     Resolved 6 packages in [TIME]

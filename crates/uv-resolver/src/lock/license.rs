@@ -2,7 +2,6 @@ use std::borrow::Cow;
 use std::collections::VecDeque;
 
 use itertools::Itertools;
-use owo_colors::OwoColorize;
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::prelude::EdgeRef;
 use petgraph::Direction;
