@@ -46,3 +46,16 @@ impl DependencyProvider for UvDependencyProvider {
         unimplemented!()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn priority_size() {
+        assert_eq!(
+            size_of::<<UvDependencyProvider as DependencyProvider>::Priority>(),
+            24
+        );
+    }
+}
