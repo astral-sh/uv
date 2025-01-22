@@ -864,6 +864,13 @@
             "null"
           ]
         },
+        "all-groups": {
+          "description": "Include all groups.\n\nOnly applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "allow-empty-requirements": {
           "description": "Allow `uv pip sync` with empty requirements, which will clear the environment of all packages.",
           "type": [
@@ -1018,6 +1025,16 @@
             "null"
           ]
         },
+        "group": {
+          "description": "Include optional dependencies from the specified group; may be provided more than once.\n\nOnly applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/GroupName"
+          }
+        },
         "index-strategy": {
           "description": "The strategy to use when resolving against multiple index URLs.\n\nBy default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (`first-index`). This prevents \"dependency confusion\" attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.",
           "anyOf": [
@@ -1103,6 +1120,13 @@
             "$ref": "#/definitions/PackageName"
           }
         },
+        "no-default-groups": {
+          "description": "Exclude default groups.\n\nOnly applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "no-deps": {
           "description": "Ignore package dependencies, instead only add those packages explicitly listed on the command line to the resulting the requirements file.",
           "type": [
@@ -1128,6 +1152,16 @@
           ],
           "items": {
             "$ref": "#/definitions/ExtraName"
+          }
+        },
+        "no-group": {
+          "description": "Exclude optional dependencies from the specified group if `all-groups` are supplied\n\nOnly applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/GroupName"
           }
         },
         "no-header": {
@@ -1173,6 +1207,16 @@
           ],
           "items": {
             "$ref": "#/definitions/PackageNameSpecifier"
+          }
+        },
+        "only-group": {
+          "description": "Exclude only dependencies from the specified group.\n\nOnly applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/GroupName"
           }
         },
         "output-file": {

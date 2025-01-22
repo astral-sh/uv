@@ -1696,6 +1696,34 @@ Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
 
 ---
 
+#### [`all-groups`](#pip_all-groups) {: #pip_all-groups }
+<span id="all-groups"></span>
+
+Include all groups.
+
+Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+
+**Default value**: `false`
+
+**Type**: `bool`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    all-groups = true
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    all-groups = true
+    ```
+
+---
+
 #### [`allow-empty-requirements`](#pip_allow-empty-requirements) {: #pip_allow-empty-requirements }
 <span id="allow-empty-requirements"></span>
 
@@ -2242,6 +2270,34 @@ Include distribution hashes in the output file.
 
 ---
 
+#### [`group`](#pip_group) {: #pip_group }
+<span id="group"></span>
+
+Include optional dependencies from the specified group; may be provided more than once.
+
+Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    group = ["dev", "docs"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    group = ["dev", "docs"]
+    ```
+
+---
+
 #### [`index-strategy`](#pip_index-strategy) {: #pip_index-strategy }
 <span id="index-strategy"></span>
 
@@ -2521,6 +2577,34 @@ are already installed.
 
 ---
 
+#### [`no-default-groups`](#pip_no-default-groups) {: #pip_no-default-groups }
+<span id="no-default-groups"></span>
+
+Exclude default groups.
+
+Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+
+**Default value**: `false`
+
+**Type**: `bool`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    no-default-groups = true
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    no-default-groups = true
+    ```
+
+---
+
 #### [`no-deps`](#pip_no-deps) {: #pip_no-deps }
 <span id="no-deps"></span>
 
@@ -2599,6 +2683,34 @@ Exclude the specified optional dependencies if `all-extras` is supplied.
     [pip]
     all-extras = true
     no-extra = ["dev", "docs"]
+    ```
+
+---
+
+#### [`no-group`](#pip_no-group) {: #pip_no-group }
+<span id="no-group"></span>
+
+Exclude optional dependencies from the specified group if `all-groups` are supplied
+
+Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    no-group = ["dev", "docs"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    no-group = ["dev", "docs"]
     ```
 
 ---
@@ -2772,6 +2884,34 @@ Clear previously specified packages with `:none:`.
     ```toml
     [pip]
     only-binary = ["ruff"]
+    ```
+
+---
+
+#### [`only-group`](#pip_only-group) {: #pip_only-group }
+<span id="only-group"></span>
+
+Exclude only dependencies from the specified group.
+
+Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    only-group = ["dev", "docs"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    only-group = ["dev", "docs"]
     ```
 
 ---

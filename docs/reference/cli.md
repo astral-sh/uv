@@ -5492,6 +5492,10 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>Only applies to <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code> sources.</p>
 
+</dd><dt><code>--all-groups</code></dt><dd><p>Include dependencies from all dependency groups.</p>
+
+<p><code>--no-group</code> can be used to exclude specific groups.</p>
+
 </dd><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 
 <p>Can be provided multiple times.</p>
@@ -5616,6 +5620,10 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 </ul>
 </dd><dt><code>--generate-hashes</code></dt><dd><p>Include distribution hashes in the output file</p>
 
+</dd><dt><code>--group</code> <i>group</i></dt><dd><p>Include dependencies from the specified dependency group.</p>
+
+<p>May be provided multiple times.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
@@ -5711,9 +5719,17 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 </dd><dt><code>--no-cache</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
+</dd><dt><code>--no-default-groups</code></dt><dd><p>Exclude dependencies from default groups.</p>
+
+<p><code>--group</code> can be used to include specific groups.</p>
+
 </dd><dt><code>--no-deps</code></dt><dd><p>Ignore package dependencies, instead only add those packages explicitly listed on the command line to the resulting the requirements file</p>
 
 </dd><dt><code>--no-emit-package</code> <i>no-emit-package</i></dt><dd><p>Specify a package to omit from the output resolution. Its dependencies will still be included in the resolution. Equivalent to pip-compile&#8217;s <code>--unsafe-package</code> option</p>
+
+</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified dependency group.</p>
+
+<p>May be provided multiple times.</p>
 
 </dd><dt><code>--no-header</code></dt><dd><p>Exclude the comment header at the top of the generated output file</p>
 
@@ -5746,6 +5762,12 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 <p>When enabled, resolving will not run code from the given packages. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
 
 <p>Multiple packages may be provided. Disable binaries for all packages with <code>:all:</code>. Clear previously specified packages with <code>:none:</code>.</p>
+
+</dd><dt><code>--only-group</code> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
+
+<p>May be provided multiple times.</p>
+
+<p>The project itself will also be omitted.</p>
 
 </dd><dt><code>--output-file</code>, <code>-o</code> <i>output-file</i></dt><dd><p>Write the compiled requirements to the given <code>requirements.txt</code> file.</p>
 
@@ -6370,6 +6392,10 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 
 <p>Only applies to <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code> sources.</p>
 
+</dd><dt><code>--all-groups</code></dt><dd><p>Include dependencies from all dependency groups.</p>
+
+<p><code>--no-group</code> can be used to exclude specific groups.</p>
+
 </dd><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 
 <p>Can be provided multiple times.</p>
@@ -6488,6 +6514,10 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 
 <li><code>requires-python</code>:  Optimize for selecting latest supported version of each package, for each supported Python version</li>
 </ul>
+</dd><dt><code>--group</code> <i>group</i></dt><dd><p>Include dependencies from the specified dependency group.</p>
+
+<p>May be provided multiple times.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
@@ -6584,7 +6614,15 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
+</dd><dt><code>--no-default-groups</code></dt><dd><p>Exclude dependencies from default groups.</p>
+
+<p><code>--group</code> can be used to include specific groups.</p>
+
 </dd><dt><code>--no-deps</code></dt><dd><p>Ignore package dependencies, instead only installing those packages explicitly listed on the command line or in the requirements files</p>
+
+</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified dependency group.</p>
+
+<p>May be provided multiple times.</p>
 
 </dd><dt><code>--no-index</code></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
 
@@ -6612,6 +6650,12 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 <p>When enabled, resolving will not run code from the given packages. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
 
 <p>Multiple packages may be provided. Disable binaries for all packages with <code>:all:</code>. Clear previously specified packages with <code>:none:</code>.</p>
+
+</dd><dt><code>--only-group</code> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
+
+<p>May be provided multiple times.</p>
+
+<p>The project itself will also be omitted.</p>
 
 </dd><dt><code>--overrides</code> <i>overrides</i></dt><dd><p>Override versions using the given requirements files.</p>
 
