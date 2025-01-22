@@ -285,6 +285,20 @@ pub(crate) async fn run(
 
             Some(environment.into_interpreter())
         } else {
+            // If no lockfile is found, warn against `--locked` and `--frozen`.
+            if locked {
+                warn_user!(
+                    "No lockfile found for Python script (ignoring `--locked`); run `{}` to generate a lockfile",
+                    "uv lock --script".green(),
+                );
+            }
+            if frozen {
+                warn_user!(
+                    "No lockfile found for Python script (ignoring `--frozen`); run `{}` to generate a lockfile",
+                    "uv lock --script".green(),
+                );
+            }
+
             // Determine the working directory for the script.
             let script_dir = match &script {
                 Pep723Item::Script(script) => std::path::absolute(&script.path)?
@@ -468,16 +482,6 @@ pub(crate) async fn run(
         if package.is_some() {
             warn_user!(
                 "`--package` is a no-op for Python scripts with inline metadata, which always run in isolation"
-            );
-        }
-        if locked {
-            warn_user!(
-                "`--locked` is a no-op for Python scripts with inline metadata, which always run in isolation"
-            );
-        }
-        if frozen {
-            warn_user!(
-                "`--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
         if no_sync {
