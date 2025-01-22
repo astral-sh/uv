@@ -1201,6 +1201,221 @@ fn extra_unconditional_non_conflicting() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn extra_unconditional_in_optional() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
+    root_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.10.0"
+        dependencies = []
+
+        [tool.uv.workspace]
+        members = ["proxy1"]
+
+        [tool.uv.sources]
+        proxy1 = { workspace = true }
+
+        [project.optional-dependencies]
+        x1 = ["proxy1[nested-x1]"]
+        x2 = ["proxy1[nested-x2]"]
+        "#,
+    )?;
+
+    let proxy1_pyproject_toml = context.temp_dir.child("proxy1").child("pyproject.toml");
+    proxy1_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "proxy1"
+        version = "0.1.0"
+        requires-python = ">=3.10.0"
+        dependencies = []
+
+        [project.optional-dependencies]
+        nested-x1 = ["sortedcontainers==2.3.0"]
+        nested-x2 = ["sortedcontainers==2.4.0"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { extra = "nested-x1" },
+            { extra = "nested-x2" },
+          ],
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
+
+    // This shouldn't install anything.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited in [TIME]
+    "###);
+
+    // This should install `sortedcontainers==2.3.0`.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=x1"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sortedcontainers==2.3.0
+    "###);
+
+    // This should install `sortedcontainers==2.4.0`.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=x2"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - sortedcontainers==2.3.0
+     + sortedcontainers==2.4.0
+    "###);
+
+    // This should error!
+    uv_snapshot!(
+        context.filters(),
+        context.sync().arg("--frozen").arg("--extra=x1").arg("--extra=x2"),
+        @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Found conflicting extras `proxy1[nested-x1]` and `proxy1[nested-x2]` enabled simultaneously
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn extra_unconditional_non_local_conflict() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
+    root_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.10.0"
+        dependencies = ["a", "b"]
+
+        [tool.uv.workspace]
+        members = ["a", "b", "c"]
+
+        [tool.uv.sources]
+        a = { workspace = true }
+        b = { workspace = true }
+        c = { workspace = true }
+        "#,
+    )?;
+
+    let a_pyproject_toml = context.temp_dir.child("a").child("pyproject.toml");
+    a_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.10.0"
+        dependencies = ["c[x1]"]
+
+        [tool.uv.sources]
+        c = { workspace = true }
+        "#,
+    )?;
+
+    let b_pyproject_toml = context.temp_dir.child("b").child("pyproject.toml");
+    b_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "b"
+        version = "0.1.0"
+        requires-python = ">=3.10.0"
+        dependencies = ["c[x2]"]
+
+        [tool.uv.sources]
+        c = { workspace = true }
+        "#,
+    )?;
+
+    let c_pyproject_toml = context.temp_dir.child("c").child("pyproject.toml");
+    c_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "c"
+        version = "0.1.0"
+        requires-python = ">=3.10.0"
+        dependencies = []
+
+        [project.optional-dependencies]
+        x1 = ["sortedcontainers==2.3.0"]
+        x2 = ["sortedcontainers==2.4.0"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { extra = "x1" },
+            { extra = "x2" },
+          ],
+        ]
+        "#,
+    )?;
+
+    // Regrettably, this produces a lock file, and it is one
+    // that can never be installed! Namely, because two different
+    // conflicting extras are enabled unconditionally in all
+    // configurations.
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "###);
+
+    // This should fail. If it doesn't and we generated a lock
+    // file above, then this will likely result in the installation
+    // of two different versions of the same package.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Found conflicting extras `c[x1]` and `c[x2]` enabled simultaneously
+    "###);
+
+    Ok(())
+}
+
 /// This tests how we deal with mutually conflicting extras that span multiple
 /// packages in a workspace.
 #[test]

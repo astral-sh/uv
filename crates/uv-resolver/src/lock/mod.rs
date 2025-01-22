@@ -4897,6 +4897,16 @@ enum LockErrorKind {
         #[source]
         err: uv_distribution::Error,
     },
+    #[error(
+        "Found conflicting extras `{package1}[{extra1}]` \
+         and `{package2}[{extra2}]` enabled simultaneously"
+    )]
+    ConflictingExtra {
+        package1: PackageName,
+        extra1: ExtraName,
+        package2: PackageName,
+        extra2: ExtraName,
+    },
 }
 
 /// An error that occurs when a source string could not be parsed.
