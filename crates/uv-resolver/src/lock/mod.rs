@@ -1319,17 +1319,14 @@ impl Lock {
                 // case, we'd expect the version to be omitted).
                 if package.id.source.is_source_tree() {
                     if metadata.dynamic {
-                        return Ok(SatisfiesResult::MismatchedDynamic(
-                            package.id.name.clone(),
-                            false,
-                        ));
+                        return Ok(SatisfiesResult::MismatchedDynamic(&package.id.name, false));
                     }
                 }
 
                 // Validate the `version` metadata.
                 if metadata.version != *version {
                     return Ok(SatisfiesResult::MismatchedVersion(
-                        package.id.name.clone(),
+                        &package.id.name,
                         version.clone(),
                         Some(metadata.version.clone()),
                     ));
@@ -1434,10 +1431,7 @@ impl Lock {
 
                     // Validate that the package is still dynamic.
                     if !metadata.dynamic {
-                        return Ok(SatisfiesResult::MismatchedDynamic(
-                            package.id.name.clone(),
-                            true,
-                        ));
+                        return Ok(SatisfiesResult::MismatchedDynamic(&package.id.name, true));
                     }
 
                     // Validate that the requirements are unchanged.
@@ -1447,7 +1441,7 @@ impl Lock {
                     }
                 }
             } else {
-                return Ok(SatisfiesResult::MissingVersion(package.id.name.clone()));
+                return Ok(SatisfiesResult::MissingVersion(&package.id.name));
             }
 
             // Recurse.
@@ -1511,9 +1505,9 @@ pub enum SatisfiesResult<'lock> {
     /// A workspace member switched from virtual to non-virtual or vice versa.
     MismatchedVirtual(PackageName, bool),
     /// A source tree switched from dynamic to non-dynamic or vice versa.
-    MismatchedDynamic(PackageName, bool),
+    MismatchedDynamic(&'lock PackageName, bool),
     /// The lockfile uses a different set of version for its workspace members.
-    MismatchedVersion(PackageName, Version, Option<Version>),
+    MismatchedVersion(&'lock PackageName, Version, Option<Version>),
     /// The lockfile uses a different set of requirements.
     MismatchedRequirements(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of constraints.
@@ -1548,7 +1542,7 @@ pub enum SatisfiesResult<'lock> {
         BTreeMap<GroupName, BTreeSet<Requirement>>,
     ),
     /// The lockfile is missing a version.
-    MissingVersion(PackageName),
+    MissingVersion(&'lock PackageName),
 }
 
 /// We discard the lockfile if these options match.
