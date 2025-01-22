@@ -1084,17 +1084,6 @@ pub struct PipOptions {
         "#
     )]
     pub no_group: Option<Vec<GroupName>>,
-    /// Exclude default groups.
-    ///
-    /// Only applies to `pyproject.toml` sources.
-    #[option(
-        default = "false",
-        value_type = "bool",
-        example = r#"
-            no-default-groups = true
-        "#
-    )]
-    pub no_default_groups: Option<bool>,
     /// Exclude only dependencies from the specified group.
     ///
     /// Only applies to `pyproject.toml` sources.

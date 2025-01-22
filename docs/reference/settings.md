@@ -2577,34 +2577,6 @@ are already installed.
 
 ---
 
-#### [`no-default-groups`](#pip_no-default-groups) {: #pip_no-default-groups }
-<span id="no-default-groups"></span>
-
-Exclude default groups.
-
-Only applies to `pyproject.toml` sources.
-
-**Default value**: `false`
-
-**Type**: `bool`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv.pip]
-    no-default-groups = true
-    ```
-=== "uv.toml"
-
-    ```toml
-    [pip]
-    no-default-groups = true
-    ```
-
----
-
 #### [`no-deps`](#pip_no-deps) {: #pip_no-deps }
 <span id="no-deps"></span>
 

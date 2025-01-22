@@ -1120,13 +1120,6 @@
             "$ref": "#/definitions/PackageName"
           }
         },
-        "no-default-groups": {
-          "description": "Exclude default groups.\n\nOnly applies to `pyproject.toml` sources.",
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
         "no-deps": {
           "description": "Ignore package dependencies, instead only add those packages explicitly listed on the command line to the resulting the requirements file.",
           "type": [

@@ -1030,14 +1030,6 @@ pub struct PipCompileArgs {
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
-    /// Exclude dependencies from default groups.
-    ///
-    /// Only applies to `pyproject.toml` sources.
-    ///
-    /// `--group` can be used to include specific groups.
-    #[arg(long, conflicts_with_all = ["no_group", "only_group"])]
-    pub no_default_groups: bool,
-
     /// Only include dependencies from the specified dependency group.
     ///
     /// The project itself will also be omitted.
@@ -1629,14 +1621,6 @@ pub struct PipInstallArgs {
     /// May be provided multiple times.
     #[arg(long)]
     pub no_group: Vec<GroupName>,
-
-    /// Exclude dependencies from default groups.
-    ///
-    /// Only applies to `pyproject.toml` sources.
-    ///
-    /// `--group` can be used to include specific groups.
-    #[arg(long, conflicts_with_all = ["no_group", "only_group"])]
-    pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
     ///
