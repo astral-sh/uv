@@ -108,8 +108,9 @@ impl FilesystemOptions {
         let path = dir.join("uv.toml");
         match fs_err::read_to_string(&path) {
             Ok(content) => {
-                let options: Options = toml::from_str(&content)
-                    .map_err(|err| Error::UvToml(path.clone(), Box::new(err)))?;
+                let options = toml::from_str::<Options>(&content)
+                    .map_err(|err| Error::UvToml(path.clone(), Box::new(err)))?
+                    .relative_to(&std::path::absolute(dir)?)?;
 
                 // If the directory also contains a `[tool.uv]` table in a `pyproject.toml` file,
                 // warn.
@@ -154,6 +155,8 @@ impl FilesystemOptions {
                     );
                     return Ok(None);
                 };
+
+                let options = options.relative_to(&std::path::absolute(dir)?)?;
 
                 tracing::debug!("Found workspace configuration at `{}`", path.display());
                 return Ok(Some(Self(options)));
@@ -252,8 +255,13 @@ fn system_config_file() -> Option<PathBuf> {
 /// Load [`Options`] from a `uv.toml` file.
 fn read_file(path: &Path) -> Result<Options, Error> {
     let content = fs_err::read_to_string(path)?;
-    let options: Options =
-        toml::from_str(&content).map_err(|err| Error::UvToml(path.to_path_buf(), Box::new(err)))?;
+    let options = toml::from_str::<Options>(&content)
+        .map_err(|err| Error::UvToml(path.to_path_buf(), Box::new(err)))?;
+    let options = if let Some(parent) = std::path::absolute(path)?.parent() {
+        options.relative_to(parent)?
+    } else {
+        options
+    };
     Ok(options)
 }
 
@@ -293,6 +301,9 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
 pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Index(#[from] uv_distribution_types::IndexUrlError),
 
     #[error("Failed to parse: `{}`", _0.user_display())]
     PyprojectToml(PathBuf, #[source] Box<toml::de::Error>),
