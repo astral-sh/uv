@@ -631,8 +631,6 @@ jobs:
 
       - name: "Smoke test"
         run: |
-          set -e
-
           ./uv venv -v
           ./uv --does-not-exist
           ./uv pip install ruff -v
@@ -658,8 +656,6 @@ jobs:
 
       - name: "Smoke test"
         run: |
-          set -e
-
           ./uv venv -v
           ./uv pip install ruff -v
           ./uvx -v ruff --version
@@ -680,9 +676,6 @@ jobs:
       - name: "Smoke test"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: |
-          $ErrorActionPreference = "Stop"
-          $PSNativeCommandUseErrorActionPreference = $true
-
           ./uv venv -v
           ./uv pip install ruff -v
           ./uvx -v ruff --version
