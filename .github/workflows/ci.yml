@@ -679,6 +679,7 @@ jobs:
           ./uv venv -v
           ./uv pip install ruff -v
           ./uvx -v ruff --version
+          ./uv --does-not-exist
           (& ./uv generate-shell-completion powershell) | Out-String | Invoke-Expression
           (& ./uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
 
