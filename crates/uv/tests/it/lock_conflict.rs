@@ -1121,6 +1121,82 @@ fn extra_unconditional() -> Result<()> {
     Ok(())
 }
 
+/// A regression tests for unconditionally installing an extra that is
+/// marked as conflicting. Previously, the `proxy1[extra1]` dependency
+/// would be completely ignored here.
+#[test]
+fn extra_unconditional_non_conflicting() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
+    root_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "dummy"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+        dependencies = [
+          "proxy1[extra1]"
+        ]
+
+        [tool.uv.workspace]
+        members = ["proxy1"]
+
+        [tool.uv.sources]
+        proxy1 = { workspace = true }
+        "#,
+    )?;
+
+    let proxy1_pyproject_toml = context.temp_dir.child("proxy1").child("pyproject.toml");
+    proxy1_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "proxy1"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+        dependencies = []
+
+        [project.optional-dependencies]
+        extra1 = ["anyio==4.1.0"]
+        extra2 = []
+        extra3 = []
+
+        [tool.uv]
+        conflicts = [
+          [
+            { extra = "extra1" },
+            { extra = "extra3" },
+          ],
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "###);
+
+    // This *should* install `anyio==4.1.0`, but when this
+    // test was initially written, it didn't. This was because
+    // `uv sync` wasn't correctly propagating extras in a way
+    // that would satisfy the conflict markers that got added
+    // to the `proxy1[extra1]` dependency.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited in [TIME]
+    "###);
+
+    Ok(())
+}
+
 /// This tests how we deal with mutually conflicting extras that span multiple
 /// packages in a workspace.
 #[test]
