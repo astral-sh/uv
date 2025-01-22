@@ -8026,6 +8026,7 @@ fn lock_redact_https() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn lock_redact_git_pep508() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_link_mode_warning();
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
@@ -8119,6 +8120,7 @@ fn lock_redact_git_pep508() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn lock_redact_git_sources() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_link_mode_warning();
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
@@ -8215,6 +8217,7 @@ fn lock_redact_git_sources() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn lock_redact_git_pep508_non_project() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_link_mode_warning();
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
@@ -17112,6 +17115,7 @@ fn lock_dependency_metadata() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn lock_dependency_metadata_git() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -19905,6 +19909,7 @@ fn lock_group_workspace() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn lock_transitive_git() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -22280,6 +22285,7 @@ fn lock_split_on_windows() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn lock_missing_git_prefix() -> Result<()> {
     let context = TestContext::new("3.12");
 

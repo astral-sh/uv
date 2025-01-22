@@ -8031,6 +8031,7 @@ fn missing_git_prefix() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn missing_subdirectory_git() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");

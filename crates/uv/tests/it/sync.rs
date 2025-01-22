@@ -5479,6 +5479,7 @@ fn sync_stale_egg_info() -> Result<()> {
 
 /// See: <https://github.com/astral-sh/uv/issues/8887>
 #[test]
+#[cfg(feature = "git")]
 fn sync_git_repeated_member_static_metadata() -> Result<()> {
     let context = TestContext::new("3.13");
 
@@ -5571,6 +5572,7 @@ fn sync_git_repeated_member_static_metadata() -> Result<()> {
 
 /// See: <https://github.com/astral-sh/uv/issues/8887>
 #[test]
+#[cfg(feature = "git")]
 fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
     let context = TestContext::new("3.13");
 
@@ -5688,6 +5690,7 @@ fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
 
 /// See: <https://github.com/astral-sh/uv/issues/8887>
 #[test]
+#[cfg(feature = "git")]
 fn sync_git_repeated_member_backwards_path() -> Result<()> {
     let context = TestContext::new("3.13");
 
@@ -5873,6 +5876,7 @@ fn mismatched_name_cached_wheel() -> Result<()> {
 ///
 /// See: <https://github.com/astral-sh/uv/issues/9516>
 #[test]
+#[cfg(feature = "git")]
 fn sync_git_path_dependency() -> Result<()> {
     let context = TestContext::new("3.13");
 
