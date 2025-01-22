@@ -228,7 +228,8 @@ jobs:
       - name: "Cargo test"
         run: |
           cargo nextest run \
-            --features python-patch \
+            --no-default-features \
+            --features python,pypi,python-managed,git \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
