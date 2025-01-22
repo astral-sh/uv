@@ -79,7 +79,7 @@ pub(crate) async fn tree(
             LockTarget::Workspace(workspace) => DependencyGroupsTarget::Workspace(workspace),
             LockTarget::Script(..) => DependencyGroupsTarget::Script,
         };
-        target.validate(&dev)?;
+        target.validate_dependency_groups(&dev)?;
     }
 
     // Determine the default groups to include.

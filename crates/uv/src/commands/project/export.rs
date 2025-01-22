@@ -123,7 +123,7 @@ pub(crate) async fn export(
             }
             ExportTarget::Script(_) => DependencyGroupsTarget::Script,
         };
-        target.validate(&dev)?;
+        target.validate_dependency_groups(&dev)?;
     }
 
     // Determine the default groups to include.

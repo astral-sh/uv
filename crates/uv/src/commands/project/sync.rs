@@ -99,7 +99,7 @@ pub(crate) async fn sync(
             }
             VirtualProject::NonProject(workspace) => DependencyGroupsTarget::Workspace(workspace),
         };
-        target.validate(&dev)?;
+        target.validate_dependency_groups(&dev)?;
     }
 
     // Determine the default groups to include.

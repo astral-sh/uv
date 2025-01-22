@@ -1756,7 +1756,10 @@ pub(crate) enum DependencyGroupsTarget<'env> {
 impl DependencyGroupsTarget<'_> {
     /// Validate the dependency groups requested by the [`DevGroupsSpecification`].
     #[allow(clippy::result_large_err)]
-    pub(crate) fn validate(self, dev: &DevGroupsSpecification) -> Result<(), ProjectError> {
+    pub(crate) fn validate_dependency_groups(
+        self,
+        dev: &DevGroupsSpecification,
+    ) -> Result<(), ProjectError> {
         for group in dev
             .groups()
             .into_iter()
