@@ -47,7 +47,9 @@ use uv_git::GitUrl;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::{Pep508Url, VerbatimUrl};
-use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
+use uv_pypi_types::{
+    ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
+};
 
 pub use crate::annotation::*;
 pub use crate::any::*;
@@ -659,6 +661,74 @@ impl RegistryBuiltDist {
     /// Returns the best or "most compatible" wheel in this distribution.
     pub fn best_wheel(&self) -> &RegistryBuiltWheel {
         &self.wheels[self.best_wheel_index]
+    }
+}
+
+impl DirectUrlBuiltDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Archive(ParsedArchiveUrl::from_source(
+            (*self.location).clone(),
+            None,
+            DistExtension::Wheel,
+        ))
+    }
+}
+
+impl PathBuiltDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Path(ParsedPathUrl::from_source(
+            self.install_path.clone(),
+            DistExtension::Wheel,
+            self.url.to_url(),
+        ))
+    }
+}
+
+impl PathSourceDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Path(ParsedPathUrl::from_source(
+            self.install_path.clone(),
+            DistExtension::Source(self.ext),
+            self.url.to_url(),
+        ))
+    }
+}
+
+impl DirectUrlSourceDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Archive(ParsedArchiveUrl::from_source(
+            (*self.location).clone(),
+            self.subdirectory.clone(),
+            DistExtension::Source(self.ext),
+        ))
+    }
+}
+
+impl GitSourceDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Git(ParsedGitUrl::from_source(
+            self.git.repository().clone(),
+            self.git.reference().clone(),
+            self.git.precise(),
+            self.subdirectory.clone(),
+        ))
+    }
+}
+
+impl DirectorySourceDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
+            self.install_path.clone(),
+            self.editable,
+            self.r#virtual,
+            self.url.to_url(),
+        ))
     }
 }
 

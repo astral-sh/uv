@@ -5019,7 +5019,6 @@ dependencies = [
 name = "uv-distribution-types"
 version = "0.0.1"
 dependencies = [
- "anyhow",
  "arcstr",
  "bitflags 2.8.0",
  "fs-err 3.0.0",
@@ -5200,6 +5199,7 @@ dependencies = [
  "uv-distribution",
  "uv-distribution-types",
  "uv-fs",
+ "uv-git",
  "uv-install-wheel",
  "uv-normalize",
  "uv-pep440",
