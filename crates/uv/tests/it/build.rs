@@ -10,16 +10,12 @@ use std::env::current_dir;
 use zip::ZipArchive;
 
 #[test]
-fn build() -> Result<()> {
+fn build_basic() -> Result<()> {
     let context = TestContext::new("3.12");
     let filters = context
         .filters()
         .into_iter()
-        .chain([
-            (r"exit code: 1", "exit status: 1"),
-            (r"bdist\.[^/\\\s]+-[^/\\\s]+", "bdist.linux-x86_64"),
-            (r"\\\.", ""),
-        ])
+        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -34,12 +30,16 @@ fn build() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
     )?;
 
-    project.child("src").child("__init__.py").touch()?;
+    project
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
     project.child("README").touch()?;
 
     // Build the specified path.
@@ -50,78 +50,7 @@ fn build() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    running egg_info
-    creating src/project.egg-info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running sdist
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running check
-    creating project-0.1.0
-    creating project-0.1.0/src
-    creating project-0.1.0/src/project.egg-info
-    copying files to project-0.1.0...
-    copying README -> project-0.1.0
-    copying pyproject.toml -> project-0.1.0
-    copying src/__init__.py -> project-0.1.0/src
-    copying src/project.egg-info/PKG-INFO -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/SOURCES.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/dependency_links.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/requires.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/top_level.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/SOURCES.txt -> project-0.1.0/src/project.egg-info
-    Writing project-0.1.0/setup.cfg
-    Creating tar archive
-    removing 'project-0.1.0' (and everything under it)
     Building wheel from source distribution...
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running bdist_wheel
-    running build
-    running build_py
-    creating build
-    creating build/lib
-    copying src/__init__.py -> build/lib
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    installing to build/bdist.linux-x86_64/wheel
-    running install
-    running install_lib
-    creating build/bdist.linux-x86_64
-    creating build/bdist.linux-x86_64/wheel
-    copying build/lib/__init__.py -> build/bdist.linux-x86_64/wheel
-    running install_egg_info
-    Copying src/project.egg-info to build/bdist.linux-x86_64/wheel/project-0.1.0-py3.12.egg-info
-    running install_scripts
-    creating build/bdist.linux-x86_64/wheel/project-0.1.0.dist-info/WHEEL
-    creating '[TEMP_DIR]/project/dist/[TMP]/wheel' to it
-    adding '__init__.py'
-    adding 'project-0.1.0.dist-info/METADATA'
-    adding 'project-0.1.0.dist-info/WHEEL'
-    adding 'project-0.1.0.dist-info/top_level.txt'
-    adding 'project-0.1.0.dist-info/RECORD'
-    removing build/bdist.linux-x86_64/wheel
     Successfully built project/dist/project-0.1.0.tar.gz
     Successfully built project/dist/project-0.1.0-py3-none-any.whl
     "###);
@@ -145,76 +74,7 @@ fn build() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running sdist
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running check
-    creating project-0.1.0
-    creating project-0.1.0/src
-    creating project-0.1.0/src/project.egg-info
-    copying files to project-0.1.0...
-    copying README -> project-0.1.0
-    copying pyproject.toml -> project-0.1.0
-    copying src/__init__.py -> project-0.1.0/src
-    copying src/project.egg-info/PKG-INFO -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/SOURCES.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/dependency_links.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/requires.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/top_level.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/SOURCES.txt -> project-0.1.0/src/project.egg-info
-    Writing project-0.1.0/setup.cfg
-    Creating tar archive
-    removing 'project-0.1.0' (and everything under it)
     Building wheel from source distribution...
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running bdist_wheel
-    running build
-    running build_py
-    creating build
-    creating build/lib
-    copying src/__init__.py -> build/lib
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    installing to build/bdist.linux-x86_64/wheel
-    running install
-    running install_lib
-    creating build/bdist.linux-x86_64
-    creating build/bdist.linux-x86_64/wheel
-    copying build/lib/__init__.py -> build/bdist.linux-x86_64/wheel
-    running install_egg_info
-    Copying src/project.egg-info to build/bdist.linux-x86_64/wheel/project-0.1.0-py3.12.egg-info
-    running install_scripts
-    creating build/bdist.linux-x86_64/wheel/project-0.1.0.dist-info/WHEEL
-    creating '[TEMP_DIR]/project/dist/[TMP]/wheel' to it
-    adding '__init__.py'
-    adding 'project-0.1.0.dist-info/METADATA'
-    adding 'project-0.1.0.dist-info/WHEEL'
-    adding 'project-0.1.0.dist-info/top_level.txt'
-    adding 'project-0.1.0.dist-info/RECORD'
-    removing build/bdist.linux-x86_64/wheel
     Successfully built dist/project-0.1.0.tar.gz
     Successfully built dist/project-0.1.0-py3-none-any.whl
     "###);
@@ -250,76 +110,7 @@ fn build() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running sdist
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running check
-    creating project-0.1.0
-    creating project-0.1.0/src
-    creating project-0.1.0/src/project.egg-info
-    copying files to project-0.1.0...
-    copying README -> project-0.1.0
-    copying pyproject.toml -> project-0.1.0
-    copying src/__init__.py -> project-0.1.0/src
-    copying src/project.egg-info/PKG-INFO -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/SOURCES.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/dependency_links.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/requires.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/top_level.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/SOURCES.txt -> project-0.1.0/src/project.egg-info
-    Writing project-0.1.0/setup.cfg
-    Creating tar archive
-    removing 'project-0.1.0' (and everything under it)
     Building wheel from source distribution...
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running bdist_wheel
-    running build
-    running build_py
-    creating build
-    creating build/lib
-    copying src/__init__.py -> build/lib
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    installing to build/bdist.linux-x86_64/wheel
-    running install
-    running install_lib
-    creating build/bdist.linux-x86_64
-    creating build/bdist.linux-x86_64/wheel
-    copying build/lib/__init__.py -> build/bdist.linux-x86_64/wheel
-    running install_egg_info
-    Copying src/project.egg-info to build/bdist.linux-x86_64/wheel/project-0.1.0-py3.12.egg-info
-    running install_scripts
-    creating build/bdist.linux-x86_64/wheel/project-0.1.0.dist-info/WHEEL
-    creating '[TEMP_DIR]/project/out/[TMP]/wheel' to it
-    adding '__init__.py'
-    adding 'project-0.1.0.dist-info/METADATA'
-    adding 'project-0.1.0.dist-info/WHEEL'
-    adding 'project-0.1.0.dist-info/top_level.txt'
-    adding 'project-0.1.0.dist-info/RECORD'
-    removing build/bdist.linux-x86_64/wheel
     Successfully built out/project-0.1.0.tar.gz
     Successfully built out/project-0.1.0-py3-none-any.whl
     "###);
@@ -337,16 +128,12 @@ fn build() -> Result<()> {
 }
 
 #[test]
-fn sdist() -> Result<()> {
+fn build_sdist() -> Result<()> {
     let context = TestContext::new("3.12");
     let filters = context
         .filters()
         .into_iter()
-        .chain([
-            (r"exit code: 1", "exit status: 1"),
-            (r"bdist\.[^/\\\s]+-[^/\\\s]+", "bdist.linux-x86_64"),
-            (r"\\\.", ""),
-        ])
+        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -361,12 +148,16 @@ fn sdist() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
     )?;
 
-    project.child("src").child("__init__.py").touch()?;
+    project
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
     project.child("README").touch()?;
 
     // Build the specified path.
@@ -377,40 +168,6 @@ fn sdist() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    running egg_info
-    creating src/project.egg-info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running sdist
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running check
-    creating project-0.1.0
-    creating project-0.1.0/src
-    creating project-0.1.0/src/project.egg-info
-    copying files to project-0.1.0...
-    copying README -> project-0.1.0
-    copying pyproject.toml -> project-0.1.0
-    copying src/__init__.py -> project-0.1.0/src
-    copying src/project.egg-info/PKG-INFO -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/SOURCES.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/dependency_links.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/requires.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/top_level.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/SOURCES.txt -> project-0.1.0/src/project.egg-info
-    Writing project-0.1.0/setup.cfg
-    Creating tar archive
-    removing 'project-0.1.0' (and everything under it)
     Successfully built dist/project-0.1.0.tar.gz
     "###);
 
@@ -427,16 +184,12 @@ fn sdist() -> Result<()> {
 }
 
 #[test]
-fn wheel() -> Result<()> {
+fn build_wheel() -> Result<()> {
     let context = TestContext::new("3.12");
     let filters = context
         .filters()
         .into_iter()
-        .chain([
-            (r"exit code: 1", "exit status: 1"),
-            (r"bdist\.[^/\\\s]+-[^/\\\s]+", "bdist.linux-x86_64"),
-            (r"\\\.", ""),
-        ])
+        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -451,12 +204,16 @@ fn wheel() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
     )?;
 
-    project.child("src").child("__init__.py").touch()?;
+    project
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
     project.child("README").touch()?;
 
     // Build the specified path.
@@ -467,45 +224,6 @@ fn wheel() -> Result<()> {
 
     ----- stderr -----
     Building wheel...
-    running egg_info
-    creating src/project.egg-info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running bdist_wheel
-    running build
-    running build_py
-    creating build
-    creating build/lib
-    copying src/__init__.py -> build/lib
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    installing to build/bdist.linux-x86_64/wheel
-    running install
-    running install_lib
-    creating build/bdist.linux-x86_64
-    creating build/bdist.linux-x86_64/wheel
-    copying build/lib/__init__.py -> build/bdist.linux-x86_64/wheel
-    running install_egg_info
-    Copying src/project.egg-info to build/bdist.linux-x86_64/wheel/project-0.1.0-py3.12.egg-info
-    running install_scripts
-    creating build/bdist.linux-x86_64/wheel/project-0.1.0.dist-info/WHEEL
-    creating '[TEMP_DIR]/project/dist/[TMP]/wheel' to it
-    adding '__init__.py'
-    adding 'project-0.1.0.dist-info/METADATA'
-    adding 'project-0.1.0.dist-info/WHEEL'
-    adding 'project-0.1.0.dist-info/top_level.txt'
-    adding 'project-0.1.0.dist-info/RECORD'
-    removing build/bdist.linux-x86_64/wheel
     Successfully built dist/project-0.1.0-py3-none-any.whl
     "###);
 
@@ -522,16 +240,12 @@ fn wheel() -> Result<()> {
 }
 
 #[test]
-fn sdist_wheel() -> Result<()> {
+fn build_sdist_wheel() -> Result<()> {
     let context = TestContext::new("3.12");
     let filters = context
         .filters()
         .into_iter()
-        .chain([
-            (r"exit code: 1", "exit status: 1"),
-            (r"bdist\.[^/\\\s]+-[^/\\\s]+", "bdist.linux-x86_64"),
-            (r"\\\.", ""),
-        ])
+        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -546,12 +260,16 @@ fn sdist_wheel() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
     )?;
 
-    project.child("src").child("__init__.py").touch()?;
+    project
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
     project.child("README").touch()?;
 
     // Build the specified path.
@@ -562,78 +280,7 @@ fn sdist_wheel() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    running egg_info
-    creating src/project.egg-info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running sdist
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running check
-    creating project-0.1.0
-    creating project-0.1.0/src
-    creating project-0.1.0/src/project.egg-info
-    copying files to project-0.1.0...
-    copying README -> project-0.1.0
-    copying pyproject.toml -> project-0.1.0
-    copying src/__init__.py -> project-0.1.0/src
-    copying src/project.egg-info/PKG-INFO -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/SOURCES.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/dependency_links.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/requires.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/top_level.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/SOURCES.txt -> project-0.1.0/src/project.egg-info
-    Writing project-0.1.0/setup.cfg
-    Creating tar archive
-    removing 'project-0.1.0' (and everything under it)
     Building wheel...
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running bdist_wheel
-    running build
-    running build_py
-    creating build
-    creating build/lib
-    copying src/__init__.py -> build/lib
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    installing to build/bdist.linux-x86_64/wheel
-    running install
-    running install_lib
-    creating build/bdist.linux-x86_64
-    creating build/bdist.linux-x86_64/wheel
-    copying build/lib/__init__.py -> build/bdist.linux-x86_64/wheel
-    running install_egg_info
-    Copying src/project.egg-info to build/bdist.linux-x86_64/wheel/project-0.1.0-py3.12.egg-info
-    running install_scripts
-    creating build/bdist.linux-x86_64/wheel/project-0.1.0.dist-info/WHEEL
-    creating '[TEMP_DIR]/project/dist/[TMP]/wheel' to it
-    adding '__init__.py'
-    adding 'project-0.1.0.dist-info/METADATA'
-    adding 'project-0.1.0.dist-info/WHEEL'
-    adding 'project-0.1.0.dist-info/top_level.txt'
-    adding 'project-0.1.0.dist-info/RECORD'
-    removing build/bdist.linux-x86_64/wheel
     Successfully built dist/project-0.1.0.tar.gz
     Successfully built dist/project-0.1.0-py3-none-any.whl
     "###);
@@ -651,16 +298,12 @@ fn sdist_wheel() -> Result<()> {
 }
 
 #[test]
-fn wheel_from_sdist() -> Result<()> {
+fn build_wheel_from_sdist() -> Result<()> {
     let context = TestContext::new("3.12");
     let filters = context
         .filters()
         .into_iter()
-        .chain([
-            (r"exit code: 1", "exit status: 1"),
-            (r"bdist\.[^/\\\s]+-[^/\\\s]+", "bdist.linux-x86_64"),
-            (r"\\\.", ""),
-        ])
+        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -675,12 +318,16 @@ fn wheel_from_sdist() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
     )?;
 
-    project.child("src").child("__init__.py").touch()?;
+    project
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
     project.child("README").touch()?;
 
     // Build the sdist.
@@ -691,40 +338,6 @@ fn wheel_from_sdist() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    running egg_info
-    creating src/project.egg-info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running sdist
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running check
-    creating project-0.1.0
-    creating project-0.1.0/src
-    creating project-0.1.0/src/project.egg-info
-    copying files to project-0.1.0...
-    copying README -> project-0.1.0
-    copying pyproject.toml -> project-0.1.0
-    copying src/__init__.py -> project-0.1.0/src
-    copying src/project.egg-info/PKG-INFO -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/SOURCES.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/dependency_links.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/requires.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/top_level.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/SOURCES.txt -> project-0.1.0/src/project.egg-info
-    Writing project-0.1.0/setup.cfg
-    Creating tar archive
-    removing 'project-0.1.0' (and everything under it)
     Successfully built dist/project-0.1.0.tar.gz
     "###);
 
@@ -767,43 +380,6 @@ fn wheel_from_sdist() -> Result<()> {
 
     ----- stderr -----
     Building wheel from source distribution...
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running bdist_wheel
-    running build
-    running build_py
-    creating build
-    creating build/lib
-    copying src/__init__.py -> build/lib
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    installing to build/bdist.linux-x86_64/wheel
-    running install
-    running install_lib
-    creating build/bdist.linux-x86_64
-    creating build/bdist.linux-x86_64/wheel
-    copying build/lib/__init__.py -> build/bdist.linux-x86_64/wheel
-    running install_egg_info
-    Copying src/project.egg-info to build/bdist.linux-x86_64/wheel/project-0.1.0-py3.12.egg-info
-    running install_scripts
-    creating build/bdist.linux-x86_64/wheel/project-0.1.0.dist-info/WHEEL
-    creating '[TEMP_DIR]/project/dist/[TMP]/wheel' to it
-    adding '__init__.py'
-    adding 'project-0.1.0.dist-info/METADATA'
-    adding 'project-0.1.0.dist-info/WHEEL'
-    adding 'project-0.1.0.dist-info/top_level.txt'
-    adding 'project-0.1.0.dist-info/RECORD'
-    removing build/bdist.linux-x86_64/wheel
     Successfully built dist/project-0.1.0-py3-none-any.whl
     "###);
 
@@ -831,16 +407,12 @@ fn wheel_from_sdist() -> Result<()> {
 }
 
 #[test]
-fn fail() -> Result<()> {
+fn build_fail() -> Result<()> {
     let context = TestContext::new("3.12");
     let filters = context
         .filters()
         .into_iter()
-        .chain([
-            (r"exit code: 1", "exit status: 1"),
-            (r"bdist\.[^/\\\s]+-[^/\\\s]+", "bdist.linux-x86_64"),
-            (r"\\\.", ""),
-        ])
+        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -860,7 +432,11 @@ fn fail() -> Result<()> {
         "#,
     )?;
 
-    project.child("src").child("__init__.py").touch()?;
+    project
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
     project.child("README").touch()?;
 
     project.child("setup.py").write_str(
@@ -906,14 +482,13 @@ fn fail() -> Result<()> {
 }
 
 #[test]
-fn workspace() -> Result<()> {
+fn build_workspace() -> Result<()> {
     let context = TestContext::new("3.12");
     let filters = context
         .filters()
         .into_iter()
         .chain([
             (r"exit code: 1", "exit status: 1"),
-            (r"bdist\.[^/\\\s]+-[^/\\\s]+", "bdist.linux-x86_64"),
             (r"\\\.", ""),
             (r"\[project\]", "[PKG]"),
             (r"\[member\]", "[PKG]"),
@@ -935,12 +510,16 @@ fn workspace() -> Result<()> {
         members = ["packages/*"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
     )?;
 
-    project.child("src").child("__init__.py").touch()?;
+    project
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
     project.child("README").touch()?;
 
     let member = project.child("packages").child("member");
@@ -955,12 +534,16 @@ fn workspace() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
     )?;
 
-    member.child("src").child("__init__.py").touch()?;
+    member
+        .child("src")
+        .child("member")
+        .child("__init__.py")
+        .touch()?;
     member.child("README").touch()?;
 
     let r#virtual = project.child("packages").child("virtual");
@@ -976,7 +559,11 @@ fn workspace() -> Result<()> {
         "#,
     )?;
 
-    r#virtual.child("src").child("__init__.py").touch()?;
+    r#virtual
+        .child("src")
+        .child("virtual")
+        .child("__init__.py")
+        .touch()?;
     r#virtual.child("README").touch()?;
 
     // Build the member.
@@ -987,78 +574,7 @@ fn workspace() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    running egg_info
-    creating src/member.egg-info
-    writing src/member.egg-info/PKG-INFO
-    writing dependency_links to src/member.egg-info/dependency_links.txt
-    writing requirements to src/member.egg-info/requires.txt
-    writing top-level names to src/member.egg-info/top_level.txt
-    writing manifest file 'src/member.egg-info/SOURCES.txt'
-    reading manifest file 'src/member.egg-info/SOURCES.txt'
-    writing manifest file 'src/member.egg-info/SOURCES.txt'
-    running sdist
-    running egg_info
-    writing src/member.egg-info/PKG-INFO
-    writing dependency_links to src/member.egg-info/dependency_links.txt
-    writing requirements to src/member.egg-info/requires.txt
-    writing top-level names to src/member.egg-info/top_level.txt
-    reading manifest file 'src/member.egg-info/SOURCES.txt'
-    writing manifest file 'src/member.egg-info/SOURCES.txt'
-    running check
-    creating member-0.1.0
-    creating member-0.1.0/src
-    creating member-0.1.0/src/member.egg-info
-    copying files to member-0.1.0...
-    copying README -> member-0.1.0
-    copying pyproject.toml -> member-0.1.0
-    copying src/__init__.py -> member-0.1.0/src
-    copying src/member.egg-info/PKG-INFO -> member-0.1.0/src/member.egg-info
-    copying src/member.egg-info/SOURCES.txt -> member-0.1.0/src/member.egg-info
-    copying src/member.egg-info/dependency_links.txt -> member-0.1.0/src/member.egg-info
-    copying src/member.egg-info/requires.txt -> member-0.1.0/src/member.egg-info
-    copying src/member.egg-info/top_level.txt -> member-0.1.0/src/member.egg-info
-    copying src/member.egg-info/SOURCES.txt -> member-0.1.0/src/member.egg-info
-    Writing member-0.1.0/setup.cfg
-    Creating tar archive
-    removing 'member-0.1.0' (and everything under it)
     Building wheel from source distribution...
-    running egg_info
-    writing src/member.egg-info/PKG-INFO
-    writing dependency_links to src/member.egg-info/dependency_links.txt
-    writing requirements to src/member.egg-info/requires.txt
-    writing top-level names to src/member.egg-info/top_level.txt
-    reading manifest file 'src/member.egg-info/SOURCES.txt'
-    writing manifest file 'src/member.egg-info/SOURCES.txt'
-    running bdist_wheel
-    running build
-    running build_py
-    creating build
-    creating build/lib
-    copying src/__init__.py -> build/lib
-    running egg_info
-    writing src/member.egg-info/PKG-INFO
-    writing dependency_links to src/member.egg-info/dependency_links.txt
-    writing requirements to src/member.egg-info/requires.txt
-    writing top-level names to src/member.egg-info/top_level.txt
-    reading manifest file 'src/member.egg-info/SOURCES.txt'
-    writing manifest file 'src/member.egg-info/SOURCES.txt'
-    installing to build/bdist.linux-x86_64/wheel
-    running install
-    running install_lib
-    creating build/bdist.linux-x86_64
-    creating build/bdist.linux-x86_64/wheel
-    copying build/lib/__init__.py -> build/bdist.linux-x86_64/wheel
-    running install_egg_info
-    Copying src/member.egg-info to build/bdist.linux-x86_64/wheel/member-0.1.0-py3.12.egg-info
-    running install_scripts
-    creating build/bdist.linux-x86_64/wheel/member-0.1.0.dist-info/WHEEL
-    creating '[TEMP_DIR]/project/dist/[TMP]/wheel' to it
-    adding '__init__.py'
-    adding 'member-0.1.0.dist-info/METADATA'
-    adding 'member-0.1.0.dist-info/WHEEL'
-    adding 'member-0.1.0.dist-info/top_level.txt'
-    adding 'member-0.1.0.dist-info/RECORD'
-    removing build/bdist.linux-x86_64/wheel
     Successfully built dist/member-0.1.0.tar.gz
     Successfully built dist/member-0.1.0-py3-none-any.whl
     "###);
@@ -1114,76 +630,7 @@ fn workspace() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    running egg_info
-    writing src/member.egg-info/PKG-INFO
-    writing dependency_links to src/member.egg-info/dependency_links.txt
-    writing requirements to src/member.egg-info/requires.txt
-    writing top-level names to src/member.egg-info/top_level.txt
-    reading manifest file 'src/member.egg-info/SOURCES.txt'
-    writing manifest file 'src/member.egg-info/SOURCES.txt'
-    running sdist
-    running egg_info
-    writing src/member.egg-info/PKG-INFO
-    writing dependency_links to src/member.egg-info/dependency_links.txt
-    writing requirements to src/member.egg-info/requires.txt
-    writing top-level names to src/member.egg-info/top_level.txt
-    reading manifest file 'src/member.egg-info/SOURCES.txt'
-    writing manifest file 'src/member.egg-info/SOURCES.txt'
-    running check
-    creating member-0.1.0
-    creating member-0.1.0/src
-    creating member-0.1.0/src/member.egg-info
-    copying files to member-0.1.0...
-    copying README -> member-0.1.0
-    copying pyproject.toml -> member-0.1.0
-    copying src/__init__.py -> member-0.1.0/src
-    copying src/member.egg-info/PKG-INFO -> member-0.1.0/src/member.egg-info
-    copying src/member.egg-info/SOURCES.txt -> member-0.1.0/src/member.egg-info
-    copying src/member.egg-info/dependency_links.txt -> member-0.1.0/src/member.egg-info
-    copying src/member.egg-info/requires.txt -> member-0.1.0/src/member.egg-info
-    copying src/member.egg-info/top_level.txt -> member-0.1.0/src/member.egg-info
-    copying src/member.egg-info/SOURCES.txt -> member-0.1.0/src/member.egg-info
-    Writing member-0.1.0/setup.cfg
-    Creating tar archive
-    removing 'member-0.1.0' (and everything under it)
     Building wheel from source distribution...
-    running egg_info
-    writing src/member.egg-info/PKG-INFO
-    writing dependency_links to src/member.egg-info/dependency_links.txt
-    writing requirements to src/member.egg-info/requires.txt
-    writing top-level names to src/member.egg-info/top_level.txt
-    reading manifest file 'src/member.egg-info/SOURCES.txt'
-    writing manifest file 'src/member.egg-info/SOURCES.txt'
-    running bdist_wheel
-    running build
-    running build_py
-    creating build
-    creating build/lib
-    copying src/__init__.py -> build/lib
-    running egg_info
-    writing src/member.egg-info/PKG-INFO
-    writing dependency_links to src/member.egg-info/dependency_links.txt
-    writing requirements to src/member.egg-info/requires.txt
-    writing top-level names to src/member.egg-info/top_level.txt
-    reading manifest file 'src/member.egg-info/SOURCES.txt'
-    writing manifest file 'src/member.egg-info/SOURCES.txt'
-    installing to build/bdist.linux-x86_64/wheel
-    running install
-    running install_lib
-    creating build/bdist.linux-x86_64
-    creating build/bdist.linux-x86_64/wheel
-    copying build/lib/__init__.py -> build/bdist.linux-x86_64/wheel
-    running install_egg_info
-    Copying src/member.egg-info to build/bdist.linux-x86_64/wheel/member-0.1.0-py3.12.egg-info
-    running install_scripts
-    creating build/bdist.linux-x86_64/wheel/member-0.1.0.dist-info/WHEEL
-    creating '[TEMP_DIR]/project/dist/[TMP]/wheel' to it
-    adding '__init__.py'
-    adding 'member-0.1.0.dist-info/METADATA'
-    adding 'member-0.1.0.dist-info/WHEEL'
-    adding 'member-0.1.0.dist-info/top_level.txt'
-    adding 'member-0.1.0.dist-info/RECORD'
-    removing build/bdist.linux-x86_64/wheel
     Successfully built project/dist/member-0.1.0.tar.gz
     Successfully built project/dist/member-0.1.0-py3-none-any.whl
     "###);
@@ -1248,7 +695,6 @@ fn build_all_with_failure() -> Result<()> {
         .into_iter()
         .chain([
             (r"exit code: 1", "exit status: 1"),
-            (r"bdist\.[^/\\\s]+-[^/\\\s]+", "bdist.linux-x86_64"),
             (r"\\\.", ""),
             (r"\[project\]", "[PKG]"),
             (r"\[member-\w+\]", "[PKG]"),
@@ -1270,12 +716,16 @@ fn build_all_with_failure() -> Result<()> {
         members = ["packages/*"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
     )?;
 
-    project.child("src").child("__init__.py").touch()?;
+    project
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
     project.child("README").touch()?;
 
     let member_a = project.child("packages").child("member_a");
@@ -1293,12 +743,16 @@ fn build_all_with_failure() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
     )?;
 
-    member_a.child("src").child("__init__.py").touch()?;
+    member_a
+        .child("src")
+        .child("member_a")
+        .child("__init__.py")
+        .touch()?;
     member_a.child("README").touch()?;
 
     member_b.child("pyproject.toml").write_str(
@@ -1315,7 +769,11 @@ fn build_all_with_failure() -> Result<()> {
         "#,
     )?;
 
-    member_b.child("src").child("__init__.py").touch()?;
+    member_b
+        .child("src")
+        .child("member_b")
+        .child("__init__.py")
+        .touch()?;
     member_b.child("README").touch()?;
 
     // member_b build should fail
@@ -1382,17 +840,13 @@ fn build_constraints() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([
-            (r"exit code: 1", "exit status: 1"),
-            (r"bdist\.[^/\\\s]+-[^/\\\s]+", "bdist.linux-x86_64"),
-            (r"\\\.", ""),
-        ])
+        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
 
     let constraints = project.child("constraints.txt");
-    constraints.write_str("setuptools==0.1.0")?;
+    constraints.write_str("hatchling==0.1.0")?;
 
     let pyproject_toml = project.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1404,12 +858,16 @@ fn build_constraints() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling>=1.0"]
+        build-backend = "hatchling.build"
         "#,
     )?;
 
-    project.child("src").child("__init__.py").touch()?;
+    project
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
     project.child("README").touch()?;
 
     uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @r###"
@@ -1421,8 +879,8 @@ fn build_constraints() -> Result<()> {
     Building source distribution...
       × Failed to build `[TEMP_DIR]/project`
       ├─▶ Failed to resolve requirements from `build-system.requires`
-      ├─▶ No solution found when resolving: `setuptools>=42`
-      ╰─▶ Because you require setuptools>=42 and setuptools==0.1.0, we can conclude that your requirements are unsatisfiable.
+      ├─▶ No solution found when resolving: `hatchling>=1.0`
+      ╰─▶ Because you require hatchling>=1.0 and hatchling==0.1.0, we can conclude that your requirements are unsatisfiable.
     "###);
 
     project
@@ -1438,16 +896,12 @@ fn build_constraints() -> Result<()> {
 }
 
 #[test]
-fn sha() -> Result<()> {
+fn build_sha() -> Result<()> {
     let context = TestContext::new("3.8");
     let filters = context
         .filters()
         .into_iter()
-        .chain([
-            (r"exit code: 1", "exit status: 1"),
-            (r"bdist\.[^/\\\s]+-[^/\\\s]+", "bdist.linux-x86_64"),
-            (r"\\\.", ""),
-        ])
+        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -1462,17 +916,45 @@ fn sha() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
     )?;
 
-    project.child("src").child("__init__.py").touch()?;
+    project
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
     project.child("README").touch()?;
 
     // Reject an incorrect hash.
     let constraints = project.child("constraints.txt");
-    constraints.write_str("setuptools==68.2.2 --hash=sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2")?;
+    constraints.write_str(indoc::indoc! {r"
+        hatchling==1.22.4 \
+            --hash=sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2 \
+            --hash=sha256:e16da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
+        packaging==24.0 \
+            --hash=sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5 \
+            --hash=sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9
+            # via hatchling
+        pathspec==0.12.1 \
+            --hash=sha256:a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08 \
+            --hash=sha256:a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712
+            # via hatchling
+        pluggy==1.4.0 \
+            --hash=sha256:7db9f7b503d67d1c5b95f59773ebb58a8c1c288129a88665838012cfb07b8981 \
+            --hash=sha256:8c85c2876142a764e5b7548e7d9a0e0ddb46f5185161049a79b7e974454223be
+            # via hatchling
+        tomli==2.0.1 \
+            --hash=sha256:939de3e7a6161af0c887ef91b7d41a53e7c5a1ca976325f429cb46ea9bc30ecc \
+            --hash=sha256:de526c12914f0c550d15924c62d72abc48d6fe7364aa87328337a31007fe8a4f
+            # via hatchling
+        trove-classifiers==2024.3.3 \
+            --hash=sha256:3a84096861b385ec422c79995d1f6435dde47a9b63adaa3c886e53232ba7e6e0 \
+            --hash=sha256:df7edff9c67ff86b733628998330b180e81d125b1e096536d83ac0fd79673fdc
+            # via hatchling
+    "})?;
 
     uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @r###"
     success: false
@@ -1483,14 +965,15 @@ fn sha() -> Result<()> {
     Building source distribution...
       × Failed to build `[TEMP_DIR]/project`
       ├─▶ Failed to install requirements from `build-system.requires`
-      ├─▶ Failed to download `setuptools==68.2.2`
-      ╰─▶ Hash mismatch for `setuptools==68.2.2`
+      ├─▶ Failed to download `hatchling==1.22.4`
+      ╰─▶ Hash mismatch for `hatchling==1.22.4`
 
           Expected:
             sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
+            sha256:e16da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
 
           Computed:
-            sha256:b454a35605876da60632df1a60f736524eb73cc47bbc9f3f1ef1b644de74fd2a
+            sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
     "###);
 
     project
@@ -1504,7 +987,7 @@ fn sha() -> Result<()> {
 
     fs_err::remove_dir_all(project.child("dist"))?;
 
-    // Reject an incorrect hash with --requires-hashes.
+    // Reject a missing hash with `--requires-hashes`.
     uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").arg("--require-hashes").current_dir(&project), @r###"
     success: false
     exit_code: 2
@@ -1514,14 +997,15 @@ fn sha() -> Result<()> {
     Building source distribution...
       × Failed to build `[TEMP_DIR]/project`
       ├─▶ Failed to install requirements from `build-system.requires`
-      ├─▶ Failed to download `setuptools==68.2.2`
-      ╰─▶ Hash mismatch for `setuptools==68.2.2`
+      ├─▶ Failed to download `hatchling==1.22.4`
+      ╰─▶ Hash mismatch for `hatchling==1.22.4`
 
           Expected:
             sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
+            sha256:e16da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
 
           Computed:
-            sha256:b454a35605876da60632df1a60f736524eb73cc47bbc9f3f1ef1b644de74fd2a
+            sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
     "###);
 
     project
@@ -1537,7 +1021,7 @@ fn sha() -> Result<()> {
 
     // Reject a missing hash.
     let constraints = project.child("constraints.txt");
-    constraints.write_str("setuptools==68.2.2")?;
+    constraints.write_str("hatchling==1.22.4")?;
 
     uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").arg("--require-hashes").current_dir(&project), @r###"
     success: false
@@ -1548,8 +1032,8 @@ fn sha() -> Result<()> {
     Building source distribution...
       × Failed to build `[TEMP_DIR]/project`
       ├─▶ Failed to resolve requirements from `build-system.requires`
-      ├─▶ No solution found when resolving: `setuptools>=42`
-      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `setuptools`
+      ├─▶ No solution found when resolving: `hatchling`
+      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
     "###);
 
     project
@@ -1565,7 +1049,31 @@ fn sha() -> Result<()> {
 
     // Accept a correct hash.
     let constraints = project.child("constraints.txt");
-    constraints.write_str("setuptools==68.2.2 --hash=sha256:b454a35605876da60632df1a60f736524eb73cc47bbc9f3f1ef1b644de74fd2a")?;
+    constraints.write_str(indoc::indoc! {r"
+        hatchling==1.22.4 \
+            --hash=sha256:8a2dcec96d7fb848382ef5848e5ac43fdae641f35a08a3fab5116bd495f3416e \
+            --hash=sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
+        packaging==24.0 \
+            --hash=sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5 \
+            --hash=sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9
+            # via hatchling
+        pathspec==0.12.1 \
+            --hash=sha256:a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08 \
+            --hash=sha256:a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712
+            # via hatchling
+        pluggy==1.4.0 \
+            --hash=sha256:7db9f7b503d67d1c5b95f59773ebb58a8c1c288129a88665838012cfb07b8981 \
+            --hash=sha256:8c85c2876142a764e5b7548e7d9a0e0ddb46f5185161049a79b7e974454223be
+            # via hatchling
+        tomli==2.0.1 \
+            --hash=sha256:939de3e7a6161af0c887ef91b7d41a53e7c5a1ca976325f429cb46ea9bc30ecc \
+            --hash=sha256:de526c12914f0c550d15924c62d72abc48d6fe7364aa87328337a31007fe8a4f
+            # via hatchling
+        trove-classifiers==2024.3.3 \
+            --hash=sha256:3a84096861b385ec422c79995d1f6435dde47a9b63adaa3c886e53232ba7e6e0 \
+            --hash=sha256:df7edff9c67ff86b733628998330b180e81d125b1e096536d83ac0fd79673fdc
+            # via hatchling
+    "})?;
 
     uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @r###"
     success: true
@@ -1574,77 +1082,7 @@ fn sha() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    running egg_info
-    creating src/project.egg-info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running sdist
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running check
-    creating project-0.1.0
-    creating project-0.1.0/src
-    creating project-0.1.0/src/project.egg-info
-    copying files to project-0.1.0...
-    copying README -> project-0.1.0
-    copying pyproject.toml -> project-0.1.0
-    copying src/__init__.py -> project-0.1.0/src
-    copying src/project.egg-info/PKG-INFO -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/SOURCES.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/dependency_links.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/requires.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/top_level.txt -> project-0.1.0/src/project.egg-info
-    Writing project-0.1.0/setup.cfg
-    Creating tar archive
-    removing 'project-0.1.0' (and everything under it)
     Building wheel from source distribution...
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running bdist_wheel
-    running build
-    running build_py
-    creating build
-    creating build/lib
-    copying src/__init__.py -> build/lib
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    installing to build/bdist.linux-x86_64/wheel
-    running install
-    running install_lib
-    creating build/bdist.linux-x86_64
-    creating build/bdist.linux-x86_64/wheel
-    copying build/lib/__init__.py -> build/bdist.linux-x86_64/wheel
-    running install_egg_info
-    Copying src/project.egg-info to build/bdist.linux-x86_64/wheel/project-0.1.0-py3.8.egg-info
-    running install_scripts
-    creating build/bdist.linux-x86_64/wheel/project-0.1.0.dist-info/WHEEL
-    creating '[TEMP_DIR]/project/dist/[TMP]/wheel' to it
-    adding '__init__.py'
-    adding 'project-0.1.0.dist-info/METADATA'
-    adding 'project-0.1.0.dist-info/WHEEL'
-    adding 'project-0.1.0.dist-info/top_level.txt'
-    adding 'project-0.1.0.dist-info/RECORD'
-    removing build/bdist.linux-x86_64/wheel
     Successfully built dist/project-0.1.0.tar.gz
     Successfully built dist/project-0.1.0-py3-none-any.whl
     "###);
@@ -1677,12 +1115,16 @@ fn build_quiet() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
     )?;
 
-    project.child("src").child("__init__.py").touch()?;
+    project
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
     project.child("README").touch()?;
 
     uv_snapshot!(&context.filters(), context.build().arg("project").arg("-q"), @r###"
@@ -1712,12 +1154,16 @@ fn build_no_build_logs() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
     )?;
 
-    project.child("src").child("__init__.py").touch()?;
+    project
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
     project.child("README").touch()?;
 
     uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-build-logs"), @r###"
@@ -1736,16 +1182,12 @@ fn build_no_build_logs() -> Result<()> {
 }
 
 #[test]
-fn tool_uv_sources() -> Result<()> {
+fn build_tool_uv_sources() -> Result<()> {
     let context = TestContext::new("3.12");
     let filters = context
         .filters()
         .into_iter()
-        .chain([
-            (r"exit code: 1", "exit status: 1"),
-            (r"bdist\.[^/\\\s]+-[^/\\\s]+", "bdist.linux-x86_64"),
-            (r"\\\.", ""),
-        ])
+        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let build = context.temp_dir.child("backend");
@@ -1758,8 +1200,8 @@ fn tool_uv_sources() -> Result<()> {
         dependencies = ["typing-extensions>=3.10"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
     )?;
 
@@ -1784,8 +1226,8 @@ fn tool_uv_sources() -> Result<()> {
         dependencies = ["iniconfig>1"]
 
         [build-system]
-        requires = ["setuptools>=42", "backend==0.1.0"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling", "backend==0.1.0"]
+        build-backend = "hatchling.build"
 
         [tool.uv.sources]
         backend = { path = "../backend" }
@@ -1803,7 +1245,11 @@ fn tool_uv_sources() -> Result<()> {
         ",
     })?;
 
-    project.child("src").child("__init__.py").touch()?;
+    project
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
     project.child("README").touch()?;
 
     uv_snapshot!(filters, context.build().current_dir(project.path()), @r###"
@@ -1813,79 +1259,7 @@ fn tool_uv_sources() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    running egg_info
-    creating src/project.egg-info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running sdist
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running check
-    creating project-0.1.0
-    creating project-0.1.0/src
-    creating project-0.1.0/src/project.egg-info
-    copying files to project-0.1.0...
-    copying README -> project-0.1.0
-    copying pyproject.toml -> project-0.1.0
-    copying setup.py -> project-0.1.0
-    copying src/__init__.py -> project-0.1.0/src
-    copying src/project.egg-info/PKG-INFO -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/SOURCES.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/dependency_links.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/requires.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/top_level.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/SOURCES.txt -> project-0.1.0/src/project.egg-info
-    Writing project-0.1.0/setup.cfg
-    Creating tar archive
-    removing 'project-0.1.0' (and everything under it)
     Building wheel from source distribution...
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running bdist_wheel
-    running build
-    running build_py
-    creating build
-    creating build/lib
-    copying src/__init__.py -> build/lib
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    installing to build/bdist.linux-x86_64/wheel
-    running install
-    running install_lib
-    creating build/bdist.linux-x86_64
-    creating build/bdist.linux-x86_64/wheel
-    copying build/lib/__init__.py -> build/bdist.linux-x86_64/wheel
-    running install_egg_info
-    Copying src/project.egg-info to build/bdist.linux-x86_64/wheel/project-0.1.0-py3.12.egg-info
-    running install_scripts
-    creating build/bdist.linux-x86_64/wheel/project-0.1.0.dist-info/WHEEL
-    creating '[TEMP_DIR]/project/dist/[TMP]/wheel' to it
-    adding '__init__.py'
-    adding 'project-0.1.0.dist-info/METADATA'
-    adding 'project-0.1.0.dist-info/WHEEL'
-    adding 'project-0.1.0.dist-info/top_level.txt'
-    adding 'project-0.1.0.dist-info/RECORD'
-    removing build/bdist.linux-x86_64/wheel
     Successfully built dist/project-0.1.0.tar.gz
     Successfully built dist/project-0.1.0-py3-none-any.whl
     "###);
@@ -1904,20 +1278,20 @@ fn tool_uv_sources() -> Result<()> {
 
 /// Check that we have a working git boundary for builds from source dist to wheel in `dist/`.
 #[test]
-fn git_boundary_in_dist_build() -> Result<()> {
+fn build_git_boundary_in_dist_build() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let project = context.temp_dir.child("demo");
     project.child("pyproject.toml").write_str(
         r#"
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-
         [project]
         name = "demo"
         version = "0.1.0"
         requires-python = ">=3.11"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
     )?;
     project.child("src/demo/__init__.py").write_str(
@@ -1964,7 +1338,6 @@ fn build_non_package() -> Result<()> {
         .into_iter()
         .chain([
             (r"exit code: 1", "exit status: 1"),
-            (r"bdist\.[^/\\\s]+-[^/\\\s]+", "bdist.linux-x86_64"),
             (r"\\\.", ""),
             (r"\[project\]", "[PKG]"),
             (r"\[member\]", "[PKG]"),
@@ -2167,7 +1540,7 @@ fn build_fast_path() -> Result<()> {
 
 /// Test the `--list` option.
 #[test]
-fn list_files() -> Result<()> {
+fn build_list_files() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let built_by_uv = current_dir()?.join("../../scripts/packages/built-by-uv");
@@ -2291,7 +1664,7 @@ fn list_files() -> Result<()> {
 
 /// Test `--list` option errors.
 #[test]
-fn list_files_errors() -> Result<()> {
+fn build_list_files_errors() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let built_by_uv = current_dir()?.join("../../scripts/packages/built-by-uv");
@@ -2341,7 +1714,7 @@ fn list_files_errors() -> Result<()> {
 }
 
 #[test]
-fn version_mismatch() -> Result<()> {
+fn build_version_mismatch() -> Result<()> {
     let context = TestContext::new("3.12");
     let anyio_local = current_dir()?.join("../../scripts/packages/anyio_local");
     context
