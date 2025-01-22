@@ -8610,10 +8610,27 @@ fn install_many_pyproject_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The dependency-group 'bar' is not defined in pyproject.toml
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    "###);
+
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r")
+    .arg("pyproject.toml").arg("-r").arg("subdir/pyproject.toml").arg("--group").arg("lies"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The dependency-group 'lies' is not defined in pyproject.toml
+    warning: The dependency-group 'lies' is not defined in subdir/pyproject.toml
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + typing-extensions==4.10.0
     "###);
 
@@ -8625,6 +8642,7 @@ fn install_many_pyproject_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The dependency-group 'bar' is not defined in pyproject.toml
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]

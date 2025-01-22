@@ -18,7 +18,7 @@ use uv_pep508::RequirementOrigin;
 use uv_pypi_types::Requirement;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
-
+use uv_warnings::warn_user_once;
 #[derive(Debug, Clone)]
 pub struct SourceTreeResolution {
     /// The requirements sourced from the source trees.
@@ -113,6 +113,20 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         for (group_name, group) in &metadata.dependency_groups {
             if self.groups.contains(group_name) {
                 requirements.extend(group.iter().cloned());
+            }
+        }
+        // Complain if dependency groups are named that don't appear.
+        // This is only a warning because *technically* we support passing in
+        // multiple pyproject.tomls, but at this level of abstraction we can't see them all,
+        // so hard erroring on "no pyproject.toml mentions this" is a bit difficult.
+        if let Some(groups) = self.groups.groups() {
+            for name in groups.names() {
+                if !metadata.dependency_groups.contains_key(name) {
+                    warn_user_once!(
+                        "The dependency-group '{name}' is not defined in {}",
+                        path.display()
+                    );
+                }
             }
         }
 
