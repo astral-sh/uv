@@ -1682,16 +1682,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 };
 
-                if let Some(err) = find_conflicting_extra(&self.conflicts, &metadata.requires_dist)
-                {
-                    return Err(err);
-                }
-                for dependencies in metadata.dependency_groups.values() {
-                    if let Some(err) = find_conflicting_extra(&self.conflicts, dependencies) {
-                        return Err(err);
-                    }
-                }
-
                 let requirements = self.flatten_requirements(
                     &metadata.requires_dist,
                     &metadata.dependency_groups,
@@ -3608,36 +3598,6 @@ pub(crate) struct VersionFork {
     id: Id<PubGrubPackage>,
     /// The initial version to set for the selected package in the fork.
     version: Option<Version>,
-}
-
-/// Returns an error if a conflicting extra is found in the given requirements.
-///
-/// Specifically, if there is any conflicting extra (just one is enough) that
-/// is unconditionally enabled as part of a dependency specification, then this
-/// returns an error.
-///
-/// The reason why we're so conservative here is because it avoids us needing
-/// the look at the entire dependency tree at once.
-///
-/// For example, consider packages `root`, `a`, `b` and `c`, where `c` has
-/// declared conflicting extras of `x1` and `x2`.
-///
-/// Now imagine `root` depends on `a` and `b`, `a` depends on `c[x1]` and `b`
-/// depends on `c[x2]`. That's a conflict, but not easily detectable unless
-/// you reject either `c[x1]` or `c[x2]` on the grounds that `x1` and `x2` are
-/// conflicting and thus cannot be enabled unconditionally.
-fn find_conflicting_extra(conflicting: &Conflicts, reqs: &[Requirement]) -> Option<ResolveError> {
-    for req in reqs {
-        for extra in &req.extras {
-            if conflicting.contains(&req.name, extra) {
-                return Some(ResolveError::ConflictingExtra {
-                    requirement: Box::new(req.clone()),
-                    extra: extra.clone(),
-                });
-            }
-        }
-    }
-    None
 }
 
 #[derive(Debug, Default, Clone)]
