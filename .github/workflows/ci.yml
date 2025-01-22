@@ -634,6 +634,7 @@ jobs:
           set -e
 
           ./uv venv -v
+          ./uv --does-not-exist
           ./uv pip install ruff -v
           ./uvx -v ruff --version
           eval "$(./uv generate-shell-completion bash)"
