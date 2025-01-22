@@ -2473,6 +2473,9 @@ pub struct VenvArgs {
     pub link_mode: Option<uv_install_wheel::linker::LinkMode>,
 
     #[command(flatten)]
+    pub refresh: RefreshArgs,
+
+    #[command(flatten)]
     pub compat_args: compat::VenvCompatArgs,
 }
 

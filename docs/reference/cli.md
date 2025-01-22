@@ -8084,6 +8084,10 @@ uv venv [OPTIONS] [PATH]
 </ul>
 </dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
+</dd><dt><code>--refresh</code></dt><dd><p>Refresh all cached data</p>
+
+</dd><dt><code>--refresh-package</code> <i>refresh-package</i></dt><dd><p>Refresh cached data for a specific package</p>
+
 </dd><dt><code>--relocatable</code></dt><dd><p>Make the virtual environment relocatable.</p>
 
 <p>A relocatable virtual environment can be moved around and redistributed without invalidating its associated entrypoint and activation scripts.</p>
