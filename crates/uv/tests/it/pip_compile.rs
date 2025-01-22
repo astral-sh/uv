@@ -1949,6 +1949,7 @@ fn compile_git_mismatched_name() -> Result<()> {
 /// Resolve a specific Git dependency with a subdirectory, where the root directory contains a
 /// static `pyproject.toml` file.
 #[test]
+#[cfg(feature = "git")]
 fn compile_git_subdirectory_static_metadata() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -4534,6 +4535,7 @@ fn generate_hashes_built_distribution_url() -> Result<()> {
 
 /// Given a VCS dependency, include hashes for its dependencies, but not the repository itself.
 #[test]
+#[cfg(feature = "git")]
 fn generate_hashes_git() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -11032,6 +11034,7 @@ fn unnamed_path_requirement() -> Result<()> {
 
 /// Detect the package name from an unnamed Git requirement.
 #[test]
+#[cfg(feature = "git")]
 fn unnamed_git_requirement() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
