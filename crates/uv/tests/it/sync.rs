@@ -4903,6 +4903,118 @@ fn sync_all_extras() -> Result<()> {
     Ok(())
 }
 
+/// Sync all members in a workspace with dynamic extras.
+#[test]
+fn sync_all_extras_dynamic() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [project.optional-dependencies]
+        types = ["sniffio>1"]
+        async = ["anyio>3"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    // Add a workspace member.
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dynamic = ["optional-dependencies"]
+
+        [tool.setuptools.dynamic.optional-dependencies]
+        dev = { file = "requirements-dev.txt" }
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    child
+        .child("requirements-dev.txt")
+        .write_str("typing-extensions==4.10.0")?;
+
+    // Generate a lockfile.
+    context.lock().assert().success();
+
+    // Sync an extra that exists in the parent.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--extra").arg("types"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    // Sync a dynamic extra that exists in the child.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--extra").arg("dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - sniffio==1.3.1
+     + typing-extensions==4.10.0
+    "###);
+
+    // Sync dependencies, ignoring non-existing extras as the child uses dynamic extras.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--extra").arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - typing-extensions==4.10.0
+    "###);
+
+    Ok(())
+}
+
 /// Sync all members in a workspace with dependency groups attached.
 #[test]
 fn sync_all_groups() -> Result<()> {
