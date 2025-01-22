@@ -1527,12 +1527,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             hashes: vec![],
                         });
                     }
-                    Err(Error::WheelMetadataNameMismatch { metadata, given }) => {
-                        debug!(
-                            "Ignoring `pyproject.toml` from GitHub for: {source} (metadata: {metadata}, given: {given})"
-                        );
+                    Err(err) => {
+                        debug!("Ignoring `pyproject.toml` from GitHub for {source}: {err}");
                     }
-                    Err(err) => return Err(err),
                 }
             }
         }
@@ -2371,12 +2368,9 @@ impl StaticMetadata {
                     Ok(()) => {
                         return Ok(Self::Some(metadata));
                     }
-                    Err(Error::WheelMetadataNameMismatch { metadata, given }) => {
-                        debug!(
-                            "Ignoring `pyproject.toml` for: {source} (metadata: {metadata}, given: {given})"
-                        );
+                    Err(err) => {
+                        debug!("Ignoring `pyproject.toml` for {source}: {err}");
                     }
-                    Err(err) => return Err(err),
                 }
             }
             Err(
@@ -2419,12 +2413,9 @@ impl StaticMetadata {
                     Ok(()) => {
                         return Ok(Self::Some(metadata));
                     }
-                    Err(Error::WheelMetadataNameMismatch { metadata, given }) => {
-                        debug!(
-                            "Ignoring `PKG-INFO` for: {source} (metadata: {metadata}, given: {given})"
-                        );
+                    Err(err) => {
+                        debug!("Ignoring `PKG-INFO` for {source}: {err}");
                     }
-                    Err(err) => return Err(err),
                 }
             }
             Err(
@@ -2451,12 +2442,9 @@ impl StaticMetadata {
                     Ok(()) => {
                         return Ok(Self::Some(metadata));
                     }
-                    Err(Error::WheelMetadataNameMismatch { metadata, given }) => {
-                        debug!(
-                            "Ignoring `egg-info` for: {source} (metadata: {metadata}, given: {given})"
-                        );
+                    Err(err) => {
+                        debug!("Ignoring `egg-info` for {source}: {err}");
                     }
-                    Err(err) => return Err(err),
                 }
             }
             Err(
