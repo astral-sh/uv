@@ -136,15 +136,29 @@ impl PubGrubPriorities {
                 // To ensure deterministic resolution, each (virtual) package needs to be registered
                 // on discovery (as dependency of another package), before we query it for
                 // prioritization.
-                let package_priority = *self
-                    .package_priority
-                    .get(name)
-                    .unwrap_or_else(|| panic!("Package not known: {name} from {package:?}"));
-                let package_tiebreaker = self
-                    .virtual_package_tiebreaker
-                    .get(package)
-                    .unwrap_or_else(|| panic!("Virtual package not known: {package:?}"));
-                (package_priority, *package_tiebreaker)
+                let package_priority = match self.package_priority.get(name) {
+                    Some(priority) => *priority,
+                    None => {
+                        if cfg!(debug_assertions) {
+                            panic!("Package not known: `{name}` from `{package}`")
+                        } else {
+                            PubGrubPriority::Unspecified(Reverse(usize::MAX))
+                        }
+                    }
+                };
+
+                let package_tiebreaker = match self.virtual_package_tiebreaker.get(package) {
+                    Some(tiebreaker) => *tiebreaker,
+                    None => {
+                        if cfg!(debug_assertions) {
+                            panic!("Virtual package not known: `{package}`")
+                        } else {
+                            PubGrubTiebreaker(Reverse(u32::MAX))
+                        }
+                    }
+                };
+
+                (package_priority, package_tiebreaker)
             }
         }
     }
