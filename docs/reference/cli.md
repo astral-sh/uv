@@ -5494,6 +5494,8 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 </dd><dt><code>--all-groups</code></dt><dd><p>Include dependencies from all dependency groups.</p>
 
+<p>Only applies to <code>pyproject.toml</code> sources.</p>
+
 <p><code>--no-group</code> can be used to exclude specific groups.</p>
 
 </dd><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
@@ -5622,6 +5624,8 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 </dd><dt><code>--group</code> <i>group</i></dt><dd><p>Include dependencies from the specified dependency group.</p>
 
+<p>Only applies to <code>pyproject.toml</code> sources.</p>
+
 <p>May be provided multiple times.</p>
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
@@ -5721,6 +5725,8 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
 </dd><dt><code>--no-default-groups</code></dt><dd><p>Exclude dependencies from default groups.</p>
 
+<p>Only applies to <code>pyproject.toml</code> sources.</p>
+
 <p><code>--group</code> can be used to include specific groups.</p>
 
 </dd><dt><code>--no-deps</code></dt><dd><p>Ignore package dependencies, instead only add those packages explicitly listed on the command line to the resulting the requirements file</p>
@@ -5728,6 +5734,8 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 </dd><dt><code>--no-emit-package</code> <i>no-emit-package</i></dt><dd><p>Specify a package to omit from the output resolution. Its dependencies will still be included in the resolution. Equivalent to pip-compile&#8217;s <code>--unsafe-package</code> option</p>
 
 </dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified dependency group.</p>
+
+<p>Only applies to <code>pyproject.toml</code> sources.</p>
 
 <p>May be provided multiple times.</p>
 
@@ -5765,9 +5773,11 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 </dd><dt><code>--only-group</code> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 
-<p>May be provided multiple times.</p>
-
 <p>The project itself will also be omitted.</p>
+
+<p>Only applies to <code>pyproject.toml</code> sources.</p>
+
+<p>May be provided multiple times.</p>
 
 </dd><dt><code>--output-file</code>, <code>-o</code> <i>output-file</i></dt><dd><p>Write the compiled requirements to the given <code>requirements.txt</code> file.</p>
 
@@ -6394,6 +6404,8 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 
 </dd><dt><code>--all-groups</code></dt><dd><p>Include dependencies from all dependency groups.</p>
 
+<p>Only applies to <code>pyproject.toml</code> sources.</p>
+
 <p><code>--no-group</code> can be used to exclude specific groups.</p>
 
 </dd><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
@@ -6516,6 +6528,8 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 </ul>
 </dd><dt><code>--group</code> <i>group</i></dt><dd><p>Include dependencies from the specified dependency group.</p>
 
+<p>Only applies to <code>pyproject.toml</code> sources.</p>
+
 <p>May be provided multiple times.</p>
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
@@ -6616,11 +6630,15 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
 </dd><dt><code>--no-default-groups</code></dt><dd><p>Exclude dependencies from default groups.</p>
 
+<p>Only applies to <code>pyproject.toml</code> sources.</p>
+
 <p><code>--group</code> can be used to include specific groups.</p>
 
 </dd><dt><code>--no-deps</code></dt><dd><p>Ignore package dependencies, instead only installing those packages explicitly listed on the command line or in the requirements files</p>
 
 </dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified dependency group.</p>
+
+<p>Only applies to <code>pyproject.toml</code> sources.</p>
 
 <p>May be provided multiple times.</p>
 
@@ -6653,9 +6671,11 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 
 </dd><dt><code>--only-group</code> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 
-<p>May be provided multiple times.</p>
-
 <p>The project itself will also be omitted.</p>
+
+<p>Only applies to <code>pyproject.toml</code> sources.</p>
+
+<p>May be provided multiple times.</p>
 
 </dd><dt><code>--overrides</code> <i>overrides</i></dt><dd><p>Override versions using the given requirements files.</p>
 

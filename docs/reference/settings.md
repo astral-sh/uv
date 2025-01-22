@@ -1701,7 +1701,7 @@ Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
 
 Include all groups.
 
-Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+Only applies to `pyproject.toml` sources.
 
 **Default value**: `false`
 
@@ -2275,7 +2275,7 @@ Include distribution hashes in the output file.
 
 Include optional dependencies from the specified group; may be provided more than once.
 
-Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+Only applies to `pyproject.toml` sources.
 
 **Default value**: `[]`
 
@@ -2582,7 +2582,7 @@ are already installed.
 
 Exclude default groups.
 
-Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+Only applies to `pyproject.toml` sources.
 
 **Default value**: `false`
 
@@ -2692,7 +2692,7 @@ Exclude the specified optional dependencies if `all-extras` is supplied.
 
 Exclude optional dependencies from the specified group if `all-groups` are supplied
 
-Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+Only applies to `pyproject.toml` sources.
 
 **Default value**: `[]`
 
@@ -2893,7 +2893,7 @@ Clear previously specified packages with `:none:`.
 
 Exclude only dependencies from the specified group.
 
-Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+Only applies to `pyproject.toml` sources.
 
 **Default value**: `[]`
 

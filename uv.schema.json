@@ -865,7 +865,7 @@
           ]
         },
         "all-groups": {
-          "description": "Include all groups.\n\nOnly applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.",
+          "description": "Include all groups.\n\nOnly applies to `pyproject.toml` sources.",
           "type": [
             "boolean",
             "null"
@@ -1026,7 +1026,7 @@
           ]
         },
         "group": {
-          "description": "Include optional dependencies from the specified group; may be provided more than once.\n\nOnly applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.",
+          "description": "Include optional dependencies from the specified group; may be provided more than once.\n\nOnly applies to `pyproject.toml` sources.",
           "type": [
             "array",
             "null"
@@ -1121,7 +1121,7 @@
           }
         },
         "no-default-groups": {
-          "description": "Exclude default groups.\n\nOnly applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.",
+          "description": "Exclude default groups.\n\nOnly applies to `pyproject.toml` sources.",
           "type": [
             "boolean",
             "null"
@@ -1155,7 +1155,7 @@
           }
         },
         "no-group": {
-          "description": "Exclude optional dependencies from the specified group if `all-groups` are supplied\n\nOnly applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.",
+          "description": "Exclude optional dependencies from the specified group if `all-groups` are supplied\n\nOnly applies to `pyproject.toml` sources.",
           "type": [
             "array",
             "null"
@@ -1210,7 +1210,7 @@
           }
         },
         "only-group": {
-          "description": "Exclude only dependencies from the specified group.\n\nOnly applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.",
+          "description": "Exclude only dependencies from the specified group.\n\nOnly applies to `pyproject.toml` sources.",
           "type": [
             "array",
             "null"

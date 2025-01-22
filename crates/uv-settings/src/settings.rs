@@ -1064,7 +1064,7 @@ pub struct PipOptions {
     pub no_extra: Option<Vec<ExtraName>>,
     /// Include optional dependencies from the specified group; may be provided more than once.
     ///
-    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+    /// Only applies to `pyproject.toml` sources.
     #[option(
         default = "[]",
         value_type = "list[str]",
@@ -1075,7 +1075,7 @@ pub struct PipOptions {
     pub group: Option<Vec<GroupName>>,
     /// Exclude optional dependencies from the specified group if `all-groups` are supplied
     ///
-    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+    /// Only applies to `pyproject.toml` sources.
     #[option(
         default = "[]",
         value_type = "list[str]",
@@ -1086,7 +1086,7 @@ pub struct PipOptions {
     pub no_group: Option<Vec<GroupName>>,
     /// Exclude default groups.
     ///
-    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+    /// Only applies to `pyproject.toml` sources.
     #[option(
         default = "false",
         value_type = "bool",
@@ -1097,7 +1097,7 @@ pub struct PipOptions {
     pub no_default_groups: Option<bool>,
     /// Exclude only dependencies from the specified group.
     ///
-    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+    /// Only applies to `pyproject.toml` sources.
     #[option(
         default = "[]",
         value_type = "list[str]",
@@ -1108,7 +1108,7 @@ pub struct PipOptions {
     pub only_group: Option<Vec<GroupName>>,
     /// Include all groups.
     ///
-    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+    /// Only applies to `pyproject.toml` sources.
     #[option(
         default = "false",
         value_type = "bool",

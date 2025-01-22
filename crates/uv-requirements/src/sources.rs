@@ -180,10 +180,7 @@ impl RequirementsSource {
 
     /// Returns `true` if the source allows groups to be specified.
     pub fn allows_groups(&self) -> bool {
-        matches!(
-            self,
-            Self::PyprojectToml(_) | Self::SetupPy(_) | Self::SetupCfg(_)
-        )
+        matches!(self, Self::PyprojectToml(_))
     }
 }
 

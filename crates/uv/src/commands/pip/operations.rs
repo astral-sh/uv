@@ -66,10 +66,7 @@ pub(crate) async fn read_requirements(
         .into());
     }
     if !groups.is_empty() && !requirements.iter().any(RequirementsSource::allows_groups) {
-        return Err(anyhow!(
-            "Requesting groups requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file."
-        )
-        .into());
+        return Err(anyhow!("Requesting groups requires a `pyproject.toml`.").into());
     }
 
     // Read all requirements from the provided sources.
