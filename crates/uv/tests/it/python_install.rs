@@ -13,7 +13,8 @@ use crate::common::{uv_snapshot, TestContext};
 fn python_install() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
 
     // Install the latest version
     uv_snapshot!(context.filters(), context.python_install(), @r###"
@@ -95,7 +96,8 @@ fn python_install() {
 fn python_install_preview() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
 
     // Install the latest version
     uv_snapshot!(context.filters(), context.python_install().arg("--preview"), @r###"
@@ -269,7 +271,8 @@ fn python_install_preview() {
 fn python_install_preview_upgrade() {
     let context = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
 
     let bin_python = context
         .temp_dir
@@ -408,7 +411,8 @@ fn python_install_preview_upgrade() {
 fn python_install_freethreaded() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
 
     // Install the latest version
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.13t"), @r###"
@@ -482,7 +486,8 @@ fn python_install_freethreaded() {
 fn python_install_invalid_request() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
 
     // Request something that is not a Python version
     uv_snapshot!(context.filters(), context.python_install().arg("foobar"), @r###"
@@ -519,7 +524,8 @@ fn python_install_invalid_request() {
 fn python_install_default() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
 
     let bin_python_minor_13 = context
         .temp_dir
@@ -815,7 +821,7 @@ fn read_link_path(path: &Path) -> String {
 
 #[test]
 fn python_install_unknown() {
-    let context: TestContext = TestContext::new_with_versions(&[]);
+    let context: TestContext = TestContext::new_with_versions(&[]).with_managed_python_dirs();
 
     // An unknown request
     uv_snapshot!(context.filters(), context.python_install().arg("foobar"), @r###"
@@ -848,7 +854,8 @@ fn python_install_preview_broken_link() {
 
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
 
     let bin_python = context.temp_dir.child("bin").child("python3.13");
 
@@ -883,7 +890,9 @@ fn python_dylib_install_name_is_patched_on_install() {
     use assert_cmd::assert::OutputAssertExt;
     use uv_python::managed::platform_key_from_env;
 
-    let context: TestContext = TestContext::new_with_versions(&[]).with_filtered_python_keys();
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_managed_python_dirs();
 
     // Install the latest version
     context
