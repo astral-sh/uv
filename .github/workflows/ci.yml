@@ -1629,7 +1629,7 @@ jobs:
   system-test-macos-x86_64:
     timeout-minutes: 10
     needs: build-binary-macos-x86_64
-    name: "check system | python on macos x86_64"
+    name: "check system | python on macos x86-64"
     runs-on: macos-13 # github-macos-13-x86_64-4
     steps:
       - uses: actions/checkout@v4
@@ -1655,7 +1655,7 @@ jobs:
   system-test-windows-python-310:
     timeout-minutes: 10
     needs: build-binary-windows-x86_64
-    name: "check system | python3.10 on windows x86_64"
+    name: "check system | python3.10 on windows x86-64"
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -1702,7 +1702,7 @@ jobs:
   system-test-windows-x86_64-python-313:
     timeout-minutes: 10
     needs: build-binary-windows-x86_64
-    name: "check system | python3.13 on windows x86_64"
+    name: "check system | python3.13 on windows x86-64"
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -1834,13 +1834,13 @@ jobs:
               os: "linux",
               target: "linux",
               runner: "ubuntu-latest",
-              arch: "x86_64",
+              arch: "x86-64",
             }
           - {
               os: "windows",
               target: "windows-x86_64",
               runner: "windows-latest",
-              arch: "x86_64",
+              arch: "x86-64",
             }
           - {
               os: "macos",
@@ -1914,7 +1914,7 @@ jobs:
   system-test-windows-embedded-python-310:
     timeout-minutes: 10
     needs: build-binary-windows-x86_64
-    name: "check system | embedded python3.10 on windows x86_64"
+    name: "check system | embedded python3.10 on windows x86-64"
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
