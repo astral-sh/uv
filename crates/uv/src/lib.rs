@@ -649,6 +649,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &args.exclude,
                 &args.format,
                 args.outdated,
+                args.requires,
+                args.required_by,
                 args.settings.prerelease,
                 args.settings.index_locations,
                 args.settings.index_strategy,

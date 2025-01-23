@@ -1975,6 +1975,24 @@ pub struct PipListArgs {
     #[arg(long, overrides_with("outdated"), hide = true)]
     pub no_outdated: bool,
 
+    /// List each package's required packages.
+    ///
+    /// This is only allowed when the output format is `json`.
+    #[arg(long, overrides_with("no_requires"))]
+    pub requires: bool,
+
+    #[arg(long, overrides_with("requires"), hide = true)]
+    pub no_requires: bool,
+
+    /// List which packages require each package.
+    ///
+    /// This is only allowed when the output format is `json`.
+    #[arg(long, overrides_with("no_required_by"))]
+    pub required_by: bool,
+
+    #[arg(long, overrides_with("required_by"), hide = true)]
+    pub no_required_by: bool,
+
     /// Validate the Python environment, to detect packages with missing dependencies and other
     /// issues.
     #[arg(long, overrides_with("no_strict"))]
