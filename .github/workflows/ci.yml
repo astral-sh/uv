@@ -481,12 +481,12 @@ jobs:
             ./target/debug/uvx
           retention-days: 1
 
-  build-binary-windows:
+  build-binary-windows-x86_64:
     needs: determine_changes
     timeout-minutes: 10
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: windows-latest
-    name: "build binary | windows"
+    name: "build binary | windows x86_64"
     steps:
       - uses: actions/checkout@v4
 
@@ -509,10 +509,48 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
-          name: uv-windows-${{ github.sha }}
+          name: uv-windows-x86_64-${{ github.sha }}
           path: |
             ${{ env.UV_WORKSPACE }}/target/debug/uv.exe
             ${{ env.UV_WORKSPACE }}/target/debug/uvx.exe
+          retention-days: 1
+
+  build-binary-windows-aarch64:
+    needs: determine_changes
+    timeout-minutes: 25
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    runs-on:
+      labels: windows-latest
+    name: "build binary | windows aarch64"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Dev Drive using ReFS
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ env.UV_WORKSPACE }}
+
+      - name: "Install cross target"
+        run: rustup target add aarch64-pc-windows-msvc
+
+      - name: "Build"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: cargo build --target aarch64-pc-windows-msvc
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@v4
+        with:
+          name: uv-windows-aarch64-${{ github.sha }}
+          path: |
+            ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/debug/uv.exe
+            ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/debug/uvx.exe
           retention-days: 1
 
   cargo-build-msrv:
@@ -667,16 +705,36 @@ jobs:
           eval "$(./uv generate-shell-completion bash)"
           eval "$(./uvx --generate-shell-completion bash)"
 
-  smoke-test-windows:
+  smoke-test-windows-x86_64:
     timeout-minutes: 10
-    needs: build-binary-windows
-    name: "smoke test | windows"
+    needs: build-binary-windows-x86_64
+    name: "smoke test | windows x86_64"
     runs-on: windows-latest
     steps:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-windows-${{ github.sha }}
+          name: uv-windows-x86_64-${{ github.sha }}
+
+      - name: "Smoke test"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
+          ./uv venv -v
+          ./uv pip install ruff -v
+          ./uvx -v ruff --version
+          (& ./uv generate-shell-completion powershell) | Out-String | Invoke-Expression
+          (& ./uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
+
+  smoke-test-windows-aarch64:
+    timeout-minutes: 10
+    needs: build-binary-windows-aarch64
+    name: "smoke test | windows aarch64"
+    runs-on: github-windows-11-aarch64-4
+    steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-aarch64-${{ github.sha }}
 
       - name: "Smoke test"
         working-directory: ${{ env.UV_WORKSPACE }}
@@ -816,9 +874,9 @@ jobs:
         run: |
           ./uv pip install -v anyio
 
-  integration-test-free-threaded-windows:
+  integration-test-free-threaded-windows-x86_64:
     timeout-minutes: 10
-    needs: build-binary-windows
+    needs: build-binary-windows-x86_64
     name: "integration test | free-threaded on windows"
     runs-on: windows-latest
 
@@ -826,7 +884,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-windows-${{ github.sha }}
+          name: uv-windows-x86_64-${{ github.sha }}
 
       - name: "Install free-threaded Python via uv"
         run: |
@@ -925,9 +983,9 @@ jobs:
         run: |
           ./uv pip install anyio
 
-  integration-test-pypy-windows:
+  integration-test-pypy-windows-x86_64:
     timeout-minutes: 10
-    needs: build-binary-windows
+    needs: build-binary-windows-x86_64
     name: "integration test | pypy on windows"
     runs-on: windows-latest
 
@@ -935,7 +993,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-windows-${{ github.sha }}
+          name: uv-windows-x86_64-${{ github.sha }}
 
       - name: "Install PyPy"
         run: .\uv.exe python install pypy3.9
@@ -982,6 +1040,9 @@ jobs:
           & .venv\Scripts\python.exe --version
 
       - name: "Check install"
+        env:
+          # Avoid debug build stack overflows.
+          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: |
           .\uv.exe pip install anyio
 
@@ -1054,9 +1115,9 @@ jobs:
         run: |
           ./uv pip install anyio
 
-  integration-test-graalpy-windows:
+  integration-test-graalpy-windows-x86_64:
     timeout-minutes: 10
-    needs: build-binary-windows
+    needs: build-binary-windows-x86_64
     name: "integration test | graalpy on windows"
     runs-on: windows-latest
 
@@ -1068,7 +1129,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-windows-${{ github.sha }}
+          name: uv-windows-x86_64-${{ github.sha }}
 
       - name: Graalpy info
         run: Get-Command graalpy
@@ -1111,6 +1172,9 @@ jobs:
           & .venv\Scripts\python.exe --version
 
       - name: "Check install"
+        env:
+          # Avoid debug build stack overflows.
+          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: |
           .\uv.exe pip install anyio
 
@@ -1574,7 +1638,7 @@ jobs:
   system-test-macos-x86_64:
     timeout-minutes: 10
     needs: build-binary-macos-x86_64
-    name: "check system | python on macos x86_64"
+    name: "check system | python on macos x86-64"
     runs-on: macos-13 # github-macos-13-x86_64-4
     steps:
       - uses: actions/checkout@v4
@@ -1599,8 +1663,8 @@ jobs:
 
   system-test-windows-python-310:
     timeout-minutes: 10
-    needs: build-binary-windows
-    name: "check system | python3.10 on windows"
+    needs: build-binary-windows-x86_64
+    name: "check system | python3.10 on windows x86-64"
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -1612,7 +1676,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-windows-${{ github.sha }}
+          name: uv-windows-x86_64-${{ github.sha }}
 
       - name: "Print Python path"
         run: echo $(which python)
@@ -1620,9 +1684,9 @@ jobs:
       - name: "Validate global Python install"
         run: py -3.10 ./scripts/check_system_python.py --uv ./uv.exe
 
-  system-test-windows-x86-python-310:
+  system-test-windows-x86_64-python-310:
     timeout-minutes: 10
-    needs: build-binary-windows
+    needs: build-binary-windows-x86_64
     name: "check system | python3.10 on windows x86"
     runs-on: windows-latest
     steps:
@@ -1636,7 +1700,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-windows-${{ github.sha }}
+          name: uv-windows-x86_64-${{ github.sha }}
 
       - name: "Print Python path"
         run: echo $(which python)
@@ -1644,10 +1708,10 @@ jobs:
       - name: "Validate global Python install"
         run: python ./scripts/check_system_python.py --uv ./uv.exe
 
-  system-test-windows-python-313:
+  system-test-windows-x86_64-python-313:
     timeout-minutes: 10
-    needs: build-binary-windows
-    name: "check system | python3.13 on windows"
+    needs: build-binary-windows-x86_64
+    name: "check system | python3.13 on windows x86-64"
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -1661,7 +1725,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-windows-${{ github.sha }}
+          name: uv-windows-x86_64-${{ github.sha }}
 
       - name: "Print Python path"
         run: echo $(which python)
@@ -1671,7 +1735,7 @@ jobs:
 
   system-test-choco:
     timeout-minutes: 10
-    needs: build-binary-windows
+    needs: build-binary-windows-x86_64
     name: "check system | python3.12 via chocolatey"
     runs-on: windows-latest
     steps:
@@ -1683,7 +1747,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-windows-${{ github.sha }}
+          name: uv-windows-x86_64-${{ github.sha }}
 
       - name: "Print Python path"
         run: echo $(which python3)
@@ -1762,8 +1826,12 @@ jobs:
   system-test-conda:
     timeout-minutes: 10
     needs:
-      [build-binary-windows, build-binary-macos-aarch64, build-binary-linux]
-    name: check system | conda${{ matrix.python-version }} on ${{ matrix.os }}
+      [
+        build-binary-windows-x86_64,
+        build-binary-macos-aarch64,
+        build-binary-linux,
+      ]
+    name: check system | conda${{ matrix.python-version }} on ${{ matrix.os }} {{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -1771,9 +1839,24 @@ jobs:
         os: ["linux", "windows", "macos"]
         python-version: ["3.8", "3.11"]
         include:
-          - { os: "linux", target: "linux", runner: "ubuntu-latest" }
-          - { os: "windows", target: "windows", runner: "windows-latest" }
-          - { os: "macos", target: "macos-aarch64", runner: "macos-14" }
+          - {
+              os: "linux",
+              target: "linux",
+              runner: "ubuntu-latest",
+              arch: "x86-64",
+            }
+          - {
+              os: "windows",
+              target: "windows-x86_64",
+              runner: "windows-latest",
+              arch: "x86-64",
+            }
+          - {
+              os: "macos",
+              target: "macos-aarch64",
+              runner: "macos-14",
+              arch: "aarch64",
+            }
     steps:
       - uses: actions/checkout@v4
 
@@ -1839,8 +1922,8 @@ jobs:
 
   system-test-windows-embedded-python-310:
     timeout-minutes: 10
-    needs: build-binary-windows
-    name: "check system | embedded python3.10 on windows"
+    needs: build-binary-windows-x86_64
+    name: "check system | embedded python3.10 on windows x86-64"
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -1848,7 +1931,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-windows-${{ github.sha }}
+          name: uv-windows-x86_64-${{ github.sha }}
 
       # Download embedded Python.
       - name: "Download embedded Python"
