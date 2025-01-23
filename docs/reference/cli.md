@@ -137,6 +137,8 @@ uv run [OPTIONS] [COMMAND]
 
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
 
+<p>You can assign a name to the index using the format <code>name=url</code>, for example:</p>
+
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
@@ -214,6 +216,8 @@ uv run [OPTIONS] [COMMAND]
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>You can assign names to indexes using the format <code>name=url</code>, for example:</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -805,6 +809,8 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
 
+<p>You can assign a name to the index using the format <code>name=url</code>, for example:</p>
+
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--dev</code></dt><dd><p>Add the requirements to the development dependency group.</p>
 
@@ -873,6 +879,8 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>You can assign names to indexes using the format <code>name=url</code>, for example:</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -1172,6 +1180,8 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
 
+<p>You can assign a name to the index using the format <code>name=url</code>, for example:</p>
+
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--dev</code></dt><dd><p>Remove the packages from the development dependency group.</p>
 
@@ -1230,6 +1240,8 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>You can assign names to indexes using the format <code>name=url</code>, for example:</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -1525,6 +1537,8 @@ uv sync [OPTIONS]
 
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
 
+<p>You can assign a name to the index using the format <code>name=url</code>, for example:</p>
+
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
@@ -1591,6 +1605,8 @@ uv sync [OPTIONS]
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>You can assign names to indexes using the format <code>name=url</code>, for example:</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -1912,6 +1928,8 @@ uv lock [OPTIONS]
 
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
 
+<p>You can assign a name to the index using the format <code>name=url</code>, for example:</p>
+
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
@@ -1963,6 +1981,8 @@ uv lock [OPTIONS]
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>You can assign names to indexes using the format <code>name=url</code>, for example:</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -2233,6 +2253,8 @@ uv export [OPTIONS]
 
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
 
+<p>You can assign a name to the index using the format <code>name=url</code>, for example:</p>
+
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
@@ -2303,6 +2325,8 @@ uv export [OPTIONS]
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>You can assign names to indexes using the format <code>name=url</code>, for example:</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -2618,6 +2642,8 @@ uv tree [OPTIONS]
 
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
 
+<p>You can assign a name to the index using the format <code>name=url</code>, for example:</p>
+
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--depth</code>, <code>-d</code> <i>depth</i></dt><dd><p>Maximum display depth of the dependency tree</p>
 
@@ -2677,6 +2703,8 @@ uv tree [OPTIONS]
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>You can assign names to indexes using the format <code>name=url</code>, for example:</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -3102,6 +3130,8 @@ uv tool run [OPTIONS] [COMMAND]
 
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
 
+<p>You can assign a name to the index using the format <code>name=url</code>, for example:</p>
+
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
@@ -3153,6 +3183,8 @@ uv tool run [OPTIONS] [COMMAND]
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>You can assign names to indexes using the format <code>name=url</code>, for example:</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -3431,6 +3463,8 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
 
+<p>You can assign a name to the index using the format <code>name=url</code>, for example:</p>
+
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
@@ -3482,6 +3516,8 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>You can assign names to indexes using the format <code>name=url</code>, for example:</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -3758,6 +3794,8 @@ uv tool upgrade [OPTIONS] <NAME>...
 
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
 
+<p>You can assign a name to the index using the format <code>name=url</code>, for example:</p>
+
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
@@ -3805,6 +3843,8 @@ uv tool upgrade [OPTIONS] <NAME>...
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>You can assign names to indexes using the format <code>name=url</code>, for example:</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -5562,6 +5602,8 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
 
+<p>You can assign a name to the index using the format <code>name=url</code>, for example:</p>
+
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
@@ -5623,6 +5665,8 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>You can assign names to indexes using the format <code>name=url</code>, for example:</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -6036,6 +6080,8 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
 
+<p>You can assign a name to the index using the format <code>name=url</code>, for example:</p>
+
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
@@ -6071,6 +6117,8 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>You can assign names to indexes using the format <code>name=url</code>, for example:</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -6436,6 +6484,8 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
 
+<p>You can assign a name to the index using the format <code>name=url</code>, for example:</p>
+
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
@@ -6495,6 +6545,8 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>You can assign names to indexes using the format <code>name=url</code>, for example:</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -7183,6 +7235,8 @@ uv pip list [OPTIONS]
 
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
 
+<p>You can assign a name to the index using the format <code>name=url</code>, for example:</p>
+
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
@@ -7234,6 +7288,8 @@ uv pip list [OPTIONS]
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>You can assign names to indexes using the format <code>name=url</code>, for example:</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -7549,6 +7605,8 @@ uv pip tree [OPTIONS]
 
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
 
+<p>You can assign a name to the index using the format <code>name=url</code>, for example:</p>
+
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--depth</code>, <code>-d</code> <i>depth</i></dt><dd><p>Maximum display depth of the dependency tree</p>
 
@@ -7585,6 +7643,8 @@ uv pip tree [OPTIONS]
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>You can assign names to indexes using the format <code>name=url</code>, for example:</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -7922,6 +7982,8 @@ uv venv [OPTIONS] [PATH]
 
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
 
+<p>You can assign a name to the index using the format <code>name=url</code>, for example:</p>
+
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
@@ -7955,6 +8017,8 @@ uv venv [OPTIONS] [PATH]
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>You can assign names to indexes using the format <code>name=url</code>, for example:</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -8194,6 +8258,8 @@ uv build [OPTIONS] [SRC]
 
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
 
+<p>You can assign a name to the index using the format <code>name=url</code>, for example:</p>
+
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
@@ -8245,6 +8311,8 @@ uv build [OPTIONS] [SRC]
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>You can assign names to indexes using the format <code>name=url</code>, for example:</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
