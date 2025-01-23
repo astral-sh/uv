@@ -154,10 +154,17 @@ impl TestContext {
         self
     }
 
-    /// Add extra standard filtering for executable suffixes on the current platform e.g.
-    /// drops `.exe` on Windows.
+    /// Add extra standard filtering for Python interpreter sources
     #[must_use]
     pub fn with_filtered_python_sources(mut self) -> Self {
+        self.filters.push((
+            "virtual environments, managed installations, or search path".to_string(),
+            "[PYTHON SOURCES]".to_string(),
+        ));
+        self.filters.push((
+            "virtual environments, managed installations, search path, or registry".to_string(),
+            "[PYTHON SOURCES]".to_string(),
+        ));
         self.filters.push((
             "managed installations or search path".to_string(),
             "[PYTHON SOURCES]".to_string(),
@@ -240,17 +247,11 @@ impl TestContext {
     #[must_use]
     pub fn with_managed_python_dirs(mut self) -> Self {
         let managed = self.temp_dir.join("managed");
-        let bin = self.temp_dir.join("bin");
 
         self.extra_env.push((
-            EnvVars::PATH.into(),
-            env::join_paths(std::iter::once(bin.clone()).chain(env::split_paths(
-                &env::var(EnvVars::PATH).unwrap_or_default(),
-            )))
-            .unwrap(),
+            EnvVars::UV_PYTHON_BIN_DIR.into(),
+            self.bin_dir.as_os_str().to_owned(),
         ));
-        self.extra_env
-            .push((EnvVars::UV_PYTHON_BIN_DIR.into(), bin.into()));
         self.extra_env
             .push((EnvVars::UV_PYTHON_INSTALL_DIR.into(), managed.into()));
         self.extra_env
@@ -360,6 +361,11 @@ impl TestContext {
             filters.push((r#"link-mode = "copy"\n"#.to_string(), String::new()));
         }
 
+        filters.extend(
+            Self::path_patterns(&bin_dir)
+                .into_iter()
+                .map(|pattern| (pattern, "[BIN]/".to_string())),
+        );
         filters.extend(
             Self::path_patterns(&cache_dir)
                 .into_iter()
@@ -524,9 +530,10 @@ impl TestContext {
     /// * Increase the stack size to avoid stack overflows on windows due to large async functions.
     pub fn add_shared_args(&self, command: &mut Command, activate_venv: bool) {
         // Push the test context bin to the front of the PATH
-        let mut path = OsString::from(self.bin_dir.as_ref());
-        path.push(if cfg!(windows) { ";" } else { ":" });
-        path.push(env::var(EnvVars::PATH).unwrap_or_default());
+        let path = env::join_paths(std::iter::once(self.bin_dir.to_path_buf()).chain(
+            env::split_paths(&env::var(EnvVars::PATH).unwrap_or_default()),
+        ))
+        .unwrap();
 
         command
             .arg("--cache-dir")

@@ -28,8 +28,7 @@ fn python_install() {
     "###);
 
     let bin_python = context
-        .temp_dir
-        .child("bin")
+        .bin_dir
         .child(format!("python3.13{}", std::env::consts::EXE_SUFFIX));
 
     // The executable should not be installed in the bin directory (requires preview)
@@ -93,6 +92,117 @@ fn python_install() {
 }
 
 #[test]
+fn python_install_automatic() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_python_sources()
+        .with_managed_python_dirs();
+
+    // With downloads disabled, the automatic install should fail
+    uv_snapshot!(context.filters(), context.run()
+        .env_remove("VIRTUAL_ENV")
+        .arg("--no-python-downloads")
+        .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found in [PYTHON SOURCES]
+    "###);
+
+    // Otherwise, we should fetch the latest Python version
+    uv_snapshot!(context.filters(), context.run()
+        .env_remove("VIRTUAL_ENV")
+        .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    (3, 13)
+
+    ----- stderr -----
+    "###);
+
+    // Subsequently, we can use the interpreter even with downloads disabled
+    uv_snapshot!(context.filters(), context.run()
+        .env_remove("VIRTUAL_ENV")
+        .arg("--no-python-downloads")
+        .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    (3, 13)
+
+    ----- stderr -----
+    "###);
+
+    // We should respect the Python request
+    uv_snapshot!(context.filters(), context.run()
+    .env_remove("VIRTUAL_ENV")
+    .arg("-p").arg("3.12")
+    .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    (3, 12)
+
+    ----- stderr -----
+    "###);
+
+    // But some requests cannot be mapped to a download
+    uv_snapshot!(context.filters(), context.run()
+       .env_remove("VIRTUAL_ENV")
+       .arg("-p").arg("foobar")
+       .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for executable name `foobar` in [PYTHON SOURCES]
+    "###);
+
+    // Create a "broken" Python executable in the test context `bin`
+    // (the snapshot is different on Windows so we just test on Unix)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let contents = r"#!/bin/sh
+        echo 'error: intentionally broken python executable' >&2
+        exit 1";
+        let python = context
+            .bin_dir
+            .join(format!("python3{}", std::env::consts::EXE_SUFFIX));
+        fs_err::write(&python, contents).unwrap();
+
+        let mut perms = fs_err::metadata(&python).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs_err::set_permissions(&python, perms).unwrap();
+
+        // We should ignore the broken executable and download a version still
+        uv_snapshot!(context.filters(), context.run()
+            .env_remove("VIRTUAL_ENV")
+            // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
+            .env("UV_TEST_PYTHON_PATH", context.bin_dir.as_os_str())
+            .arg("-p").arg("3.11")
+            .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
+
+        ----- stderr -----
+        error: Failed to inspect Python interpreter from search path at `[BIN]/python3`
+          Caused by: Querying Python at `[BIN]/python3` failed with exit status exit status: 1
+
+        [stderr]
+        error: intentionally broken python executable
+        "###);
+    }
+}
+
+#[test]
 fn python_install_preview() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
@@ -111,8 +221,7 @@ fn python_install_preview() {
     "###);
 
     let bin_python = context
-        .temp_dir
-        .child("bin")
+        .bin_dir
         .child(format!("python3.13{}", std::env::consts::EXE_SUFFIX));
 
     // The executable should be installed in the bin directory
@@ -182,7 +291,7 @@ fn python_install_preview() {
 
     ----- stderr -----
     error: Failed to install cpython-3.13.1-[PLATFORM]
-      Caused by: Executable already exists at `[TEMP_DIR]/bin/python3.13` but is not managed by uv; use `--force` to replace it
+      Caused by: Executable already exists at `[BIN]/python3.13` but is not managed by uv; use `--force` to replace it
     "###);
 
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--force").arg("3.13"), @r###"
@@ -243,8 +352,7 @@ fn python_install_preview() {
     "###);
 
     let bin_python = context
-        .temp_dir
-        .child("bin")
+        .bin_dir
         .child(format!("python3.12{}", std::env::consts::EXE_SUFFIX));
 
     // The link should be for the newer patch version
@@ -275,8 +383,7 @@ fn python_install_preview_upgrade() {
         .with_managed_python_dirs();
 
     let bin_python = context
-        .temp_dir
-        .child("bin")
+        .bin_dir
         .child(format!("python3.12{}", std::env::consts::EXE_SUFFIX));
 
     // Install 3.12.5
@@ -426,8 +533,7 @@ fn python_install_freethreaded() {
     "###);
 
     let bin_python = context
-        .temp_dir
-        .child("bin")
+        .bin_dir
         .child(format!("python3.13t{}", std::env::consts::EXE_SUFFIX));
 
     // The executable should be installed in the bin directory
@@ -528,18 +634,15 @@ fn python_install_default() {
         .with_managed_python_dirs();
 
     let bin_python_minor_13 = context
-        .temp_dir
-        .child("bin")
+        .bin_dir
         .child(format!("python3.13{}", std::env::consts::EXE_SUFFIX));
 
     let bin_python_major = context
-        .temp_dir
-        .child("bin")
+        .bin_dir
         .child(format!("python3{}", std::env::consts::EXE_SUFFIX));
 
     let bin_python_default = context
-        .temp_dir
-        .child("bin")
+        .bin_dir
         .child(format!("python{}", std::env::consts::EXE_SUFFIX));
 
     // `--preview` is required for `--default`
@@ -656,8 +759,7 @@ fn python_install_default() {
     "###);
 
     let bin_python_minor_12 = context
-        .temp_dir
-        .child("bin")
+        .bin_dir
         .child(format!("python3.12{}", std::env::consts::EXE_SUFFIX));
 
     // All the executables should exist
@@ -857,10 +959,10 @@ fn python_install_preview_broken_link() {
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
 
-    let bin_python = context.temp_dir.child("bin").child("python3.13");
+    let bin_python = context.bin_dir.child("python3.13");
 
     // Create a broken symlink
-    context.temp_dir.child("bin").create_dir_all().unwrap();
+    context.bin_dir.create_dir_all().unwrap();
     symlink(context.temp_dir.join("does-not-exist"), &bin_python).unwrap();
 
     // Install
