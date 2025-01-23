@@ -8371,7 +8371,7 @@ fn direct_url_json_direct_url() -> Result<()> {
 }
 
 #[test]
-fn install_group() -> Result<()> {
+fn dependency_group() -> Result<()> {
     fn new_context() -> Result<TestContext> {
         let context = TestContext::new("3.12");
 
@@ -8391,28 +8391,6 @@ fn install_group() -> Result<()> {
             "#,
         )?;
 
-        let test_script = context.temp_dir.child("main.py");
-        test_script.write_str(indoc! { r#"
-            try:
-                import anyio
-                print("imported `anyio`")
-            except ImportError:
-                print("failed to import `anyio`")
-
-            try:
-                import iniconfig
-                print("imported `iniconfig`")
-            except ImportError:
-                print("failed to import `iniconfig`")
-
-            try:
-                import typing_extensions
-                print("imported `typing_extensions`")
-            except ImportError:
-                print("failed to import `typing_extensions`")
-           "#
-        })?;
-
         context.lock().assert().success();
         Ok(context)
     }
@@ -8420,8 +8398,8 @@ fn install_group() -> Result<()> {
     let mut context;
 
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_install().arg("-r")
-    .arg("pyproject.toml"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8434,8 +8412,9 @@ fn install_group() -> Result<()> {
     "###);
 
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_install().arg("-r")
-    .arg("pyproject.toml").arg("--only-group").arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("--only-group").arg("bar"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8449,8 +8428,9 @@ fn install_group() -> Result<()> {
     "###);
 
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_install().arg("-r")
-    .arg("pyproject.toml").arg("--group").arg("foo"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("--group").arg("foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8464,8 +8444,10 @@ fn install_group() -> Result<()> {
     "###);
 
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_install().arg("-r")
-    .arg("pyproject.toml").arg("--group").arg("foo").arg("--group").arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("--group").arg("foo")
+        .arg("--group").arg("bar"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8480,8 +8462,9 @@ fn install_group() -> Result<()> {
     "###);
 
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_install().arg("-r")
-    .arg("pyproject.toml").arg("--all-groups"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("--all-groups"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8497,8 +8480,10 @@ fn install_group() -> Result<()> {
     "###);
 
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_install().arg("-r")
-    .arg("pyproject.toml").arg("--all-groups").arg("--no-group").arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("--all-groups")
+        .arg("--no-group").arg("bar"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8515,7 +8500,7 @@ fn install_group() -> Result<()> {
 }
 
 #[test]
-fn install_many_pyproject_group() -> Result<()> {
+fn many_pyproject_group() -> Result<()> {
     fn new_context() -> Result<TestContext> {
         let context = TestContext::new("3.12");
 
@@ -8556,8 +8541,9 @@ fn install_many_pyproject_group() -> Result<()> {
     let mut context;
 
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_install().arg("-r")
-    .arg("pyproject.toml").arg("-r").arg("subdir/pyproject.toml"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("-r").arg("subdir/pyproject.toml"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8570,8 +8556,10 @@ fn install_many_pyproject_group() -> Result<()> {
     "###);
 
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_install().arg("-r")
-    .arg("pyproject.toml").arg("-r").arg("subdir/pyproject.toml").arg("--all-groups"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("-r").arg("subdir/pyproject.toml")
+        .arg("--all-groups"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8587,8 +8575,10 @@ fn install_many_pyproject_group() -> Result<()> {
     "###);
 
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_install().arg("-r")
-    .arg("pyproject.toml").arg("-r").arg("subdir/pyproject.toml").arg("--group").arg("foo"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("-r").arg("subdir/pyproject.toml")
+        .arg("--group").arg("foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8603,8 +8593,10 @@ fn install_many_pyproject_group() -> Result<()> {
     "###);
 
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_install().arg("-r")
-    .arg("pyproject.toml").arg("-r").arg("subdir/pyproject.toml").arg("--group").arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("-r").arg("subdir/pyproject.toml")
+        .arg("--group").arg("bar"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8619,8 +8611,10 @@ fn install_many_pyproject_group() -> Result<()> {
     "###);
 
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_install().arg("-r")
-    .arg("pyproject.toml").arg("-r").arg("subdir/pyproject.toml").arg("--group").arg("lies"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("-r").arg("subdir/pyproject.toml")
+        .arg("--group").arg("lies"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8635,8 +8629,11 @@ fn install_many_pyproject_group() -> Result<()> {
     "###);
 
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_install().arg("-r")
-    .arg("pyproject.toml").arg("-r").arg("subdir/pyproject.toml").arg("--group").arg("foo").arg("--group").arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("-r").arg("subdir/pyproject.toml")
+        .arg("--group").arg("foo")
+        .arg("--group").arg("bar"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8659,7 +8656,9 @@ fn install_many_pyproject_group() -> Result<()> {
 fn group_needs_manifest() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.filters(), context.pip_install().arg("sniffio").arg("--group").arg("foo"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("sniffio")
+        .arg("--group").arg("foo"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
