@@ -89,6 +89,7 @@ pub struct TestContext {
     pub cache_dir: ChildPath,
     pub python_dir: ChildPath,
     pub home_dir: ChildPath,
+    pub bin_dir: ChildPath,
     pub venv: ChildPath,
     pub workspace_root: PathBuf,
 
@@ -274,6 +275,14 @@ impl TestContext {
         let python_dir = ChildPath::new(root.path()).child("python");
         fs_err::create_dir_all(&python_dir).expect("Failed to create test Python directory");
 
+        let bin_dir = ChildPath::new(root.path()).child("bin");
+        fs_err::create_dir_all(&bin_dir).expect("Failed to create test bin directory");
+
+        // When the `git` feature is disabled, enforce that the test suite does not use `git`
+        if cfg!(not(feature = "git")) {
+            Self::disallow_git_cli(&bin_dir).expect("Failed to setup disallowed `git` command");
+        }
+
         let home_dir = ChildPath::new(root.path()).child("home");
         fs_err::create_dir_all(&home_dir).expect("Failed to create test home directory");
 
@@ -441,6 +450,7 @@ impl TestContext {
             cache_dir,
             python_dir,
             home_dir,
+            bin_dir,
             venv,
             workspace_root,
             python_version,
@@ -457,6 +467,24 @@ impl TestContext {
         command
     }
 
+    fn disallow_git_cli(bin_dir: &Path) -> std::io::Result<()> {
+        let contents = r"#!/bin/sh
+    echo 'error: `git` operations are not allowed — are you missing a cfg for the `git` feature?' >&2
+    exit 127";
+        let git = bin_dir.join(format!("git{}", env::consts::EXE_SUFFIX));
+        fs_err::write(&git, contents)?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs_err::metadata(&git)?.permissions();
+            perms.set_mode(0o755);
+            fs_err::set_permissions(&git, perms)?;
+        }
+
+        Ok(())
+    }
+
     /// Shared behaviour for almost all test commands.
     ///
     /// * Use a temporary cache directory
@@ -468,12 +496,18 @@ impl TestContext {
     ///   `UV_TEST_PYTHON_PATH` and an active venv (if applicable) by removing `VIRTUAL_ENV`.
     /// * Increase the stack size to avoid stack overflows on windows due to large async functions.
     pub fn add_shared_args(&self, command: &mut Command, activate_venv: bool) {
+        // Push the test context bin to the front of the PATH
+        let mut path = OsString::from(self.bin_dir.as_ref());
+        path.push(if cfg!(windows) { ";" } else { ":" });
+        path.push(env::var(EnvVars::PATH).unwrap_or_default());
+
         command
             .arg("--cache-dir")
             .arg(self.cache_dir.path())
             // When running the tests in a venv, ignore that venv, otherwise we'll capture warnings.
             .env_remove(EnvVars::VIRTUAL_ENV)
             .env(EnvVars::UV_NO_WRAP, "1")
+            .env(EnvVars::PATH, path)
             .env(EnvVars::HOME, self.home_dir.as_os_str())
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
             .env(EnvVars::UV_TEST_PYTHON_PATH, self.python_path())

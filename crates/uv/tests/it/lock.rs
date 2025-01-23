@@ -10768,6 +10768,7 @@ fn lock_mismatched_sources() -> Result<()> {
 ///
 /// See: <https://github.com/astral-sh/uv/issues/4604>
 #[test]
+#[cfg(feature = "git")]
 fn lock_mismatched_versions() -> Result<()> {
     let context = TestContext::new("3.12");
 

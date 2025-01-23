@@ -3183,6 +3183,7 @@ fn sync_custom_environment_path() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn sync_workspace_custom_environment_path() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -5276,7 +5277,7 @@ fn sync_derivation_chain_group() -> Result<()> {
 
 /// See: <https://github.com/astral-sh/uv/issues/9743>
 #[test]
-#[cfg(feature = "slow-tests")]
+#[cfg(all(feature = "slow-tests", feature = "git"))]
 fn sync_stale_egg_info() -> Result<()> {
     let context = TestContext::new("3.13");
 
