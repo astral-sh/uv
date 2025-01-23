@@ -4440,11 +4440,18 @@ conflicts = [
         "#,
     )?;
 
-    // I believe there are multiple valid solutions here, but the main
-    // thing is that `x2` should _not_ activate the `idna==3.4` dependency
-    // in `proxy1`. The `--extra=x2` should be a no-op, since there is no
-    // `x2` extra in the top level `pyproject.toml`.
+    // Error out, as x2 extra is only on the child.
     uv_snapshot!(context.filters(), context.sync().arg("--extra=x2"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    error: Extra `x2` is not defined in the project's `optional-dependencies` table
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
