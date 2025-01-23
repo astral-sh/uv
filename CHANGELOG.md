@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.5.24
+
+### Enhancements
+
+- Improve determinism of resolution by always setting package priorities ([#10853](https://github.com/astral-sh/uv/pull/10853))
+- Upgrade to `cargo-dist` 0.28.0; improves several installer behaviors ([#10884](https://github.com/astral-sh/uv/pull/10884))
+
+### Performance
+
+- Remove dependencies clone in resolver ([#10880](https://github.com/astral-sh/uv/pull/10880))
+- Use Hashbrown's raw entry API to reduce hashes and clone in resolver priority determination ([#10881](https://github.com/astral-sh/uv/pull/10881))
+
+### Bug fixes
+
+- Allow fallback to Python download on non-critical discovery errors ([#10908](https://github.com/astral-sh/uv/pull/10908))
+
+### Preview features
+
+- Register managed Python version with the Windows Registry (PEP 514) ([#10634](https://github.com/astral-sh/uv/pull/10634))
+
+### Documentation
+
+- Improve documentation for some environment variables ([#10887](https://github.com/astral-sh/uv/pull/10887))
+- Add git subdirectory example ([#10894](https://github.com/astral-sh/uv/pull/10894))
+
 ## 0.5.23
 
 ### Enhancements
