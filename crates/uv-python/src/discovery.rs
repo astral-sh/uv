@@ -20,16 +20,17 @@ use crate::downloads::PythonDownloadRequest;
 use crate::implementation::ImplementationName;
 use crate::installation::PythonInstallation;
 use crate::interpreter::Error as InterpreterError;
+use crate::interpreter::{StatusCodeError, UnexpectedResponseError};
 use crate::managed::ManagedPythonInstallations;
 #[cfg(windows)]
 use crate::microsoft_store::find_microsoft_store_pythons;
-#[cfg(windows)]
-use crate::py_launcher::{registry_pythons, WindowsPython};
 use crate::virtualenv::Error as VirtualEnvError;
 use crate::virtualenv::{
     conda_environment_from_env, virtualenv_from_env, virtualenv_from_working_dir,
     virtualenv_python_executable, CondaEnvironmentKind,
 };
+#[cfg(windows)]
+use crate::windows_registry::{registry_pythons, WindowsPython};
 use crate::{Interpreter, PythonVersion};
 
 /// A request to find a Python installation.
@@ -323,7 +324,7 @@ fn python_executables_from_installed<'a>(
                         }
                     })
                     .inspect(|installation| debug!("Found managed installation `{installation}`"))
-                    .map(|installation| (PythonSource::Managed, installation.executable())))
+                    .map(|installation| (PythonSource::Managed, installation.executable(false))))
             })
     })
     .flatten_ok();
@@ -414,7 +415,7 @@ fn python_executables<'a>(
     })
     .flatten();
 
-    // Check if the the base conda environment is active
+    // Check if the base conda environment is active
     let from_base_conda_environment = iter::once_with(|| {
         conda_environment_from_env(CondaEnvironmentKind::Base)
             .into_iter()
@@ -720,9 +721,15 @@ impl Error {
                 InterpreterError::Encode(_)
                 | InterpreterError::Io(_)
                 | InterpreterError::SpawnFailed { .. } => true,
-                InterpreterError::QueryScript { path, .. }
-                | InterpreterError::UnexpectedResponse { path, .. }
-                | InterpreterError::StatusCode { path, .. } => {
+                InterpreterError::UnexpectedResponse(UnexpectedResponseError { path, .. })
+                | InterpreterError::StatusCode(StatusCodeError { path, .. }) => {
+                    debug!(
+                        "Skipping bad interpreter at {} from {source}: {err}",
+                        path.display()
+                    );
+                    false
+                }
+                InterpreterError::QueryScript { path, err } => {
                     debug!(
                         "Skipping bad interpreter at {} from {source}: {err}",
                         path.display()
@@ -971,9 +978,16 @@ pub(crate) fn find_python_installation(
 ) -> Result<FindPythonResult, Error> {
     let installations = find_python_installations(request, environments, preference, cache);
     let mut first_prerelease = None;
+    let mut first_error = None;
     for result in installations {
         // Iterate until the first critical error or happy result
         if !result.as_ref().err().map_or(true, Error::is_critical) {
+            // Track the first non-critical error
+            if first_error.is_none() {
+                if let Err(err) = result {
+                    first_error = Some(err);
+                }
+            }
             continue;
         }
 
@@ -1024,6 +1038,12 @@ pub(crate) fn find_python_installation(
     // If we only found pre-releases, they're implicitly allowed and we should return the first one.
     if let Some(installation) = first_prerelease {
         return Ok(Ok(installation));
+    }
+
+    // If we found a Python, but it was unusable for some reason, report that instead of saying we
+    // couldn't find any Python interpreters.
+    if let Some(err) = first_error {
+        return Err(err);
     }
 
     Ok(Err(PythonNotFound {
@@ -1154,7 +1174,7 @@ pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
             component.starts_with("python")
                 && std::path::Path::new(component)
                     .extension()
-                    .map_or(false, |ext| ext.eq_ignore_ascii_case("exe"))
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
         })
     {
         return false;
@@ -2220,7 +2240,7 @@ impl FromStr for VersionRequest {
         };
 
         // Cast the release components into u8s since that's what we use in `VersionRequest`
-        let Ok(release) = try_into_u8_slice(version.release()) else {
+        let Ok(release) = try_into_u8_slice(&version.release()) else {
             return Err(Error::InvalidVersionRequest(s.to_string()));
         };
 

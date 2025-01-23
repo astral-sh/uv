@@ -397,7 +397,7 @@ pub async fn upload(
         if UvRetryableStrategy.handle(&result) == Some(Retryable::Transient) {
             let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
             if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
-                warn_user!("Transient failure while handling response for {registry}; retrying...",);
+                warn_user!("Transient failure while handling response for {registry}; retrying...");
                 reporter.on_download_complete(idx);
                 let duration = execute_after
                     .duration_since(SystemTime::now())
@@ -674,7 +674,7 @@ async fn form_metadata(
     ];
 
     if let DistFilename::WheelFilename(wheel) = filename {
-        form_metadata.push(("pyversion", wheel.python_tag.join(".")));
+        form_metadata.push(("pyversion", wheel.python_tags().iter().join(".")));
     } else {
         form_metadata.push(("pyversion", "source".to_string()));
     }

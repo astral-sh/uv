@@ -3,6 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::Path;
+use std::sync::Arc;
 
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
@@ -11,13 +12,13 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, ExtrasSpecification, LowerBound, PreviewMode, Reinstall, TrustedHost,
-    Upgrade,
+    Concurrency, Constraints, DevGroupsSpecification, ExtrasSpecification, LowerBound, PreviewMode,
+    Reinstall, TrustedHost, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
-    DependencyMetadata, Index, IndexLocations, NameRequirementSpecification,
+    DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
     UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
@@ -31,6 +32,7 @@ use uv_resolver::{
     FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, PythonRequirement, RequiresPython,
     ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
 };
+use uv_scripts::{Pep723ItemRef, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -38,7 +40,7 @@ use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceMember};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::LockTarget;
-use crate::commands::project::{ProjectError, ProjectInterpreter};
+use crate::commands::project::{ProjectError, ProjectInterpreter, ScriptInterpreter};
 use crate::commands::reporters::ResolverReporter;
 use crate::commands::{diagnostics, pip, ExitStatus};
 use crate::printer::Printer;
@@ -79,6 +81,7 @@ pub(crate) async fn lock(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
+    script: Option<Pep723Script>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
@@ -91,29 +94,52 @@ pub(crate) async fn lock(
     preview: PreviewMode,
 ) -> anyhow::Result<ExitStatus> {
     // Find the project requirements.
-    let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
+    let workspace;
+    let target = if let Some(script) = script.as_ref() {
+        LockTarget::Script(script)
+    } else {
+        workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
+        LockTarget::Workspace(&workspace)
+    };
 
     // Determine the lock mode.
     let interpreter;
     let mode = if frozen {
         LockMode::Frozen
     } else {
-        interpreter = ProjectInterpreter::discover(
-            &workspace,
-            project_dir,
-            python.as_deref().map(PythonRequest::parse),
-            python_preference,
-            python_downloads,
-            connectivity,
-            native_tls,
-            allow_insecure_host,
-            &install_mirrors,
-            no_config,
-            cache,
-            printer,
-        )
-        .await?
-        .into_interpreter();
+        interpreter = match target {
+            LockTarget::Workspace(workspace) => ProjectInterpreter::discover(
+                workspace,
+                project_dir,
+                python.as_deref().map(PythonRequest::parse),
+                python_preference,
+                python_downloads,
+                connectivity,
+                native_tls,
+                allow_insecure_host,
+                &install_mirrors,
+                no_config,
+                cache,
+                printer,
+            )
+            .await?
+            .into_interpreter(),
+            LockTarget::Script(script) => ScriptInterpreter::discover(
+                Pep723ItemRef::Script(script),
+                python.as_deref().map(PythonRequest::parse),
+                python_preference,
+                python_downloads,
+                connectivity,
+                native_tls,
+                allow_insecure_host,
+                &install_mirrors,
+                no_config,
+                cache,
+                printer,
+            )
+            .await?
+            .into_interpreter(),
+        };
 
         if locked {
             LockMode::Locked(&interpreter)
@@ -130,7 +156,7 @@ pub(crate) async fn lock(
     // Perform the lock operation.
     match do_safe_lock(
         mode,
-        (&workspace).into(),
+        target,
         settings.as_ref(),
         LowerBound::Warn,
         &state,
@@ -167,9 +193,11 @@ pub(crate) async fn lock(
 
             Ok(ExitStatus::Success)
         }
-        Err(ProjectError::Operation(err)) => diagnostics::OperationDiagnostic::default()
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
+        Err(ProjectError::Operation(err)) => {
+            diagnostics::OperationDiagnostic::native_tls(native_tls)
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+        }
         Err(err) => Err(err.into()),
     }
 }
@@ -390,7 +418,7 @@ async fn do_lock(
 
     // Determine the supported Python range. If no range is defined, and warn and default to the
     // current minor version.
-    let requires_python = target.requires_python();
+    let requires_python = target.requires_python()?;
 
     let requires_python = if let Some(requires_python) = requires_python {
         if requires_python.is_unbounded() {
@@ -440,6 +468,12 @@ async fn do_lock(
         }
     }
 
+    for index in target.indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
+    }
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
         .native_tls(native_tls)
@@ -472,13 +506,14 @@ async fn do_lock(
         .index_strategy(index_strategy)
         .build_options(build_options.clone())
         .build();
-    let hasher = HashStrategy::Generate;
+    let hasher = HashStrategy::Generate(HashGeneration::Url);
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
     let extras = ExtrasSpecification::default();
+    let groups = DevGroupsSpecification::default();
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
@@ -603,15 +638,10 @@ async fn do_lock(
             let resolver_env = ResolverEnvironment::universal(
                 forks_lock
                     .map(|lock| {
-                        // TODO(ag): Consider whether we should be capturing
-                        // conflicting extras/groups for every fork. If
-                        // we did, then we'd be able to use them here,
-                        // which would in turn flow into construction of
-                        // `ResolverEnvironment`.
                         lock.fork_markers()
                             .iter()
                             .copied()
-                            .map(UniversalMarker::pep508)
+                            .map(UniversalMarker::combined)
                             .collect()
                     })
                     .unwrap_or_else(|| {
@@ -625,7 +655,7 @@ async fn do_lock(
             // Resolve the requirements.
             let resolution = pip::operations::resolve(
                 ExtrasResolver::new(&hasher, state.index(), database)
-                    .with_reporter(ResolverReporter::from(printer))
+                    .with_reporter(Arc::new(ResolverReporter::from(printer)))
                     .resolve(target.members_requirements())
                     .await
                     .map_err(|err| ProjectError::Operation(err.into()))?
@@ -654,6 +684,7 @@ async fn do_lock(
                 None,
                 packages.keys().cloned().collect(),
                 &extras,
+                &groups,
                 preferences,
                 EmptyInstalledPackages,
                 &hasher,
@@ -902,7 +933,7 @@ impl ValidatedLock {
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedSources(name, expected) => {
+            SatisfiesResult::MismatchedVirtual(name, expected) => {
                 if expected {
                     debug!(
                         "Ignoring existing lockfile due to mismatched source: `{name}` (expected: `virtual`)"
@@ -910,6 +941,18 @@ impl ValidatedLock {
                 } else {
                     debug!(
                         "Ignoring existing lockfile due to mismatched source: `{name}` (expected: `editable`)"
+                    );
+                }
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedDynamic(name, expected) => {
+                if expected {
+                    debug!(
+                        "Ignoring existing lockfile due to static version: `{name}` (expected a dynamic version)"
+                    );
+                } else {
+                    debug!(
+                        "Ignoring existing lockfile due to dynamic version: `{name}` (expected a static version)"
                     );
                 }
                 Ok(Self::Preferable(lock))
@@ -978,17 +1021,35 @@ impl ValidatedLock {
                 Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedPackageRequirements(name, version, expected, actual) => {
-                debug!(
-                    "Ignoring existing lockfile due to mismatched `requires-dist` for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
-                    expected, actual
-                );
+                if let Some(version) = version {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched requirements for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
+                        expected, actual
+                    );
+                } else {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched requirements for: `{name}`\n  Requested: {:?}\n  Existing: {:?}",
+                        expected, actual
+                    );
+                }
                 Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedPackageDependencyGroups(name, version, expected, actual) => {
-                debug!(
-                    "Ignoring existing lockfile due to mismatched dev dependencies for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
-                    expected, actual
-                );
+                if let Some(version) = version {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched dependency groups for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
+                        expected, actual
+                    );
+                } else {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched dependency groups for: `{name}`\n  Requested: {:?}\n  Existing: {:?}",
+                        expected, actual
+                    );
+                }
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MissingVersion(name) => {
+                debug!("Ignoring existing lockfile due to missing version: `{name}`");
                 Ok(Self::Preferable(lock))
             }
         }
@@ -1015,7 +1076,7 @@ fn report_upgrades(
     printer: Printer,
     dry_run: bool,
 ) -> anyhow::Result<bool> {
-    let existing_packages: FxHashMap<&PackageName, BTreeSet<&Version>> =
+    let existing_packages: FxHashMap<&PackageName, BTreeSet<Option<&Version>>> =
         if let Some(existing_lock) = existing_lock {
             existing_lock.packages().iter().fold(
                 FxHashMap::with_capacity_and_hasher(existing_lock.packages().len(), FxBuildHasher),
@@ -1030,7 +1091,7 @@ fn report_upgrades(
             FxHashMap::default()
         };
 
-    let new_distributions: FxHashMap<&PackageName, BTreeSet<&Version>> =
+    let new_distributions: FxHashMap<&PackageName, BTreeSet<Option<&Version>>> =
         new_lock.packages().iter().fold(
             FxHashMap::with_capacity_and_hasher(new_lock.packages().len(), FxBuildHasher),
             |mut acc, package| {
@@ -1047,18 +1108,25 @@ fn report_upgrades(
         .chain(new_distributions.keys())
         .collect::<BTreeSet<_>>()
     {
+        /// Format a version for inclusion in the upgrade report.
+        fn format_version(version: Option<&Version>) -> String {
+            version
+                .map(|version| format!("v{version}"))
+                .unwrap_or_else(|| "(dynamic)".to_string())
+        }
+
         updated = true;
         match (existing_packages.get(name), new_distributions.get(name)) {
             (Some(existing_versions), Some(new_versions)) => {
                 if existing_versions != new_versions {
                     let existing_versions = existing_versions
                         .iter()
-                        .map(|version| format!("v{version}"))
+                        .map(|version| format_version(*version))
                         .collect::<Vec<_>>()
                         .join(", ");
                     let new_versions = new_versions
                         .iter()
-                        .map(|version| format!("v{version}"))
+                        .map(|version| format_version(*version))
                         .collect::<Vec<_>>()
                         .join(", ");
                     writeln!(
@@ -1071,7 +1139,7 @@ fn report_upgrades(
             (Some(existing_versions), None) => {
                 let existing_versions = existing_versions
                     .iter()
-                    .map(|version| format!("v{version}"))
+                    .map(|version| format_version(*version))
                     .collect::<Vec<_>>()
                     .join(", ");
                 writeln!(
@@ -1083,7 +1151,7 @@ fn report_upgrades(
             (None, Some(new_versions)) => {
                 let new_versions = new_versions
                     .iter()
-                    .map(|version| format!("v{version}"))
+                    .map(|version| format_version(*version))
                     .collect::<Vec<_>>()
                     .join(", ");
                 writeln!(

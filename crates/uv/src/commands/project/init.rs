@@ -121,7 +121,10 @@ pub(crate) async fn init(
                         .and_then(|path| path.to_str())
                         .context("Missing directory name")?;
 
-                    PackageName::new(name.to_string())?
+                    // Pre-normalize the package name by removing any leading or trailing
+                    // whitespace, and replacing any internal whitespace with hyphens.
+                    let name = name.trim().replace(' ', "-");
+                    PackageName::new(name)?
                 }
             };
 
@@ -496,7 +499,12 @@ async fn init_project(
         };
 
         (requires_python, python_request)
-    } else if let Some(requires_python) = workspace.as_ref().and_then(find_requires_python) {
+    } else if let Some(requires_python) = workspace
+        .as_ref()
+        .map(find_requires_python)
+        .transpose()?
+        .flatten()
+    {
         // (3) `requires-python` from the workspace
         debug!("Using Python version from project workspace");
         let python_request = PythonRequest::Version(VersionRequest::Range(
@@ -1003,7 +1011,7 @@ fn pyproject_build_backend_prerequisites(
             if !build_file.try_exists()? {
                 fs_err::write(
                     build_file,
-                    indoc::formatdoc! {r#"
+                    indoc::formatdoc! {r"
                     cmake_minimum_required(VERSION 3.15)
                     project(${{SKBUILD_PROJECT_NAME}} LANGUAGES CXX)
 
@@ -1012,7 +1020,7 @@ fn pyproject_build_backend_prerequisites(
 
                     pybind11_add_module(_core MODULE src/main.cpp)
                     install(TARGETS _core DESTINATION ${{SKBUILD_PROJECT_NAME}})
-                "#},
+                "},
                 )?;
             }
         }
@@ -1049,25 +1057,25 @@ fn generate_package_scripts(
 
     // Python script for binary-based packaged apps or libs
     let binary_call_script = if is_lib {
-        indoc::formatdoc! {r#"
+        indoc::formatdoc! {r"
         from {module_name}._core import hello_from_bin
+
 
         def hello() -> str:
             return hello_from_bin()
-        "#}
+        "}
     } else {
-        indoc::formatdoc! {r#"
+        indoc::formatdoc! {r"
         from {module_name}._core import hello_from_bin
+
 
         def main() -> None:
             print(hello_from_bin())
-        "#}
+        "}
     };
 
     // .pyi file for binary script
     let pyi_contents = indoc::indoc! {r"
-        from __future__ import annotations
-
         def hello_from_bin() -> str: ...
     "};
 

@@ -7,6 +7,7 @@ use petgraph::{
     Directed, Direction,
 };
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
@@ -442,7 +443,7 @@ impl ResolverOutput {
             (
                 ResolvedDist::Installable {
                     dist,
-                    version: version.clone(),
+                    version: Some(version.clone()),
                 },
                 hashes,
                 Some(metadata),
@@ -726,7 +727,7 @@ impl ResolverOutput {
                     MarkerExpression::String {
                         key: value_string.into(),
                         operator: MarkerOperator::Equal,
-                        value: from_env.to_string(),
+                        value: from_env.into(),
                     }
                 }
             };

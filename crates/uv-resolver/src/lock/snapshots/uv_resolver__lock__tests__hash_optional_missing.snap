@@ -42,7 +42,9 @@ Ok(
                     name: PackageName(
                         "anyio",
                     ),
-                    version: "4.3.0",
+                    version: Some(
+                        "4.3.0",
+                    ),
                     source: Registry(
                         Url(
                             UrlString(
@@ -66,16 +68,16 @@ Ok(
                                 "anyio",
                             ),
                             version: "4.3.0",
-                            build_tag: None,
-                            python_tag: [
-                                "py3",
-                            ],
-                            abi_tag: [
-                                "none",
-                            ],
-                            platform_tag: [
-                                "any",
-                            ],
+                            tags: Small {
+                                small: WheelTagSmall {
+                                    python_tag: Python {
+                                        major: 3,
+                                        minor: None,
+                                    },
+                                    abi_tag: None,
+                                    platform_tag: Any,
+                                },
+                            },
                         },
                     },
                 ],
@@ -94,7 +96,9 @@ Ok(
                 name: PackageName(
                     "anyio",
                 ),
-                version: "4.3.0",
+                version: Some(
+                    "4.3.0",
+                ),
                 source: Registry(
                     Url(
                         UrlString(

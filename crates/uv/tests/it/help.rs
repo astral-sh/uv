@@ -52,7 +52,7 @@ fn help() {
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
@@ -132,7 +132,7 @@ fn help_flag() {
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
@@ -211,7 +211,7 @@ fn help_short_flag() {
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
@@ -347,9 +347,9 @@ fn help_subcommand() {
               (<https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>)
 
           --color <COLOR_CHOICE>
-              Control colors in output
+              Control the use of color in output.
               
-              [default: auto]
+              By default, uv will automatically detect support for colors when writing to a terminal.
 
               Possible values:
               - auto:   Enables colored output only when the output is going to a terminal or TTY with
@@ -593,9 +593,9 @@ fn help_subsubcommand() {
               (<https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>)
 
           --color <COLOR_CHOICE>
-              Control colors in output
+              Control the use of color in output.
               
-              [default: auto]
+              By default, uv will automatically detect support for colors when writing to a terminal.
 
               Possible values:
               - auto:   Enables colored output only when the output is going to a terminal or TTY with
@@ -730,7 +730,7 @@ fn help_flag_subcommand() {
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
@@ -803,7 +803,7 @@ fn help_flag_subsubcommand() {
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
@@ -960,7 +960,7 @@ fn help_with_global_option() {
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
@@ -1076,7 +1076,7 @@ fn help_with_no_pager() {
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]

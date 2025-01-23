@@ -1218,7 +1218,7 @@ fn init_workspace_outside() -> Result<()> {
 fn init_normalized_names() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // `foo-bar` module is normalized to `foo_bar`.
+    // `foo-bar` module is normalized to `foo-bar`.
     uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("foo-bar").arg("--lib"), @r###"
     success: true
     exit_code: 0
@@ -1252,17 +1252,17 @@ fn init_normalized_names() -> Result<()> {
         );
     });
 
-    // `foo-bar` module is normalized to `foo_bar`.
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("foo-bar").arg("--app"), @r###"
-    success: false
-    exit_code: 2
+    // `bar_baz` module is normalized to `bar-baz`.
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("bar_baz").arg("--app"), @r###"
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Project is already initialized in `[TEMP_DIR]/foo-bar` (`pyproject.toml` file exists)
+    Initialized project `bar-baz` at `[TEMP_DIR]/bar_baz`
     "###);
 
-    let child = context.temp_dir.child("foo-bar");
+    let child = context.temp_dir.child("bar_baz");
     let pyproject = fs_err::read_to_string(child.join("pyproject.toml"))?;
 
     insta::with_settings!({
@@ -1271,29 +1271,44 @@ fn init_normalized_names() -> Result<()> {
         assert_snapshot!(
             pyproject, @r###"
         [project]
-        name = "foo-bar"
+        name = "bar-baz"
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
         "###
         );
     });
 
-    // "bar baz" is not allowed.
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("bar baz"), @r###"
-    success: false
-    exit_code: 2
+    // "baz bop" is normalized to "baz-bop".
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("baz bop"), @r###"
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Not a valid package or extra name: "bar baz". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
+    Initialized project `baz-bop` at `[TEMP_DIR]/baz bop`
     "###);
+
+    let child = context.temp_dir.child("baz bop");
+    let pyproject = fs_err::read_to_string(child.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "baz-bop"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+        "###
+        );
+    });
 
     Ok(())
 }
@@ -2239,6 +2254,7 @@ fn init_failure() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn init_git() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -2299,6 +2315,7 @@ fn init_vcs_none() {
 
 /// Run `uv init` from within a Git repository. Do not try to reinitialize one.
 #[test]
+#[cfg(feature = "git")]
 fn init_inside_git_repo() {
     let context = TestContext::new("3.12");
 
@@ -2749,6 +2766,7 @@ fn init_app_build_backend_maturin() -> Result<()> {
             init, @r###"
         from foo._core import hello_from_bin
 
+
         def main() -> None:
             print(hello_from_bin())
         "###
@@ -2761,8 +2779,6 @@ fn init_app_build_backend_maturin() -> Result<()> {
     }, {
         assert_snapshot!(
             pyi_contents, @r###"
-        from __future__ import annotations
-
         def hello_from_bin() -> str: ...
         "###
         );
@@ -2879,6 +2895,7 @@ fn init_app_build_backend_scikit() -> Result<()> {
             init, @r###"
         from foo._core import hello_from_bin
 
+
         def main() -> None:
             print(hello_from_bin())
         "###
@@ -2891,8 +2908,6 @@ fn init_app_build_backend_scikit() -> Result<()> {
     }, {
         assert_snapshot!(
             pyi_contents, @r###"
-        from __future__ import annotations
-
         def hello_from_bin() -> str: ...
         "###
         );
@@ -3002,6 +3017,7 @@ fn init_lib_build_backend_maturin() -> Result<()> {
             init, @r###"
         from foo._core import hello_from_bin
 
+
         def hello() -> str:
             return hello_from_bin()
         "###
@@ -3014,8 +3030,6 @@ fn init_lib_build_backend_maturin() -> Result<()> {
     }, {
         assert_snapshot!(
             pyi_contents, @r###"
-        from __future__ import annotations
-
         def hello_from_bin() -> str: ...
         "###
         );
@@ -3129,6 +3143,7 @@ fn init_lib_build_backend_scikit() -> Result<()> {
             init, @r###"
         from foo._core import hello_from_bin
 
+
         def hello() -> str:
             return hello_from_bin()
         "###
@@ -3141,8 +3156,6 @@ fn init_lib_build_backend_scikit() -> Result<()> {
     }, {
         assert_snapshot!(
             pyi_contents, @r###"
-        from __future__ import annotations
-
         def hello_from_bin() -> str: ...
         "###
         );

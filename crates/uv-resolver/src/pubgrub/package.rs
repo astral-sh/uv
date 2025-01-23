@@ -273,6 +273,11 @@ impl PubGrubPackage {
             PubGrubPackageInner::Marker { .. } => "marker",
         }
     }
+
+    /// Returns a new [`PubGrubPackage`] representing the base package with the given name.
+    pub(crate) fn base(name: &PackageName) -> Self {
+        Self::from_package(name.clone(), None, None, MarkerTree::TRUE)
+    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
@@ -347,5 +352,11 @@ impl std::fmt::Display for PubGrubPackageInner {
                 dev: Some(_),
             } => unreachable!(),
         }
+    }
+}
+
+impl From<&PubGrubPackage> for PubGrubPackage {
+    fn from(package: &PubGrubPackage) -> Self {
+        package.clone()
     }
 }

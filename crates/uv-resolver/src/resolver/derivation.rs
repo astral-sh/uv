@@ -54,7 +54,7 @@ impl DerivationChainBuilder {
                                     name.clone(),
                                     p1.extra().cloned(),
                                     p1.dev().cloned(),
-                                    version.clone(),
+                                    Some(version.clone()),
                                     v2.clone(),
                                 ));
 

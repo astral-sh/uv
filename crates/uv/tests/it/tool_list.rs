@@ -156,7 +156,7 @@ fn tool_list_bad_environment() -> Result<()> {
     - ruff
 
     ----- stderr -----
-    Invalid environment at `tools/black`: missing Python executable at `tools/black/[BIN]/python`
+    warning: Invalid environment at `tools/black`: missing Python executable at `tools/black/[BIN]/python` (run `uv tool install black --reinstall` to reinstall)
     "###
     );
 

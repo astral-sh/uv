@@ -866,44 +866,28 @@ fn tool_run_csv_with() -> anyhow::Result<()> {
        "
     })?;
 
-    // performs a tool run with CSV `with` flag
+    // Performs a tool run with a comma-separated `--with` flag.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--with")
-        .arg("numpy,pandas")
-        .arg("ipython")
-        .arg("-c")
-        .arg("import numpy; import pandas;")
+        .arg("iniconfig,typing-extensions")
+        .arg("pytest")
+        .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
+    pytest 8.1.1
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + asttokens==2.4.1
-     + decorator==5.1.1
-     + executing==2.0.1
-     + ipython==8.22.2
-     + jedi==0.19.1
-     + matplotlib-inline==0.1.6
-     + numpy==1.26.4
-     + pandas==2.2.1
-     + parso==0.8.3
-     + pexpect==4.9.0
-     + prompt-toolkit==3.0.43
-     + ptyprocess==0.7.0
-     + pure-eval==0.2.2
-     + pygments==2.17.2
-     + python-dateutil==2.9.0.post0
-     + pytz==2024.1
-     + six==1.16.0
-     + stack-data==0.6.3
-     + traitlets==5.14.2
-     + tzdata==2024.1
-     + wcwidth==0.2.13
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + typing-extensions==4.10.0
     "###);
 
     Ok(())
@@ -946,41 +930,28 @@ fn tool_run_csv_with() -> anyhow::Result<()> {
        "
     })?;
 
-    // performs a tool run with CSV `with` flag
+    // Performs a tool run with a comma-separated `--with` flag.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--with")
-        .arg("numpy,pandas")
-        .arg("ipython")
-        .arg("-c")
-        .arg("import numpy; import pandas;")
+        .arg("iniconfig,typing-extensions")
+        .arg("pytest")
+        .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
+    pytest 8.1.1
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + asttokens==2.4.1
-     + decorator==5.1.1
-     + executing==2.0.1
-     + ipython==8.22.2
-     + jedi==0.19.1
-     + matplotlib-inline==0.1.6
-     + numpy==1.26.4
-     + pandas==2.2.1
-     + parso==0.8.3
-     + prompt-toolkit==3.0.43
-     + pure-eval==0.2.2
-     + pygments==2.17.2
-     + python-dateutil==2.9.0.post0
-     + pytz==2024.1
-     + six==1.16.0
-     + stack-data==0.6.3
-     + traitlets==5.14.2
-     + wcwidth==0.2.13
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + typing-extensions==4.10.0
     "###);
 
     Ok(())
@@ -1023,46 +994,30 @@ fn tool_run_repeated_with() -> anyhow::Result<()> {
        "
     })?;
 
-    // performs a tool run with repeated `with` flag
+    // Performs a tool run with a repeated `--with` flag.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--with")
-        .arg("numpy")
+        .arg("iniconfig")
         .arg("--with")
-        .arg("pandas")
-        .arg("ipython")
-        .arg("-c")
-        .arg("import numpy; import pandas;")
+        .arg("typing-extensions")
+        .arg("pytest")
+        .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
+    pytest 8.1.1
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + asttokens==2.4.1
-     + decorator==5.1.1
-     + executing==2.0.1
-     + ipython==8.22.2
-     + jedi==0.19.1
-     + matplotlib-inline==0.1.6
-     + numpy==1.26.4
-     + pandas==2.2.1
-     + parso==0.8.3
-     + pexpect==4.9.0
-     + prompt-toolkit==3.0.43
-     + ptyprocess==0.7.0
-     + pure-eval==0.2.2
-     + pygments==2.17.2
-     + python-dateutil==2.9.0.post0
-     + pytz==2024.1
-     + six==1.16.0
-     + stack-data==0.6.3
-     + traitlets==5.14.2
-     + tzdata==2024.1
-     + wcwidth==0.2.13
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + typing-extensions==4.10.0
     "###);
 
     Ok(())
@@ -1105,43 +1060,30 @@ fn tool_run_repeated_with() -> anyhow::Result<()> {
        "
     })?;
 
-    // performs a tool run with repeated `with` flag
+    // Performs a tool run with a repeated `--with` flag.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--with")
-        .arg("numpy")
+        .arg("iniconfig")
         .arg("--with")
-        .arg("pandas")
-        .arg("ipython")
-        .arg("-c")
-        .arg("import numpy; import pandas;")
+        .arg("typing-extensions")
+        .arg("pytest")
+        .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
+    pytest 8.1.1
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + asttokens==2.4.1
-     + decorator==5.1.1
-     + executing==2.0.1
-     + ipython==8.22.2
-     + jedi==0.19.1
-     + matplotlib-inline==0.1.6
-     + numpy==1.26.4
-     + pandas==2.2.1
-     + parso==0.8.3
-     + prompt-toolkit==3.0.43
-     + pure-eval==0.2.2
-     + pygments==2.17.2
-     + python-dateutil==2.9.0.post0
-     + pytz==2024.1
-     + six==1.16.0
-     + stack-data==0.6.3
-     + traitlets==5.14.2
-     + wcwidth==0.2.13
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + typing-extensions==4.10.0
     "###);
 
     Ok(())

@@ -88,6 +88,9 @@ fn {{module_name}}() {
         .arg("--no-binary")
         .arg("{{.}}")
         {{/resolver_options.no_binary}}
+        {{#resolver_options.python_platform}}
+        .arg("--python-platform={{.}}")
+        {{/resolver_options.python_platform}}
         {{#root.requires}}
         .arg("{{requirement}}")
         {{/root.requires}}, @r###"<snapshot>

@@ -50,7 +50,7 @@ use uv_workspace::pyproject::PyProjectToml;
 
 use crate::RequirementsSource;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RequirementsSpecification {
     /// The name of the project specifying requirements.
     pub project: Option<PackageName>,

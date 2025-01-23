@@ -5,7 +5,9 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use version_ranges::Ranges;
 
-use uv_distribution_types::{DerivationChain, DerivationStep, Dist, DistErrorKind, Name};
+use uv_distribution_types::{
+    DerivationChain, DerivationStep, Dist, DistErrorKind, Name, RequestedDist,
+};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_resolver::SentinelRange;
@@ -32,26 +34,37 @@ static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::ne
 pub(crate) struct OperationDiagnostic {
     /// The hint to display to the user upon resolution failure.
     pub(crate) hint: Option<String>,
+    /// Whether native TLS is enabled.
+    pub(crate) native_tls: bool,
     /// The context to display to the user upon resolution failure.
     pub(crate) context: Option<&'static str>,
 }
 
 impl OperationDiagnostic {
+    /// Create an [`OperationDiagnostic`] with the given native TLS setting.
+    #[must_use]
+    pub(crate) fn native_tls(native_tls: bool) -> Self {
+        Self {
+            native_tls,
+            ..Default::default()
+        }
+    }
+
     /// Set the hint to display to the user upon resolution failure.
     #[must_use]
-    pub(crate) fn with_hint(hint: String) -> Self {
+    pub(crate) fn with_hint(self, hint: String) -> Self {
         Self {
             hint: Some(hint),
-            ..Default::default()
+            ..self
         }
     }
 
     /// Set the context to display to the user upon resolution failure.
     #[must_use]
-    pub(crate) fn with_context(context: &'static str) -> Self {
+    pub(crate) fn with_context(self, context: &'static str) -> Self {
         Self {
             context: Some(context),
-            ..Default::default()
+            ..self
         }
     }
 
@@ -78,7 +91,7 @@ impl OperationDiagnostic {
                 chain,
                 err,
             )) => {
-                dist_error(kind, dist, &chain, err);
+                requested_dist_error(kind, dist, &chain, err);
                 None
             }
             pip::operations::Error::Requirements(uv_requirements::Error::Dist(kind, dist, err)) => {
@@ -104,6 +117,12 @@ impl OperationDiagnostic {
                     Some(pip::operations::Error::Requirements(err))
                 }
             }
+            pip::operations::Error::Resolve(uv_resolver::ResolveError::Client(err))
+                if !self.native_tls && err.is_ssl() =>
+            {
+                native_tls_hint(err);
+                None
+            }
             err => Some(err),
         }
     }
@@ -122,6 +141,51 @@ pub(crate) fn dist_error(
     struct Diagnostic {
         kind: DistErrorKind,
         dist: Box<Dist>,
+        #[source]
+        cause: Arc<uv_distribution::Error>,
+        #[help]
+        help: Option<String>,
+    }
+
+    let help = SUGGESTIONS
+        .get(dist.name())
+        .map(|suggestion| {
+            format!(
+                "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
+                dist.name().cyan(),
+                suggestion.cyan(),
+                suggestion.cyan(),
+            )
+        })
+        .or_else(|| {
+            if chain.is_empty() {
+                None
+            } else {
+                Some(format_chain(dist.name(), dist.version(), chain))
+            }
+        });
+    let report = miette::Report::new(Diagnostic {
+        kind,
+        dist,
+        cause,
+        help,
+    });
+    anstream::eprint!("{report:?}");
+}
+
+/// Render a requested distribution failure (read, download or build) with a help message.
+pub(crate) fn requested_dist_error(
+    kind: DistErrorKind,
+    dist: Box<RequestedDist>,
+    chain: &DerivationChain,
+    cause: Arc<uv_distribution::Error>,
+) {
+    #[derive(Debug, miette::Diagnostic, thiserror::Error)]
+    #[error("{kind} `{dist}`")]
+    #[diagnostic()]
+    struct Diagnostic {
+        kind: DistErrorKind,
+        dist: Box<RequestedDist>,
         #[source]
         cause: Arc<uv_distribution::Error>,
         #[help]
@@ -189,6 +253,41 @@ pub(crate) fn no_solution_hint(err: uv_resolver::NoSolutionError, help: String) 
     anstream::eprint!("{report:?}");
 }
 
+/// Render a [`uv_resolver::NoSolutionError`] with a help message.
+pub(crate) fn native_tls_hint(err: uv_client::Error) {
+    #[derive(Debug, miette::Diagnostic)]
+    #[diagnostic()]
+    struct Error {
+        /// The underlying error.
+        err: uv_client::Error,
+
+        /// The help message to display.
+        #[help]
+        help: String,
+    }
+
+    impl std::fmt::Display for Error {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self.err)
+        }
+    }
+
+    impl std::error::Error for Error {
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            self.err.source()
+        }
+    }
+
+    let report = miette::Report::new(Error {
+        err,
+        help: format!(
+            "Consider enabling use of system TLS certificates with the `{}` command-line flag",
+            "--native-tls".green()
+        ),
+    });
+    anstream::eprint!("{report:?}");
+}
+
 /// Format a [`DerivationChain`] as a human-readable error message.
 fn format_chain(name: &PackageName, version: Option<&Version>, chain: &DerivationChain) -> String {
     /// Format a step in the [`DerivationChain`] as a human-readable error message.
@@ -197,52 +296,86 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
             range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
         {
             if let Some(extra) = &step.extra {
-                // Ex) `flask[dotenv]>=1.0.0` (v1.2.3)
-                format!(
-                    "`{}{}` ({})",
-                    format!("{}[{}]", step.name, extra).cyan(),
-                    range.cyan(),
-                    format!("v{}", step.version).cyan(),
-                )
+                if let Some(version) = step.version.as_ref() {
+                    // Ex) `flask[dotenv]>=1.0.0` (v1.2.3)
+                    format!(
+                        "`{}{}` ({})",
+                        format!("{}[{}]", step.name, extra).cyan(),
+                        range.cyan(),
+                        format!("v{version}").cyan(),
+                    )
+                } else {
+                    // Ex) `flask[dotenv]>=1.0.0`
+                    format!(
+                        "`{}{}`",
+                        format!("{}[{}]", step.name, extra).cyan(),
+                        range.cyan(),
+                    )
+                }
             } else if let Some(group) = &step.group {
-                // Ex) `flask:dev>=1.0.0` (v1.2.3)
-                format!(
-                    "`{}{}` ({})",
-                    format!("{}:{}", step.name, group).cyan(),
-                    range.cyan(),
-                    format!("v{}", step.version).cyan(),
-                )
+                if let Some(version) = step.version.as_ref() {
+                    // Ex) `flask:dev>=1.0.0` (v1.2.3)
+                    format!(
+                        "`{}{}` ({})",
+                        format!("{}:{}", step.name, group).cyan(),
+                        range.cyan(),
+                        format!("v{version}").cyan(),
+                    )
+                } else {
+                    // Ex) `flask:dev>=1.0.0`
+                    format!(
+                        "`{}{}`",
+                        format!("{}:{}", step.name, group).cyan(),
+                        range.cyan(),
+                    )
+                }
             } else {
-                // Ex) `flask>=1.0.0` (v1.2.3)
-                format!(
-                    "`{}{}` ({})",
-                    step.name.cyan(),
-                    range.cyan(),
-                    format!("v{}", step.version).cyan(),
-                )
+                if let Some(version) = step.version.as_ref() {
+                    // Ex) `flask>=1.0.0` (v1.2.3)
+                    format!(
+                        "`{}{}` ({})",
+                        step.name.cyan(),
+                        range.cyan(),
+                        format!("v{version}").cyan(),
+                    )
+                } else {
+                    // Ex) `flask>=1.0.0`
+                    format!("`{}{}`", step.name.cyan(), range.cyan())
+                }
             }
         } else {
             if let Some(extra) = &step.extra {
-                // Ex) `flask[dotenv]` (v1.2.3)
-                format!(
-                    "`{}` ({})",
-                    format!("{}[{}]", step.name, extra).cyan(),
-                    format!("v{}", step.version).cyan(),
-                )
+                if let Some(version) = step.version.as_ref() {
+                    // Ex) `flask[dotenv]` (v1.2.3)
+                    format!(
+                        "`{}` ({})",
+                        format!("{}[{}]", step.name, extra).cyan(),
+                        format!("v{version}").cyan(),
+                    )
+                } else {
+                    // Ex) `flask[dotenv]`
+                    format!("`{}`", format!("{}[{}]", step.name, extra).cyan())
+                }
             } else if let Some(group) = &step.group {
-                // Ex) `flask:dev` (v1.2.3)
-                format!(
-                    "`{}` ({})",
-                    format!("{}:{}", step.name, group).cyan(),
-                    format!("v{}", step.version).cyan(),
-                )
+                if let Some(version) = step.version.as_ref() {
+                    // Ex) `flask:dev` (v1.2.3)
+                    format!(
+                        "`{}` ({})",
+                        format!("{}:{}", step.name, group).cyan(),
+                        format!("v{version}").cyan(),
+                    )
+                } else {
+                    // Ex) `flask:dev`
+                    format!("`{}`", format!("{}:{}", step.name, group).cyan())
+                }
             } else {
-                // Ex) `flask` (v1.2.3)
-                format!(
-                    "`{}` ({})",
-                    step.name.cyan(),
-                    format!("v{}", step.version).cyan()
-                )
+                if let Some(version) = step.version.as_ref() {
+                    // Ex) `flask` (v1.2.3)
+                    format!("`{}` ({})", step.name.cyan(), format!("v{version}").cyan())
+                } else {
+                    // Ex) `flask`
+                    format!("`{}`", step.name.cyan())
+                }
             }
         }
     }

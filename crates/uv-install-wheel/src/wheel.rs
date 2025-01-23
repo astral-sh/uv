@@ -26,6 +26,8 @@ use crate::{Error, Layout};
 /// Wrapper script template function
 ///
 /// <https://github.com/pypa/pip/blob/7f8a6844037fb7255cfd0d34ff8e8cf44f2598d4/src/pip/_vendor/distlib/scripts.py#L41-L48>
+///
+/// Script template slightly modified: removed `import re`, allowing scripts that never import `re` to load faster.
 fn get_script_launcher(entry_point: &Script, shebang: &str) -> String {
     let Script {
         module, function, ..
@@ -34,15 +36,17 @@ fn get_script_launcher(entry_point: &Script, shebang: &str) -> String {
     let import_name = entry_point.import_name();
 
     format!(
-        r##"{shebang}
+        r#"{shebang}
 # -*- coding: utf-8 -*-
-import re
 import sys
 from {module} import {import_name}
 if __name__ == "__main__":
-    sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+    if sys.argv[0].endswith("-script.pyw"):
+        sys.argv[0] = sys.argv[0][:-11]
+    elif sys.argv[0].endswith(".exe"):
+        sys.argv[0] = sys.argv[0][:-4]
     sys.exit({function}())
-"##
+"#
     )
 }
 

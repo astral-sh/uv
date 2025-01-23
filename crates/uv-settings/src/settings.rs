@@ -1,13 +1,15 @@
+use std::{fmt::Debug, num::NonZeroUsize, path::Path, path::PathBuf};
+
 use serde::{Deserialize, Serialize};
-use std::{fmt::Debug, num::NonZeroUsize, path::PathBuf};
 use url::Url;
+
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
-    TrustedHost, TrustedPublishing,
+    ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, RequiredVersion,
+    TargetTriple, TrustedHost, TrustedPublishing,
 };
 use uv_distribution_types::{
-    Index, IndexUrl, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
+    Index, IndexUrl, IndexUrlError, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
 };
 use uv_install_wheel::linker::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
@@ -142,6 +144,15 @@ impl Options {
             ..Default::default()
         }
     }
+
+    /// Resolve the [`Options`] relative to the given root directory.
+    pub fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        Ok(Self {
+            top_level: self.top_level.relative_to(root_dir)?,
+            pip: self.pip.map(|pip| pip.relative_to(root_dir)).transpose()?,
+            ..self
+        })
+    }
 }
 
 /// Global settings, relevant to all invocations.
@@ -149,6 +160,20 @@ impl Options {
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct GlobalOptions {
+    /// Enforce a requirement on the version of uv.
+    ///
+    /// If the version of uv does not meet the requirement at runtime, uv will exit
+    /// with an error.
+    ///
+    /// Accepts a [PEP 440](https://peps.python.org/pep-0440/) specifier, like `==0.5.0` or `>=0.5.0`.
+    #[option(
+        default = "null",
+        value_type = "str",
+        example = r#"
+            required-version = ">=0.5.0"
+        "#
+    )]
+    pub required_version: Option<RequiredVersion>,
     /// Whether to load TLS certificates from the platform's native certificate store.
     ///
     /// By default, uv loads certificates from the bundled `webpki-roots` crate. The
@@ -707,6 +732,46 @@ pub struct ResolverInstallerOptions {
     pub no_binary_package: Option<Vec<PackageName>>,
 }
 
+impl ResolverInstallerOptions {
+    /// Resolve the [`ResolverInstallerOptions`] relative to the given root directory.
+    pub fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        Ok(Self {
+            index: self
+                .index
+                .map(|index| {
+                    index
+                        .into_iter()
+                        .map(|index| index.relative_to(root_dir))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()?,
+            index_url: self
+                .index_url
+                .map(|index_url| index_url.relative_to(root_dir))
+                .transpose()?,
+            extra_index_url: self
+                .extra_index_url
+                .map(|extra_index_url| {
+                    extra_index_url
+                        .into_iter()
+                        .map(|extra_index_url| extra_index_url.relative_to(root_dir))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()?,
+            find_links: self
+                .find_links
+                .map(|find_links| {
+                    find_links
+                        .into_iter()
+                        .map(|find_link| find_link.relative_to(root_dir))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()?,
+            ..self
+        })
+    }
+}
+
 /// Shared settings, relevant to all operations that might create managed python installations.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(rename_all = "kebab-case")]
@@ -1262,16 +1327,16 @@ pub struct PipOptions {
         "#
     )]
     pub universal: Option<bool>,
-    /// Limit candidate packages to those that were uploaded prior to the given date.
+    /// Limit candidate packages to those that were uploaded prior to a given point in time.
     ///
-    /// Accepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g.,
-    /// `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`) in your
-    /// system's configured time zone.
+    /// Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
+    /// `2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will
+    /// behave consistently across timezones.
     #[option(
         default = "None",
         value_type = "str",
         example = r#"
-            exclude-newer = "2006-12-02"
+            exclude-newer = "2006-12-02T02:07:43Z"
         "#
     )]
     pub exclude_newer: Option<ExcludeNewer>,
@@ -1464,6 +1529,46 @@ pub struct PipOptions {
     pub reinstall_package: Option<Vec<PackageName>>,
 }
 
+impl PipOptions {
+    /// Resolve the [`PipOptions`] relative to the given root directory.
+    pub fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        Ok(Self {
+            index: self
+                .index
+                .map(|index| {
+                    index
+                        .into_iter()
+                        .map(|index| index.relative_to(root_dir))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()?,
+            index_url: self
+                .index_url
+                .map(|index_url| index_url.relative_to(root_dir))
+                .transpose()?,
+            extra_index_url: self
+                .extra_index_url
+                .map(|extra_index_url| {
+                    extra_index_url
+                        .into_iter()
+                        .map(|extra_index_url| extra_index_url.relative_to(root_dir))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()?,
+            find_links: self
+                .find_links
+                .map(|find_links| {
+                    find_links
+                        .into_iter()
+                        .map(|find_link| find_link.relative_to(root_dir))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()?,
+            ..self
+        })
+    }
+}
+
 impl From<ResolverInstallerOptions> for ResolverOptions {
     fn from(value: ResolverInstallerOptions) -> Self {
         Self {
@@ -1623,6 +1728,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
 pub struct OptionsWire {
     // #[serde(flatten)]
     // globals: GlobalOptions
+    required_version: Option<RequiredVersion>,
     native_tls: Option<bool>,
     offline: Option<bool>,
     no_cache: Option<bool>,
@@ -1704,6 +1810,7 @@ pub struct OptionsWire {
 impl From<OptionsWire> for Options {
     fn from(value: OptionsWire) -> Self {
         let OptionsWire {
+            required_version,
             native_tls,
             offline,
             no_cache,
@@ -1764,6 +1871,7 @@ impl From<OptionsWire> for Options {
 
         Self {
             globals: GlobalOptions {
+                required_version,
                 native_tls,
                 offline,
                 no_cache,

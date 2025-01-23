@@ -16,6 +16,10 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-small-str = { workspace = true }
+
+memchr = { workspace = true }
+rkyv = { workspace = true}
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }

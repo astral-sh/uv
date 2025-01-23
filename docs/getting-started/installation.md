@@ -25,7 +25,7 @@ uv provides a standalone installer to download and install uv:
     Request a specific version by including it in the URL:
 
     ```console
-    $ curl -LsSf https://astral.sh/uv/0.5.13/install.sh | sh
+    $ curl -LsSf https://astral.sh/uv/0.5.23/install.sh | sh
     ```
 
 === "Windows"
@@ -41,7 +41,7 @@ uv provides a standalone installer to download and install uv:
     Request a specific version by including it in the URL:
 
     ```console
-    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.5.13/install.ps1 | iex"
+    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.5.23/install.ps1 | iex"
     ```
 
 !!! tip
@@ -105,12 +105,20 @@ uv is available in the core Homebrew packages.
 $ brew install uv
 ```
 
-### Winget
+### WinGet
 
-uv is available via [winget](https://winstall.app/apps/astral-sh.uv).
+uv is available via [WinGet](https://winstall.app/apps/astral-sh.uv).
 
 ```console
 $ winget install --id=astral-sh.uv  -e
+```
+
+### Scoop
+
+uv is available via [Scoop](https://scoop.sh/#/apps?q=uv).
+
+```console
+$ scoop install main/uv
 ```
 
 ### Docker

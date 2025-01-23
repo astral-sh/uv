@@ -1,8 +1,11 @@
+use std::borrow::Cow;
 use std::collections::hash_map::Entry;
+use std::collections::BTreeSet;
 use std::collections::VecDeque;
 use std::path::Path;
 
 use either::Either;
+use itertools::Itertools;
 use petgraph::Graph;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
@@ -264,6 +267,8 @@ pub trait Installable<'lock> {
             }
         }
 
+        let mut all_activated_extras: BTreeSet<(&PackageName, &ExtraName)> =
+            activated_extras.iter().copied().collect();
         while let Some((package, extra)) = queue.pop_front() {
             let deps = if let Some(extra) = extra {
                 Either::Left(
@@ -277,6 +282,15 @@ pub trait Installable<'lock> {
                 Either::Right(package.dependencies.iter())
             };
             for dep in deps {
+                let mut activated_extras = Cow::Borrowed(&*activated_extras);
+                if !dep.extra.is_empty() {
+                    let mut extended = activated_extras.to_vec();
+                    for extra in &dep.extra {
+                        extended.push((&dep.package_id.name, extra));
+                        all_activated_extras.insert((&dep.package_id.name, extra));
+                    }
+                    activated_extras = Cow::Owned(extended);
+                }
                 if !dep.complexified_marker.evaluate(
                     marker_env,
                     &activated_extras,
@@ -329,6 +343,32 @@ pub trait Installable<'lock> {
             }
         }
 
+        // At time of writing, it's somewhat expected that the set of
+        // conflicting extras is pretty small. With that said, the
+        // time complexity of the following routine is pretty gross.
+        // Namely, `set.contains` is linear in the size of the set,
+        // iteration over all conflicts is also obviously linear in
+        // the number of conflicting sets and then for each of those,
+        // we visit every possible pair of activated extra from above,
+        // which is quadratic in the total number of extras enabled. I
+        // believe the simplest improvement here, if it's necessary, is
+        // to adjust the `Conflicts` internals to own these sorts of
+        // checks. ---AG
+        for set in self.lock().conflicts().iter() {
+            for ((pkg1, extra1), (pkg2, extra2)) in all_activated_extras.iter().tuple_combinations()
+            {
+                if set.contains(pkg1, *extra1) && set.contains(pkg2, *extra2) {
+                    return Err(LockErrorKind::ConflictingExtra {
+                        package1: (*pkg1).clone(),
+                        extra1: (*extra1).clone(),
+                        package2: (*pkg2).clone(),
+                        extra2: (*extra2).clone(),
+                    }
+                    .into());
+                }
+            }
+        }
+
         Ok(Resolution::new(petgraph))
     }
 
@@ -344,7 +384,7 @@ pub trait Installable<'lock> {
             TagPolicy::Required(tags),
             build_options,
         )?;
-        let version = package.version().clone();
+        let version = package.version().cloned();
         let dist = ResolvedDist::Installable { dist, version };
         let hashes = package.hashes();
         Ok(Node::Dist {
@@ -361,7 +401,7 @@ pub trait Installable<'lock> {
             TagPolicy::Preferred(tags),
             &BuildOptions::default(),
         )?;
-        let version = package.version().clone();
+        let version = package.version().cloned();
         let dist = ResolvedDist::Installable { dist, version };
         let hashes = package.hashes();
         Ok(Node::Dist {

@@ -47,7 +47,9 @@ use uv_git::GitUrl;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::{Pep508Url, VerbatimUrl};
-use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
+use uv_pypi_types::{
+    ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
+};
 
 pub use crate::annotation::*;
 pub use crate::any::*;
@@ -67,6 +69,7 @@ pub use crate::installed::*;
 pub use crate::origin::*;
 pub use crate::pip_index::*;
 pub use crate::prioritized_distribution::*;
+pub use crate::requested::*;
 pub use crate::resolution::*;
 pub use crate::resolved::*;
 pub use crate::specified_requirement::*;
@@ -90,6 +93,7 @@ mod installed;
 mod origin;
 mod pip_index;
 mod prioritized_distribution;
+mod requested;
 mod resolution;
 mod resolved;
 mod specified_requirement;
@@ -248,7 +252,7 @@ pub struct DirectUrlBuiltDist {
     /// `https://example.org/packages/flask-3.0.0-py3-none-any.whl`
     pub filename: WheelFilename,
     /// The URL without the subdirectory fragment.
-    pub location: Url,
+    pub location: Box<Url>,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
@@ -289,7 +293,7 @@ pub struct DirectUrlSourceDist {
     /// like using e.g. `foo @ https://github.com/org/repo/archive/master.zip`
     pub name: PackageName,
     /// The URL without the subdirectory fragment.
-    pub location: Url,
+    pub location: Box<Url>,
     /// The subdirectory within the archive in which the source distribution is located.
     pub subdirectory: Option<PathBuf>,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
@@ -361,14 +365,14 @@ impl Dist {
 
                 Ok(Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
                     filename,
-                    location,
+                    location: Box::new(location),
                     url,
                 })))
             }
             DistExtension::Source(ext) => {
                 Ok(Self::Source(SourceDist::DirectUrl(DirectUrlSourceDist {
                     name,
-                    location,
+                    location: Box::new(location),
                     subdirectory,
                     ext,
                     url,
@@ -657,6 +661,74 @@ impl RegistryBuiltDist {
     /// Returns the best or "most compatible" wheel in this distribution.
     pub fn best_wheel(&self) -> &RegistryBuiltWheel {
         &self.wheels[self.best_wheel_index]
+    }
+}
+
+impl DirectUrlBuiltDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Archive(ParsedArchiveUrl::from_source(
+            (*self.location).clone(),
+            None,
+            DistExtension::Wheel,
+        ))
+    }
+}
+
+impl PathBuiltDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Path(ParsedPathUrl::from_source(
+            self.install_path.clone(),
+            DistExtension::Wheel,
+            self.url.to_url(),
+        ))
+    }
+}
+
+impl PathSourceDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Path(ParsedPathUrl::from_source(
+            self.install_path.clone(),
+            DistExtension::Source(self.ext),
+            self.url.to_url(),
+        ))
+    }
+}
+
+impl DirectUrlSourceDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Archive(ParsedArchiveUrl::from_source(
+            (*self.location).clone(),
+            self.subdirectory.clone(),
+            DistExtension::Source(self.ext),
+        ))
+    }
+}
+
+impl GitSourceDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Git(ParsedGitUrl::from_source(
+            self.git.repository().clone(),
+            self.git.reference().clone(),
+            self.git.precise(),
+            self.subdirectory.clone(),
+        ))
+    }
+}
+
+impl DirectorySourceDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
+            self.install_path.clone(),
+            self.editable,
+            self.r#virtual,
+            self.url.to_url(),
+        ))
     }
 }
 
@@ -1341,10 +1413,10 @@ mod test {
     /// Ensure that we don't accidentally grow the `Dist` sizes.
     #[test]
     fn dist_size() {
-        assert!(size_of::<Dist>() <= 336, "{}", size_of::<Dist>());
-        assert!(size_of::<BuiltDist>() <= 336, "{}", size_of::<BuiltDist>());
+        assert!(size_of::<Dist>() <= 200, "{}", size_of::<Dist>());
+        assert!(size_of::<BuiltDist>() <= 200, "{}", size_of::<BuiltDist>());
         assert!(
-            size_of::<SourceDist>() <= 264,
+            size_of::<SourceDist>() <= 176,
             "{}",
             size_of::<SourceDist>()
         );

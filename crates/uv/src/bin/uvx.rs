@@ -30,13 +30,21 @@ fn run() -> std::io::Result<ExitStatus> {
             "Could not determine the location of the `uvx` binary",
         ));
     };
-    let uv = bin.join("uv");
+    let uv = bin.join(format!("uv{}", std::env::consts::EXE_SUFFIX));
     let args = ["tool", "uvx"]
         .iter()
         .map(OsString::from)
         // Skip the `uvx` name
         .chain(std::env::args_os().skip(1))
         .collect::<Vec<_>>();
+
+    // If we are sure the uv binary does not exist, display a clearer error message
+    if matches!(uv.try_exists(), Ok(false)) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Could not find the `uv` binary at: {}", uv.display()),
+        ));
+    }
 
     let mut cmd = Command::new(uv);
     cmd.args(&args);

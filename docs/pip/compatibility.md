@@ -350,9 +350,20 @@ def manylinux_compatible(*_, **__):  # PEP 600
 
 ## Bytecode compilation
 
-Unlike pip, uv does not compile `.py` files to `.pyc` files during installation by default (i.e., uv
-does not create or populate `__pycache__` directories). To enable bytecode compilation during
-installs, pass the `--compile-bytecode` flag to `uv pip install` or `uv pip sync`.
+Unlike `pip`, uv does not compile `.py` files to `.pyc` files during installation by default (i.e.,
+uv does not create or populate `__pycache__` directories). To enable bytecode compilation during
+installs, pass the `--compile-bytecode` flag to `uv pip install` or `uv pip sync`, or set the
+`UV_COMPILE_BYTECODE` environment variable to `1`.
+
+Skipping bytecode compilation can be undesirable in workflows; for example, we recommend enabling
+bytecode compilation in [Docker builds](../guides/integration/docker.md) to improve startup times
+(at the cost of increased build times).
+
+As bytecode compilation suppresses various warnings issued by the Python interpreter, in rare cases
+you may seen `SyntaxWarning` or `DeprecationWarning` messages when running Python code that was
+installed with uv that do not appear when using `pip`. These are valid warnings, but are typically
+hidden by the bytecode compilation process, and can either be ignored, fixed upstream, or similarly
+suppressed by enabling bytecode compilation in uv.
 
 ## Strictness and spec enforcement
 

@@ -62,11 +62,13 @@ fn tool_install() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import patched_main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(patched_main())
         "###);
 
@@ -135,11 +137,13 @@ fn tool_install() {
         assert_snapshot!(fs_err::read_to_string(bin_dir.join("flask")).unwrap(), @r###"
         #![TEMP_DIR]/tools/flask/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from flask.cli import main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(main())
         "###);
     });
@@ -173,6 +177,8 @@ fn tool_install() {
 
 #[test]
 fn tool_install_with_editable() -> Result<()> {
+    static EXCLUDE_NEWER: &str = "2025-01-18T00:00:00Z";
+
     let context = TestContext::new("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -185,11 +191,12 @@ fn tool_install_with_editable() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tool_install()
+        .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
         .arg("--with-editable")
         .arg("./src/anyio_local")
         .arg("--with")
         .arg("iniconfig")
-        .arg("flask")
+        .arg("executable-application")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
@@ -202,15 +209,9 @@ fn tool_install_with_editable() -> Result<()> {
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + anyio==4.3.0+foo (from file://[TEMP_DIR]/src/anyio_local)
-     + blinker==1.7.0
-     + click==8.1.7
-     + flask==3.0.2
+     + executable-application==0.3.0
      + iniconfig==2.0.0
-     + itsdangerous==2.1.2
-     + jinja2==3.1.3
-     + markupsafe==2.1.5
-     + werkzeug==3.0.1
-    Installed 1 executable: flask
+    Installed 1 executable: app
     "###);
 
     Ok(())
@@ -327,11 +328,13 @@ fn tool_install_version() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import patched_main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(patched_main())
         "###);
 
@@ -409,11 +412,13 @@ fn tool_install_editable() {
         assert_snapshot!(fs_err::read_to_string(&executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(main())
         "###);
 
@@ -705,11 +710,13 @@ fn tool_install_editable_from() {
         assert_snapshot!(fs_err::read_to_string(&executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(main())
         "###);
 
@@ -856,11 +863,13 @@ fn tool_install_already_installed() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import patched_main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(patched_main())
         "###);
     });
@@ -1218,11 +1227,13 @@ fn tool_install_force() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python3
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import patched_main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(patched_main())
         "###);
 
@@ -1453,7 +1464,7 @@ fn tool_install_uninstallable() {
         .into_iter()
         .chain([
             (r"exit code: 1", "exit status: 1"),
-            (r"bdist\.[^/\\\s]+-[^/\\\s]+", "bdist.linux-x86_64"),
+            (r"bdist\.[^/\\\s]+(-[^/\\\s]+)?", "bdist.linux-x86_64"),
             (r"\\\.", ""),
             (r"#+", "#"),
         ])
@@ -1545,11 +1556,13 @@ fn tool_install_unnamed_package() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import patched_main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(patched_main())
         "###);
 
@@ -1658,11 +1671,13 @@ fn tool_install_unnamed_from() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import patched_main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(patched_main())
         "###);
 
@@ -1747,11 +1762,13 @@ fn tool_install_unnamed_with() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import patched_main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(patched_main())
         "###);
 
@@ -2576,15 +2593,18 @@ fn tool_install_bad_receipt() -> Result<()> {
 /// that isn't properly normalized).
 #[test]
 fn tool_install_malformed_dist_info() {
+    static EXCLUDE_NEWER: &str = "2025-01-18T00:00:00Z";
+
     let context = TestContext::new("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `babel`
+    // Install `executable-application`
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("babel")
+        .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
+        .arg("executable-application")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
@@ -2596,17 +2616,19 @@ fn tool_install_malformed_dist_info() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + babel==2.14.0
-    Installed 1 executable: pybabel
+     + executable-application==0.3.0
+    Installed 1 executable: app
     "###);
 
-    tool_dir.child("babel").assert(predicate::path::is_dir());
     tool_dir
-        .child("babel")
+        .child("executable-application")
+        .assert(predicate::path::is_dir());
+    tool_dir
+        .child("executable-application")
         .child("uv-receipt.toml")
         .assert(predicate::path::exists());
 
-    let executable = bin_dir.child(format!("pybabel{}", std::env::consts::EXE_SUFFIX));
+    let executable = bin_dir.child(format!("app{}", std::env::consts::EXE_SUFFIX));
     assert!(executable.exists());
 
     // On Windows, we can't snapshot an executable file.
@@ -2616,13 +2638,15 @@ fn tool_install_malformed_dist_info() {
     }, {
         // Should run black in the virtual environment
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
-        #![TEMP_DIR]/tools/babel/bin/python
+        #![TEMP_DIR]/tools/executable-application/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
-        from babel.messages.frontend import main
+        from executable_application import main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(main())
         "###);
 
@@ -2632,15 +2656,15 @@ fn tool_install_malformed_dist_info() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("babel").join("uv-receipt.toml")).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = [{ name = "babel" }]
+        requirements = [{ name = "executable-application" }]
         entrypoints = [
-            { name = "pybabel", install-path = "[TEMP_DIR]/bin/pybabel" },
+            { name = "app", install-path = "[TEMP_DIR]/bin/app" },
         ]
 
         [tool.options]
-        exclude-newer = "2024-03-25T00:00:00Z"
+        exclude-newer = "2025-01-18T00:00:00Z"
         "###);
     });
 }
@@ -2696,11 +2720,13 @@ fn tool_install_settings() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/flask/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from flask.cli import main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(main())
         "###);
 
@@ -2915,6 +2941,8 @@ fn tool_install_at_latest() {
 /// Test installing a tool with `uv tool install {package} --from {package}@latest`.
 #[test]
 fn tool_install_from_at_latest() {
+    static EXCLUDE_NEWER: &str = "2025-01-18T00:00:00Z";
+
     let context = TestContext::new("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -2922,9 +2950,10 @@ fn tool_install_from_at_latest() {
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("pybabel")
+        .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
+        .arg("app")
         .arg("--from")
-        .arg("babel@latest")
+        .arg("executable-application@latest")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
@@ -2936,22 +2965,22 @@ fn tool_install_from_at_latest() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + babel==2.14.0
-    Installed 1 executable: pybabel
+     + executable-application==0.3.0
+    Installed 1 executable: app
     "###);
 
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("babel").join("uv-receipt.toml")).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = [{ name = "babel" }]
+        requirements = [{ name = "executable-application" }]
         entrypoints = [
-            { name = "pybabel", install-path = "[TEMP_DIR]/bin/pybabel" },
+            { name = "app", install-path = "[TEMP_DIR]/bin/app" },
         ]
 
         [tool.options]
-        exclude-newer = "2024-03-25T00:00:00Z"
+        exclude-newer = "2025-01-18T00:00:00Z"
         "###);
     });
 }
@@ -2959,6 +2988,8 @@ fn tool_install_from_at_latest() {
 /// Test installing a tool with `uv tool install {package} --from {package}@{version}`.
 #[test]
 fn tool_install_from_at_version() {
+    static EXCLUDE_NEWER: &str = "2025-01-18T00:00:00Z";
+
     let context = TestContext::new("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -2966,9 +2997,10 @@ fn tool_install_from_at_version() {
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("pybabel")
+        .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
+        .arg("app")
         .arg("--from")
-        .arg("babel@2.13.0")
+        .arg("executable-application@0.2.0")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
@@ -2980,22 +3012,22 @@ fn tool_install_from_at_version() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + babel==2.13.0
-    Installed 1 executable: pybabel
+     + executable-application==0.2.0
+    Installed 1 executable: app
     "###);
 
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("babel").join("uv-receipt.toml")).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = [{ name = "babel", specifier = "==2.13.0" }]
+        requirements = [{ name = "executable-application", specifier = "==0.2.0" }]
         entrypoints = [
-            { name = "pybabel", install-path = "[TEMP_DIR]/bin/pybabel" },
+            { name = "app", install-path = "[TEMP_DIR]/bin/app" },
         ]
 
         [tool.options]
-        exclude-newer = "2024-03-25T00:00:00Z"
+        exclude-newer = "2025-01-18T00:00:00Z"
         "###);
     });
 }

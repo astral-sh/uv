@@ -1,3 +1,10 @@
+---
+title: Using tools
+description:
+  A guide to using uv to run tools published as Python packages, including one-off invocations with
+  uvx, requesting specific tool versions, installing tools, upgrading tools, and more.
+---
+
 # Using tools
 
 Many Python packages provide applications that can be used as tools. uv has specialized support for
@@ -235,4 +242,4 @@ $ uv tool upgrade --all
 To learn more about managing tools with uv, see the [Tools concept](../concepts/tools.md) page and
 the [command reference](../reference/cli.md#uv-tool).
 
-Or, read on to learn how to to [work on projects](./projects.md).
+Or, read on to learn how to [work on projects](./projects.md).

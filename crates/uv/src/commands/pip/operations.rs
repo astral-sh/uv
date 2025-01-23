@@ -6,14 +6,15 @@ use owo_colors::OwoColorize;
 use std::collections::{BTreeSet, HashSet};
 use std::fmt::Write;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tracing::debug;
 use uv_tool::InstalledTools;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, Overrides,
-    Reinstall, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification,
+    ExtrasSpecification, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -53,6 +54,7 @@ pub(crate) async fn read_requirements(
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     extras: &ExtrasSpecification,
+    groups: &DevGroupsSpecification,
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
@@ -62,6 +64,9 @@ pub(crate) async fn read_requirements(
             "Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file."
         )
         .into());
+    }
+    if !groups.is_empty() && !requirements.iter().any(RequirementsSource::allows_groups) {
+        return Err(anyhow!("Requesting groups requires a `pyproject.toml`.").into());
     }
 
     // Read all requirements from the provided sources.
@@ -95,6 +100,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     mut project: Option<PackageName>,
     workspace_members: BTreeSet<PackageName>,
     extras: &ExtrasSpecification,
+    groups: &DevGroupsSpecification,
     preferences: Vec<Preference>,
     installed_packages: InstalledPackages,
     hasher: &HashStrategy,
@@ -138,7 +144,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                     index,
                     DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
                 )
-                .with_reporter(ResolverReporter::from(printer))
+                .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(unnamed.into_iter())
                 .await?,
             );
@@ -148,11 +154,12 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         if !source_trees.is_empty() {
             let resolutions = SourceTreeResolver::new(
                 extras,
+                groups,
                 hasher,
                 index,
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
             )
-            .with_reporter(ResolverReporter::from(printer))
+            .with_reporter(Arc::new(ResolverReporter::from(printer)))
             .resolve(source_trees.iter().map(PathBuf::as_path))
             .await?;
 
@@ -221,7 +228,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                     index,
                     DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
                 )
-                .with_reporter(ResolverReporter::from(printer))
+                .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(unnamed.into_iter())
                 .await?,
             );
@@ -251,7 +258,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 index,
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
             )
-            .with_reporter(ResolverReporter::from(printer))
+            .with_reporter(Arc::new(ResolverReporter::from(printer)))
             .resolve(&resolver_env)
             .await?
         }
@@ -297,7 +304,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             installed_packages,
             DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
         )?
-        .with_reporter(reporter);
+        .with_reporter(Arc::new(reporter));
 
         resolver.resolve().await?
     };
@@ -460,7 +467,9 @@ pub(crate) async fn install(
             build_options,
             DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
         )
-        .with_reporter(PrepareReporter::from(printer).with_length(remote.len() as u64));
+        .with_reporter(Arc::new(
+            PrepareReporter::from(printer).with_length(remote.len() as u64),
+        ));
 
         let wheels = preparer
             .prepare(remote.clone(), in_flight, resolution)
@@ -519,7 +528,9 @@ pub(crate) async fn install(
             .with_link_mode(link_mode)
             .with_cache(cache)
             .with_installer_metadata(installer_metadata)
-            .with_reporter(InstallReporter::from(printer).with_length(installs.len() as u64))
+            .with_reporter(Arc::new(
+                InstallReporter::from(printer).with_length(installs.len() as u64),
+            ))
             // This technically can block the runtime, but we are on the main thread and
             // have no other running tasks at this point, so this lets us avoid spawning a blocking
             // task.

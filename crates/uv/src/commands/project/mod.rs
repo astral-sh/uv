@@ -1,6 +1,7 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -142,6 +143,9 @@ pub(crate) enum ProjectError {
     #[error("Group `{0}` is not defined in any project's `dependency-group` table")]
     MissingGroupWorkspace(GroupName),
 
+    #[error("PEP 723 scripts do not support dependency groups, but group `{0}` was specified")]
+    MissingGroupScript(GroupName),
+
     #[error("Default group `{0}` (from `tool.uv.default-groups`) is not defined in the project's `dependency-group` table")]
     MissingDefaultGroup(GroupName),
 
@@ -150,6 +154,9 @@ pub(crate) enum ProjectError {
 
     #[error("Environment markers `{0}` don't overlap with Python requirement `{1}`")]
     DisjointEnvironment(MarkerTreeContents, VersionSpecifiers),
+
+    #[error("The workspace contains conflicting Python requirements:\n{}", _0.iter().map(|(name, specifiers)| format!("- `{name}`: `{specifiers}`")).join("\n"))]
+    DisjointRequiresPython(BTreeMap<PackageName, VersionSpecifiers>),
 
     #[error("Environment marker is empty")]
     EmptyEnvironment,
@@ -165,6 +172,9 @@ pub(crate) enum ProjectError {
 
     #[error("Failed to update `pyproject.toml`")]
     PyprojectTomlUpdate,
+
+    #[error("Failed to parse PEP 723 script metadata")]
+    Pep723ScriptTomlParse(#[source] toml::de::Error),
 
     #[error(transparent)]
     DependencyGroup(#[from] DependencyGroupError),
@@ -271,7 +281,7 @@ impl std::fmt::Display for ConflictError {
                     self.conflicts
                         .iter()
                         .map(|conflict| match conflict {
-                            ConflictPackage::Group(ref group) if self.dev.default(group) =>
+                            ConflictPackage::Group(ref group) if self.dev.is_default(group) =>
                                 format!("`{group}` (enabled by default)"),
                             ConflictPackage::Group(ref group) => format!("`{group}`"),
                             ConflictPackage::Extra(..) => unreachable!(),
@@ -290,7 +300,7 @@ impl std::fmt::Display for ConflictError {
                         .map(|(i, conflict)| {
                             let conflict = match conflict {
                                 ConflictPackage::Extra(ref extra) => format!("extra `{extra}`"),
-                                ConflictPackage::Group(ref group) if self.dev.default(group) => {
+                                ConflictPackage::Group(ref group) if self.dev.is_default(group) => {
                                     format!("group `{group}` (enabled by default)")
                                 }
                                 ConflictPackage::Group(ref group) => format!("group `{group}`"),
@@ -310,14 +320,27 @@ impl std::error::Error for ConflictError {}
 ///
 /// For a [`Workspace`] with multiple packages, the `Requires-Python` bound is the union of the
 /// `Requires-Python` bounds of all the packages.
-pub(crate) fn find_requires_python(workspace: &Workspace) -> Option<RequiresPython> {
-    RequiresPython::intersection(workspace.packages().values().filter_map(|member| {
-        member
-            .pyproject_toml()
-            .project
-            .as_ref()
-            .and_then(|project| project.requires_python.as_ref())
-    }))
+#[allow(clippy::result_large_err)]
+pub(crate) fn find_requires_python(
+    workspace: &Workspace,
+) -> Result<Option<RequiresPython>, ProjectError> {
+    // If there are no `Requires-Python` specifiers in the workspace, return `None`.
+    if workspace.requires_python().next().is_none() {
+        return Ok(None);
+    }
+    match RequiresPython::intersection(
+        workspace
+            .requires_python()
+            .map(|(.., specifiers)| specifiers),
+    ) {
+        Some(requires_python) => Ok(Some(requires_python)),
+        None => Err(ProjectError::DisjointRequiresPython(
+            workspace
+                .requires_python()
+                .map(|(name, specifiers)| (name.clone(), specifiers.clone()))
+                .collect(),
+        )),
+    }
 }
 
 /// Returns an error if the [`Interpreter`] does not satisfy the [`Workspace`] `requires-python`.
@@ -725,7 +748,7 @@ impl WorkspacePython {
         project_dir: &Path,
         no_config: bool,
     ) -> Result<Self, ProjectError> {
-        let requires_python = workspace.and_then(find_requires_python);
+        let requires_python = workspace.map(find_requires_python).transpose()?.flatten();
 
         let workspace_root = workspace.map(Workspace::install_path);
 
@@ -1077,7 +1100,7 @@ pub(crate) async fn resolve_names(
             state.index(),
             DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
         )
-        .with_reporter(ResolverReporter::from(printer))
+        .with_reporter(Arc::new(ResolverReporter::from(printer)))
         .resolve(unnamed.into_iter())
         .await?,
     );
@@ -1085,7 +1108,7 @@ pub(crate) async fn resolve_names(
     Ok(requirements)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct EnvironmentSpecification<'lock> {
     /// The requirements to include in the environment.
     requirements: RequirementsSpecification,
@@ -1110,7 +1133,7 @@ impl<'lock> EnvironmentSpecification<'lock> {
 }
 
 /// Run dependency resolution for an interpreter, returning the [`ResolverOutput`].
-pub(crate) async fn resolve_environment<'a>(
+pub(crate) async fn resolve_environment(
     spec: EnvironmentSpecification<'_>,
     interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,
@@ -1202,6 +1225,7 @@ pub(crate) async fn resolve_environment<'a>(
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let extras = ExtrasSpecification::default();
+    let groups = DevGroupsSpecification::default();
     let hasher = HashStrategy::default();
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
@@ -1265,6 +1289,7 @@ pub(crate) async fn resolve_environment<'a>(
         project,
         BTreeSet::default(),
         &extras,
+        &groups,
         preferences,
         EmptyInstalledPackages,
         &hasher,
@@ -1562,6 +1587,7 @@ pub(crate) async fn update_environment(
     let build_hasher = HashStrategy::default();
     let dry_run = false;
     let extras = ExtrasSpecification::default();
+    let groups = DevGroupsSpecification::default();
     let hasher = HashStrategy::default();
     let preferences = Vec::default();
 
@@ -1610,6 +1636,7 @@ pub(crate) async fn update_environment(
         project,
         BTreeSet::default(),
         &extras,
+        &groups,
         preferences,
         site_packages.clone(),
         &hasher,
@@ -1726,6 +1753,8 @@ pub(crate) enum DependencyGroupsTarget<'env> {
     Workspace(&'env Workspace),
     /// The dependency groups must be defined in the target project.
     Project(&'env ProjectWorkspace),
+    /// The dependency groups must be defined in the target script.
+    Script,
 }
 
 impl DependencyGroupsTarget<'_> {
@@ -1755,6 +1784,9 @@ impl DependencyGroupsTarget<'_> {
                     {
                         return Err(ProjectError::MissingGroupProject(group.clone()));
                     }
+                }
+                Self::Script => {
+                    return Err(ProjectError::MissingGroupScript(group.clone()));
                 }
             }
         }

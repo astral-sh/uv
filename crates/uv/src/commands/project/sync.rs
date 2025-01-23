@@ -1,6 +1,4 @@
-use std::borrow::Cow;
 use std::path::Path;
-use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
@@ -18,16 +16,14 @@ use uv_distribution_types::{
 };
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
-use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
-use uv_pypi_types::{
-    LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, VerbatimParsedUrl,
-};
+use uv_pep508::{MarkerTree, VersionOrUrl};
+use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Installable};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user;
-use uv_workspace::pyproject::{DependencyGroupSpecifier, Source, Sources, ToolUvSources};
+use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
@@ -164,7 +160,7 @@ pub(crate) async fn sync(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
+            return diagnostics::OperationDiagnostic::native_tls(native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
@@ -240,7 +236,7 @@ pub(crate) async fn sync(
     {
         Ok(()) => {}
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
+            return diagnostics::OperationDiagnostic::native_tls(native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
@@ -367,8 +363,8 @@ pub(super) async fn do_sync(
         }
     }
 
-    // Populate credentials from the workspace.
-    store_credentials_from_workspace(target.workspace());
+    // Populate credentials from the target.
+    store_credentials_from_target(target);
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
@@ -526,9 +522,16 @@ fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolu
 ///
 /// These credentials can come from any of `tool.uv.sources`, `tool.uv.dev-dependencies`,
 /// `project.dependencies`, and `project.optional-dependencies`.
-fn store_credentials_from_workspace(workspace: &Workspace) {
-    // Iterate over any sources in the workspace root.
-    for source in workspace.sources().values().flat_map(Sources::iter) {
+fn store_credentials_from_target(target: InstallTarget<'_>) {
+    // Iterate over any idnexes in the target.
+    for index in target.indexes() {
+        if let Some(credentials) = index.credentials() {
+            store_credentials(index.raw_url(), credentials);
+        }
+    }
+
+    // Iterate over any sources in the target.
+    for source in target.sources() {
         match source {
             Source::Git { git, .. } => {
                 uv_git::store_credentials_from_url(git);
@@ -540,8 +543,8 @@ fn store_credentials_from_workspace(workspace: &Workspace) {
         }
     }
 
-    // Iterate over any dependencies defined in the workspace root.
-    for requirement in &workspace.requirements() {
+    // Iterate over any dependencies defined in the target.
+    for requirement in target.requirements() {
         let Some(VersionOrUrl::Url(url)) = &requirement.version_or_url else {
             continue;
         };
@@ -553,117 +556,6 @@ fn store_credentials_from_workspace(workspace: &Workspace) {
                 uv_auth::store_credentials_from_url(url);
             }
             _ => {}
-        }
-    }
-
-    // Iterate over any dependency groups defined in the workspace root.
-    for requirement in workspace
-        .dependency_groups()
-        .ok()
-        .iter()
-        .flat_map(|groups| groups.values().flat_map(|group| group.iter()))
-    {
-        let Some(VersionOrUrl::Url(url)) = &requirement.version_or_url else {
-            continue;
-        };
-        match &url.parsed_url {
-            ParsedUrl::Git(ParsedGitUrl { url, .. }) => {
-                uv_git::store_credentials_from_url(url.repository());
-            }
-            ParsedUrl::Archive(ParsedArchiveUrl { url, .. }) => {
-                uv_auth::store_credentials_from_url(url);
-            }
-            _ => {}
-        }
-    }
-
-    // Iterate over each workspace member.
-    for member in workspace.packages().values() {
-        // Iterate over the `tool.uv.sources`.
-        for source in member
-            .pyproject_toml()
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.sources.as_ref())
-            .map(ToolUvSources::inner)
-            .iter()
-            .flat_map(|sources| sources.values().flat_map(Sources::iter))
-        {
-            match source {
-                Source::Git { git, .. } => {
-                    uv_git::store_credentials_from_url(git);
-                }
-                Source::Url { url, .. } => {
-                    uv_auth::store_credentials_from_url(url);
-                }
-                _ => {}
-            }
-        }
-
-        // Iterate over all dependencies.
-        let dependencies = member
-            .pyproject_toml()
-            .project
-            .as_ref()
-            .and_then(|project| project.dependencies.as_ref())
-            .into_iter()
-            .flatten();
-        let optional_dependencies = member
-            .pyproject_toml()
-            .project
-            .as_ref()
-            .and_then(|project| project.optional_dependencies.as_ref())
-            .into_iter()
-            .flat_map(|optional| optional.values())
-            .flatten();
-        let dependency_groups = member
-            .pyproject_toml()
-            .dependency_groups
-            .as_ref()
-            .into_iter()
-            .flatten()
-            .flat_map(|(_, dependencies)| {
-                dependencies.iter().filter_map(|specifier| {
-                    if let DependencyGroupSpecifier::Requirement(requirement) = specifier {
-                        Some(requirement)
-                    } else {
-                        None
-                    }
-                })
-            });
-        let dev_dependencies = member
-            .pyproject_toml()
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.dev_dependencies.as_ref())
-            .into_iter()
-            .flatten();
-
-        for requirement in dependencies
-            .chain(optional_dependencies)
-            .chain(dependency_groups)
-            .filter_map(|requires_dist| {
-                LenientRequirement::<VerbatimParsedUrl>::from_str(requires_dist)
-                    .map(Requirement::from)
-                    .map(Cow::Owned)
-                    .ok()
-            })
-            .chain(dev_dependencies.map(Cow::Borrowed))
-        {
-            let Some(VersionOrUrl::Url(url)) = &requirement.version_or_url else {
-                continue;
-            };
-            match &url.parsed_url {
-                ParsedUrl::Git(ParsedGitUrl { url, .. }) => {
-                    uv_git::store_credentials_from_url(url.repository());
-                }
-                ParsedUrl::Archive(ParsedArchiveUrl { url, .. }) => {
-                    uv_auth::store_credentials_from_url(url);
-                }
-                _ => {}
-            }
         }
     }
 }
