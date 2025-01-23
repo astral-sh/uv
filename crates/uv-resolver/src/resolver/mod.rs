@@ -613,17 +613,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             ));
                     }
                     ForkedDependencies::Unforked(dependencies) => {
-                        state.add_package_version_dependencies(
-                            next_id,
-                            &version,
-                            &self.urls,
-                            &self.indexes,
-                            dependencies.clone(),
-                            &self.git,
-                            &self.workspace_members,
-                            self.selector.resolution_strategy(),
-                        )?;
-
                         // Emit a request to fetch the metadata for each registry package.
                         for dependency in &dependencies {
                             let PubGrubDependency {
@@ -636,6 +625,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 package.name().and_then(|name| state.fork_indexes.get(name));
                             self.visit_package(package, url, index, &request_sink)?;
                         }
+
+                        state.add_package_version_dependencies(
+                            next_id,
+                            &version,
+                            &self.urls,
+                            &self.indexes,
+                            dependencies,
+                            &self.git,
+                            &self.workspace_members,
+                            self.selector.resolution_strategy(),
+                        )?;
                     }
                     ForkedDependencies::Forked {
                         mut forks,
