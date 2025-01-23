@@ -8739,3 +8739,72 @@ fn group_needs_manifest() {
     error: Requesting groups requires a `pyproject.toml`.
     "###);
 }
+
+#[test]
+fn group_directory_target() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        foo = ["sortedcontainers"]
+        "#,
+    )?;
+
+    let subdir = context.temp_dir.child("subdir");
+    subdir.create_dir_all()?;
+    let pyproject_toml2 = subdir.child("pyproject.toml");
+    pyproject_toml2.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        foo = ["iniconfig"]
+        bar = ["sniffio"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Targeting a directory does not allow selection of groups
+    uv_snapshot!(context.filters(), context.pip_install().arg(".").arg("--group").arg("foo"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Requesting groups requires a `pyproject.toml`.
+    "###);
+
+    // A subdirectory is the same
+    uv_snapshot!(context.filters(), context.pip_install().arg("subdir").arg("--group").arg("foo"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Requesting groups requires a `pyproject.toml`.
+    "###);
+
+    // Editables are the same
+    uv_snapshot!(context.filters(), context.pip_install().arg("-e").arg(".").arg("--group").arg("foo"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Requesting groups requires a `pyproject.toml`.
+    "###);
+
+    Ok(())
+}
