@@ -24,13 +24,13 @@ use crate::interpreter::{StatusCodeError, UnexpectedResponseError};
 use crate::managed::ManagedPythonInstallations;
 #[cfg(windows)]
 use crate::microsoft_store::find_microsoft_store_pythons;
-#[cfg(windows)]
-use crate::py_launcher::{registry_pythons, WindowsPython};
 use crate::virtualenv::Error as VirtualEnvError;
 use crate::virtualenv::{
     conda_environment_from_env, virtualenv_from_env, virtualenv_from_working_dir,
     virtualenv_python_executable, CondaEnvironmentKind,
 };
+#[cfg(windows)]
+use crate::windows_registry::{registry_pythons, WindowsPython};
 use crate::{Interpreter, PythonVersion};
 
 /// A request to find a Python installation.
@@ -324,7 +324,7 @@ fn python_executables_from_installed<'a>(
                         }
                     })
                     .inspect(|installation| debug!("Found managed installation `{installation}`"))
-                    .map(|installation| (PythonSource::Managed, installation.executable())))
+                    .map(|installation| (PythonSource::Managed, installation.executable(false))))
             })
     })
     .flatten_ok();

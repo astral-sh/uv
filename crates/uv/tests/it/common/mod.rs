@@ -1077,7 +1077,7 @@ pub fn get_python(version: &PythonVersion) -> PathBuf {
                 .expect("Tests are run on a supported platform")
                 .next()
                 .as_ref()
-                .map(uv_python::managed::ManagedPythonInstallation::executable)
+                .map(|python| python.executable(false))
         })
         // We'll search for the request Python on the PATH if not found in the python versions
         // We hack this into a `PathBuf` to satisfy the compiler but it's just a string

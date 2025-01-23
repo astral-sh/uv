@@ -102,6 +102,10 @@ impl Arch {
             variant: None,
         }
     }
+
+    pub fn family(&self) -> target_lexicon::Architecture {
+        self.family
+    }
 }
 
 impl Display for Libc {

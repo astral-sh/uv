@@ -1733,6 +1733,24 @@ jobs:
       - name: "Validate global Python install"
         run: py -3.13 ./scripts/check_system_python.py --uv ./uv.exe
 
+  # Test our PEP 514 integration that installs Python into the Windows registry.
+  system-test-windows-registry:
+    timeout-minutes: 10
+    needs: build-binary-windows-x86_64
+    name: "check system | windows registry"
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-x86_64-${{ github.sha }}
+
+      # NB: Run this last, we are modifying the registry
+      - name: "Test PEP 514 registration"
+        run: python ./scripts/check_registry.py --uv ./uv.exe
+
   system-test-choco:
     timeout-minutes: 10
     needs: build-binary-windows-x86_64
