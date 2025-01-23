@@ -156,7 +156,9 @@ impl GlobalSettings {
                 .combine(env(env::UV_PYTHON_DOWNLOADS))
                 .combine(workspace.and_then(|workspace| workspace.globals.python_downloads))
                 .unwrap_or_default(),
-            no_progress: args.no_progress,
+            // Disable the progress bar with `RUST_LOG` to avoid progress fragments interleaving
+            // with log messages.
+            no_progress: args.no_progress || std::env::var_os(EnvVars::RUST_LOG).is_some(),
             installer_metadata: !args.no_installer_metadata,
         }
     }
