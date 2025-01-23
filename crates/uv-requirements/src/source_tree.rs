@@ -98,16 +98,21 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             .cloned()
             .collect::<Vec<_>>();
 
-        // Flatten any transitive extras.
-        let mut requirements =
-            FlatRequiresDist::from_requirements(metadata.requires_dist, &metadata.name)
-                .into_iter()
-                .map(|requirement| Requirement {
-                    origin: Some(origin.clone()),
-                    marker: requirement.marker.simplify_extras(&extras),
-                    ..requirement
-                })
-                .collect::<Vec<_>>();
+        let mut requirements = Vec::new();
+
+        // Flatten any transitive extras and include dependencies
+        // (unless something like --only-group was passed)
+        if self.groups.prod() {
+            requirements.extend(
+                FlatRequiresDist::from_requirements(metadata.requires_dist, &metadata.name)
+                    .into_iter()
+                    .map(|requirement| Requirement {
+                        origin: Some(origin.clone()),
+                        marker: requirement.marker.simplify_extras(&extras),
+                        ..requirement
+                    }),
+            );
+        }
 
         // Apply dependency-groups
         for (group_name, group) in &metadata.dependency_groups {

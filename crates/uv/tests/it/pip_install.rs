@@ -8425,11 +8425,10 @@ fn dependency_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + iniconfig==2.0.0
-     + typing-extensions==4.10.0
     "###);
 
     context = new_context()?;
