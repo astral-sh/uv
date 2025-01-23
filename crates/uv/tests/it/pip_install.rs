@@ -8504,6 +8504,71 @@ fn dependency_group() -> Result<()> {
 }
 
 #[test]
+fn dependency_group_default_groups() -> Result<()> {
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+
+            [tool.uv]
+            default-groups = ["foo", "bar"]
+
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            bar = ["iniconfig"]
+            dev = ["sniffio"]
+            "#,
+        )?;
+
+        context.lock().assert().success();
+        Ok(context)
+    }
+
+    let mut context;
+
+    // We should not install the default groups
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    "###);
+
+    // Selecting a group works as normal
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("--only-group").arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + typing-extensions==4.10.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn many_pyproject_group() -> Result<()> {
     fn new_context() -> Result<TestContext> {
         let context = TestContext::new("3.12");
