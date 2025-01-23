@@ -13,7 +13,7 @@ use uv_distribution_types::{
 };
 use uv_install_wheel::linker::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
-use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::Requirement;
 use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
@@ -1111,50 +1111,6 @@ pub struct PipOptions {
         "#
     )]
     pub no_extra: Option<Vec<ExtraName>>,
-    /// Include optional dependencies from the specified group; may be provided more than once.
-    ///
-    /// Only applies to `pyproject.toml` sources.
-    #[option(
-        default = "[]",
-        value_type = "list[str]",
-        example = r#"
-            group = ["dev", "docs"]
-        "#
-    )]
-    pub group: Option<Vec<GroupName>>,
-    /// Exclude optional dependencies from the specified group if `all-groups` are supplied
-    ///
-    /// Only applies to `pyproject.toml` sources.
-    #[option(
-        default = "[]",
-        value_type = "list[str]",
-        example = r#"
-            no-group = ["dev", "docs"]
-        "#
-    )]
-    pub no_group: Option<Vec<GroupName>>,
-    /// Exclude only dependencies from the specified group.
-    ///
-    /// Only applies to `pyproject.toml` sources.
-    #[option(
-        default = "[]",
-        value_type = "list[str]",
-        example = r#"
-            only-group = ["dev", "docs"]
-        "#
-    )]
-    pub only_group: Option<Vec<GroupName>>,
-    /// Include all groups.
-    ///
-    /// Only applies to `pyproject.toml` sources.
-    #[option(
-        default = "false",
-        value_type = "bool",
-        example = r#"
-            all-groups = true
-        "#
-    )]
-    pub all_groups: Option<bool>,
     /// Ignore package dependencies, instead only add those packages explicitly listed
     /// on the command line to the resulting the requirements file.
     #[option(
