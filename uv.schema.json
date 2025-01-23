@@ -88,7 +88,7 @@
       ]
     },
     "conflicts": {
-      "description": "A list sets of conflicting groups or extras.",
+      "description": "A list of sets of conflicting groups or extras.",
       "anyOf": [
         {
           "$ref": "#/definitions/SchemaConflicts"
