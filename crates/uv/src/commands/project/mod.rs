@@ -1225,6 +1225,7 @@ pub(crate) async fn resolve_environment(
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let extras = ExtrasSpecification::default();
+    let groups = DevGroupsSpecification::default();
     let hasher = HashStrategy::default();
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
@@ -1288,6 +1289,7 @@ pub(crate) async fn resolve_environment(
         project,
         BTreeSet::default(),
         &extras,
+        &groups,
         preferences,
         EmptyInstalledPackages,
         &hasher,
@@ -1585,6 +1587,7 @@ pub(crate) async fn update_environment(
     let build_hasher = HashStrategy::default();
     let dry_run = false;
     let extras = ExtrasSpecification::default();
+    let groups = DevGroupsSpecification::default();
     let hasher = HashStrategy::default();
     let preferences = Vec::default();
 
@@ -1633,6 +1636,7 @@ pub(crate) async fn update_environment(
         project,
         BTreeSet::default(),
         &extras,
+        &groups,
         preferences,
         site_packages.clone(),
         &hasher,

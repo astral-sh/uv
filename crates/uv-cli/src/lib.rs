@@ -1014,6 +1014,40 @@ pub struct PipCompileArgs {
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
 
+    /// Include dependencies from the specified dependency group.
+    ///
+    /// Only applies to `pyproject.toml` sources.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, conflicts_with("only_group"))]
+    pub group: Vec<GroupName>,
+
+    /// Exclude dependencies from the specified dependency group.
+    ///
+    /// Only applies to `pyproject.toml` sources.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub no_group: Vec<GroupName>,
+
+    /// Only include dependencies from the specified dependency group.
+    ///
+    /// The project itself will also be omitted.
+    ///
+    /// Only applies to `pyproject.toml` sources.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, conflicts_with("group"))]
+    pub only_group: Vec<GroupName>,
+
+    /// Include dependencies from all dependency groups.
+    ///
+    /// Only applies to `pyproject.toml` sources.
+    ///
+    /// `--no-group` can be used to exclude specific groups.
+    #[arg(long, conflicts_with_all = [ "group", "only_group" ])]
+    pub all_groups: bool,
+
     #[command(flatten)]
     pub resolver: ResolverArgs,
 
@@ -1571,6 +1605,40 @@ pub struct PipInstallArgs {
 
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
+
+    /// Include dependencies from the specified dependency group.
+    ///
+    /// Only applies to `pyproject.toml` sources.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, conflicts_with("only_group"))]
+    pub group: Vec<GroupName>,
+
+    /// Exclude dependencies from the specified dependency group.
+    ///
+    /// Only applies to `pyproject.toml` sources.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub no_group: Vec<GroupName>,
+
+    /// Only include dependencies from the specified dependency group.
+    ///
+    /// The project itself will also be omitted.
+    ///
+    /// Only applies to `pyproject.toml` sources.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, conflicts_with("group"))]
+    pub only_group: Vec<GroupName>,
+
+    /// Include dependencies from all dependency groups.
+    ///
+    /// Only applies to `pyproject.toml` sources.
+    ///
+    /// `--no-group` can be used to exclude specific groups.
+    #[arg(long, conflicts_with_all = [ "group", "only_group" ])]
+    pub all_groups: bool,
 
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
@@ -2727,9 +2795,9 @@ pub struct RunArgs {
 
     /// Only include dependencies from the specified dependency group.
     ///
-    /// May be provided multiple times.
-    ///
     /// The project itself will also be omitted.
+    ///
+    /// May be provided multiple times.
     #[arg(long, conflicts_with("group"))]
     pub only_group: Vec<GroupName>,
 
@@ -2998,9 +3066,9 @@ pub struct SyncArgs {
 
     /// Only include dependencies from the specified dependency group.
     ///
-    /// May be provided multiple times.
-    ///
     /// The project itself will also be omitted.
+    ///
+    /// May be provided multiple times.
     #[arg(long, conflicts_with("group"))]
     pub only_group: Vec<GroupName>,
 
@@ -3449,9 +3517,9 @@ pub struct TreeArgs {
 
     /// Only include dependencies from the specified dependency group.
     ///
-    /// May be provided multiple times.
-    ///
     /// The project itself will also be omitted.
+    ///
+    /// May be provided multiple times.
     #[arg(long, conflicts_with("group"))]
     pub only_group: Vec<GroupName>,
 
@@ -3619,9 +3687,9 @@ pub struct ExportArgs {
 
     /// Only include dependencies from the specified dependency group.
     ///
-    /// May be provided multiple times.
-    ///
     /// The project itself will also be omitted.
+    ///
+    /// May be provided multiple times.
     #[arg(long, conflicts_with("group"))]
     pub only_group: Vec<GroupName>,
 

@@ -11,8 +11,9 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, IndexStrategy,
-    LowerBound, NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy, TrustedHost, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification,
+    ExtrasSpecification, IndexStrategy, LowerBound, NoBinary, NoBuild, PreviewMode, Reinstall,
+    SourceStrategy, TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -55,6 +56,7 @@ pub(crate) async fn pip_compile(
     overrides_from_workspace: Vec<Requirement>,
     environments: SupportedEnvironments,
     extras: ExtrasSpecification,
+    groups: DevGroupsSpecification,
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PrereleaseMode,
@@ -379,6 +381,7 @@ pub(crate) async fn pip_compile(
         project,
         BTreeSet::default(),
         &extras,
+        &groups,
         preferences,
         EmptyInstalledPackages,
         &hasher,

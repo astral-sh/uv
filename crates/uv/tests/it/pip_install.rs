@@ -8371,3 +8371,305 @@ fn direct_url_json_direct_url() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn dependency_group() -> Result<()> {
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            bar = ["iniconfig"]
+            dev = ["sniffio"]
+            "#,
+        )?;
+
+        context.lock().assert().success();
+        Ok(context)
+    }
+
+    let mut context;
+
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    "###);
+
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("--only-group").arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + typing-extensions==4.10.0
+    "###);
+
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("--group").arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + sortedcontainers==2.4.0
+     + typing-extensions==4.10.0
+    "###);
+
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("--group").arg("foo")
+        .arg("--group").arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + iniconfig==2.0.0
+     + sortedcontainers==2.4.0
+     + typing-extensions==4.10.0
+    "###);
+
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("--all-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+     + sortedcontainers==2.4.0
+     + typing-extensions==4.10.0
+    "###);
+
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("--all-groups")
+        .arg("--no-group").arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + sniffio==1.3.1
+     + sortedcontainers==2.4.0
+     + typing-extensions==4.10.0
+    "###);
+    Ok(())
+}
+
+#[test]
+fn many_pyproject_group() -> Result<()> {
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            "#,
+        )?;
+
+        let subdir = context.temp_dir.child("subdir");
+        subdir.create_dir_all()?;
+        let pyproject_toml2 = subdir.child("pyproject.toml");
+        pyproject_toml2.write_str(
+            r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [dependency-groups]
+            foo = ["iniconfig"]
+            bar = ["sniffio"]
+            "#,
+        )?;
+
+        context.lock().assert().success();
+        Ok(context)
+    }
+
+    let mut context;
+
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("-r").arg("subdir/pyproject.toml"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    "###);
+
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("-r").arg("subdir/pyproject.toml")
+        .arg("--all-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+     + sortedcontainers==2.4.0
+     + typing-extensions==4.10.0
+    "###);
+
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("-r").arg("subdir/pyproject.toml")
+        .arg("--group").arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + iniconfig==2.0.0
+     + sortedcontainers==2.4.0
+     + typing-extensions==4.10.0
+    "###);
+
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("-r").arg("subdir/pyproject.toml")
+        .arg("--group").arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The dependency-group 'bar' is not defined in pyproject.toml
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    "###);
+
+    context = new_context()?;
+
+    uv_snapshot!(context.filters().into_iter().chain([(
+        "warning: The dependency-group 'lies' is not defined in pyproject.toml\nwarning: The dependency-group 'lies' is not defined in subdir/pyproject.toml",
+        "warning: The dependency-group 'lies' is not defined in subdir/pyproject.toml\nwarning: The dependency-group 'lies' is not defined in pyproject.toml",
+    )]).collect::<Vec<_>>(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("-r").arg("subdir/pyproject.toml")
+        .arg("--group").arg("lies"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The dependency-group 'lies' is not defined in subdir/pyproject.toml
+    warning: The dependency-group 'lies' is not defined in pyproject.toml
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    "###);
+
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("-r").arg("subdir/pyproject.toml")
+        .arg("--group").arg("foo")
+        .arg("--group").arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The dependency-group 'bar' is not defined in pyproject.toml
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+     + sortedcontainers==2.4.0
+     + typing-extensions==4.10.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn group_needs_manifest() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("sniffio")
+        .arg("--group").arg("foo"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Requesting groups requires a `pyproject.toml`.
+    "###);
+}

@@ -12,8 +12,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, ExtrasSpecification, LowerBound, PreviewMode, Reinstall, TrustedHost,
-    Upgrade,
+    Concurrency, Constraints, DevGroupsSpecification, ExtrasSpecification, LowerBound, PreviewMode,
+    Reinstall, TrustedHost, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::DistributionDatabase;
@@ -513,6 +513,7 @@ async fn do_lock(
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
     let extras = ExtrasSpecification::default();
+    let groups = DevGroupsSpecification::default();
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
@@ -683,6 +684,7 @@ async fn do_lock(
                 None,
                 packages.keys().cloned().collect(),
                 &extras,
+                &groups,
                 preferences,
                 EmptyInstalledPackages,
                 &hasher,
