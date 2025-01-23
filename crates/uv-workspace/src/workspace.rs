@@ -549,6 +549,15 @@ impl Workspace {
             .collect()
     }
 
+    /// Whether at least one project in the workspace sets the key dynamically.
+    pub fn uses_dynamic_key(&self, key: &str) -> bool {
+        self.pyproject_toml.is_key_dynamic(key)
+            || self
+                .packages
+                .values()
+                .any(|member| member.pyproject_toml.is_key_dynamic(key))
+    }
+
     /// The path to the workspace root, the directory containing the top level `pyproject.toml` with
     /// the `uv.tool.workspace`, or the `pyproject.toml` in an implicit single workspace project.
     pub fn install_path(&self) -> &PathBuf {
