@@ -2066,6 +2066,41 @@ fn sync_default_groups() -> Result<()> {
      - iniconfig==2.0.0
     "###);
 
+    // Using `--no-default-groups` with `--no-group foo` should exclude `dev` and `foo`.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups").arg("--no-group").arg("foo"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 7 packages in [TIME]
+     - anyio==4.3.0
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - idna==3.6
+     - requests==2.31.0
+     - sniffio==1.3.1
+     - urllib3==2.2.1
+    "#);
+
+    // Using `--no-default-groups` with `--all-groups` should include all groups except `dev`.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups").arg("--all-groups"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + iniconfig==2.0.0
+     + requests==2.31.0
+     + urllib3==2.2.1
+    "#);
+
     Ok(())
 }
 
