@@ -292,16 +292,18 @@ impl TestContext {
 
         let root = tempfile::TempDir::new_in(bucket).expect("Failed to create test root directory");
 
-        let temp_dir = ChildPath::new(root.path()).child("temp");
+        let root_path = root.path().with_extension(".ci");
+
+        let temp_dir = ChildPath::new(&root_path).child("temp");
         fs_err::create_dir_all(&temp_dir).expect("Failed to create test working directory");
 
-        let cache_dir = ChildPath::new(root.path()).child("cache");
+        let cache_dir = ChildPath::new(&root_path).child("cache");
         fs_err::create_dir_all(&cache_dir).expect("Failed to create test cache directory");
 
-        let python_dir = ChildPath::new(root.path()).child("python");
+        let python_dir = ChildPath::new(&root_path).child("python");
         fs_err::create_dir_all(&python_dir).expect("Failed to create test Python directory");
 
-        let bin_dir = ChildPath::new(root.path()).child("bin");
+        let bin_dir = ChildPath::new(&root_path).child("bin");
         fs_err::create_dir_all(&bin_dir).expect("Failed to create test bin directory");
 
         // When the `git` feature is disabled, enforce that the test suite does not use `git`
@@ -309,7 +311,7 @@ impl TestContext {
             Self::disallow_git_cli(&bin_dir).expect("Failed to setup disallowed `git` command");
         }
 
-        let home_dir = ChildPath::new(root.path()).child("home");
+        let home_dir = ChildPath::new(&root_path).child("home");
         fs_err::create_dir_all(&home_dir).expect("Failed to create test home directory");
 
         // Canonicalize the temp dir for consistent snapshot behavior
