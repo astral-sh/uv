@@ -188,16 +188,12 @@ fn python_install_automatic() {
             .env("UV_TEST_PYTHON_PATH", context.bin_dir.as_os_str())
             .arg("-p").arg("3.11")
             .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r###"
-        success: false
-        exit_code: 2
+        success: true
+        exit_code: 0
         ----- stdout -----
+        (3, 11)
 
         ----- stderr -----
-        error: Failed to inspect Python interpreter from search path at `[BIN]/python3`
-          Caused by: Querying Python at `[BIN]/python3` failed with exit status exit status: 1
-
-        [stderr]
-        error: intentionally broken python executable
         "###);
     }
 }
