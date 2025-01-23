@@ -705,6 +705,10 @@ jobs:
               - "uv sync --group all"
               - "uv lock --upgrade"
             python: "3.12"
+          - repo: "urllib3/urllib3"
+            commands:
+              - "uv sync"
+            python: "3.12"
       fail-fast: false
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
