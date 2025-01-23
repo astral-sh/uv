@@ -102,6 +102,9 @@ pub struct TestContext {
     /// Standard filters for this test context.
     filters: Vec<(String, String)>,
 
+    /// Extra environment variables to apply to all commands.
+    extra_env: Vec<(OsString, OsString)>,
+
     #[allow(dead_code)]
     _root: tempfile::TempDir,
 }
@@ -230,6 +233,29 @@ impl TestContext {
                 .to_string(),
             "$1-[PLATFORM]".to_string(),
         ));
+        self
+    }
+
+    /// Add extra directories and configuration for managed Python installations.
+    #[must_use]
+    pub fn with_managed_python_dirs(mut self) -> Self {
+        let managed = self.temp_dir.join("managed");
+        let bin = self.temp_dir.join("bin");
+
+        self.extra_env.push((
+            EnvVars::PATH.into(),
+            env::join_paths(std::iter::once(bin.clone()).chain(env::split_paths(
+                &env::var(EnvVars::PATH).unwrap_or_default(),
+            )))
+            .unwrap(),
+        ));
+        self.extra_env
+            .push((EnvVars::UV_PYTHON_BIN_DIR.into(), bin.into()));
+        self.extra_env
+            .push((EnvVars::UV_PYTHON_INSTALL_DIR.into(), managed.into()));
+        self.extra_env
+            .push((EnvVars::UV_PYTHON_DOWNLOADS.into(), "automatic".into()));
+
         self
     }
 
@@ -456,6 +482,7 @@ impl TestContext {
             python_version,
             python_versions,
             filters,
+            extra_env: vec![],
             _root: root,
         }
     }
@@ -510,11 +537,17 @@ impl TestContext {
             .env(EnvVars::PATH, path)
             .env(EnvVars::HOME, self.home_dir.as_os_str())
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
+            // Installations are not allowed by default; see `Self::with_managed_python_dirs`
+            .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
             .env(EnvVars::UV_TEST_PYTHON_PATH, self.python_path())
             .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .env_remove(EnvVars::UV_CACHE_DIR)
             .env_remove(EnvVars::UV_TOOL_BIN_DIR)
             .current_dir(self.temp_dir.path());
+
+        for (key, value) in &self.extra_env {
+            command.env(key, value);
+        }
 
         if activate_venv {
             command.env(EnvVars::VIRTUAL_ENV, self.venv.as_os_str());
@@ -677,21 +710,10 @@ impl TestContext {
     /// Create a `uv python install` command with options shared across scenarios.
     pub fn python_install(&self) -> Command {
         let mut command = self.new_command();
-        let managed = self.temp_dir.join("managed");
-        let bin = self.temp_dir.join("bin");
         self.add_shared_args(&mut command, true);
         command
             .arg("python")
             .arg("install")
-            .env(EnvVars::UV_PYTHON_INSTALL_DIR, managed)
-            .env(EnvVars::UV_PYTHON_BIN_DIR, bin.as_os_str())
-            .env(
-                EnvVars::PATH,
-                env::join_paths(std::iter::once(bin).chain(env::split_paths(
-                    &env::var(EnvVars::PATH).unwrap_or_default(),
-                )))
-                .unwrap(),
-            )
             .current_dir(&self.temp_dir);
         command
     }
@@ -699,14 +721,10 @@ impl TestContext {
     /// Create a `uv python uninstall` command with options shared across scenarios.
     pub fn python_uninstall(&self) -> Command {
         let mut command = self.new_command();
-        let managed = self.temp_dir.join("managed");
-        let bin = self.temp_dir.join("bin");
         self.add_shared_args(&mut command, true);
         command
             .arg("python")
             .arg("uninstall")
-            .env(EnvVars::UV_PYTHON_INSTALL_DIR, managed)
-            .env(EnvVars::UV_PYTHON_BIN_DIR, bin)
             .current_dir(&self.temp_dir);
         command
     }

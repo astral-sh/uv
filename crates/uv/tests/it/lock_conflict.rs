@@ -3394,7 +3394,7 @@ fn shared_optional_dependency_mixed1() -> Result<()> {
 /// Regression test for: <https://github.com/astral-sh/uv/issues/9640>
 #[test]
 fn shared_optional_dependency_extra2() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.11");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3432,9 +3432,6 @@ fn shared_optional_dependency_extra2() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.11.11
-    Removed virtual environment at: .venv
-    Creating virtual environment at: .venv
     Resolved 5 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -3536,7 +3533,7 @@ fn shared_optional_dependency_extra2() -> Result<()> {
 /// Regression test for: <https://github.com/astral-sh/uv/issues/9640>
 #[test]
 fn shared_optional_dependency_group2() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.11");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3574,9 +3571,6 @@ fn shared_optional_dependency_group2() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.11.11
-    Removed virtual environment at: .venv
-    Creating virtual environment at: .venv
     Resolved 5 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -3682,7 +3676,7 @@ fn shared_optional_dependency_group2() -> Result<()> {
 /// Regression test for: <https://github.com/astral-sh/uv/issues/9640>
 #[test]
 fn shared_optional_dependency_mixed2() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.11");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3722,9 +3716,6 @@ fn shared_optional_dependency_mixed2() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.11.11
-    Removed virtual environment at: .venv
-    Creating virtual environment at: .venv
     Resolved 5 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -4364,7 +4355,7 @@ fn shared_dependency_mixed() -> Result<()> {
 /// Ref <https://github.com/astral-sh/uv/issues/9289>
 #[test]
 fn extras_are_namespaced() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.11");
 
     let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
     root_pyproject_toml.write_str(
@@ -4423,9 +4414,6 @@ conflicts = [
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.11.11
-    Removed virtual environment at: .venv
-    Creating virtual environment at: .venv
     Resolved 7 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -7297,7 +7285,7 @@ fn deduplicate_resolution_markers() -> Result<()> {
 
 #[test]
 fn overlapping_resolution_markers() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.10");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7305,7 +7293,7 @@ fn overlapping_resolution_markers() -> Result<()> {
         [project]
         name = "ads-mega-model"
         version = "0.1.0"
-        requires-python = "==3.10.12"
+        requires-python = "==3.10.*"
         dependencies = [
             "wandb==0.17.6",
         ]
@@ -7344,7 +7332,6 @@ fn overlapping_resolution_markers() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.10.12
     Resolved 45 packages in [TIME]
     "###);
 
@@ -7356,7 +7343,7 @@ fn overlapping_resolution_markers() -> Result<()> {
             lock,
             @r###"
         version = 1
-        requires-python = "==3.10.12"
+        requires-python = "==3.10.*"
         resolution-markers = [
             "sys_platform == 'linux' and extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118'",
             "sys_platform != 'linux' and extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118'",
