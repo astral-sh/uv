@@ -660,6 +660,9 @@ jobs:
           - repo: "pallets/flask"
             command: "uv pip install -r requirements/dev.txt"
             python: "3.12"
+          - repo: "pydantic/pydantic-core"
+            command: "uv sync --group all"
+            python: "3.12"
       fail-fast: false
     steps:
       - uses: actions/checkout@v4
