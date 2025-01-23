@@ -1596,7 +1596,8 @@ mod tests {
               "dependencies": [
                 "anyio>=4.3.0,<5"
               ],
-              "optional-dependencies": null
+              "optional-dependencies": null,
+              "dynamic": null
             },
             "pyproject_toml": "[PYPROJECT_TOML]"
           }
@@ -1611,7 +1612,8 @@ mod tests {
             "dependencies": [
               "anyio>=4.3.0,<5"
             ],
-            "optional-dependencies": null
+            "optional-dependencies": null,
+            "dynamic": null
           },
           "tool": null,
           "dependency-groups": null
@@ -1649,7 +1651,8 @@ mod tests {
                   "dependencies": [
                     "anyio>=4.3.0,<5"
                   ],
-                  "optional-dependencies": null
+                  "optional-dependencies": null,
+                  "dynamic": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
               }
@@ -1664,7 +1667,8 @@ mod tests {
                 "dependencies": [
                   "anyio>=4.3.0,<5"
                 ],
-                "optional-dependencies": null
+                "optional-dependencies": null,
+                "dynamic": null
               },
               "tool": null,
               "dependency-groups": null
@@ -1702,7 +1706,8 @@ mod tests {
                         "bird-feeder",
                         "tqdm>=4,<5"
                       ],
-                      "optional-dependencies": null
+                      "optional-dependencies": null,
+                      "dynamic": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   },
@@ -1716,7 +1721,8 @@ mod tests {
                         "anyio>=4.3.0,<5",
                         "seeds"
                       ],
-                      "optional-dependencies": null
+                      "optional-dependencies": null,
+                      "dynamic": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   },
@@ -1729,7 +1735,8 @@ mod tests {
                       "dependencies": [
                         "idna==3.6"
                       ],
-                      "optional-dependencies": null
+                      "optional-dependencies": null,
+                      "dynamic": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   }
@@ -1753,7 +1760,8 @@ mod tests {
                       "bird-feeder",
                       "tqdm>=4,<5"
                     ],
-                    "optional-dependencies": null
+                    "optional-dependencies": null,
+                    "dynamic": null
                   },
                   "tool": {
                     "uv": {
@@ -1819,7 +1827,8 @@ mod tests {
                     "bird-feeder",
                     "tqdm>=4,<5"
                   ],
-                  "optional-dependencies": null
+                  "optional-dependencies": null,
+                  "dynamic": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
               },
@@ -1833,7 +1842,8 @@ mod tests {
                     "anyio>=4.3.0,<5",
                     "seeds"
                   ],
-                  "optional-dependencies": null
+                  "optional-dependencies": null,
+                  "dynamic": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
               },
@@ -1846,7 +1856,8 @@ mod tests {
                   "dependencies": [
                     "idna==3.6"
                   ],
-                  "optional-dependencies": null
+                  "optional-dependencies": null,
+                  "dynamic": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
               }
@@ -1909,7 +1920,8 @@ mod tests {
                   "dependencies": [
                     "tqdm>=4,<5"
                   ],
-                  "optional-dependencies": null
+                  "optional-dependencies": null,
+                  "dynamic": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
               }
@@ -1924,7 +1936,8 @@ mod tests {
                 "dependencies": [
                   "tqdm>=4,<5"
                 ],
-                "optional-dependencies": null
+                "optional-dependencies": null,
+                "dynamic": null
               },
               "tool": null,
               "dependency-groups": null
@@ -2029,7 +2042,8 @@ mod tests {
                   "dependencies": [
                     "tqdm>=4,<5"
                   ],
-                  "optional-dependencies": null
+                  "optional-dependencies": null,
+                  "dynamic": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
               },
@@ -2042,7 +2056,8 @@ mod tests {
                   "dependencies": [
                     "idna==3.6"
                   ],
-                  "optional-dependencies": null
+                  "optional-dependencies": null,
+                  "dynamic": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
               }
@@ -2057,7 +2072,8 @@ mod tests {
                 "dependencies": [
                   "tqdm>=4,<5"
                 ],
-                "optional-dependencies": null
+                "optional-dependencies": null,
+                "dynamic": null
               },
               "tool": {
                 "uv": {
@@ -2132,7 +2148,8 @@ mod tests {
                   "dependencies": [
                     "tqdm>=4,<5"
                   ],
-                  "optional-dependencies": null
+                  "optional-dependencies": null,
+                  "dynamic": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
               },
@@ -2145,7 +2162,8 @@ mod tests {
                   "dependencies": [
                     "idna==3.6"
                   ],
-                  "optional-dependencies": null
+                  "optional-dependencies": null,
+                  "dynamic": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
               }
@@ -2160,7 +2178,8 @@ mod tests {
                 "dependencies": [
                   "tqdm>=4,<5"
                 ],
-                "optional-dependencies": null
+                "optional-dependencies": null,
+                "dynamic": null
               },
               "tool": {
                 "uv": {
@@ -2236,7 +2255,8 @@ mod tests {
                   "dependencies": [
                     "tqdm>=4,<5"
                   ],
-                  "optional-dependencies": null
+                  "optional-dependencies": null,
+                  "dynamic": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
               },
@@ -2249,7 +2269,8 @@ mod tests {
                   "dependencies": [
                     "anyio>=4.3.0,<5"
                   ],
-                  "optional-dependencies": null
+                  "optional-dependencies": null,
+                  "dynamic": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
               },
@@ -2262,7 +2283,8 @@ mod tests {
                   "dependencies": [
                     "idna==3.6"
                   ],
-                  "optional-dependencies": null
+                  "optional-dependencies": null,
+                  "dynamic": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
               }
@@ -2277,7 +2299,8 @@ mod tests {
                 "dependencies": [
                   "tqdm>=4,<5"
                 ],
-                "optional-dependencies": null
+                "optional-dependencies": null,
+                "dynamic": null
               },
               "tool": {
                 "uv": {
@@ -2353,7 +2376,8 @@ mod tests {
                   "dependencies": [
                     "tqdm>=4,<5"
                   ],
-                  "optional-dependencies": null
+                  "optional-dependencies": null,
+                  "dynamic": null
                 },
                 "pyproject_toml": "[PYPROJECT_TOML]"
               }
@@ -2368,7 +2392,8 @@ mod tests {
                 "dependencies": [
                   "tqdm>=4,<5"
                 ],
-                "optional-dependencies": null
+                "optional-dependencies": null,
+                "dynamic": null
               },
               "tool": {
                 "uv": {
