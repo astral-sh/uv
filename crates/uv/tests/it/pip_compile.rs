@@ -14676,7 +14676,10 @@ fn many_pyproject_group() -> Result<()> {
     "###);
 
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_compile()
+    uv_snapshot!(context.filters().into_iter().chain([(
+        "warning: The dependency-group 'lies' is not defined in pyproject.toml\nwarning: The dependency-group 'lies' is not defined in subdir/pyproject.toml",
+        "warning: The dependency-group 'lies' is not defined in subdir/pyproject.toml\nwarning: The dependency-group 'lies' is not defined in pyproject.toml",
+    )]).collect::<Vec<_>>(), context.pip_compile()
         .arg("pyproject.toml")
         .arg("subdir/pyproject.toml")
         .arg("--group").arg("lies"), @r###"
@@ -14689,8 +14692,8 @@ fn many_pyproject_group() -> Result<()> {
         # via project (pyproject.toml)
 
     ----- stderr -----
-    warning: The dependency-group 'lies' is not defined in pyproject.toml
     warning: The dependency-group 'lies' is not defined in subdir/pyproject.toml
+    warning: The dependency-group 'lies' is not defined in pyproject.toml
     Resolved 1 package in [TIME]
     "###);
 

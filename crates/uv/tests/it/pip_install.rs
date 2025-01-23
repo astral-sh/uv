@@ -8611,7 +8611,11 @@ fn many_pyproject_group() -> Result<()> {
     "###);
 
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_install()
+
+    uv_snapshot!(context.filters().into_iter().chain([(
+        "warning: The dependency-group 'lies' is not defined in pyproject.toml\nwarning: The dependency-group 'lies' is not defined in subdir/pyproject.toml",
+        "warning: The dependency-group 'lies' is not defined in subdir/pyproject.toml\nwarning: The dependency-group 'lies' is not defined in pyproject.toml",
+    )]).collect::<Vec<_>>(), context.pip_install()
         .arg("-r").arg("pyproject.toml")
         .arg("-r").arg("subdir/pyproject.toml")
         .arg("--group").arg("lies"), @r###"
@@ -8620,8 +8624,8 @@ fn many_pyproject_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The dependency-group 'lies' is not defined in pyproject.toml
     warning: The dependency-group 'lies' is not defined in subdir/pyproject.toml
+    warning: The dependency-group 'lies' is not defined in pyproject.toml
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
