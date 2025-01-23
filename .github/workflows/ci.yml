@@ -404,12 +404,37 @@ jobs:
         if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
         run: uvx --with-requirements docs/requirements.txt mkdocs build --strict -f mkdocs.insiders.yml
 
-  build-binary-linux:
+  build-binary-linux-libc:
     timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: github-ubuntu-24.04-x86_64-8
-    name: "build binary | linux"
+    name: "build binary | linux libc"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: rui314/setup-mold@v1
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Build"
+        run: cargo build
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@v4
+        with:
+          name: uv-linux-libc-${{ github.sha }}
+          path: |
+            ./target/debug/uv
+            ./target/debug/uvx
+          retention-days: 1
+
+  build-binary-linux-musl:
+    timeout-minutes: 10
+    needs: determine_changes
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    runs-on: github-ubuntu-24.04-x86_64-8
+    name: "build binary | linux musl"
     steps:
       - uses: actions/checkout@v4
 
@@ -421,13 +446,14 @@ jobs:
           rustup target add x86_64-unknown-linux-musl
 
       - uses: Swatinem/rust-cache@v2
+
       - name: "Build"
         run: cargo build --target x86_64-unknown-linux-musl --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
-          name: uv-linux-${{ github.sha }}
+          name: uv-linux-musl-${{ github.sha }}
           path: |
             ./target/x86_64-unknown-linux-musl/debug/uv
             ./target/x86_64-unknown-linux-musl/debug/uvx
@@ -622,7 +648,7 @@ jobs:
 
   ecosystem-test:
     timeout-minutes: 10
-    needs: build-binary-linux
+    needs: build-binary-linux-libc
     name: "ecosystem test | ${{ matrix.repo }}"
     runs-on: ubuntu-latest
     strategy:
@@ -647,7 +673,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-linux-${{ github.sha }}
+          name: uv-linux-libc-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
@@ -659,14 +685,14 @@ jobs:
 
   smoke-test-linux:
     timeout-minutes: 10
-    needs: build-binary-linux
+    needs: build-binary-linux-libc
     name: "smoke test | linux"
     runs-on: ubuntu-latest
     steps:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-linux-${{ github.sha }}
+          name: uv-linux-libc-${{ github.sha }}
 
       - name: "Prepare binary"
         run: |
@@ -750,7 +776,7 @@ jobs:
 
   integration-test-conda:
     timeout-minutes: 10
-    needs: build-binary-linux
+    needs: build-binary-linux-libc
     name: "integration test | conda on ubuntu"
     runs-on: ubuntu-latest
     steps:
@@ -764,7 +790,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-linux-${{ github.sha }}
+          name: uv-linux-libc-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
@@ -781,7 +807,7 @@ jobs:
 
   integration-test-deadsnakes-39-linux:
     timeout-minutes: 5
-    needs: build-binary-linux
+    needs: build-binary-linux-libc
     name: "integration test | deadsnakes python3.9 on ubuntu"
     runs-on: ubuntu-latest
     steps:
@@ -794,7 +820,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-linux-${{ github.sha }}
+          name: uv-linux-libc-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
@@ -823,7 +849,7 @@ jobs:
 
   integration-test-free-threaded-linux:
     timeout-minutes: 5
-    needs: build-binary-linux
+    needs: build-binary-linux-libc
     name: "integration test | free-threaded on linux"
     runs-on: ubuntu-latest
     steps:
@@ -836,7 +862,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-linux-${{ github.sha }}
+          name: uv-linux-libc-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
@@ -921,7 +947,7 @@ jobs:
 
   integration-test-pypy-linux:
     timeout-minutes: 10
-    needs: build-binary-linux
+    needs: build-binary-linux-libc
     name: "integration test | pypy on ubuntu"
     runs-on: ubuntu-latest
     steps:
@@ -930,7 +956,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-linux-${{ github.sha }}
+          name: uv-linux-libc-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
@@ -1048,7 +1074,7 @@ jobs:
 
   integration-test-graalpy-linux:
     timeout-minutes: 10
-    needs: build-binary-linux
+    needs: build-binary-linux-libc
     name: "integration test | graalpy on ubuntu"
     runs-on: ubuntu-latest
     steps:
@@ -1061,7 +1087,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-linux-${{ github.sha }}
+          name: uv-linux-libc-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
@@ -1180,7 +1206,7 @@ jobs:
 
   integration-test-github-actions:
     timeout-minutes: 10
-    needs: build-binary-linux
+    needs: build-binary-linux-libc
     name: "integration test | github actions"
     runs-on: ubuntu-latest
     steps:
@@ -1191,7 +1217,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-linux-${{ github.sha }}
+          name: uv-linux-libc-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
@@ -1238,7 +1264,7 @@ jobs:
 
   integration-test-publish-changed:
     timeout-minutes: 10
-    needs: build-binary-linux
+    needs: build-binary-linux-libc
     name: "integration test | determine publish changes"
     runs-on: ubuntu-latest
     outputs:
@@ -1287,7 +1313,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-linux-${{ github.sha }}
+          name: uv-linux-libc-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
@@ -1314,7 +1340,7 @@ jobs:
 
   cache-test-ubuntu:
     timeout-minutes: 10
-    needs: build-binary-linux
+    needs: build-binary-linux-libc
     name: "check cache | ubuntu"
     runs-on: ubuntu-latest
     steps:
@@ -1327,7 +1353,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-linux-${{ github.sha }}
+          name: uv-linux-libc-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
@@ -1362,7 +1388,7 @@ jobs:
 
   system-test-debian:
     timeout-minutes: 10
-    needs: build-binary-linux
+    needs: build-binary-linux-musl
     name: "check system | python on debian"
     runs-on: ubuntu-latest
     container: debian:bookworm
@@ -1375,7 +1401,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-linux-${{ github.sha }}
+          name: uv-linux-musl-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
@@ -1388,7 +1414,7 @@ jobs:
 
   system-test-fedora:
     timeout-minutes: 10
-    needs: build-binary-linux
+    needs: build-binary-linux-libc
     name: "check system | python on fedora"
     runs-on: ubuntu-latest
     container: fedora:42
@@ -1401,7 +1427,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-linux-${{ github.sha }}
+          name: uv-linux-libc-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
@@ -1414,7 +1440,7 @@ jobs:
 
   system-test-ubuntu:
     timeout-minutes: 10
-    needs: build-binary-linux
+    needs: build-binary-linux-libc
     name: "check system | python on ubuntu"
     runs-on: ubuntu-latest
     steps:
@@ -1427,7 +1453,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-linux-${{ github.sha }}
+          name: uv-linux-libc-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
@@ -1440,7 +1466,7 @@ jobs:
 
   system-test-opensuse:
     timeout-minutes: 5
-    needs: build-binary-linux
+    needs: build-binary-linux-libc
     name: "check system | python on opensuse"
     runs-on: ubuntu-latest
     container: opensuse/tumbleweed
@@ -1460,7 +1486,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-linux-${{ github.sha }}
+          name: uv-linux-libc-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
@@ -1476,7 +1502,7 @@ jobs:
   # and avoids issues with centos stream uptime concerns
   system-test-rocky-linux:
     timeout-minutes: 10
-    needs: build-binary-linux
+    needs: build-binary-linux-musl
     name: "check system | python on rocky linux ${{ matrix.rocky-version }}"
     runs-on: ubuntu-latest
     container: rockylinux:${{ matrix.rocky-version }}
@@ -1500,7 +1526,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-linux-${{ github.sha }}
+          name: uv-linux-musl-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
@@ -1513,7 +1539,7 @@ jobs:
 
   system-test-pypy:
     timeout-minutes: 10
-    needs: build-binary-linux
+    needs: build-binary-linux-libc
     name: "check system | pypy on ubuntu"
     runs-on: ubuntu-latest
     steps:
@@ -1526,7 +1552,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-linux-${{ github.sha }}
+          name: uv-linux-libc-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
@@ -1539,7 +1565,7 @@ jobs:
 
   system-test-pyston:
     timeout-minutes: 10
-    needs: build-binary-linux
+    needs: build-binary-linux-musl
     name: "check system | pyston"
     runs-on: ubuntu-latest
     container: pyston/pyston:2.3.5
@@ -1549,7 +1575,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-linux-${{ github.sha }}
+          name: uv-linux-musl-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
@@ -1562,7 +1588,7 @@ jobs:
 
   system-test-alpine:
     timeout-minutes: 10
-    needs: build-binary-linux
+    needs: build-binary-linux-musl
     name: "check system | alpine"
     runs-on: ubuntu-latest
     container: alpine:latest
@@ -1575,7 +1601,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-linux-${{ github.sha }}
+          name: uv-linux-musl-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
@@ -1775,7 +1801,7 @@ jobs:
 
   system-test-pyenv:
     timeout-minutes: 10
-    needs: build-binary-linux
+    needs: build-binary-linux-libc
     name: "check system | python3.9 via pyenv"
     runs-on: ubuntu-latest
     steps:
@@ -1803,7 +1829,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-linux-${{ github.sha }}
+          name: uv-linux-libc-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
@@ -1816,7 +1842,7 @@ jobs:
 
   system-test-linux-313:
     timeout-minutes: 10
-    needs: build-binary-linux
+    needs: build-binary-linux-libc
     name: "check system | python3.13"
     runs-on: ubuntu-latest
     steps:
@@ -1830,7 +1856,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-linux-${{ github.sha }}
+          name: uv-linux-libc-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
@@ -1847,7 +1873,7 @@ jobs:
       [
         build-binary-windows-x86_64,
         build-binary-macos-aarch64,
-        build-binary-linux,
+        build-binary-linux-libc,
       ]
     name: check system | conda${{ matrix.python-version }} on ${{ matrix.os }} {{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
@@ -1859,7 +1885,7 @@ jobs:
         include:
           - {
               os: "linux",
-              target: "linux",
+              target: "linux-libc",
               runner: "ubuntu-latest",
               arch: "x86-64",
             }
@@ -1911,7 +1937,7 @@ jobs:
 
   system-test-amazonlinux:
     timeout-minutes: 10
-    needs: build-binary-linux
+    needs: build-binary-linux-musl
     name: "check system | amazonlinux"
     runs-on: ubuntu-latest
     container: amazonlinux:2023
@@ -1927,7 +1953,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-linux-${{ github.sha }}
+          name: uv-linux-musl-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
