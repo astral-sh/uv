@@ -3394,7 +3394,7 @@ fn shared_optional_dependency_mixed1() -> Result<()> {
 /// Regression test for: <https://github.com/astral-sh/uv/issues/9640>
 #[test]
 fn shared_optional_dependency_extra2() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.11");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3432,9 +3432,6 @@ fn shared_optional_dependency_extra2() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.11.11
-    Removed virtual environment at: .venv
-    Creating virtual environment at: .venv
     Resolved 5 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -3536,7 +3533,7 @@ fn shared_optional_dependency_extra2() -> Result<()> {
 /// Regression test for: <https://github.com/astral-sh/uv/issues/9640>
 #[test]
 fn shared_optional_dependency_group2() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.11");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3574,9 +3571,6 @@ fn shared_optional_dependency_group2() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.11.11
-    Removed virtual environment at: .venv
-    Creating virtual environment at: .venv
     Resolved 5 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -3682,7 +3676,7 @@ fn shared_optional_dependency_group2() -> Result<()> {
 /// Regression test for: <https://github.com/astral-sh/uv/issues/9640>
 #[test]
 fn shared_optional_dependency_mixed2() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.11");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3722,9 +3716,6 @@ fn shared_optional_dependency_mixed2() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.11.11
-    Removed virtual environment at: .venv
-    Creating virtual environment at: .venv
     Resolved 5 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -4364,7 +4355,7 @@ fn shared_dependency_mixed() -> Result<()> {
 /// Ref <https://github.com/astral-sh/uv/issues/9289>
 #[test]
 fn extras_are_namespaced() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.11");
 
     let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
     root_pyproject_toml.write_str(
@@ -4423,9 +4414,6 @@ conflicts = [
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.11.11
-    Removed virtual environment at: .venv
-    Creating virtual environment at: .venv
     Resolved 7 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -7297,7 +7285,7 @@ fn deduplicate_resolution_markers() -> Result<()> {
 
 #[test]
 fn overlapping_resolution_markers() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.10");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7305,7 +7293,7 @@ fn overlapping_resolution_markers() -> Result<()> {
         [project]
         name = "ads-mega-model"
         version = "0.1.0"
-        requires-python = "==3.10.12"
+        requires-python = "==3.10.*"
         dependencies = [
             "wandb==0.17.6",
         ]
@@ -7344,7 +7332,6 @@ fn overlapping_resolution_markers() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.10.12
     Resolved 45 packages in [TIME]
     "###);
 
@@ -7356,7 +7343,7 @@ fn overlapping_resolution_markers() -> Result<()> {
             lock,
             @r###"
         version = 1
-        requires-python = "==3.10.12"
+        requires-python = "==3.10.*"
         resolution-markers = [
             "sys_platform == 'linux' and extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118'",
             "sys_platform != 'linux' and extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118'",
@@ -7662,12 +7649,12 @@ fn overlapping_resolution_markers() -> Result<()> {
 
         [[package]]
         name = "nvidia-nvjitlink-cu12"
-        version = "12.6.85"
+        version = "12.8.61"
         source = { registry = "https://pypi.org/simple" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/9d/d7/c5383e47c7e9bf1c99d5bd2a8c935af2b6d705ad831a7ec5c97db4d82f4f/nvidia_nvjitlink_cu12-12.6.85-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl", hash = "sha256:eedc36df9e88b682efe4309aa16b5b4e78c2407eac59e8c10a6a47535164369a", size = 19744971 },
-            { url = "https://files.pythonhosted.org/packages/31/db/dc71113d441f208cdfe7ae10d4983884e13f464a6252450693365e166dcf/nvidia_nvjitlink_cu12-12.6.85-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:cf4eaa7d4b6b543ffd69d6abfb11efdeb2db48270d94dfd3a452c24150829e41", size = 19270338 },
-            { url = "https://files.pythonhosted.org/packages/89/76/93c1467b1387387440a4d25102d86b7794535449b689f8e2dc22c1c8ff7f/nvidia_nvjitlink_cu12-12.6.85-py3-none-win_amd64.whl", hash = "sha256:e61120e52ed675747825cdd16febc6a0730537451d867ee58bee3853b1b13d1c", size = 161908572 },
+            { url = "https://files.pythonhosted.org/packages/03/f8/9d85593582bd99b8d7c65634d2304780aefade049b2b94d96e44084be90b/nvidia_nvjitlink_cu12-12.8.61-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl", hash = "sha256:45fd79f2ae20bd67e8bc411055939049873bfd8fac70ff13bd4865e0b9bdab17", size = 39243473 },
+            { url = "https://files.pythonhosted.org/packages/af/53/698f3758f48c5fcb1112721e40cc6714da3980d3c7e93bae5b29dafa9857/nvidia_nvjitlink_cu12-12.8.61-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:9b80ecab31085dda3ce3b41d043be0ec739216c3fc633b8abe212d5a30026df0", size = 38374634 },
+            { url = "https://files.pythonhosted.org/packages/7f/c6/0d1b2bfeb2ef42c06db0570c4d081e5cde4450b54c09e43165126cfe6ff6/nvidia_nvjitlink_cu12-12.8.61-py3-none-win_amd64.whl", hash = "sha256:1166a964d25fdc0eae497574d38824305195a5283324a21ccb0ce0c802cbf41c", size = 268514099 },
         ]
 
         [[package]]
