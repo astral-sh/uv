@@ -655,13 +655,19 @@ jobs:
       matrix:
         include:
           - repo: "prefecthq/prefect"
-            command: "uv pip install -e '.[dev]'"
+            commands:
+              - "uv venv"
+              - "uv pip install -e '.[dev]'"
             python: "3.9"
           - repo: "pallets/flask"
-            command: "uv pip install -r requirements/dev.txt"
+            commands:
+              - "uv venv"
+              - "uv pip install -r requirements/dev.txt"
             python: "3.12"
           - repo: "pydantic/pydantic-core"
-            command: "uv sync --group all"
+            commands:
+              - "uv sync --group all"
+              - "uv lock --upgrade"
             python: "3.12"
       fail-fast: false
     steps:
@@ -683,8 +689,14 @@ jobs:
 
       - name: "Test"
         run: |
-          ./uv venv
-          ./${{ matrix.command }}
+          echo '${{ toJSON(matrix.commands) }}' | jq -r '.[]' | while read cmd; do
+            echo "+ $cmd" >&2
+            if [[ $cmd == uv* ]]; then
+              ./$cmd
+            else
+              $cmd
+            fi
+          done
 
   smoke-test-linux:
     timeout-minutes: 10
