@@ -69,6 +69,7 @@ pub(crate) async fn add(
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
+    subdirectory: Option<PathBuf>,
     extras: Vec<ExtraName>,
     package: Option<PackageName>,
     python: Option<String>,
@@ -264,6 +265,7 @@ pub(crate) async fn add(
                     rev.as_deref(),
                     tag.as_deref(),
                     branch.as_deref(),
+                    subdirectory.as_deref(),
                 )
             })
             .partition_map(|requirement| match requirement {
@@ -416,6 +418,7 @@ pub(crate) async fn add(
                     rev.clone(),
                     tag.clone(),
                     branch.clone(),
+                    subdirectory.clone(),
                     script_dir,
                 )?
             }
@@ -432,6 +435,7 @@ pub(crate) async fn add(
                     rev.clone(),
                     tag.clone(),
                     branch.clone(),
+                    subdirectory.clone(),
                     project.root(),
                 )?
             }
@@ -885,6 +889,7 @@ fn augment_requirement(
     rev: Option<&str>,
     tag: Option<&str>,
     branch: Option<&str>,
+    subdirectory: Option<&Path>
 ) -> UnresolvedRequirement {
     match requirement {
         UnresolvedRequirement::Named(requirement) => {
@@ -894,7 +899,7 @@ fn augment_requirement(
                         repository,
                         reference,
                         precise,
-                        subdirectory,
+                        subdirectory: current_subdirectory,
                         url,
                     } => {
                         let reference = if let Some(rev) = rev {
@@ -906,6 +911,7 @@ fn augment_requirement(
                         } else {
                             reference
                         };
+                        let subdirectory = subdirectory.map(ToOwned::to_owned).or(current_subdirectory);
                         RequirementSource::Git {
                             repository,
                             reference,
@@ -955,6 +961,7 @@ fn resolve_requirement(
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
+    subdirectory: Option<PathBuf>,
     root: &Path,
 ) -> Result<(Requirement, Option<Source>), anyhow::Error> {
     let result = Source::from_requirement(
@@ -966,6 +973,7 @@ fn resolve_requirement(
         rev,
         tag,
         branch,
+        subdirectory,
         root,
     );
 
