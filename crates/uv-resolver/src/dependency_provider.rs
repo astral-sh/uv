@@ -18,7 +18,7 @@ impl DependencyProvider for UvDependencyProvider {
     type VS = Range<Version>;
     type M = UnavailableReason;
     /// Main priority and tiebreak for virtual packages.
-    type Priority = (Option<PubGrubPriority>, Option<PubGrubTiebreaker>);
+    type Priority = (PubGrubPriority, PubGrubTiebreaker);
     type Err = Infallible;
 
     fn prioritize(
@@ -44,5 +44,18 @@ impl DependencyProvider for UvDependencyProvider {
         _version: &Self::V,
     ) -> Result<Dependencies<Self::P, Self::VS, Self::M>, Self::Err> {
         unimplemented!()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn priority_size() {
+        assert_eq!(
+            size_of::<<UvDependencyProvider as DependencyProvider>::Priority>(),
+            24
+        );
     }
 }
