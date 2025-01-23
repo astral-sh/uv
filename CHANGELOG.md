@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.5.23
+
+### Enhancements
+
+- Add `--refresh` to `uv venv` ([#10834](https://github.com/astral-sh/uv/pull/10834))
+- Add `--no-default-groups` command-line flag ([#10618](https://github.com/astral-sh/uv/pull/10618))
+
+### Bug fixes
+
+- Sort extras and groups when comparing lockfile requirements ([#10856](https://github.com/astral-sh/uv/pull/10856))
+- Include `commit_id` and `requested_revision` in `direct_url.json` ([#10862](https://github.com/astral-sh/uv/pull/10862))
+- Invalidate lockfile when static versions change ([#10858](https://github.com/astral-sh/uv/pull/10858))
+- Make GitHub fast path errors non-fatal ([#10859](https://github.com/astral-sh/uv/pull/10859))
+- Remove warnings for `--frozen` and `--locked` in `uv run --script` ([#10840](https://github.com/astral-sh/uv/pull/10840))
+- Resolve `find-links` paths relative to the configuration file ([#10827](https://github.com/astral-sh/uv/pull/10827))
+- Respect visitation order for proxy packages ([#10833](https://github.com/astral-sh/uv/pull/10833))
+- Treat version mismatch errors as non-fatal in fast paths ([#10860](https://github.com/astral-sh/uv/pull/10860))
+- Mark `--locked` and `--upgrade` are conflicting ([#10836](https://github.com/astral-sh/uv/pull/10836))
+- Relax error checking around unconditional enabling of conflicting extras ([#10875](https://github.com/astral-sh/uv/pull/10875))
+
+### Documentation
+
+- Reduce ambiguity in conflicting extras example ([#10877](https://github.com/astral-sh/uv/pull/10877))
+- Update pre-commit documentation  ([#10756](https://github.com/astral-sh/uv/pull/10756))
+
+### Error messages
+
+- Error when workspace contains conflicting Python requirements ([#10841](https://github.com/astral-sh/uv/pull/10841))
+- Improve uvx error message when uv is missing ([#9745](https://github.com/astral-sh/uv/pull/9745))
+
 ## 0.5.22
 
 ### Enhancements
