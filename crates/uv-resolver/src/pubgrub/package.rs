@@ -354,3 +354,9 @@ impl std::fmt::Display for PubGrubPackageInner {
         }
     }
 }
+
+impl From<&PubGrubPackage> for PubGrubPackage {
+    fn from(package: &PubGrubPackage) -> Self {
+        package.clone()
+    }
+}
