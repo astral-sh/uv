@@ -1875,7 +1875,7 @@ jobs:
         build-binary-macos-aarch64,
         build-binary-linux-libc,
       ]
-    name: check system | conda${{ matrix.python-version }} on ${{ matrix.os }} {{ matrix.arch }}
+    name: check system | conda${{ matrix.python-version }} on ${{ matrix.os }} ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
