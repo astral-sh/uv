@@ -1,11 +1,7 @@
 // Generated with `{{generated_with}}`
 // From template at `{{generated_from}}`
 
-use uv_pep440::{Prerelease, PrereleaseKind};
-use crate::PythonVariant;
-use crate::platform::ArchVariant;
-
-pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
+vec![
     {{#versions}}
     ManagedPythonDownload {
         key: PythonInstallationKey {
