@@ -2,7 +2,9 @@ use std::borrow::Cow;
 use std::path::Path;
 use std::str::FromStr;
 
-use itertools::Either;
+use crate::commands::project::ProjectError;
+use itertools::{Either, Itertools};
+use uv_configuration::ExtrasSpecification;
 use uv_distribution_types::Index;
 use uv_normalize::PackageName;
 use uv_pypi_types::{LenientRequirement, VerbatimParsedUrl};
@@ -229,5 +231,54 @@ impl<'lock> InstallTarget<'lock> {
                     .map(Cow::Borrowed),
             ),
         }
+    }
+
+    /// Validate the extras requested by the [`ExtrasSpecification`].
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn validate_extras(self, extras: &ExtrasSpecification) -> Result<(), ProjectError> {
+        let extras = match extras {
+            ExtrasSpecification::Some(extras) => {
+                if extras.is_empty() {
+                    return Ok(());
+                }
+                extras
+            }
+            ExtrasSpecification::Exclude(extras) => {
+                if extras.is_empty() {
+                    return Ok(());
+                }
+                &Vec::from_iter(extras.clone())
+            }
+            _ => return Ok(()),
+        };
+
+        match self {
+            Self::Project { lock, .. }
+            | Self::Workspace { lock, .. }
+            | Self::NonProjectWorkspace { lock, .. } => {
+                let member_packages: Vec<&Package> = lock
+                    .packages()
+                    .iter()
+                    .filter(|package| self.roots().contains(package.name()))
+                    .collect();
+
+                for extra in extras {
+                    if !member_packages
+                        .iter()
+                        .any(|package| package.contains_extra(extra))
+                    {
+                        return match self {
+                            Self::Project { .. } => {
+                                Err(ProjectError::MissingExtraProject(extra.clone()))
+                            }
+                            _ => Err(ProjectError::MissingExtraWorkspace(extra.clone())),
+                        };
+                    }
+                }
+            }
+            Self::Script { .. } => return Err(ProjectError::MissingExtraScript(extras[0].clone())),
+        }
+
+        Ok(())
     }
 }
