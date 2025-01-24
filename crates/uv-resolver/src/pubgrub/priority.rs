@@ -1,15 +1,16 @@
 use std::cmp::Reverse;
+use std::iter;
 
-use hashbrown::hash_map::{EntryRef, OccupiedEntry};
-use pubgrub::{DependencyProvider, Range};
-use rustc_hash::FxBuildHasher;
+use hashbrown::hash_map::EntryRef;
+use pubgrub::{DependencyProvider, Id, Range};
+use smallvec::{smallvec, SmallVec};
 
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
 use crate::dependency_provider::UvDependencyProvider;
 use crate::fork_urls::ForkUrls;
-use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
+use crate::pubgrub::PubGrubPackage;
 use crate::{FxHashbrownMap, SentinelRange};
 
 /// A prioritization map to guide the PubGrub resolution process.
@@ -25,41 +26,93 @@ use crate::{FxHashbrownMap, SentinelRange};
 /// Our main priority is the package name, the earlier we encounter a package, the higher its
 /// priority. This way, all virtual packages of the same name will be applied in a batch. To ensure
 /// determinism, we also track the discovery order of virtual packages as secondary order.
-#[derive(Clone, Debug, Default)]
+///
+/// Lookups are in constant time (vec indexing).
+#[derive(Clone, Debug)]
 pub(crate) struct PubGrubPriorities {
-    package_priority: FxHashbrownMap<PackageName, PubGrubPriority>,
-    virtual_package_tiebreaker: FxHashbrownMap<PubGrubPackage, PubGrubTiebreaker>,
+    // In pubgrub, packages are interned into an arena backed by a vec. We reuse those indices
+    // into the arena to build a matching vec `lookup` that returns priorities as a vec lookup.
+    //
+    // `package_priority` has two jobs:
+    // a) Priorities are per package name, so when updating the priorities for a single virtual
+    // package, we need to update the priorities for all virtual packages associated with it.
+    // `Id` is half a word on 64-bit platforms.
+    // b) Keep the order of virtual packages deterministic, using their index in the `SmallVec`.
+    package_priority: FxHashbrownMap<PackageName, SmallVec<[Id<PubGrubPackage>; 4]>>,
+    lookup: Vec<(PubGrubPriority, PubGrubVirtualPriority)>,
 }
 
 impl PubGrubPriorities {
+    pub(crate) fn new(
+        root: Id<PubGrubPackage>,
+        target_python: Id<PubGrubPackage>,
+        installed_python: Id<PubGrubPackage>,
+    ) -> Self {
+        let mut slf = Self {
+            package_priority: FxHashbrownMap::default(),
+            lookup: vec![],
+        };
+        // Insert the virtual packages not linked to any real package, so indexing them doesn't
+        // error.
+        Self::insert_lookup(
+            &mut slf.lookup,
+            root,
+            PubGrubPriority::Root,
+            PubGrubVirtualPriority::from(0),
+        );
+        Self::insert_lookup(
+            &mut slf.lookup,
+            target_python,
+            PubGrubPriority::Root,
+            PubGrubVirtualPriority::from(1),
+        );
+        Self::insert_lookup(
+            &mut slf.lookup,
+            installed_python,
+            PubGrubPriority::Root,
+            PubGrubVirtualPriority::from(2),
+        );
+        slf
+    }
+
     /// Add a [`PubGrubPackage`] to the priority map.
-    pub(crate) fn insert(
-        &mut self,
-        package: &PubGrubPackage,
+    pub(crate) fn insert<'a>(
+        &'a mut self,
+        package_id: Id<PubGrubPackage>,
+        package: &'a PubGrubPackage,
         version: &Range<Version>,
         urls: &ForkUrls,
-    ) {
-        let len = self.virtual_package_tiebreaker.len();
-        self.virtual_package_tiebreaker
-            .entry_ref(package)
-            .or_insert_with(|| {
-                PubGrubTiebreaker::from(u32::try_from(len).expect("Less than 2**32 packages"))
-            });
-
+    ) -> Option<(
+        <UvDependencyProvider as DependencyProvider>::Priority,
+        impl IntoIterator<Item = Id<PubGrubPackage>>,
+    )> {
         // The root package and Python constraints have no explicit priority, the root package is
         // always first and the Python version (range) is fixed.
-        let Some(name) = package.name_no_root() else {
-            return;
-        };
+        let name = package.name_no_root()?;
 
         let len = self.package_priority.len();
         match self.package_priority.entry_ref(name) {
             EntryRef::Occupied(mut entry) => {
                 // Preserve the original index.
-                let index = Self::get_index(&entry).unwrap_or(len);
+                let old_priority = self.lookup[entry.get()[0].into_raw()].0;
+                let index = Self::get_index(&old_priority).unwrap_or(len);
+
+                // If not present, register the virtual package
+                if !entry.get().contains(&package_id) {
+                    let virtual_priority = PubGrubVirtualPriority::from(
+                        u32::try_from(entry.get().len()).expect("less than 2**32 packages"),
+                    );
+                    Self::insert_lookup(
+                        &mut self.lookup,
+                        package_id,
+                        old_priority,
+                        virtual_priority,
+                    );
+                    entry.get_mut().push(package_id);
+                }
 
                 // Compute the priority.
-                let priority = if urls.get(name).is_some() {
+                let new_priority = if urls.get(name).is_some() {
                     PubGrubPriority::DirectUrl(Reverse(index))
                 } else if version.as_singleton().is_some()
                     || SentinelRange::from(version).is_sentinel()
@@ -69,17 +122,36 @@ impl PubGrubPriorities {
                     // Keep the conflict-causing packages to avoid loops where we seesaw between
                     // `Unspecified` and `Conflict*`.
                     if matches!(
-                        entry.get(),
+                        old_priority,
                         PubGrubPriority::ConflictEarly(_) | PubGrubPriority::ConflictLate(_)
                     ) {
-                        return;
+                        return None;
                     }
                     PubGrubPriority::Unspecified(Reverse(index))
                 };
 
-                // Take the maximum of the new and existing priorities.
-                if priority > *entry.get() {
-                    entry.insert(priority);
+                // If necessary, update the priorities for all virtual packages of this package name
+                if new_priority > old_priority {
+                    for virtual_package in entry.get() {
+                        self.lookup[virtual_package.into_raw()].0 = new_priority;
+                    }
+                    let virtual_priority = entry
+                        .get()
+                        .iter()
+                        .position(|x| *x == package_id)
+                        .map(|x| u32::try_from(x).expect("less than 2**32 packages"))
+                        .unwrap_or_else(|| {
+                            if cfg!(debug_assertions) {
+                                panic!("Virtual package not known: `{package}`")
+                            } else {
+                                u32::MAX
+                            }
+                        });
+                    // TODO(konsti): Avoid the clone
+                    return Some((
+                        (new_priority, PubGrubVirtualPriority::from(virtual_priority)),
+                        entry.get().clone(),
+                    ));
                 }
             }
             EntryRef::Vacant(entry) => {
@@ -94,73 +166,62 @@ impl PubGrubPriorities {
                     PubGrubPriority::Unspecified(Reverse(len))
                 };
 
-                // Insert the priority.
-                entry.insert(priority);
+                // Insert the virtual package
+                entry.insert(smallvec![package_id]);
+                Self::insert_lookup(
+                    &mut self.lookup,
+                    package_id,
+                    priority,
+                    PubGrubVirtualPriority::from(0),
+                );
             }
+        }
+        None
+    }
+
+    /// The virtual package
+    fn insert_lookup(
+        lookup: &mut Vec<(PubGrubPriority, PubGrubVirtualPriority)>,
+        package_id: Id<PubGrubPackage>,
+        priority: PubGrubPriority,
+        virtual_priority: PubGrubVirtualPriority,
+    ) {
+        if lookup.len() <= package_id.into_raw() {
+            lookup.reserve(package_id.into_raw() + 1);
+            lookup.extend(iter::repeat_n(
+                (
+                    PubGrubPriority::Sentinel,
+                    PubGrubVirtualPriority::from(u32::MAX),
+                ),
+                package_id.into_raw() - lookup.len(),
+            ));
+            lookup.push((priority, virtual_priority));
+            debug_assert!(lookup.len() == package_id.into_raw() + 1);
+        } else {
+            lookup[package_id.into_raw()] = (priority, virtual_priority);
         }
     }
 
-    fn get_index(
-        entry: &OccupiedEntry<'_, PackageName, PubGrubPriority, FxBuildHasher>,
-    ) -> Option<usize> {
-        match entry.get() {
+    fn get_index(priority: &PubGrubPriority) -> Option<usize> {
+        match priority {
             PubGrubPriority::ConflictLate(Reverse(index))
             | PubGrubPriority::Unspecified(Reverse(index))
             | PubGrubPriority::ConflictEarly(Reverse(index))
             | PubGrubPriority::Singleton(Reverse(index))
             | PubGrubPriority::DirectUrl(Reverse(index)) => Some(*index),
             PubGrubPriority::Root => None,
+            PubGrubPriority::Sentinel => {
+                panic!("priority not set")
+            }
         }
     }
 
     /// Return the [`PubGrubPriority`] of the given package, if it exists.
     pub(crate) fn get(
         &self,
-        package: &PubGrubPackage,
+        package_id: Id<PubGrubPackage>,
     ) -> <UvDependencyProvider as DependencyProvider>::Priority {
-        match &**package {
-            // There is only a single root package despite the value. The priorities on root don't
-            // matter for the resolution output, since the Pythons don't have dependencies
-            // themselves and are only used when the package is incompatible.
-            PubGrubPackageInner::Root(_) => (PubGrubPriority::Root, PubGrubTiebreaker::from(0)),
-            PubGrubPackageInner::Python(PubGrubPython::Installed) => {
-                (PubGrubPriority::Root, PubGrubTiebreaker::from(1))
-            }
-            PubGrubPackageInner::Python(PubGrubPython::Target) => {
-                (PubGrubPriority::Root, PubGrubTiebreaker::from(2))
-            }
-            PubGrubPackageInner::Marker { name, .. }
-            | PubGrubPackageInner::Extra { name, .. }
-            | PubGrubPackageInner::Dev { name, .. }
-            | PubGrubPackageInner::Package { name, .. } => {
-                // To ensure deterministic resolution, each (virtual) package needs to be registered
-                // on discovery (as dependency of another package), before we query it for
-                // prioritization.
-                let package_priority = match self.package_priority.get(name) {
-                    Some(priority) => *priority,
-                    None => {
-                        if cfg!(debug_assertions) {
-                            panic!("Package not known: `{name}` from `{package}`")
-                        } else {
-                            PubGrubPriority::Unspecified(Reverse(usize::MAX))
-                        }
-                    }
-                };
-
-                let package_tiebreaker = match self.virtual_package_tiebreaker.get(package) {
-                    Some(tiebreaker) => *tiebreaker,
-                    None => {
-                        if cfg!(debug_assertions) {
-                            panic!("Virtual package not known: `{package}`")
-                        } else {
-                            PubGrubTiebreaker(Reverse(u32::MAX))
-                        }
-                    }
-                };
-
-                (package_priority, package_tiebreaker)
-            }
-        }
+        self.lookup[package_id.into_raw()]
     }
 
     /// Mark a package as prioritized by setting it to [`PubGrubPriority::ConflictEarly`], if it
@@ -168,7 +229,11 @@ impl PubGrubPriorities {
     ///
     /// Returns whether the priority was changed, i.e., it's the first time we hit this condition
     /// for the package.
-    pub(crate) fn mark_conflict_early(&mut self, package: &PubGrubPackage) -> bool {
+    pub(crate) fn mark_conflict_early(
+        &mut self,
+        package_id: Id<PubGrubPackage>,
+        package: &PubGrubPackage,
+    ) -> bool {
         let Some(name) = package.name_no_root() else {
             // Not a correctness bug
             if cfg!(debug_assertions) {
@@ -181,16 +246,29 @@ impl PubGrubPriorities {
         let len = self.package_priority.len();
         match self.package_priority.entry_ref(name) {
             EntryRef::Vacant(entry) => {
-                entry.insert(PubGrubPriority::ConflictEarly(Reverse(len)));
+                let priority = PubGrubPriority::ConflictEarly(Reverse(len));
+                entry.insert(smallvec![package_id]);
+                Self::insert_lookup(
+                    &mut self.lookup,
+                    package_id,
+                    priority,
+                    PubGrubVirtualPriority::from(0),
+                );
                 true
             }
-            EntryRef::Occupied(mut entry) => {
-                if matches!(entry.get(), PubGrubPriority::ConflictEarly(_)) {
+            EntryRef::Occupied(entry) => {
+                if matches!(
+                    self.lookup[entry.get()[0].into_raw()].0,
+                    PubGrubPriority::ConflictEarly(_)
+                ) {
                     // Already in the right category
                     return false;
                 };
-                let index = Self::get_index(&entry).unwrap_or(len);
-                entry.insert(PubGrubPriority::ConflictEarly(Reverse(index)));
+                let index = Self::get_index(&self.lookup[package_id.into_raw()].0).unwrap_or(len);
+                let priority = PubGrubPriority::ConflictEarly(Reverse(index));
+                for virtual_package in entry.get() {
+                    self.lookup[virtual_package.into_raw()].0 = priority;
+                }
                 true
             }
         }
@@ -201,7 +279,11 @@ impl PubGrubPriorities {
     ///
     /// Returns whether the priority was changed, i.e., it's the first time this package was
     /// marked as conflicting above the threshold.
-    pub(crate) fn mark_conflict_late(&mut self, package: &PubGrubPackage) -> bool {
+    pub(crate) fn mark_conflict_late(
+        &mut self,
+        package_id: Id<PubGrubPackage>,
+        package: &PubGrubPackage,
+    ) -> bool {
         let Some(name) = package.name_no_root() else {
             // Not a correctness bug
             if cfg!(debug_assertions) {
@@ -214,20 +296,30 @@ impl PubGrubPriorities {
         let len = self.package_priority.len();
         match self.package_priority.entry_ref(name) {
             EntryRef::Vacant(entry) => {
-                entry.insert(PubGrubPriority::ConflictLate(Reverse(len)));
+                let priority = PubGrubPriority::ConflictLate(Reverse(len));
+                entry.insert(smallvec![package_id]);
+                Self::insert_lookup(
+                    &mut self.lookup,
+                    package_id,
+                    priority,
+                    PubGrubVirtualPriority::from(0),
+                );
                 true
             }
-            EntryRef::Occupied(mut entry) => {
+            EntryRef::Occupied(entry) => {
                 // The ConflictEarly` match avoids infinite loops.
                 if matches!(
-                    entry.get(),
+                    self.lookup[entry.get()[0].into_raw()].0,
                     PubGrubPriority::ConflictLate(_) | PubGrubPriority::ConflictEarly(_)
                 ) {
                     // Already in the right category
                     return false;
                 };
-                let index = Self::get_index(&entry).unwrap_or(len);
-                entry.insert(PubGrubPriority::ConflictLate(Reverse(index)));
+                let index = Self::get_index(&self.lookup[package_id.into_raw()].0).unwrap_or(len);
+                let priority = PubGrubPriority::ConflictLate(Reverse(index));
+                for virtual_package in entry.get() {
+                    self.lookup[virtual_package.into_raw()].0 = priority;
+                }
                 true
             }
         }
@@ -266,12 +358,15 @@ pub(crate) enum PubGrubPriority {
 
     /// The package is the root package.
     Root,
+
+    /// The value is not yet determined and must not be read.
+    Sentinel,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct PubGrubTiebreaker(Reverse<u32>);
+pub(crate) struct PubGrubVirtualPriority(Reverse<u32>);
 
-impl From<u32> for PubGrubTiebreaker {
+impl From<u32> for PubGrubVirtualPriority {
     fn from(value: u32) -> Self {
         Self(Reverse(value))
     }

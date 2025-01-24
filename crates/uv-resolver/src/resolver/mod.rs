@@ -335,122 +335,122 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
             let start = Instant::now();
             loop {
-                let highest_priority_pkg =
-                    if let Some(initial) = state.initial_id.take() {
-                        // If we just forked based on `requires-python`, we can skip unit
-                        // propagation, since we already propagated the package that initiated
-                        // the fork.
-                        initial
-                    } else {
-                        // Run unit propagation.
-                        let result = state.pubgrub.unit_propagation(state.next);
-                        match result {
-                            Err(err) => {
-                                // If unit propagation failed, there is no solution.
-                                return Err(self.convert_no_solution_err(
-                                    err,
-                                    state.fork_urls,
-                                    state.fork_indexes,
-                                    state.env,
-                                    &visited,
-                                ));
-                            }
-                            Ok(conflicts) => {
-                                for (affected, incompatibility) in conflicts {
-                                    // Conflict tracking: If there was a conflict, track affected and
-                                    // culprit for all root cause incompatibilities
-                                    state.record_conflict(affected, None, incompatibility);
-                                }
-                            }
-                        }
-
-                        // Pre-visit all candidate packages, to allow metadata to be fetched in parallel.
-                        if self.dependency_mode.is_transitive() {
-                            Self::pre_visit(
-                                state
-                                    .pubgrub
-                                    .partial_solution
-                                    .prioritized_packages()
-                                    .map(|(id, range)| (&state.pubgrub.package_store[id], range)),
-                                &self.urls,
-                                &self.indexes,
-                                &state.python_requirement,
-                                &request_sink,
-                            )?;
-                        }
-
-                        Self::reprioritize_conflicts(&mut state);
-
-                        trace!(
-                            "assigned packages: {}",
-                            state
-                                .pubgrub
-                                .partial_solution
-                                .extract_solution()
-                                .filter(|(p, _)| !state.pubgrub.package_store[*p].is_proxy())
-                                .map(|(p, v)| format!("{}=={}", state.pubgrub.package_store[p], v))
-                                .join(", ")
-                        );
-                        // Choose a package .
-                        let Some(highest_priority_pkg) =
-                            state.pubgrub.partial_solution.pick_highest_priority_pkg(
-                                |id, _range| state.priorities.get(&state.pubgrub.package_store[id]),
-                            )
-                        else {
-                            // All packages have been assigned, the fork has been successfully resolved
-                            if tracing::enabled!(Level::DEBUG) {
-                                state.prefetcher.log_tried_versions();
-                            }
-                            debug!(
-                                "{} resolution took {:.3}s",
+                let highest_priority_pkg = if let Some(initial) = state.initial_id.take() {
+                    // If we just forked based on `requires-python`, we can skip unit
+                    // propagation, since we already propagated the package that initiated
+                    // the fork.
+                    initial
+                } else {
+                    // Run unit propagation.
+                    let result = state.pubgrub.unit_propagation(state.next);
+                    match result {
+                        Err(err) => {
+                            // If unit propagation failed, there is no solution.
+                            return Err(self.convert_no_solution_err(
+                                err,
+                                state.fork_urls,
+                                state.fork_indexes,
                                 state.env,
-                                start.elapsed().as_secs_f32()
-                            );
-
-                            let resolution = state.into_resolution();
-
-                            // Walk over the selected versions, and mark them as preferences. We have to
-                            // add forks back as to not override the preferences from the lockfile for
-                            // the next fork
-                            //
-                            // If we're using a resolution mode that varies based on whether a dependency is
-                            // direct or transitive, skip preferences, as we risk adding a preference from
-                            // one fork (in which it's a transitive dependency) to another fork (in which
-                            // it's direct).
-                            if matches!(
-                                self.options.resolution_mode,
-                                ResolutionMode::Lowest | ResolutionMode::Highest
-                            ) {
-                                for (package, version) in &resolution.nodes {
-                                    preferences.insert(
-                                        package.name.clone(),
-                                        package.index.clone(),
-                                        resolution
-                                            .env
-                                            .try_universal_markers()
-                                            .unwrap_or(UniversalMarker::TRUE),
-                                        version.clone(),
-                                    );
-                                }
+                                &visited,
+                            ));
+                        }
+                        Ok(conflicts) => {
+                            for (affected, incompatibility) in conflicts {
+                                // Conflict tracking: If there was a conflict, track affected and
+                                // culprit for all root cause incompatibilities
+                                state.record_conflict(affected, None, incompatibility);
                             }
+                        }
+                    }
 
-                            resolutions.push(resolution);
-                            continue 'FORK;
-                        };
-                        trace!(
-                            "Chose package for decision: {}. remaining choices: {}",
-                            state.pubgrub.package_store[highest_priority_pkg],
+                    // Pre-visit all candidate packages, to allow metadata to be fetched in parallel.
+                    if self.dependency_mode.is_transitive() {
+                        Self::pre_visit(
                             state
                                 .pubgrub
                                 .partial_solution
-                                .undecided_packages()
-                                .filter(|(p, _)| !state.pubgrub.package_store[**p].is_proxy())
-                                .map(|(p, _)| state.pubgrub.package_store[*p].to_string())
-                                .join(", ")
+                                .prioritized_packages()
+                                .map(|(id, range)| (&state.pubgrub.package_store[id], range)),
+                            &self.urls,
+                            &self.indexes,
+                            &state.python_requirement,
+                            &request_sink,
+                        )?;
+                    }
+
+                    Self::reprioritize_conflicts(&mut state);
+
+                    trace!(
+                        "assigned packages: {}",
+                        state
+                            .pubgrub
+                            .partial_solution
+                            .extract_solution()
+                            .filter(|(p, _)| !state.pubgrub.package_store[*p].is_proxy())
+                            .map(|(p, v)| format!("{}=={}", state.pubgrub.package_store[p], v))
+                            .join(", ")
+                    );
+
+                    // Choose a package.
+                    let Some(highest_priority_pkg) = state
+                        .pubgrub
+                        .partial_solution
+                        .pick_highest_priority_pkg(|package, _range| state.priorities.get(package))
+                    else {
+                        // All packages have been assigned, the fork has been successfully resolved
+                        if tracing::enabled!(Level::DEBUG) {
+                            state.prefetcher.log_tried_versions();
+                        }
+                        debug!(
+                            "{} resolution took {:.3}s",
+                            state.env,
+                            start.elapsed().as_secs_f32()
                         );
 
-                        highest_priority_pkg
+                        let resolution = state.into_resolution();
+
+                        // Walk over the selected versions, and mark them as preferences. We have to
+                        // add forks back as to not override the preferences from the lockfile for
+                        // the next fork
+                        //
+                        // If we're using a resolution mode that varies based on whether a dependency is
+                        // direct or transitive, skip preferences, as we risk adding a preference from
+                        // one fork (in which it's a transitive dependency) to another fork (in which
+                        // it's direct).
+                        if matches!(
+                            self.options.resolution_mode,
+                            ResolutionMode::Lowest | ResolutionMode::Highest
+                        ) {
+                            for (package, version) in &resolution.nodes {
+                                preferences.insert(
+                                    package.name.clone(),
+                                    package.index.clone(),
+                                    resolution
+                                        .env
+                                        .try_universal_markers()
+                                        .unwrap_or(UniversalMarker::TRUE),
+                                    version.clone(),
+                                );
+                            }
+                        }
+
+                        resolutions.push(resolution);
+                        continue 'FORK;
                     };
+                    trace!(
+                        "Chose package for decision: {}. remaining choices: {}",
+                        state.pubgrub.package_store[highest_priority_pkg],
+                        state
+                            .pubgrub
+                            .partial_solution
+                            .undecided_packages()
+                            .filter(|(p, _)| !state.pubgrub.package_store[**p].is_proxy())
+                            .map(|(p, _)| state.pubgrub.package_store[*p].to_string())
+                            .join(", ")
+                    );
+
+                    highest_priority_pkg
+                };
 
                 state.next = highest_priority_pkg;
 
@@ -488,7 +488,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .pubgrub
                         .partial_solution
                         .term_intersection_for_package(next_id)
-                        .expect("a package was chosen but we don't have a term");
+                        .unwrap_or_else(|| {
+                            panic!("package {next_id:?} was chosen but we don't have a term")
+                        });
                     let decision = self.choose_version(
                         next_package,
                         next_id,
@@ -512,7 +514,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 .pubgrub
                                 .partial_solution
                                 .term_intersection_for_package(next_id)
-                                .expect("a package was chosen but we don't have a term");
+                                .unwrap_or_else(|| {
+                                    panic!(
+                                        "package {next_id:?} was chosen but we don't have a term"
+                                    )
+                                });
 
                             if let PubGrubPackageInner::Package { ref name, .. } = &**next_package {
                                 // Check if the decision was due to the package being unavailable
@@ -722,7 +728,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         for package in state.conflict_tracker.prioritize.drain(..) {
             let changed = state
                 .priorities
-                .mark_conflict_early(&state.pubgrub.package_store[package]);
+                .mark_conflict_early(package, &state.pubgrub.package_store[package]);
             if changed {
                 debug!(
                     "Package {} has too many conflicts (affected), prioritizing",
@@ -732,7 +738,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 debug!(
                     "Package {} has too many conflicts (affected), already {:?}",
                     state.pubgrub.package_store[package],
-                    state.priorities.get(&state.pubgrub.package_store[package])
+                    state.priorities.get(package)
                 );
             }
         }
@@ -740,7 +746,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         for package in state.conflict_tracker.deprioritize.drain(..) {
             let changed = state
                 .priorities
-                .mark_conflict_late(&state.pubgrub.package_store[package]);
+                .mark_conflict_late(package, &state.pubgrub.package_store[package]);
             if changed {
                 debug!(
                     "Package {} has too many conflicts (culprit), deprioritizing and backtracking",
@@ -759,7 +765,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 debug!(
                     "Package {} has too many conflicts (culprit), already {:?}",
                     state.pubgrub.package_store[package],
-                    state.priorities.get(&state.pubgrub.package_store[package])
+                    state.priorities.get(package)
                 );
             }
         }
@@ -2531,20 +2537,29 @@ pub(crate) struct ForkState {
 
 impl ForkState {
     fn new(
-        pubgrub: State<UvDependencyProvider>,
+        mut pubgrub: State<UvDependencyProvider>,
         env: ResolverEnvironment,
         python_requirement: PythonRequirement,
         prefetcher: BatchPrefetcher,
     ) -> Self {
+        let fork_urls = ForkUrls::default();
+        let target_python = pubgrub
+            .package_store
+            .alloc(PubGrubPackageInner::Python(PubGrubPython::Target).into());
+        let installed_python = pubgrub
+            .package_store
+            .alloc(PubGrubPackageInner::Python(PubGrubPython::Installed).into());
+        let priorities =
+            PubGrubPriorities::new(pubgrub.root_package, target_python, installed_python);
         Self {
             initial_id: None,
             initial_version: None,
             next: pubgrub.root_package,
             pubgrub,
             pins: FilePins::default(),
-            fork_urls: ForkUrls::default(),
+            fork_urls,
             fork_indexes: ForkIndexes::default(),
-            priorities: PubGrubPriorities::default(),
+            priorities,
             added_dependencies: FxHashMap::default(),
             env,
             python_requirement,
@@ -2621,7 +2636,22 @@ impl ForkState {
             }
 
             // Update the package priorities.
-            self.priorities.insert(package, version, &self.fork_urls);
+            let package_id = self.pubgrub.package_store.alloc(package.clone());
+            let new_priority =
+                self.priorities
+                    .insert(package_id, package, version, &self.fork_urls);
+            if let Some((new_priority, packages)) = new_priority {
+                for package_id in packages {
+                    // We must not add the current package since pubgrub is unaware that this
+                    // package is being decided.
+                    if package_id == self.next {
+                        continue;
+                    }
+                    self.pubgrub
+                        .partial_solution
+                        .update_priority(package_id, new_priority);
+                }
+            }
         }
 
         let conflict = self.pubgrub.add_package_version_dependencies(

@@ -4,7 +4,7 @@ use pubgrub::{Dependencies, DependencyProvider, PackageResolutionStatistics, Ran
 
 use uv_pep440::Version;
 
-use crate::pubgrub::{PubGrubPackage, PubGrubPriority, PubGrubTiebreaker};
+use crate::pubgrub::{PubGrubPackage, PubGrubPriority, PubGrubVirtualPriority};
 use crate::resolver::UnavailableReason;
 
 /// We don't use a dependency provider, we interact with state directly, but we still need this one
@@ -18,7 +18,7 @@ impl DependencyProvider for UvDependencyProvider {
     type VS = Range<Version>;
     type M = UnavailableReason;
     /// Main priority and tiebreak for virtual packages.
-    type Priority = (PubGrubPriority, PubGrubTiebreaker);
+    type Priority = (PubGrubPriority, PubGrubVirtualPriority);
     type Err = Infallible;
 
     fn prioritize(
