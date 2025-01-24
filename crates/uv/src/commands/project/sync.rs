@@ -267,6 +267,8 @@ pub(super) async fn do_sync(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<(), ProjectError> {
+    target.validate_extras(extras)?;
+
     // Use isolated state for universal resolution. When resolving, we don't enforce that the
     // prioritized distributions match the current platform. So if we lock here, then try to
     // install from the same state, and we end up performing a resolution during the sync (i.e.,
