@@ -2432,6 +2432,16 @@ fn sync_non_existent_extra() -> Result<()> {
     error: Extra `baz` is not defined in the project's `optional-dependencies` table
     "###);
 
+    // Requesting a non-existent extra with frozen lock file should fail.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("baz"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Extra `baz` is not defined in the project's `optional-dependencies` table
+    "###);
+
     // Excluding a non-existing extra when requesting all extras should fail.
     uv_snapshot!(context.filters(), context.sync().arg("--all-extras").arg("--no-extra").arg("baz"), @r###"
     success: false
