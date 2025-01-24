@@ -2741,13 +2741,14 @@ dependencies = [
 [[package]]
 name = "pubgrub"
 version = "0.2.1"
+source = "git+https://github.com/astral-sh/pubgrub?branch=konsti%2Fsimplify-prioritization#f58a60f683bfcc83fce374d721eb0e181050ac58"
 dependencies = [
  "indexmap",
  "log",
  "priority-queue",
  "rustc-hash",
  "thiserror 2.0.11",
- "version-ranges 0.1.1",
+ "version-ranges",
 ]
 
 [[package]]
@@ -4581,7 +4582,7 @@ dependencies = [
  "uv-virtualenv",
  "uv-warnings",
  "uv-workspace",
- "version-ranges 0.1.1 (git+https://github.com/astral-sh/pubgrub?branch=konsti%2Fsimplify-prioritization)",
+ "version-ranges",
  "walkdir",
  "which",
  "zip",
@@ -4668,7 +4669,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-version",
  "uv-warnings",
- "version-ranges 0.1.1 (git+https://github.com/astral-sh/pubgrub?branch=konsti%2Fsimplify-prioritization)",
+ "version-ranges",
  "walkdir",
  "zip",
 ]
@@ -5045,7 +5046,7 @@ dependencies = [
  "uv-pep508",
  "uv-platform-tags",
  "uv-pypi-types",
- "version-ranges 0.1.1 (git+https://github.com/astral-sh/pubgrub?branch=konsti%2Fsimplify-prioritization)",
+ "version-ranges",
 ]
 
 [[package]]
@@ -5274,7 +5275,7 @@ dependencies = [
  "tracing",
  "unicode-width 0.1.14",
  "unscanny",
- "version-ranges 0.1.1 (git+https://github.com/astral-sh/pubgrub?branch=konsti%2Fsimplify-prioritization)",
+ "version-ranges",
 ]
 
 [[package]]
@@ -5300,7 +5301,7 @@ dependencies = [
  "uv-fs",
  "uv-normalize",
  "uv-pep440",
- "version-ranges 0.1.1 (git+https://github.com/astral-sh/pubgrub?branch=konsti%2Fsimplify-prioritization)",
+ "version-ranges",
 ]
 
 [[package]]
@@ -5794,13 +5795,6 @@ name = "valuable"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "830b7e5d4d90034032940e4ace0d9a9a057e7a45cd94e6c007832e39edb82f6d"
-
-[[package]]
-name = "version-ranges"
-version = "0.1.1"
-dependencies = [
- "smallvec",
-]
 
 [[package]]
 name = "version-ranges"
