@@ -2626,6 +2626,91 @@ fn sync_group_self() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn sync_non_existent_extra() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        [project.optional-dependencies]
+        types = ["sniffio>1"]
+        async = ["anyio>3"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Requesting a non-existent extra should fail.
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("baz"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    error: Extra `baz` is not defined in the project's `optional-dependencies` table
+    "###);
+
+    // Excluding a non-existing extra when requesting all extras should fail.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-extras").arg("--no-extra").arg("baz"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    error: Extra `baz` is not defined in the project's `optional-dependencies` table
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn sync_non_existent_extra_no_optional_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Requesting a non-existent extra should fail.
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("baz"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Extra `baz` is not defined in the project's `optional-dependencies` table
+    "###);
+
+    // Excluding a non-existing extra when requesting all extras should fail.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-extras").arg("--no-extra").arg("baz"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Extra `baz` is not defined in the project's `optional-dependencies` table
+    "###);
+
+    Ok(())
+}
+
 /// Regression test for <https://github.com/astral-sh/uv/issues/6316>.
 ///
 /// Previously, we would read metadata statically from pyproject.toml and write that to `uv.lock`. In
@@ -5243,7 +5328,7 @@ fn sync_all_extras() -> Result<()> {
      + typing-extensions==4.10.0
     "###);
 
-    // Sync all extras.
+    // Sync all extras excluding an extra that exists in both the parent and child.
     uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--all-extras").arg("--no-extra").arg("types"), @r###"
     success: true
     exit_code: 0
@@ -5253,6 +5338,139 @@ fn sync_all_extras() -> Result<()> {
     Resolved 8 packages in [TIME]
     Uninstalled 1 package in [TIME]
      - typing-extensions==4.10.0
+    "###);
+
+    // Sync an extra that doesn't exist.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--extra").arg("foo"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    error: Extra `foo` is not defined in any project's `optional-dependencies` table
+    "###);
+
+    // Sync all extras excluding an extra that doesn't exist.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--all-extras").arg("--no-extra").arg("foo"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    error: Extra `foo` is not defined in any project's `optional-dependencies` table
+    "###);
+
+    Ok(())
+}
+
+/// Sync all members in a workspace with dynamic extras.
+#[test]
+fn sync_all_extras_dynamic() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [project.optional-dependencies]
+        types = ["sniffio>1"]
+        async = ["anyio>3"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    // Add a workspace member.
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dynamic = ["optional-dependencies"]
+
+        [tool.setuptools.dynamic.optional-dependencies]
+        dev = { file = "requirements-dev.txt" }
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    child
+        .child("requirements-dev.txt")
+        .write_str("typing-extensions==4.10.0")?;
+
+    // Generate a lockfile.
+    context.lock().assert().success();
+
+    // Sync an extra that exists in the parent.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--extra").arg("types"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    // Sync a dynamic extra that exists in the child.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--extra").arg("dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - sniffio==1.3.1
+     + typing-extensions==4.10.0
+    "###);
+
+    // Sync a dynamic extra that doesn't exist in the child.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--extra").arg("foo"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    error: Extra `foo` is not defined in any project's `optional-dependencies` table
     "###);
 
     Ok(())
