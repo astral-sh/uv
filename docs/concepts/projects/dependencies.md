@@ -77,6 +77,14 @@ $ uv add "httpx>9999"
       we can conclude that your project's requirements are unsatisfiable.
 ```
 
+### Importing dependencies
+
+Dependencies declared in a `requirements.txt` file can be added to the project with the `-r` option:
+
+```
+uv add -r requirements.txt
+```
+
 ## Removing dependencies
 
 To remove a dependency:
