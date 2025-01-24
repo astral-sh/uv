@@ -294,7 +294,7 @@ impl PythonInstallationKey {
         }
     }
 
-    fn new_from_version(
+    pub fn new_from_version(
         implementation: LenientImplementationName,
         version: &PythonVersion,
         os: Os,
