@@ -165,8 +165,10 @@ impl Arch {
             Self::X86 | Self::X86_64 => Some(5),
             // manylinux_2_31
             Self::Riscv64 => Some(31),
+            // manylinux_2_36
+            Self::LoongArch64 => Some(36),
             // unsupported
-            Self::Powerpc | Self::Armv5TEL | Self::Armv6L | Self::LoongArch64 => None,
+            Self::Powerpc | Self::Armv5TEL | Self::Armv6L => None,
         }
     }
 
