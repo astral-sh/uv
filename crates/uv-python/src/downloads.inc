@@ -3,11 +3,7 @@
 // Generated with `crates/uv-python/template-download-metadata.py`
 // From template at `crates/uv-python/src/downloads.inc.mustache`
 
-use crate::platform::ArchVariant;
-use crate::PythonVariant;
-use uv_pep440::{Prerelease, PrereleaseKind};
-
-pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
+vec![
     ManagedPythonDownload {
         key: PythonInstallationKey {
             major: 3,
