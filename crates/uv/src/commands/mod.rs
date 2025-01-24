@@ -69,6 +69,7 @@ mod project;
 mod publish;
 mod python;
 pub(crate) mod reporters;
+mod run;
 #[cfg(feature = "self-update")]
 mod self_update;
 mod tool;
