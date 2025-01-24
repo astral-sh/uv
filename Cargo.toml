@@ -232,6 +232,7 @@ large_stack_arrays = "allow"
 [profile.release]
 strip = true
 lto = "fat"
+opt-level = "s"
 
 # This profile is meant to mimic the `release` profile as closely as
 # possible, but using settings that are more beneficial for iterative
