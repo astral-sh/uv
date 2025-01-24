@@ -6,7 +6,7 @@ is not minimal, i.e., if it includes lots of content which is not related to the
 a maintainer much longer to identify the root cause of the problem.
 
 There's a great guide to the basics of creating MREs on
-[StackOverflow](https://stackoverflow.com/help/minimal-reproducible-example). Here, we'll discuss a
+[Stack Overflow](https://stackoverflow.com/help/minimal-reproducible-example). Here, we'll discuss a
 couple strategies for creating MREs specific to uv.
 
 ## Docker image
