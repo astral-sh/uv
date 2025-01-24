@@ -70,6 +70,7 @@ plugins:
         "concepts/dependencies.md": "concepts/projects/dependencies.md"
         "reference/versioning.md": "reference/policies/versioning.md"
         "reference/platforms.md": "reference/policies/platforms.md"
+        "reference/build_failures.md": "reference/troubleshooting/build-failures.md"
 extra_css:
   - stylesheets/extra.css
 extra_javascript:
@@ -148,7 +149,10 @@ nav:
       - reference/index.md
       - Commands: reference/cli.md
       - Settings: reference/settings.md
-      - Build failures: reference/build_failures.md
+      - Troubleshooting:
+          - reference/troubleshooting/index.md
+          - Build failures: reference/troubleshooting/build-failures.md
+          - Reproducible examples: reference/troubleshooting/reproducible-examples.md
       - Resolver: reference/resolver-internals.md
       - Benchmarks: reference/benchmarks.md
       - Policies:
