@@ -164,6 +164,8 @@ jobs:
             arch: x64
           - target: i686-pc-windows-msvc
             arch: x86
+          - target: aarch64-pc-windows-msvc
+            arch: x64 # not relevant here
     steps:
       - uses: actions/checkout@v4
         with:

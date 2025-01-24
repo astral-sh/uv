@@ -299,6 +299,7 @@ unix-archive = ".tar.gz"
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = [
   "aarch64-apple-darwin",
+  "aarch64-pc-windows-msvc",
   "aarch64-unknown-linux-gnu",
   "aarch64-unknown-linux-musl",
   "arm-unknown-linux-musleabihf",
