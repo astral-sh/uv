@@ -2642,14 +2642,12 @@ impl ForkState {
                     .insert(package_id, package, version, &self.fork_urls);
             if let Some((new_priority, packages)) = new_priority {
                 for package_id in packages {
-                    // We must not add the current package since pubgrub is unaware that this
-                    // package is being decided.
-                    if package_id == self.next {
-                        continue;
-                    }
-                    self.pubgrub
-                        .partial_solution
-                        .update_priority(package_id, new_priority);
+                    // Update only the main package priority, the virtual package still has the
+                    // same priority
+                    self.pubgrub.partial_solution.update_priority(
+                        package_id,
+                        (new_priority, self.priorities.get(package_id).1),
+                    );
                 }
             }
         }
