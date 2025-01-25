@@ -4,11 +4,11 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::str::FromStr;
-use std::sync::OnceLock;
 use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime};
 
 use futures::TryStreamExt;
+use once_cell::sync::OnceCell;
 use owo_colors::OwoColorize;
 use reqwest_retry::RetryPolicy;
 use serde::Deserialize;
@@ -41,6 +41,8 @@ use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
+    #[error(transparent)]
+    SerdeJson(#[from] serde_json::Error),
     #[error(transparent)]
     ImplementationError(#[from] ImplementationError),
     #[error("Expected download URL (`{0}`) to end in a supported file extension: {1}")]
@@ -91,6 +93,8 @@ pub enum Error {
     Mirror(&'static str, &'static str),
     #[error(transparent)]
     LibcDetection(#[from] LibcDetectionError),
+    #[error("Remote python downloads JSON is not yet supported, please use a local path (without `file://` prefix)")]
+    RemoteJSONNotSupported(),
 }
 
 #[derive(Debug, PartialEq)]
@@ -250,9 +254,11 @@ impl PythonDownloadRequest {
     }
 
     /// Iterate over all [`PythonDownload`]'s that match this request.
-    pub fn iter_downloads(&self) -> impl Iterator<Item = &'static ManagedPythonDownload> + '_ {
-        ManagedPythonDownload::iter_all()
-            .filter(move |download| self.satisfied_by_download(download))
+    pub fn iter_downloads(
+        &self,
+    ) -> Result<impl Iterator<Item = &'static ManagedPythonDownload> + use<'_>, Error> {
+        Ok(ManagedPythonDownload::iter_all()?
+            .filter(move |download| self.satisfied_by_download(download)))
     }
 
     /// Whether this request is satisfied by an installation key.
@@ -450,7 +456,7 @@ impl FromStr for PythonDownloadRequest {
     }
 }
 
-static PYTHON_DOWNLOADS: OnceLock<Vec<ManagedPythonDownload>> = OnceLock::new();
+static PYTHON_DOWNLOADS: OnceCell<Vec<ManagedPythonDownload>> = OnceCell::new();
 
 #[derive(Debug, Deserialize, Clone)]
 struct JsonPythonDownload {
@@ -485,31 +491,28 @@ impl ManagedPythonDownload {
         request: &PythonDownloadRequest,
     ) -> Result<&'static ManagedPythonDownload, Error> {
         request
-            .iter_downloads()
+            .iter_downloads()?
             .next()
             .ok_or(Error::NoDownloadFound(request.clone()))
     }
 
     /// Iterate over all [`ManagedPythonDownload`]s.
-    pub fn iter_all() -> impl Iterator<Item = &'static ManagedPythonDownload> {
-        PYTHON_DOWNLOADS.get_or_init(|| {
+    pub fn iter_all() -> Result<impl Iterator<Item = &'static ManagedPythonDownload>, Error> {
+        Ok(PYTHON_DOWNLOADS.get_or_try_init(|| {
             if let Ok(json_source) = std::env::var(EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL) {
-                let result = if Url::parse(&json_source).is_ok() {
-                    panic!("Remote JSON is not yet supported");
+                let result: Result<std::vec::Vec<ManagedPythonDownload>, Error>  = if Url::parse(&json_source).is_ok() {
+                    Err(Error::RemoteJSONNotSupported())
                 } else {
                     let file = match fs_err::File::open(&json_source) {
                         Ok(file) => file,
                         Err(e) => {
-                            panic!("Failed to open Python downloads JSON file at {json_source}: {e}");
-                        }
+                            Err(Error::Io(e))
+                        }?
                     };
 
-                    let json_downloads: HashMap<String, JsonPythonDownload> = serde_json::from_reader(file)
-                        .unwrap_or_else(|e| {
-                            panic!("Failed to parse JSON file at {json_source}: {e}");
-                        });
+                    let json_downloads: HashMap<String, JsonPythonDownload> = serde_json::from_reader(file)?;
 
-                    json_downloads.into_iter()
+                    Ok(json_downloads.into_iter()
                         .filter_map(|(key, entry)| {
                             let implementation = match entry.name.as_str() {
                                 "cpython" => LenientImplementationName::Known(ImplementationName::CPython),
@@ -588,15 +591,15 @@ impl ManagedPythonDownload {
                                 sha256,
                             })
                         })
-                        .collect()
+                        .collect())
                 };
                 result
             } else {
                 #[allow(incomplete_include)]
                 let downloads: Vec<ManagedPythonDownload> = include!("downloads.inc");
-                downloads
+                Ok(downloads)
             }
-        }).iter()
+        })?.iter())
     }
 
     pub fn url(&self) -> &'static str {
