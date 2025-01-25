@@ -188,6 +188,7 @@ winsafe = { version = "0.0.22", features = ["kernel"] }
 wiremock = { version = "0.6.2" }
 xz2 = { version = "0.1.7" }
 zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
+once_cell = { version = "1.20.2" }
 
 [workspace.metadata.cargo-shear]
 ignored = ["flate2", "xz2"]
