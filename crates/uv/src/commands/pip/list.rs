@@ -38,6 +38,8 @@ pub(crate) async fn pip_list(
     exclude: &[PackageName],
     format: &ListFormat,
     outdated: bool,
+    requires: bool,
+    required_by: bool,
     prerelease: PrereleaseMode,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
@@ -56,6 +58,14 @@ pub(crate) async fn pip_list(
     // Disallow `--outdated` with `--format freeze`.
     if outdated && matches!(format, ListFormat::Freeze) {
         anyhow::bail!("`--outdated` cannot be used with `--format freeze`");
+    }
+
+    if requires && !matches!(format, ListFormat::Json) {
+        anyhow::bail!("`--requires` can only be used with `--format json`");
+    }
+
+    if required_by && !matches!(format, ListFormat::Json) {
+        anyhow::bail!("`--required_by` can only be used with `--format json`");
     }
 
     // Detect the current Python interpreter.
@@ -150,6 +160,47 @@ pub(crate) async fn pip_list(
         results
     };
 
+    let requires_map = if requires || required_by {
+        let mut requires_map = FxHashMap::default();
+
+        // Determine the markers to use for resolution.
+        let markers = environment.interpreter().resolver_marker_environment();
+
+        if required_by {
+            // To compute which packages require a given package, we need to
+            // consider every installed package.
+            for package in site_packages.iter() {
+                if let Ok(metadata) = package.metadata() {
+                    let requires = metadata
+                        .requires_dist
+                        .into_iter()
+                        .filter(|req| req.evaluate_markers(&markers, &[]))
+                        .map(|req| req.name)
+                        .collect_vec();
+
+                    requires_map.insert(package.name(), requires);
+                }
+            }
+        } else {
+            for package in &results {
+                if let Ok(metadata) = package.metadata() {
+                    let requires = metadata
+                        .requires_dist
+                        .into_iter()
+                        .filter(|req| req.evaluate_markers(&markers, &[]))
+                        .map(|req| req.name)
+                        .collect_vec();
+
+                    requires_map.insert(package.name(), requires);
+                }
+            }
+        }
+
+        requires_map
+    } else {
+        FxHashMap::default()
+    };
+
     match format {
         ListFormat::Json => {
             let rows = results
@@ -170,6 +221,30 @@ pub(crate) async fn pip_list(
                     editable_project_location: dist
                         .as_editable()
                         .map(|url| url.to_file_path().unwrap().simplified_display().to_string()),
+                    requires: requires.then(|| {
+                        if let Some(packages) = requires_map.get(dist.name()) {
+                            packages
+                                .iter()
+                                .map(|name| Require { name: name.clone() })
+                                .collect_vec()
+                        } else {
+                            vec![]
+                        }
+                    }),
+                    required_by: required_by.then(|| {
+                        requires_map
+                            .iter()
+                            .filter(|(name, pkgs)| {
+                                **name != dist.name() && pkgs.iter().any(|pkg| pkg == dist.name())
+                            })
+                            .map(|(name, _)| name)
+                            .sorted_unstable()
+                            .dedup()
+                            .map(|name| RequiredBy {
+                                name: (*name).clone(),
+                            })
+                            .collect_vec()
+                    }),
                 })
                 .collect_vec();
             let output = serde_json::to_string(&rows)?;
@@ -315,6 +390,16 @@ impl From<&DistFilename> for FileType {
     }
 }
 
+#[derive(Debug, Serialize)]
+struct Require {
+    name: PackageName,
+}
+
+#[derive(Debug, Serialize)]
+struct RequiredBy {
+    name: PackageName,
+}
+
 /// An entry in a JSON list of installed packages.
 #[derive(Debug, Serialize)]
 struct Entry {
@@ -326,6 +411,10 @@ struct Entry {
     latest_filetype: Option<FileType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     editable_project_location: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    requires: Option<Vec<Require>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    required_by: Option<Vec<RequiredBy>>,
 }
 
 /// A column in a table.
