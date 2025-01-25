@@ -47,8 +47,8 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, validate_project_requires_python, DependencyGroupsTarget,
-    EnvironmentSpecification, ProjectError, ScriptInterpreter, WorkspacePython,
+    default_dependency_groups, validate_project_requires_python, EnvironmentSpecification,
+    ProjectError, ScriptInterpreter, SpecificationTarget, WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::run::run_to_completion;
@@ -684,21 +684,23 @@ pub(crate) async fn run(
                         .map(|lock| (lock, project.workspace().install_path().to_owned()));
                 }
             } else {
-                // Validate that any referenced dependency groups are defined in the workspace.
+                // Validate that any referenced dependency groups and extras are defined in the
+                // workspace.
                 if !frozen {
                     let target = match &project {
                         VirtualProject::Project(project) => {
                             if all_packages {
-                                DependencyGroupsTarget::Workspace(project.workspace())
+                                SpecificationTarget::Workspace(project.workspace())
                             } else {
-                                DependencyGroupsTarget::Project(project)
+                                SpecificationTarget::Project(project)
                             }
                         }
                         VirtualProject::NonProject(workspace) => {
-                            DependencyGroupsTarget::Workspace(workspace)
+                            SpecificationTarget::Workspace(workspace)
                         }
                     };
-                    target.validate(&dev)?;
+                    target.validate_dependency_groups(&dev)?;
+                    target.validate_extras(&extras)?;
                 }
 
                 // Determine the default groups to include.

@@ -21,7 +21,7 @@ use uv_distribution_types::{
 use uv_fs::{Simplified, CWD};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{SatisfiesResult, SitePackages};
-use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
 use uv_pypi_types::{ConflictPackage, ConflictSet, Conflicts, Requirement};
@@ -148,6 +148,15 @@ pub(crate) enum ProjectError {
 
     #[error("Default group `{0}` (from `tool.uv.default-groups`) is not defined in the project's `dependency-group` table")]
     MissingDefaultGroup(GroupName),
+
+    #[error("Extra `{0}` is not defined in the project's `optional-dependencies` table")]
+    MissingExtraProject(ExtraName),
+
+    #[error("Extra `{0}` is not defined in any project's `optional-dependencies` table")]
+    MissingExtraWorkspace(ExtraName),
+
+    #[error("PEP 723 scripts do not support optional dependencies, but extra `{0}` was specified")]
+    MissingExtraScript(ExtraName),
 
     #[error("Supported environments must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
     OverlappingMarkers(String, String, String),
@@ -1748,19 +1757,22 @@ pub(crate) async fn init_script_python_requirement(
 }
 
 #[derive(Debug, Copy, Clone)]
-pub(crate) enum DependencyGroupsTarget<'env> {
-    /// The dependency groups can be defined in any workspace member.
+pub(crate) enum SpecificationTarget<'env> {
+    /// The specification applies to any workspace member.
     Workspace(&'env Workspace),
-    /// The dependency groups must be defined in the target project.
+    /// The specification only applies to the target project.
     Project(&'env ProjectWorkspace),
-    /// The dependency groups must be defined in the target script.
+    /// The specification only applies to the target script.
     Script,
 }
 
-impl DependencyGroupsTarget<'_> {
+impl SpecificationTarget<'_> {
     /// Validate the dependency groups requested by the [`DevGroupsSpecification`].
     #[allow(clippy::result_large_err)]
-    pub(crate) fn validate(self, dev: &DevGroupsSpecification) -> Result<(), ProjectError> {
+    pub(crate) fn validate_dependency_groups(
+        self,
+        dev: &DevGroupsSpecification,
+    ) -> Result<(), ProjectError> {
         for group in dev
             .groups()
             .into_iter()
@@ -1790,6 +1802,77 @@ impl DependencyGroupsTarget<'_> {
                 }
             }
         }
+        Ok(())
+    }
+
+    /// Validate the extras requested by the [`ExtrasSpecification`].
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn validate_extras(self, extras: &ExtrasSpecification) -> Result<(), ProjectError> {
+        let extras = match extras {
+            ExtrasSpecification::Some(extras) => {
+                if extras.is_empty() {
+                    return Ok(());
+                }
+                extras
+            }
+            ExtrasSpecification::Exclude(extras) => {
+                if extras.is_empty() {
+                    return Ok(());
+                }
+                &Vec::from_iter(extras.clone())
+            }
+            _ => return Ok(()),
+        };
+
+        match self {
+            Self::Workspace(workspace) => {
+                // If at least one project in the workspace uses dynamic extras, the list of extras
+                // cannot be determined, so we cannot check if they are valid.
+                if workspace.uses_dynamic_key("optional-dependencies") {
+                    return Ok(());
+                }
+
+                let workspace_extras = workspace.extras();
+
+                for extra in extras {
+                    // The extra must be defined in the workspace.
+                    if !workspace_extras.contains(extra) {
+                        return Err(ProjectError::MissingExtraWorkspace(extra.clone()));
+                    }
+                }
+            }
+            Self::Project(project) => {
+                // If the project uses dynamic extras, the list of extras cannot be determined, so
+                // we cannot check if they are valid.
+                if project
+                    .current_project()
+                    .pyproject_toml()
+                    .is_key_dynamic("optional-dependencies")
+                {
+                    return Ok(());
+                }
+
+                let optional_dependencies = project
+                    .current_project()
+                    .pyproject_toml()
+                    .project
+                    .as_ref()
+                    .map_or_else(BTreeMap::new, |project| {
+                        project.clone().optional_dependencies.unwrap_or_default()
+                    });
+
+                for extra in extras {
+                    // The extra must be defined in the target project.
+                    if !optional_dependencies.contains_key(extra) {
+                        return Err(ProjectError::MissingExtraProject(extra.clone()));
+                    }
+                }
+            }
+            Self::Script => {
+                return Err(ProjectError::MissingExtraScript(extras[0].clone()));
+            }
+        }
+
         Ok(())
     }
 }
