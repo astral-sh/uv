@@ -495,7 +495,7 @@ async fn build_package(
 
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
+        if let Some(credentials) = index.credentials(keyring_provider.to_provider()) {
             store_credentials(index.raw_url(), credentials);
         }
     }
