@@ -116,6 +116,13 @@ Or, with the installer:
 ADD https://astral.sh/uv/0.5.24/install.sh /uv-installer.sh
 ```
 
+!!! tip
+
+    While the examples above pin to a specific tag, it's also possible to pin a
+    specific commit SHA. Pinning a specific commit SHA is considered best
+    practice in environments that require reproducible builds as tags can be
+    moved across different commit SHAs.
+
 ### Installing a project
 
 If you're using uv to manage your project, you can copy it into the image and install it:
