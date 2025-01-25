@@ -93,6 +93,7 @@ pub(crate) async fn list(
         let downloads = download_request
             .as_ref()
             .map(PythonDownloadRequest::iter_downloads)
+            .transpose()?
             .into_iter()
             .flatten();
 
