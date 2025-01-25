@@ -79,7 +79,7 @@ ModuleNotFoundError: No module named 'distutils'
 !!! important
 
     The `--use-pep517` flag should be included with the `pip install` invocation to ensure the same
-    build isolation behavior. uv always uses [build isolation by default](../pip/compatibility.md#pep-517-build-isolation).
+    build isolation behavior. uv always uses [build isolation by default](../../pip/compatibility.md#pep-517-build-isolation).
 
     We also recommend including the `--force-reinstall` and `--no-cache` options when reproducing
     failures.
@@ -210,7 +210,7 @@ installed.
 ### Module is missing or cannot be imported
 
 If the build error mentions a failing import, consider
-[disabling build isolation](../concepts/projects/config.md#build-isolation).
+[disabling build isolation](../../concepts/projects/config.md#build-isolation).
 
 For example, some packages assume that `pip` is available without declaring it as a build
 dependency:
@@ -258,7 +258,7 @@ dependencies of the package, e.g, `setuptools`.
 ### Old version of the package is built
 
 If a package fails to build during resolution and the version that failed to build is older than the
-version you want to use, try adding a [constraint](./settings.md#constraint-dependencies) with a
+version you want to use, try adding a [constraint](../settings.md#constraint-dependencies) with a
 lower bound (e.g. `numpy>=1.17`). Sometimes, due to algorithmic limitations, the uv resolver tries
 to find a fitting version using unreasonably old packages, which can be prevented by using lower
 bounds.
@@ -286,12 +286,12 @@ Adding a lower bound constraint, e.g., `apache-beam<=2.49.0,>2.30.0`, resolves t
 uv will avoid using an old version of `apache-beam`.
 
 Constraints can also be defined for indirect dependencies using `constraints.txt` files or the
-[`constraint-dependencies`](./settings.md#constraint-dependencies) setting.
+[`constraint-dependencies`](../settings.md#constraint-dependencies) setting.
 
 ### Package is only needed for an unused platform
 
 If locking fails due to building a package from a platform you do not need to support, consider
-[limiting resolution](../concepts/projects/config.md#limited-resolution-environments) to your
+[limiting resolution](../../concepts/projects/config.md#limited-resolution-environments) to your
 supported platforms.
 
 ### Package does not support all Python versions
@@ -309,6 +309,6 @@ numpy<1.23; python_version < "3.10"
 ### Package is only usable on a specific platform
 
 If locking fails due to building a package that is only usable on another platform, you can
-[provide dependency metadata manually](./settings.md#dependency-metadata) to skip the build. uv can
+[provide dependency metadata manually](../settings.md#dependency-metadata) to skip the build. uv can
 not verify this information, so it is important to specify correct metadata when using this
 override.
