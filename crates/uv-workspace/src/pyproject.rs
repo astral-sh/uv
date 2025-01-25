@@ -1312,6 +1312,8 @@ pub enum SourceError {
     UnusedTag(String, String),
     #[error("`{0}` did not resolve to a Git repository, but a Git reference (`--branch {1}`) was provided.")]
     UnusedBranch(String, String),
+    #[error("`{0}` did not resolve to a Git repository, but a Git reference (`--subdirectory {1}`) was provided.")]
+    UnusedSubdirectory(String, PathBuf),
     #[error("Failed to resolve absolute path")]
     Absolute(#[from] std::io::Error),
     #[error("Path contains invalid characters: `{}`", _0.display())]
@@ -1334,6 +1336,7 @@ impl Source {
         rev: Option<String>,
         tag: Option<String>,
         branch: Option<String>,
+        subdirectory: Option<PathBuf>,
         root: &Path,
     ) -> Result<Option<Source>, SourceError> {
         // If we resolved to a non-Git source, and the user specified a Git reference, error.
@@ -1346,6 +1349,9 @@ impl Source {
             }
             if let Some(branch) = branch {
                 return Err(SourceError::UnusedBranch(name.to_string(), branch));
+            }
+            if let Some(subdirectory) = subdirectory {
+                return Err(SourceError::UnusedSubdirectory(name.to_string(), subdirectory));
             }
         }
 
