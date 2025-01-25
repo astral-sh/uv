@@ -196,8 +196,12 @@ impl CandidateSelector {
                 type Entries<'a> = SmallVec<[&'a Entry; 3]>;
 
                 let mut preferences = preferences.iter().collect::<Entries>();
+
                 // Filter out preferences that map to a conflicting index.
                 preferences.retain(|entry| index.is_none_or(|index| entry.index().matches(index)));
+
+                // Sort the preferences by priority.
+                let highest = self.use_highest_version(package_name, env);
                 preferences.sort_by_key(|entry| {
                     let marker = entry.marker();
 
@@ -207,8 +211,16 @@ impl CandidateSelector {
                     // Prefer preferences that match the current index.
                     let matches_index = index.is_none_or(|index| entry.index().matches(index));
 
-                    std::cmp::Reverse((matches_env, matches_index))
+                    // Prefer the latest (or earliest) version.
+                    let version = if highest {
+                        Either::Left(entry.pin().version())
+                    } else {
+                        Either::Right(std::cmp::Reverse(entry.pin().version()))
+                    };
+
+                    std::cmp::Reverse((matches_env, matches_index, version))
                 });
+
                 Either::Right(
                     preferences
                         .into_iter()

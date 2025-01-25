@@ -4418,7 +4418,7 @@ conflicts = [
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.3.0
-     + idna==3.5
+     + idna==3.6
      + sniffio==1.3.1
     "###);
 
@@ -4451,8 +4451,8 @@ conflicts = [
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
             { name = "idna", version = "3.4", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-proxy1-x2' or (extra == 'extra-6-proxy1-x3' and extra == 'extra-7-project-x1')" },
-            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-proxy1-x3' or (extra == 'extra-6-proxy1-x2' and extra == 'extra-7-project-x1') or (extra != 'extra-6-proxy1-x2' and extra != 'extra-7-project-x1')" },
-            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-6-proxy1-x2' and extra == 'extra-6-proxy1-x3') or (extra != 'extra-6-proxy1-x3' and extra == 'extra-7-project-x1') or (extra != 'extra-6-proxy1-x2' and extra == 'extra-7-project-x1')" },
+            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-proxy1-x3' or (extra == 'extra-6-proxy1-x2' and extra == 'extra-7-project-x1')" },
+            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-project-x1' or (extra == 'extra-6-proxy1-x2' and extra == 'extra-6-proxy1-x3') or (extra != 'extra-6-proxy1-x2' and extra != 'extra-6-proxy1-x3')" },
             { name = "sniffio" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
