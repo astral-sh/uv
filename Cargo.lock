@@ -2741,7 +2741,7 @@ dependencies = [
 [[package]]
 name = "pubgrub"
 version = "0.2.1"
-source = "git+https://github.com/astral-sh/pubgrub?rev=648aa343486e5529953153781fc86025c73c4a61#648aa343486e5529953153781fc86025c73c4a61"
+source = "git+https://github.com/astral-sh/pubgrub?branch=konsti%2Fsimplify-prioritization#f58a60f683bfcc83fce374d721eb0e181050ac58"
 dependencies = [
  "indexmap",
  "log",
@@ -5799,7 +5799,7 @@ checksum = "830b7e5d4d90034032940e4ace0d9a9a057e7a45cd94e6c007832e39edb82f6d"
 [[package]]
 name = "version-ranges"
 version = "0.1.1"
-source = "git+https://github.com/astral-sh/pubgrub?rev=648aa343486e5529953153781fc86025c73c4a61#648aa343486e5529953153781fc86025c73c4a61"
+source = "git+https://github.com/astral-sh/pubgrub?branch=konsti%2Fsimplify-prioritization#f58a60f683bfcc83fce374d721eb0e181050ac58"
 dependencies = [
  "smallvec",
 ]
