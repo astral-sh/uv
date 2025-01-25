@@ -1302,6 +1302,60 @@ fn install_editable_pep_508_requirements_txt() -> Result<()> {
     "###
     );
 
+    requirements_txt.write_str(&indoc::formatdoc! {r"
+        --editable black[d] @ file://{workspace_root}/scripts/packages/black_editable
+        ",
+        workspace_root = context.workspace_root.simplified_display(),
+    })?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    requirements_txt.write_str(&indoc::formatdoc! {r"
+        --editable=black[d] @ file://{workspace_root}/scripts/packages/black_editable
+        ",
+        workspace_root = context.workspace_root.simplified_display(),
+    })?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    requirements_txt.write_str(&indoc::formatdoc! {r"
+        --editable= black[d] @ file://{workspace_root}/scripts/packages/black_editable
+        ",
+        workspace_root = context.workspace_root.simplified_display(),
+    })?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
     Ok(())
 }
 
