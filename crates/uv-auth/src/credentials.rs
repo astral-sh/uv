@@ -5,11 +5,19 @@ use base64::write::EncoderWriter;
 use netrc::Netrc;
 use reqwest::header::HeaderValue;
 use reqwest::Request;
+
+use futures::executor;
 use std::io::Read;
 use std::io::Write;
+use tracing::{debug, error, trace, warn};
+
 use url::Url;
 
 use uv_static::EnvVars;
+
+use crate::keyring_config::AuthConfig;
+use crate::keyring_config::ConfigFile;
+use crate::KeyringProvider;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Credentials {
@@ -155,6 +163,37 @@ impl Credentials {
         }
     }
 
+    /// Extract the [`Credentials`] from keyring, given a named source.
+    ///
+    /// Look up the username stored for the named source in the user-level config.
+    /// Load the credentials from keyring for the service and username.
+    pub fn from_keyring(
+        name: &str,
+        url: &Url,
+        keyring_provider: Option<KeyringProvider>,
+    ) -> Option<Self> {
+        debug!("Trying to read credentials for index {name} with url {url}");
+        if keyring_provider.is_none() {
+            trace!("No keyring provider available");
+            return None;
+        }
+
+        let auth_config = match AuthConfig::load() {
+            Ok(auth_config) => auth_config,
+            Err(e) => {
+                error!("Error loading auth config: {e}");
+                return None;
+            }
+        };
+
+        let Some(index) = auth_config.find_entry(name) else {
+            warn!("Could not find entry for {name}");
+            return None;
+        };
+
+        executor::block_on(keyring_provider.unwrap().fetch(url, &index.username))
+    }
+
     /// Parse [`Credentials`] from an HTTP request, if any.
     ///
     /// Only HTTP Basic Authentication is supported.
@@ -247,7 +286,11 @@ impl Credentials {
 
 #[cfg(test)]
 mod tests {
+
     use insta::assert_debug_snapshot;
+    use tempfile::tempdir;
+
+    use crate::keyring_config::{reset_config_path, set_test_config_path};
 
     use super::*;
 
@@ -352,5 +395,36 @@ mod tests {
 
         assert_debug_snapshot!(header, @r###""Basic dXNlcjpwYXNzd29yZD09""###);
         assert_eq!(Credentials::from_header_value(&header), Some(credentials));
+    }
+
+    #[test]
+    fn from_keyring() {
+        let username = "user";
+        let password = "password";
+        let index = "test_index";
+
+        let url = Url::parse("https://example.com").unwrap();
+        let keyring = KeyringProvider::dummy([((url.host_str().unwrap(), username), password)]);
+        let temp_dir = tempdir().unwrap();
+        let auth_config_path = temp_dir.into_path().join("test_auth.toml");
+
+        set_test_config_path(auth_config_path);
+
+        let mut auth_config = AuthConfig::load().unwrap();
+        auth_config.add_entry(index.to_string(), username.to_string());
+        auth_config.store().unwrap();
+
+        // Act
+        let credentials = Credentials::from_keyring(index, &url, Some(keyring));
+
+        assert_eq!(
+            credentials,
+            Some(Credentials::new(
+                Some(username.to_string()),
+                Some(password.to_string())
+            ))
+        );
+
+        reset_config_path();
     }
 }

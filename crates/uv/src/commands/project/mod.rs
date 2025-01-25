@@ -1034,7 +1034,7 @@ pub(crate) async fn resolve_names(
 
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
+        if let Some(credentials) = index.credentials(settings.keyring_provider.to_provider()) {
             uv_auth::store_credentials(index.raw_url(), credentials);
         }
     }
@@ -1184,7 +1184,7 @@ pub(crate) async fn resolve_environment(
 
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
+        if let Some(credentials) = index.credentials(settings.keyring_provider.to_provider()) {
             uv_auth::store_credentials(index.raw_url(), credentials);
         }
     }
@@ -1351,7 +1351,7 @@ pub(crate) async fn sync_environment(
 
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
+        if let Some(credentials) = index.credentials(settings.keyring_provider.to_provider()) {
             uv_auth::store_credentials(index.raw_url(), credentials);
         }
     }
@@ -1546,7 +1546,7 @@ pub(crate) async fn update_environment(
 
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
+        if let Some(credentials) = index.credentials(settings.keyring_provider.to_provider()) {
             uv_auth::store_credentials(index.raw_url(), credentials);
         }
     }
