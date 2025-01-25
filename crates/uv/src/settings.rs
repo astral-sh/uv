@@ -227,6 +227,7 @@ impl InitSettings {
             no_pin_python,
             no_workspace,
             python,
+            ..
         } = args;
 
         let kind = match (app, lib, script) {
