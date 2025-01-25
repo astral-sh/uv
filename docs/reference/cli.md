@@ -4066,6 +4066,8 @@ uv tool list [OPTIONS]
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
+</dd><dt><code>--outdated</code></dt><dd><p>List only tools that are outdated</p>
+
 </dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
