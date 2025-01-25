@@ -1,7 +1,5 @@
 use std::borrow::Cow;
 
-use either::Either;
-
 use uv_normalize::{GroupName, DEV_DEPENDENCIES};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -34,14 +32,6 @@ impl DevMode {
             Self::Only => "--only-dev",
         }
     }
-
-    /// Returns `true` if the group is `dev`, and development dependencies should be included.
-    pub fn contains(&self, group: &GroupName) -> bool {
-        match self {
-            DevMode::Exclude => false,
-            DevMode::Include | DevMode::Only => group == &*DEV_DEPENDENCIES,
-        }
-    }
 }
 
 #[derive(Default, Debug, Clone)]
@@ -53,7 +43,7 @@ pub struct DevGroupsSpecification {
 
     /// The groups to include.
     ///
-    /// Requested via the `--group` and `--only-group` options.
+    /// Requested via the `--group`, `--no-group`, `--all-groups`, `--only-group` and `--no-default-groups` options.
     groups: Option<GroupsSpecification>,
 }
 
@@ -67,11 +57,8 @@ pub enum GroupsSpecification {
     Include {
         include: IncludeGroups,
         exclude: Vec<GroupName>,
+        no_default_groups: bool,
     },
-    /// Include dependencies from the specified groups, omitting any default groups.
-    ///
-    /// If the list is empty, no group will be included.
-    Explicit { include: Vec<GroupName> },
     /// Only include dependencies from the specified groups, exclude all other dependencies.
     ///
     /// The `include` list is guaranteed to omit groups in the `exclude` list (i.e., they have an
@@ -88,12 +75,13 @@ impl GroupsSpecification {
         Self::Include {
             include: IncludeGroups::Some(vec![group]),
             exclude: Vec::new(),
+            no_default_groups: false,
         }
     }
 
     /// Returns `true` if the specification allows for production dependencies.
     pub fn prod(&self) -> bool {
-        matches!(self, Self::Include { .. } | Self::Explicit { .. })
+        matches!(self, Self::Include { .. })
     }
 
     /// Returns `true` if the specification is limited to a select set of groups.
@@ -104,18 +92,30 @@ impl GroupsSpecification {
     /// Returns the option that was used to request the groups, if any.
     pub fn as_flag(&self) -> Option<Cow<'_, str>> {
         match self {
-            Self::Include { include, exclude } => match include {
-                IncludeGroups::All => Some(Cow::Borrowed("--all-groups")),
-                IncludeGroups::Some(groups) => match groups.as_slice() {
-                    [] => match exclude.as_slice() {
-                        [] => None,
-                        [group] => Some(Cow::Owned(format!("--no-group {group}"))),
-                        [..] => Some(Cow::Borrowed("--no-group")),
+            Self::Include {
+                include,
+                exclude,
+                no_default_groups,
+            } => {
+                let flag = match include {
+                    IncludeGroups::All => Some(Cow::Borrowed("--all-groups")),
+                    IncludeGroups::Some(groups) => match groups.as_slice() {
+                        [] => match exclude.as_slice() {
+                            [] => None,
+                            [group] => Some(Cow::Owned(format!("--no-group {group}"))),
+                            [..] => Some(Cow::Borrowed("--no-group")),
+                        },
+                        [group] => Some(Cow::Owned(format!("--group {group}"))),
+                        [..] => Some(Cow::Borrowed("--group")),
                     },
-                    [group] => Some(Cow::Owned(format!("--group {group}"))),
-                    [..] => Some(Cow::Borrowed("--group")),
-                },
-            },
+                };
+                match (flag, *no_default_groups) {
+                    (None, false) => None,
+                    (Some(flag), true) => Some(Cow::Owned(format!("{flag} --no-default-groups"))),
+                    (Some(flag), false) => Some(flag),
+                    (None, true) => Some(Cow::Borrowed("--no-default-groups")),
+                }
+            }
             Self::Only { include, exclude } => match include.as_slice() {
                 [] => match exclude.as_slice() {
                     [] => None,
@@ -125,36 +125,34 @@ impl GroupsSpecification {
                 [group] => Some(Cow::Owned(format!("--only-group {group}"))),
                 [..] => Some(Cow::Borrowed("--only-group")),
             },
-            Self::Explicit { include } => match include.as_slice() {
-                [] => Some(Cow::Borrowed("--no-default-groups")),
-                [group] => Some(Cow::Owned(format!("--group {group}"))),
-                [..] => Some(Cow::Borrowed("--group")),
-            },
         }
     }
 
     /// Iterate over all groups referenced in the [`GroupsSpecification`].
     pub fn names(&self) -> impl Iterator<Item = &GroupName> {
         match self {
-            GroupsSpecification::Include { include, exclude } => {
-                Either::Left(include.names().chain(exclude.iter()))
-            }
-            GroupsSpecification::Only { include, exclude } => {
-                Either::Left(include.iter().chain(exclude.iter()))
-            }
-            GroupsSpecification::Explicit { include } => Either::Right(include.iter()),
+            GroupsSpecification::Include {
+                include, exclude, ..
+            } => include.names().chain(exclude.iter()),
+            GroupsSpecification::Only { include, exclude } => include.iter().chain(exclude.iter()),
         }
     }
 
     /// Returns `true` if the specification includes the given group.
-    pub fn contains(&self, group: &GroupName) -> bool {
+    pub fn contains(&self, group: &GroupName, is_default_group: bool) -> bool {
         match self {
-            GroupsSpecification::Include { include, exclude } => {
+            GroupsSpecification::Include {
+                include,
+                exclude,
+                no_default_groups,
+            } => {
+                if *no_default_groups && is_default_group {
+                    return false;
+                }
                 // For `--all-groups`, the group is included unless it is explicitly excluded.
                 include.contains(group) && !exclude.contains(group)
             }
             GroupsSpecification::Only { include, .. } => include.contains(group),
-            GroupsSpecification::Explicit { include } => include.contains(group),
         }
     }
 
@@ -163,11 +161,12 @@ impl GroupsSpecification {
         let GroupsSpecification::Include {
             include: IncludeGroups::Some(includes),
             exclude,
+            no_default_groups,
         } = self
         else {
             return false;
         };
-        includes.is_empty() && exclude.is_empty()
+        !no_default_groups && includes.is_empty() && exclude.is_empty()
     }
 }
 
@@ -220,15 +219,11 @@ impl DevGroupsSpecification {
             None
         };
 
-        let groups = if no_default_groups {
-            // Remove groups specified with `--no-group`.
-            group.retain(|group| !no_group.contains(group));
-
-            Some(GroupsSpecification::Explicit { include: group })
-        } else if all_groups {
+        let groups = if all_groups {
             Some(GroupsSpecification::Include {
                 include: IncludeGroups::All,
                 exclude: no_group,
+                no_default_groups,
             })
         } else if !group.is_empty() {
             if matches!(dev, Some(DevMode::Only)) {
@@ -241,6 +236,7 @@ impl DevGroupsSpecification {
             Some(GroupsSpecification::Include {
                 include: IncludeGroups::Some(group),
                 exclude: no_group,
+                no_default_groups,
             })
         } else if !only_group.is_empty() {
             if matches!(dev, Some(DevMode::Include)) {
@@ -258,6 +254,13 @@ impl DevGroupsSpecification {
             Some(GroupsSpecification::Include {
                 include: IncludeGroups::Some(Vec::new()),
                 exclude: no_group,
+                no_default_groups,
+            })
+        } else if no_default_groups {
+            Some(GroupsSpecification::Include {
+                include: IncludeGroups::Some(Vec::new()),
+                exclude: Vec::new(),
+                no_default_groups,
             })
         } else {
             None
@@ -300,7 +303,7 @@ impl DevGroupsSpecification {
     }
 
     /// Returns `true` if the group is included in the specification.
-    pub fn contains(&self, group: &GroupName) -> bool {
+    pub fn contains(&self, group: &GroupName, is_default_group: bool) -> bool {
         if group == &*DEV_DEPENDENCIES {
             match self.dev.as_ref() {
                 None => {}
@@ -315,7 +318,14 @@ impl DevGroupsSpecification {
                 Some(DevMode::Include) => {
                     // If `--no-group dev` was provided, exclude dev.
                     return match self.groups.as_ref() {
-                        Some(GroupsSpecification::Include { exclude, .. }) => {
+                        Some(GroupsSpecification::Include {
+                            exclude,
+                            no_default_groups,
+                            ..
+                        }) => {
+                            if *no_default_groups && is_default_group {
+                                return false;
+                            }
                             !exclude.contains(group)
                         }
                         _ => true,
@@ -326,7 +336,7 @@ impl DevGroupsSpecification {
 
         self.groups
             .as_ref()
-            .is_some_and(|groups| groups.contains(group))
+            .is_some_and(|groups| groups.contains(group, is_default_group))
     }
 
     /// Returns `true` if the specification will have no effect.
@@ -393,7 +403,7 @@ impl DevGroupsManifest {
 
     /// Returns `true` if the group was enabled by default.
     pub fn is_default(&self, group: &GroupName) -> bool {
-        if self.spec.contains(group) {
+        if self.spec.contains(group, false) {
             // If the group was explicitly requested, then it wasn't enabled by default.
             false
         } else {
@@ -405,7 +415,7 @@ impl DevGroupsManifest {
 
     /// Returns `true` if the group is included in the manifest.
     pub fn contains(&self, group: &GroupName) -> bool {
-        if self.spec.contains(group) {
+        if self.spec.contains(group, self.defaults.contains(group)) {
             return true;
         }
         if self.spec.only() {
@@ -415,24 +425,27 @@ impl DevGroupsManifest {
             .iter()
             .filter(|default| {
                 // If `--no-dev` was provided, exclude the `dev` group from the list of defaults.
-                if matches!(self.spec.dev_mode(), Some(DevMode::Exclude)) {
-                    if *default == &*DEV_DEPENDENCIES {
-                        return false;
-                    };
+                if *default == &*DEV_DEPENDENCIES
+                    && matches!(self.spec.dev_mode(), Some(DevMode::Exclude))
+                {
+                    return false;
                 }
 
-                // If `--no-default-groups` was provided, only include group if it's explicitly
-                // included with `--group <group>`.
-                if let Some(GroupsSpecification::Explicit { include }) = self.spec.groups() {
-                    return include.contains(group);
-                }
-
-                // If `--no-group` was provided, exclude the group from the list of defaults.
                 if let Some(GroupsSpecification::Include {
-                    include: _,
+                    include,
                     exclude,
+                    no_default_groups,
                 }) = self.spec.groups()
                 {
+                    // If `--no-default-groups` was provided, only include group if it's explicitly
+                    // included with `--group <group>`.
+                    if *no_default_groups {
+                        if let IncludeGroups::Some(include) = include {
+                            return include.contains(group);
+                        }
+                        return false;
+                    }
+                    // If `--no-group` was provided, exclude the group from the list of defaults.
                     if exclude.contains(default) {
                         return false;
                     }
