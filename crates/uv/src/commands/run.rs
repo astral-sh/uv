@@ -7,7 +7,7 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
     // Ignore signals in the parent process, deferring them to the child. This is safe as long as
     // the command is the last thing that runs in this process; otherwise, we'd need to restore the
     // signal handlers after the command completes.
-    let _handler = tokio::spawn(async { while tokio::signal::ctrl_c().await.is_ok() {} });
+    let mut int_signal_count = 0;
 
     // Exit based on the result of the command.
     #[cfg(unix)]
@@ -16,16 +16,28 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
         use tokio::signal::unix::{signal, SignalKind};
 
         let mut term_signal = signal(SignalKind::terminate())?;
+        let mut int_signal = signal(SignalKind::interrupt())?;
         loop {
             select! {
                 result = handle.wait() => {
                     break result;
                 },
 
+                // TODO(zanieb: Refactor `interrupt_process` and `terminate_process` to use
+                // shared logic.
+                // `SIGINT`
+                _ = int_signal.recv() => {
+                    int_signal_count += 1;
+                    if int_signal_count > 1 {
+                        let _ = interrupt_process(&mut handle);
+                    }
+                },
+
                 // `SIGTERM`
                 _ = term_signal.recv() => {
                     let _ = terminate_process(&mut handle);
                 }
+
             };
         }
     }?;
@@ -68,4 +80,14 @@ fn terminate_process(child: &mut Child) -> anyhow::Result<()> {
 
     let pid = child.id().context("Failed to get child process ID")?;
     signal::kill(Pid::from_raw(pid.try_into()?), Signal::SIGTERM).context("Failed to send SIGTERM")
+}
+
+#[cfg(unix)]
+fn interrupt_process(child: &mut Child) -> anyhow::Result<()> {
+    use anyhow::Context;
+    use nix::sys::signal::{self, Signal};
+    use nix::unistd::Pid;
+
+    let pid = child.id().context("Failed to get child process ID")?;
+    signal::kill(Pid::from_raw(pid.try_into()?), Signal::SIGINT).context("Failed to send SIGINT")
 }
