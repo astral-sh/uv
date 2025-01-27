@@ -59,7 +59,7 @@ from argparse import ArgumentParser
 from dataclasses import dataclass
 from pathlib import Path
 from shutil import rmtree
-from subprocess import PIPE, check_call, check_output, run
+from subprocess import PIPE, check_call, run
 from time import sleep
 
 import httpx
@@ -293,7 +293,7 @@ def wait_for_index(
     just `get_filenames` fails non-deterministically.
     """
     for _ in range(50):
-        output = check_output(
+        result = run(
             [
                 uv,
                 "pip",
@@ -311,15 +311,29 @@ def wait_for_index(
             ],
             text=True,
             input=f"{project_name}",
+            stdout=PIPE,
         )
-        if f"{project_name}=={version}" in output and output.count("--hash") == 2:
+        # codeberg sometimes times out
+        if result.returncode != 0:
+            print(
+                f"uv pip compile not updated, missing 2 files for {version}, "
+                + f"sleeping for 2s: `{index_url}`:\n",
+                file=sys.stderr,
+            )
+            sleep(2)
+            continue
+
+        if (
+            f"{project_name}=={version}" in result.stdout
+            and result.stdout.count("--hash") == 2
+        ):
             break
 
         print(
             f"uv pip compile not updated, missing 2 files for {version}, "
             + f"sleeping for 2s: `{index_url}`:\n"
             + "```\n"
-            + output.replace("\\\n    ", "")
+            + result.stdout.replace("\\\n    ", "")
             + "```",
             file=sys.stderr,
         )
