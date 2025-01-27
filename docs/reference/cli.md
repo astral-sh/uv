@@ -358,7 +358,7 @@ uv run [OPTIONS] [COMMAND]
 
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--no-sync</code></dt><dd><p>Avoid syncing the virtual environment.</p>
 
@@ -976,7 +976,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--no-sync</code></dt><dd><p>Avoid syncing the virtual environment</p>
 
@@ -1333,7 +1333,7 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--no-sync</code></dt><dd><p>Avoid syncing the virtual environment after re-locking the project</p>
 
@@ -1728,7 +1728,7 @@ uv sync [OPTIONS]
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -2063,7 +2063,7 @@ uv lock [OPTIONS]
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -2442,7 +2442,7 @@ uv export [OPTIONS]
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -2798,7 +2798,7 @@ uv tree [OPTIONS]
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -3253,7 +3253,7 @@ uv tool run [OPTIONS] [COMMAND]
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -3580,7 +3580,7 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -3903,7 +3903,7 @@ uv tool upgrade [OPTIONS] <NAME>...
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -5726,7 +5726,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--no-strip-extras</code></dt><dd><p>Include extras in the output file.</p>
 
@@ -6160,7 +6160,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--no-verify-hashes</code></dt><dd><p>Disable validation of hashes in the requirements file.</p>
 
@@ -6595,7 +6595,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--no-verify-hashes</code></dt><dd><p>Disable validation of hashes in the requirements file.</p>
 
@@ -8347,7 +8347,7 @@ uv build [OPTIONS] [SRC]
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--no-verify-hashes</code></dt><dd><p>Disable validation of hashes in the requirements file.</p>
 
