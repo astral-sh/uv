@@ -875,6 +875,37 @@ fn add_raw_error() -> Result<()> {
     Ok(())
 }
 
+#[test]
+#[cfg(feature = "git")]
+fn add_editable_error() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    // Provide `--editable` with a non-source tree.
+    uv_snapshot!(context.filters(), context.add().arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl").arg("--editable"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `flask` did not resolve to a local directory, but the `--editable` flag was provided. Editable installs are only supported for local directories.
+    "###);
+
+    Ok(())
+}
+
 /// Add an unnamed requirement.
 #[test]
 #[cfg(feature = "git")]
@@ -2186,6 +2217,24 @@ fn add_workspace_editable() -> Result<()> {
     "#})?;
 
     let child1 = context.temp_dir.join("child1");
+
+    // `--no-editable` should error.
+    let mut add_cmd = context.add();
+    add_cmd
+        .arg("child2")
+        .arg("--no-editable")
+        .current_dir(&child1);
+
+    uv_snapshot!(context.filters(), add_cmd, @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Workspace dependency `child2` was marked as `--no-editable`, but workspace dependencies are always added in editable mode. Pass `--no-editable` to `uv sync` or `uv run` to install workspace dependencies in non-editable mode.
+    "###);
+
+    // `--editable` should not.
     let mut add_cmd = context.add();
     add_cmd.arg("child2").arg("--editable").current_dir(&child1);
 
