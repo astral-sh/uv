@@ -4245,8 +4245,8 @@ pub struct ToolUpgradeArgs {
     pub no_compile_bytecode: bool,
 
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
-    /// standards-compliant, publishable package metadata, as opposed to using any local or Git
-    /// sources.
+    /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
+    /// URL, or local path sources.
     #[arg(long, help_heading = "Resolver options")]
     pub no_sources: bool,
 
@@ -4863,8 +4863,8 @@ pub struct InstallerArgs {
     pub no_compile_bytecode: bool,
 
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
-    /// standards-compliant, publishable package metadata, as opposed to using any local or Git
-    /// sources.
+    /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
+    /// URL, or local path sources.
     #[arg(long, help_heading = "Resolver options")]
     pub no_sources: bool,
 }
@@ -5030,8 +5030,8 @@ pub struct ResolverArgs {
     pub link_mode: Option<uv_install_wheel::linker::LinkMode>,
 
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
-    /// standards-compliant, publishable package metadata, as opposed to using any local or Git
-    /// sources.
+    /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
+    /// URL, or local path sources.
     #[arg(long, help_heading = "Resolver options")]
     pub no_sources: bool,
 }
@@ -5247,8 +5247,8 @@ pub struct ResolverInstallerArgs {
     pub no_compile_bytecode: bool,
 
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
-    /// standards-compliant, publishable package metadata, as opposed to using any local or Git
-    /// sources.
+    /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
+    /// URL, or local path sources.
     #[arg(long, help_heading = "Resolver options")]
     pub no_sources: bool,
 }
