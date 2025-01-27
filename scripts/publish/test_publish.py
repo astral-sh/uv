@@ -380,7 +380,7 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
         )
 
         args = [uv, "publish", "--publish-url", publish_url, *extra_args]
-        result = run(args, cwd=project_dir, env=env, stderr=PIPE)
+        result = run(args, cwd=project_dir, env=env, text=True, stderr=PIPE)
         if result.returncode == 0:
             # Successful upload
             break
@@ -388,7 +388,8 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
         retries -= 1
         if retries > 0:
             print(
-                f"Publish failed, retrying after 10s: {result.stderr}", file=sys.stderr
+                f"Publish failed, retrying after 10s:\n---\n{result.stderr}\n---",
+                file=sys.stderr,
             )
             sleep(10)
         else:
