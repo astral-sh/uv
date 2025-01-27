@@ -3,36 +3,93 @@ use tokio::process::Child;
 use tracing::debug;
 
 /// Wait for the child process to complete, handling signals and error codes.
+///
+/// Note that this registers handles to ignore some signals in the parent process. This is safe as
+/// long as the command is the last thing that runs in this process; otherwise, we'd need to restore
+/// the default signal handlers after the command completes.
 pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitStatus> {
-    // Ignore signals in the parent process, deferring them to the child. This is safe as long as
-    // the command is the last thing that runs in this process; otherwise, we'd need to restore the
-    // signal handlers after the command completes.
-    let _handler = tokio::spawn(async { while tokio::signal::ctrl_c().await.is_ok() {} });
-
-    // Exit based on the result of the command.
+    // On Unix, shells will send SIGINT to the active process group when a user presses `Ctrl-C`. In
+    // general, this means that uv should ignore SIGINT, allowing the child process to cleanly exit
+    // instead. If uv forwarded the SIGINT immediately, the child process would receive _two_ SIGINT
+    // signals which has semantic meaning for some programs, i.e., slow exit on the first signal and
+    // fast exit on the second. The exception to this is if a child process changes its process
+    // group, in which case the shell will _not_ send SIGINT to the child process and uv must take
+    // ownership of forwarding the signal.
+    //
+    // Note this assumes an interactive shell. If a signal is sent directly to the uv parent process
+    // (e.g., `kill -2 <pid>`), the process group is not involved and a signal is not sent to the
+    // child by default. In this context, uv must forward the signal to the child. We work around
+    // this by forwarding SIGINT if it is received more than once. We could attempt to infer if the
+    // parent is a shell using TTY detection(?), but there hasn't been sufficient motivation to
+    // explore alternatives yet.
+    //
+    // Use of SIGTERM is also a bit complicated. If a shell receives a SIGTERM, it just waits for
+    // its children to exit — multiple SIGTERMs do not have any effect and the signals are not
+    // forwarded to the children. Consequently, the description for SIGINT above does not apply to
+    // SIGTERM in shells. It is _possible_ to have a parent process that sends a SIGTERM to the
+    // process group; for example, `tini` supports this via a `-g` option. In this case, it's
+    // possible that uv will improperly send a second SIGTERM to the child process. However,
+    // this seems preferable to not forwarding it in the first place.
     #[cfg(unix)]
     let status = {
+        use nix::sys::signal;
+        use nix::unistd::{getpgid, Pid};
         use tokio::select;
-        use tokio::signal::unix::{signal, SignalKind};
+        use tokio::signal::unix::{signal as handle_signal, SignalKind};
 
-        let mut term_signal = signal(SignalKind::terminate())?;
+        // Get the parent and child process group ids
+        let child_pid = handle
+            .id()
+            .and_then(|id| id.try_into().ok())
+            .map(Pid::from_raw);
+        let parent_pgid = getpgid(None)?;
+
+        let mut sigterm_handle = handle_signal(SignalKind::terminate())?;
+        let mut sigint_handle = handle_signal(SignalKind::interrupt())?;
+        let mut sigint_count = 0;
+
         loop {
             select! {
                 result = handle.wait() => {
                     break result;
                 },
+                _ = sigint_handle.recv() => {
+                    // See above for commentary on handling of SIGINT.
 
-                // `SIGTERM`
-                _ = term_signal.recv() => {
-                    let _ = terminate_process(&mut handle);
+                    // Check if the child pgid has changed
+                    let child_pgid = getpgid(child_pid)?;
+
+                    // Increment the number of interrupts seen
+                    sigint_count += 1;
+
+                    // If the pgid _differs_ from the parent, the child will not receive a SIGINT
+                    // and we should forward it. If we've received multiple SIGINTs, forward it
+                    // regardless.
+                    if child_pgid == parent_pgid && sigint_count < 2 {
+                        continue;
+                    }
+
+                    let _ = send_signal(&handle, child_pid, signal::Signal::SIGINT);
+                },
+                _ = sigterm_handle.recv() => {
+                    // We unconditionally forward SIGTERM to the child process; unlike SIGINT, this
+                    // isn't usually handled by the shell and in cases like
+                    let _ = send_signal(&handle, child_pid, signal::Signal::SIGTERM);
                 }
             };
         }
     }?;
 
+    // On Windows, we just ignore the console CTRL_C_EVENT and assume it will always be sent to the
+    // child by the console. There's not a clear programmatic way to forward the signal anyway.
     #[cfg(not(unix))]
-    let status = handle.wait().await?;
+    let status = {
+        let _ctrl_c_handler =
+            tokio::spawn(async { while tokio::signal::ctrl_c().await.is_ok() {} });
+        handle.wait().await?
+    };
 
+    // Exit based on the result of the command.
     if let Some(code) = status.code() {
         debug!("Command exited with code: {code}");
         if let Ok(code) = u8::try_from(code) {
@@ -60,12 +117,29 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
     }
 }
 
+/// Send a signal to a child process on Unix.
+///
+/// Includes a safety check that the process has not exited.
 #[cfg(unix)]
-fn terminate_process(child: &mut Child) -> anyhow::Result<()> {
-    use anyhow::Context;
-    use nix::sys::signal::{self, Signal};
-    use nix::unistd::Pid;
+fn send_signal(
+    child: &Child,
+    child_pid: Option<nix::unistd::Pid>,
+    signal: nix::sys::signal::Signal,
+) -> anyhow::Result<()> {
+    use nix::sys::signal;
 
-    let pid = child.id().context("Failed to get child process ID")?;
-    signal::kill(Pid::from_raw(pid.try_into()?), Signal::SIGTERM).context("Failed to send SIGTERM")
+    // If the child has already exited, we can't send it signals
+    let Some(child_pid) = child_pid else {
+        anyhow::bail!("Child process has already exited");
+    };
+
+    // The child can exit and a different process can take its PID; this may be
+    // overly defensive but seems better than sending a signal to the wrong process.
+    if child.id().is_none() {
+        anyhow::bail!("Child process has already exited");
+    }
+
+    signal::kill(child_pid, signal)?;
+
+    Ok(())
 }
