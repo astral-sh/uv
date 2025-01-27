@@ -53,6 +53,7 @@ Docs: https://forgejo.org/docs/latest/user/packages/pypi/
 import os
 import re
 import shutil
+import sys
 import time
 from argparse import ArgumentParser
 from dataclasses import dataclass
@@ -180,12 +181,12 @@ def get_latest_version(project_name: str, client: httpx.Client) -> Version:
                 break
             except httpx.HTTPError as err:
                 error = err
-                print(f"Error getting version, sleeping for 1s: {err}")
+                print(f"Error getting version, sleeping for 1s: {err}", file=sys.stderr)
                 time.sleep(1)
             except InvalidSdistFilename as err:
                 # Sometimes there's a link that says "status page"
                 error = err
-                print(f"Invalid index page, sleeping for 1s: {err}")
+                print(f"Invalid index page, sleeping for 1s: {err}", file=sys.stderr)
                 time.sleep(1)
         else:
             raise RuntimeError(f"Failed to fetch {url}") from error
@@ -319,7 +320,8 @@ def wait_for_index(
             + f"sleeping for 2s: `{index_url}`:\n"
             + "```\n"
             + output.replace("\\\n    ", "")
-            + "```"
+            + "```",
+            file=sys.stderr,
         )
         sleep(2)
 
@@ -333,7 +335,7 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
     """
     project_name = all_targets[target].project_name
 
-    print(f"\nPublish {project_name} for {target}")
+    print(f"\nPublish {project_name} for {target}", file=sys.stderr)
 
     # The distributions are build to the dist directory of the project.
     previous_version = get_latest_version(project_name, client)
@@ -352,14 +354,18 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
     expected_filenames.remove(".DS_Store")
 
     print(
-        f"\n=== 1. Publishing a new version: {project_name} {version} {publish_url} ==="
+        f"\n=== 1. Publishing a new version: {project_name} {version} {publish_url} ===",
+        file=sys.stderr,
     )
     args = [uv, "publish", "--publish-url", publish_url, *extra_args]
     check_call(args, cwd=project_dir, env=env)
 
     if publish_url == TEST_PYPI_PUBLISH_URL:
         # Confirm pypi behaviour: Uploading the same file again is fine.
-        print(f"\n=== 2. Publishing {project_name} {version} again (PyPI) ===")
+        print(
+            f"\n=== 2. Publishing {project_name} {version} again (PyPI) ===",
+            file=sys.stderr,
+        )
         wait_for_index(index_url, project_name, version, uv)
         args = [uv, "publish", "--publish-url", publish_url, *extra_args]
         output = run(
@@ -377,7 +383,10 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
             )
 
     mode = "index" if all_targets[target].index else "check URL"
-    print(f"\n=== 3. Publishing {project_name} {version} again with {mode} ===")
+    print(
+        f"\n=== 3. Publishing {project_name} {version} again with {mode} ===",
+        file=sys.stderr,
+    )
     wait_for_index(index_url, project_name, version, uv)
     # Test twine-style and index-style uploads for different packages.
     if index := all_targets[target].index:
@@ -418,7 +427,8 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
 
     print(
         f"\n=== 4. Publishing modified {project_name} {version} "
-        f"again with skip existing (error test) ==="
+        f"again with skip existing (error test) ===",
+        file=sys.stderr,
     )
     wait_for_index(index_url, project_name, version, uv)
     args = [
