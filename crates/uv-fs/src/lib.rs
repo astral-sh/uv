@@ -310,22 +310,45 @@ pub async fn persist_with_retry(
         // See: <https://github.com/astral-sh/uv/issues/1491> & <https://github.com/astral-sh/uv/issues/9531>
         let to = to.as_ref();
 
-        // the `NamedTempFile` `persist` method consumes `self`, and returns it back inside the Error in case of `PersistError`
+        // Ok there's a lot of complex ownership stuff going on here.
+        //
+        // the `NamedTempFile` `persist` method consumes `self`, and returns it back inside
+        // the Error in case of `PersistError`:
         // https://docs.rs/tempfile/latest/tempfile/struct.NamedTempFile.html#method.persist
-        // So we will update the `from` optional value in safe and borrow-checker friendly way every retry
-        // Allows us to use the NamedTempFile inside a FnMut closure used for backoff::retry
-        let mut from = Some(from);
-        let persist = move || {
-            // Needed because we cannot move out of `from`, a captured variable in an `FnMut` closure, and then pass it to the async move block
-            let mut from: Option<NamedTempFile> = from.take();
+        // So every time we fail, we need to reset the `NamedTempFile` to try again.
+        //
+        // Every time we (re)try we call this outer closure (`let persist = ...`), so it needs to
+        // be at least a `FnMut` (as opposed to `Fnonce`). However the closure needs to return a
+        // totally owned `Future` (so effectively it returns a `FnOnce`).
+        //
+        // But if the `Future` is totally owned it *necessarily* can't write back the `NamedTempFile`
+        // to somewhere the outer `FnMut` can see using references. So we need to use `Arc`s
+        // with interior mutability (`Mutex`) to have the closure and all the Futures it creates share
+        // a single memory location that the `NamedTempFile` can be shuttled in and out of.
+        //
+        // In spite of the Mutex all of this code will run logically serially, so there shouldn't be a
+        // chance for a race where we try to get the `NamedTempFile` but it's actually None. The code
+        // is just written pedantically/robustly.
+        let from = std::sync::Arc::new(std::sync::Mutex::new(Some(from)));
+        let persist = || {
+            // Turn our by-ref-captured Arc into an owned Arc that the Future can capture by-value
+            let from2 = from.clone();
 
             async move {
-                if let Some(file) = from.take() {
+                let maybe_file: Option<NamedTempFile> = from2
+                    .lock()
+                    .map_err(|_| PersistRetryError::LostState)?
+                    .take();
+                if let Some(file) = maybe_file {
                     file.persist(to).map_err(|err| {
-                        let error_message = err.to_string();
-                        // Set back the NamedTempFile returned back by the Error
-                        from = Some(err.file);
-                        PersistRetryError::Persist(error_message)
+                        let error_message: String = err.to_string();
+                        // Set back the `NamedTempFile` returned back by the Error
+                        if let Ok(mut guard) = from2.lock() {
+                            *guard = Some(err.file);
+                            PersistRetryError::Persist(error_message)
+                        } else {
+                            PersistRetryError::LostState
+                        }
                     })
                 } else {
                     Err(PersistRetryError::LostState)
