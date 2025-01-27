@@ -1,15 +1,40 @@
 # Reproducible examples
 
+## Why reproducible examples are important
+
 A minimal reproducible example (MRE) is essential for fixing bugs. Without an example that can be
 used to reproduce the problem, a maintainer cannot debug it or test if it is fixed. If the example
 is not minimal, i.e., if it includes lots of content which is not related to the issue, it can take
 a maintainer much longer to identify the root cause of the problem.
 
-There's a great guide to the basics of creating MREs on
-[Stack Overflow](https://stackoverflow.com/help/minimal-reproducible-example). Here, we'll discuss a
-couple strategies for creating MREs specific to uv.
+## How to write a reproducible example
 
-## Docker image
+When writing a reproducible examaple, the goal is to provide all of the context necessary for
+someone else to reproduce your example. This includes:
+
+- The platform you're using (e.g., the operating system and architecture)
+- Any relevant system state (e.g., )
+- The version of uv
+- The version of other relevant tools
+- The relevant files (the `uv.lock`, `pyproject.toml`, etc.)
+- The commands to run
+
+To ensure your reproduction is minimal, remove as many dependencies, settings, and files as
+possible. Be sure to test your reproduction before sharing it. We recommend including verbose logs
+from your reproduction; they may differ on your machine in a critical way. Using a
+[Gist](https://gist.github.com) can be helpful for very long logs.
+
+Below, we'll cover several specific [strategies](#strategies-for-reproducible-examples) for creating
+and sharing reproducible examples.
+
+!!! tip
+
+    There's a great guide to the basics of creating MREs on
+    [Stack Overflow](https://stackoverflow.com/help/minimal-reproducible-example).
+
+## Strategies for reproducible examples
+
+### Docker image
 
 Writing a Docker image is often the best way to share a reproducible example because it is entirely
 self-contained. This means that the state from the reproducer's system does not affect the problem.
@@ -80,22 +105,7 @@ from the build steps by disabling caching and the fancy output:
 docker build . --progress plain --no-cache
 ```
 
-## Git repository
-
-When sharing a Git repository reproduction, it's helpful to include a [script](#script) that
-reproduces the problem or, even better, a [Dockerfile](#docker-image).
-
-You can quickly create a new repository in the [GitHub UI](https://github.com/new) or with the `gh`
-CLI:
-
-```console
-$ gh repo create uv-mre-1234 --clone
-```
-
-When using a Git repository for a reproduction, please remember to _minimize_ the contents by
-excluding files or configuration that are not required to reproduce your problem.
-
-## Script
+### Script
 
 When reporting platform-specific bugs that cannot be reproduced in a [container](#docker-image),
 it's best practice to include a script showing the commands that can be used to reproduce the bug,
@@ -108,9 +118,34 @@ uv sync
 uv run -v python -c "import pydantic"
 ```
 
+If your reproduction requires many files, use a [Git repository](#git-repository) to share them.
+
 In addition to the script, include _verbose_ logs (i.e., with the `-v` flag) of the failure and the
 complete error message.
 
 Whenever a script relies on external state, be sure to share that information. For example, if you
 wrote the script on Windows and it uses a Python version that you installed with `choco` and runs on
 PowerShell 6.2, please include that in the report.
+
+### Git repository
+
+When sharing a Git repository reproduction, include a [script](#script) that reproduces the problem
+or, even better, a [Dockerfile](#docker-image). The first step of the script should be to clone the
+repository and checkout a specific commit:
+
+```console
+$ git clone https://github.com/<user>/<project>.git
+$ cd <project>
+$ git checkout <commit>
+$ <commands to produce error>
+```
+
+You can quickly create a new repository in the [GitHub UI](https://github.com/new) or with the `gh`
+CLI:
+
+```console
+$ gh repo create uv-mre-1234 --clone
+```
+
+When using a Git repository for a reproduction, please remember to _minimize_ the contents by
+excluding files or settings that are not required to reproduce your problem.
