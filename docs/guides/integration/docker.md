@@ -118,7 +118,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.5.24 /uv /uvx /bin/
     be moved across different commit SHAs.
 
     ```Dockerfile
-    # The sha256 for 0.5.24
+    # e.g., using a hash from a previous release
     COPY --from=ghcr.io/astral-sh/uv@sha256:2381d6aa60c326b71fd40023f921a0a3b8f91b14d5db6b90402e65a635053709 /uv /uvx /bin/
     ```
 
