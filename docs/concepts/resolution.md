@@ -97,12 +97,19 @@ if different versions are needed for different platforms — the markers determi
 be used. A universal resolution is often more constrained than a platform-specific resolution, since
 we need to take the requirements for all markers into account.
 
-During universal resolution, all selected dependency versions must be compatible with the _entire_
-`requires-python` range declared in the `pyproject.toml`. For example, if a project's
-`requires-python` is `>=3.8`, then uv will not allow _any_ dependency versions that are limited to,
-e.g., Python 3.9 and later, as they are not compatible with Python 3.8, the lower bound of the
-project's supported range. In other words, the project's `requires-python` must be a subset of the
+During universal resolution, all required packages must be compatible with the _entire_ range of
+`requires-python` declared in the `pyproject.toml`. For example, if a project's `requires-python` is
+`>=3.8`, resolution will fail if all versions of given dependency require Python 3.9 or later, since
+the dependency lacks a usable version for (e.g.) Python 3.8, the lower bound of the project's
+supported range. In other words, the project's `requires-python` must be a subset of the
 `requires-python` of all its dependencies.
+
+When selecting the compatible version for a given dependency, uv will
+([by default](#multi-version-resolution)) attempt to choose the latest compatible version for each
+supported Python version. For example, if a project's `requires-python` is `>=3.8`, and the latest
+version of a dependency requires Python 3.9 or later, while all prior versions supporting Python
+3.8, the resolver will select the latest version for users running Python 3.9 or later, and previous
+versions for users running Python 3.8.
 
 When evaluating `requires-python` ranges for dependencies, uv only considers lower bounds and
 ignores upper bounds entirely. For example, `>=3.8, <4` is treated as `>=3.8`.
