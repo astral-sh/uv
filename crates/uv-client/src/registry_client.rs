@@ -20,6 +20,7 @@ use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     BuiltDist, File, FileLocation, Index, IndexCapabilities, IndexUrl, IndexUrls, Name,
 };
+use uv_fs::LockedFile;
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -336,6 +337,10 @@ impl RegistryClient {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
+        // Acquire the advisory lock for the cache entry.
+        let lock_entry = cache_entry.with_file(format!("{package_name}.lock"));
+        let _lock = acquire_lock(&lock_entry).await?;
+
         let result = if matches!(index, IndexUrl::Path(_)) {
             self.fetch_local_index(package_name, &url).await
         } else {
@@ -614,6 +619,10 @@ impl RegistryClient {
                 Connectivity::Offline => CacheControl::AllowStale,
             };
 
+            // Acquire the advisory lock for the cache entry.
+            let lock_entry = cache_entry.with_file(format!("{}.lock", filename.stem()));
+            let _lock = acquire_lock(&lock_entry).await?;
+
             let response_callback = |response: Response| async {
                 let bytes = response
                     .bytes()
@@ -676,6 +685,10 @@ impl RegistryClient {
             ),
             Connectivity::Offline => CacheControl::AllowStale,
         };
+
+        // Acquire the advisory lock for the cache entry.
+        let lock_entry = cache_entry.with_file(format!("{}.lock", filename.stem()));
+        let _lock = acquire_lock(&lock_entry).await?;
 
         // Attempt to fetch via a range request.
         if index.map_or(true, |index| capabilities.supports_range_requests(index)) {
@@ -978,6 +991,18 @@ impl Connectivity {
         matches!(self, Self::Offline)
     }
 }
+
+/// Apply an advisory lock to a [`CacheEntry`] to prevent concurrent cache writes.
+async fn acquire_lock(cache_entry: &CacheEntry) -> Result<LockedFile, Error> {
+    fs_err::create_dir_all(cache_entry.dir()).map_err(ErrorKind::Io)?;
+
+    let lock = LockedFile::acquire(cache_entry.path(), cache_entry.dir().display())
+        .await.map_err(ErrorKind::Io)
+        ?;
+
+    Ok(lock)
+}
+
 
 #[cfg(test)]
 mod tests {

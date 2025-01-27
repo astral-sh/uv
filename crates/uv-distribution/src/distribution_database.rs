@@ -14,7 +14,7 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{info_span, instrument, warn, Instrument};
 use url::Url;
 
-use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
+use uv_cache::{ArchiveId, CacheBucket, CacheEntry, CacheShard, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
@@ -25,7 +25,7 @@ use uv_distribution_types::{
     SourceDist,
 };
 use uv_extract::hash::Hasher;
-use uv_fs::write_atomic;
+use uv_fs::{write_atomic, LockedFile};
 use uv_platform_tags::Tags;
 use uv_pypi_types::HashDigest;
 use uv_types::{BuildContext, BuildStack};
@@ -33,7 +33,7 @@ use uv_types::{BuildContext, BuildStack};
 use crate::archive::Archive;
 use crate::locks::Locks;
 use crate::metadata::{ArchiveMetadata, Metadata};
-use crate::source::SourceDistributionBuilder;
+use crate::source::{acquire_entry_lock, lock_shard, SourceDistributionBuilder};
 use crate::{Error, LocalWheel, Reporter, RequiresDist};
 
 /// A cached high-level interface to convert distributions (a requirement resolved to a location)
@@ -373,9 +373,28 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         }
 
         // Otherwise, unzip the wheel.
-        let id = self
+        let id = match self
             .unzip_wheel(&built_wheel.path, &built_wheel.target)
-            .await?;
+            .await
+        {
+            Ok(id) => id,
+            Err(Error::CacheWrite(err)) => {
+                // If we failed due to a cache conflict, try again.
+                warn!("Failed to write wheel to cache; retrying ({err})");
+                return if let Ok(archive) = built_wheel.target.canonicalize() {
+                    Ok(LocalWheel {
+                        dist: Dist::Source(dist.clone()),
+                        archive,
+                        filename: built_wheel.filename,
+                        hashes: built_wheel.hashes,
+                        cache: built_wheel.cache_info,
+                    })
+                } else {
+                    Err(Error::CacheWrite(err))
+                };
+            }
+            Err(err) => return Err(err),
+        };
 
         Ok(LocalWheel {
             dist: Dist::Source(dist.clone()),
@@ -515,8 +534,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
     ) -> Result<Archive, Error> {
+        // Create an entry for the advisory lock.
+        let lock_entry = wheel_entry.with_file(format!("{}.lock", filename.stem()));
+        let _lock = acquire_lock(&lock_entry).await?;
+
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.stem()));
+
 
         let download = |response: reqwest::Response| {
             async {
@@ -640,8 +664,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
     ) -> Result<Archive, Error> {
+        // Create an entry for the advisory lock.
+        let lock_entry = wheel_entry.with_file(format!("{}.lock", filename.stem()));
+        let _lock = acquire_lock(&lock_entry).await?;
+
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.stem()));
+
 
         let download = |response: reqwest::Response| {
             async {
@@ -796,12 +825,17 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
+        // Create an entry for the advisory lock.
+        let lock_entry = wheel_entry.with_file(format!("{}.lock", filename.stem()));
+        let _lock = acquire_lock(&lock_entry).await?;
+
         // Determine the last-modified time of the wheel.
         let modified = Timestamp::from_path(path).map_err(Error::CacheRead)?;
 
         // Attempt to read the archive pointer from the cache.
         let pointer_entry = wheel_entry.with_file(format!("{}.rev", filename.stem()));
         let pointer = LocalArchivePointer::read_from(&pointer_entry)?;
+
 
         // Extract the archive from the pointer.
         let archive = pointer
@@ -890,10 +924,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let temp_dir = tokio::task::spawn_blocking({
             let path = path.to_owned();
             let root = self.build_context.cache().root().to_path_buf();
-            move || -> Result<TempDir, uv_extract::Error> {
+            move || -> Result<TempDir, Error> {
                 // Unzip the wheel into a temporary directory.
-                let temp_dir = tempfile::tempdir_in(root)?;
-                uv_extract::unzip(fs_err::File::open(path)?, temp_dir.path())?;
+                let temp_dir = tempfile::tempdir_in(root).map_err(Error::CacheWrite)?;
+                let reader = fs_err::File::open(path).map_err(Error::CacheWrite)?;
+                uv_extract::unzip(reader, temp_dir.path())?;
                 Ok(temp_dir)
             }
         })
@@ -1078,4 +1113,16 @@ impl LocalArchivePointer {
     pub fn to_cache_info(&self) -> CacheInfo {
         CacheInfo::from_timestamp(self.timestamp)
     }
+}
+
+
+/// Apply an advisory lock to a [`CacheEntry`] to prevent concurrent cache writes.
+async fn acquire_lock(cache_entry: &CacheEntry) -> Result<LockedFile, Error> {
+    fs_err::create_dir_all(cache_entry.dir()).map_err(Error::CacheWrite)?;
+
+    let lock = LockedFile::acquire(cache_entry.path(), cache_entry.dir().display())
+        .await
+        .map_err(Error::CacheWrite)?;
+
+    Ok(lock)
 }

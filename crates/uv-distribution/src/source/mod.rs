@@ -2884,7 +2884,7 @@ fn read_wheel_metadata(
 }
 
 /// Apply an advisory lock to a [`CacheShard`] to prevent concurrent builds.
-async fn lock_shard(cache_shard: &CacheShard) -> Result<LockedFile, Error> {
+pub(crate) async fn lock_shard(cache_shard: &CacheShard) -> Result<LockedFile, Error> {
     let root = cache_shard.as_ref();
 
     fs_err::create_dir_all(root).map_err(Error::CacheWrite)?;
