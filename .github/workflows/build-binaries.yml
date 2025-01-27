@@ -4,7 +4,7 @@
 #
 # Assumed to run as a subworkflow of .github/workflows/release.yml; specifically, as a local
 # artifacts job within `cargo-dist`.
-name: "Build binaries"
+name: "Build release binaries"
 
 on:
   workflow_call:
