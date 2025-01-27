@@ -3249,6 +3249,10 @@ pub struct AddArgs {
     #[arg(long, group = "git-ref", action = clap::ArgAction::Set)]
     pub branch: Option<String>,
 
+    /// Subdirectory to use when adding a dependency from Git.
+    #[arg(long)]
+    pub subdirectory: Option<PathBuf>,
+
     /// Extras to enable for the dependency.
     ///
     /// May be provided more than once.
