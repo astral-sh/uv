@@ -160,8 +160,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: cargo-bins/cargo-binstall@main
-      - run: cargo binstall --no-confirm cargo-shear
+      - name: "Install cargo shear"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-shear
       - run: cargo shear
 
   # We use the large GitHub actions runners
