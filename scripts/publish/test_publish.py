@@ -335,30 +335,51 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
     """
     project_name = all_targets[target].project_name
 
-    print(f"\nPublish {project_name} for {target}", file=sys.stderr)
+    # If a version was recently uploaded by another run of this script,
+    # `get_latest_version` may get a cached version and uploading fails. In this case
+    # we wait and try again.
+    retries = 3
+    while True:
+        print(f"\nPublish {project_name} for {target}", file=sys.stderr)
 
-    # The distributions are build to the dist directory of the project.
-    previous_version = get_latest_version(project_name, client)
-    version = get_new_version(previous_version)
-    project_dir = build_project_at_version(target, version, uv)
+        # The distributions are build to the dist directory of the project.
+        previous_version = get_latest_version(project_name, client)
+        version = get_new_version(previous_version)
+        project_dir = build_project_at_version(target, version, uv)
 
-    # Upload configuration
-    publish_url = all_targets[target].publish_url
-    index_url = all_targets[target].index_url
-    env, extra_args = target_configuration(target)
-    env = {**os.environ, **env}
-    expected_filenames = [path.name for path in project_dir.joinpath("dist").iterdir()]
-    # Ignore the gitignore file in dist
-    expected_filenames.remove(".gitignore")
-    # Ignore our test file
-    expected_filenames.remove(".DS_Store")
+        # Upload configuration
+        publish_url = all_targets[target].publish_url
+        index_url = all_targets[target].index_url
+        env, extra_args = target_configuration(target)
+        env = {**os.environ, **env}
+        expected_filenames = [
+            path.name for path in project_dir.joinpath("dist").iterdir()
+        ]
+        # Ignore the gitignore file in dist
+        expected_filenames.remove(".gitignore")
+        # Ignore our test file
+        expected_filenames.remove(".DS_Store")
 
-    print(
-        f"\n=== 1. Publishing a new version: {project_name} {version} {publish_url} ===",
-        file=sys.stderr,
-    )
-    args = [uv, "publish", "--publish-url", publish_url, *extra_args]
-    check_call(args, cwd=project_dir, env=env)
+        print(
+            f"\n=== 1. Publishing a new version: {project_name} {version} {publish_url} ===",
+            file=sys.stderr,
+        )
+
+        args = [uv, "publish", "--publish-url", publish_url, *extra_args]
+        result = run(args, cwd=project_dir, env=env, stderr=PIPE)
+        if result.returncode == 0:
+            # Successful upload
+            break
+
+        retries -= 1
+        if retries > 0:
+            print(
+                f"Publish failed, retrying after 10s: {result.stderr}", file=sys.stderr
+            )
+            sleep(10)
+        else:
+            # Raise the error after three failures
+            result.check_returncode()
 
     if publish_url == TEST_PYPI_PUBLISH_URL:
         # Confirm pypi behaviour: Uploading the same file again is fine.
