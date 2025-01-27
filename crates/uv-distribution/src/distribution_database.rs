@@ -347,7 +347,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         tags: &Tags,
         hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
-        let lock = self.locks.acquire(&Dist::Source(dist.clone())).await;
+        let lock = self.locks.acquire(dist).await;
         let _guard = lock.lock().await;
 
         let built_wheel = self
