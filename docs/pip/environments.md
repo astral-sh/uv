@@ -45,7 +45,7 @@ $ uv pip install ruff
 
 The virtual environment can be "activated" to make its packages available:
 
-=== "macOS and Linux (bash/zsh)"
+=== "macOS and Linux"
 
     ```console
     $ source .venv/bin/activate
@@ -57,18 +57,29 @@ The virtual environment can be "activated" to make its packages available:
     $ .venv\Scripts\activate
     ```
 
-=== "Alternative shells"
+!!! note
 
-    ```console
-    # For fish shell
-    $ source .venv/bin/activate.fish
+    The default activation script on Unix is for POSIX compliant shells like `sh`, `bash`, or `zsh`.
+    There are additional activation scripts for common alternative shells.
 
-    # For csh/tcsh
-    $ source .venv/bin/activate.csh
+    === "fish"
 
-    # For Nushell
-    $ use .venv\Scripts\activate.nu
-    ```
+        ```console
+        $ source .venv/bin/activate.fish
+        ```
+
+    === "csh / tcsh"
+
+
+        ```console
+        $ source .venv/bin/activate.csh
+        ```
+
+    === "Nushell"
+
+        ```console
+        $ use .venv\Scripts\activate.nu
+        ```
 
 ## Using arbitrary Python environments
 
