@@ -13213,7 +13213,7 @@ fn compile_enumerate_no_versions() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.10.[X]) does not satisfy Python>=3.11,<4.0 and all versions of rooster-blue depend on Python>=3.11,<4.0, we can conclude that all versions of rooster-blue cannot be used.
+      ╰─▶ Because the current Python version (3.10.[X]) does not satisfy Python>=3.11,<4.0 and rooster-blue<=0.0.8 depends on Python>=3.11,<4.0, we can conclude that rooster-blue<=0.0.8 cannot be used.
           And because you require rooster-blue, we can conclude that your requirements are unsatisfiable.
     "###);
 
