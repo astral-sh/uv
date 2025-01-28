@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.5.25
+
+### Enhancements
+
+- Allow installation of manylinux wheels on loongarch64 ([#10927](https://github.com/astral-sh/uv/pull/10927))
+- Allow optional `=` for editables in `requirements.txt` ([#10954](https://github.com/astral-sh/uv/pull/10954))
+- Add Windows aarch64 to the release binaries ([#10885](https://github.com/astral-sh/uv/pull/10885))
+
+### Bug fixes
+
+- Use spec-compliant (`128+n`) exit codes for `uv run` and `uv tool run` on Unix ([#10781](https://github.com/astral-sh/uv/pull/10781))
+- Fix best-interpreter lookups when there is an invalid interpreter in the `PATH` ([#11030](https://github.com/astral-sh/uv/pull/11030))
+- Guard against concurrent cache writes on Windows ([#11007](https://github.com/astral-sh/uv/pull/11007))
+- Prioritize package preferences with greater package versions ([#10963](https://github.com/astral-sh/uv/pull/10963))
+- Reject `--editable` flag on non-directory requirements ([#10994](https://github.com/astral-sh/uv/pull/10994))
+- Respect `--no-sources` for `uv pip install` workspace discovery ([#11003](https://github.com/astral-sh/uv/pull/11003))
+- Set `JEMALLOC_SYS_WITH_LG_PAGE=16` in ARM Docker builds ([#10943](https://github.com/astral-sh/uv/pull/10943))
+- Update `riscv64` Python downloads to allow install on `riscv64gc` ([#10937](https://github.com/astral-sh/uv/pull/10937))
+- Fix file persist retries on Windows ([#11008](https://github.com/astral-sh/uv/pull/11008))
+- Fix incorrect error message when specifying `tool.uv.sources.(package).workspace` with other options ([#11013](https://github.com/astral-sh/uv/pull/11013))
+- Improve SIGINT handling in `uv run` ([#11009](https://github.com/astral-sh/uv/pull/11009))
+
+### Documentation
+
+- Add `SECURITY` policy ([#11035](https://github.com/astral-sh/uv/pull/11035))
+- Add `Requires-Python` upper bound behavior to the docs ([#10964](https://github.com/astral-sh/uv/pull/10964))
+- Add a troubleshooting section and reproducible example guide ([#10947](https://github.com/astral-sh/uv/pull/10947))
+- Add documentation for `uv add -r` ([#10926](https://github.com/astral-sh/uv/pull/10926))
+- Amend `requires-python` rules in resolver documentation ([#10993](https://github.com/astral-sh/uv/pull/10993))
+- Reference workspaces in `--no-sources` documentation ([#10995](https://github.com/astral-sh/uv/pull/10995))
+- Update documentation for activating virtual environments in different shell ([#11000](https://github.com/astral-sh/uv/pull/11000))
+- Add Docker SHA pinning tip ([#10955](https://github.com/astral-sh/uv/pull/10955))
+
 ## 0.5.24
 
 ### Enhancements
