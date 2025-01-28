@@ -161,6 +161,34 @@ enum Prompt {
 
 /// Unify the different possible source for username and password information.
 ///
+/// Possible credential sources are environment variables, the CLI, the URL, the keyring, trusted
+/// publishing or a prompt.
+///
+/// The username can come from, in order:
+///
+/// - Mutually exclusive:
+///   - `--username` or `UV_PUBLISH_USERNAME`. The CLI option overrides the environment variable
+///   - The username field in the publish URL
+///   - If `--token` or `UV_PUBLISH_TOKEN` are used, it is `__token__`. The CLI option
+///     overrides the environment variable
+/// - If trusted publishing is available, it is `__token__`
+/// - (We currently do not read the username from the keyring)
+/// - If stderr is a tty, prompt the user
+///
+/// The password can come from, in order:
+///
+/// - Mutually exclusive:
+///   - `--password` or `UV_PUBLISH_PASSWORD`. The CLI option overrides the environment variable
+///   - The password field in the publish URL
+///   - If `--token` or `UV_PUBLISH_TOKEN` are used, it is the token value. The CLI option overrides
+///     the environment variable
+/// - If the keyring is enabled, the keyring entry for the URL and username
+/// - If trusted publishing is available, the trusted publishing token
+/// - If stderr is a tty, prompt the user
+///
+/// If no credentials are found, the auth middleware does a final check for cached credentials and
+/// otherwise errors without sending the request.
+///
 /// Returns the publish URL, the username and the password.
 async fn gather_credentials(
     mut publish_url: Url,
