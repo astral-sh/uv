@@ -1243,10 +1243,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Commands::Publish(args) => {
             show_settings!(args);
 
-            if globals.preview.is_disabled() {
-                warn_user_once!("`uv publish` is experimental and may change without warning");
-            }
-
             if args.skip_existing {
                 bail!(
                     "`uv publish` does not support `--skip-existing` because there is not a \
