@@ -21,3 +21,8 @@ If you have found a possible vulnerability that is not excluded by the above
 
 While we sincerely appreciate and encourage reports of suspected security problems, please note that
 Astral does not currently run any bug bounty programs.
+
+## Vulnerability disclosures
+
+Critical vulnerabilities will be disclosed via GitHub's
+[security advisory](https://github.com/astral-sh/uv/security) system.
