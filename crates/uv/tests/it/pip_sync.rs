@@ -1418,14 +1418,18 @@ fn install_url_source_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(context.clean()
-        .arg("source_distribution"), @r###"
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(
+        filters,
+        context.clean().arg("source_distribution"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Removed 19 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###
     );
 
@@ -1600,19 +1604,9 @@ fn install_registry_source_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    let filters: Vec<(&str, &str)> = if cfg!(windows) {
-        // On Windows, the number of files removed is different.
-        [("Removed 13 files", "Removed 14 files")]
-            .into_iter()
-            .chain(context.filters())
-            .collect()
-    } else {
-        // For some Linux distributions, like Gentoo, the number of files removed is different.
-        [("Removed 12 files", "Removed 14 files")]
-            .into_iter()
-            .chain(context.filters())
-            .collect()
-    };
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
     uv_snapshot!(filters, context.clean()
         .arg("source_distribution"), @r###"
     success: true
@@ -1620,7 +1614,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 20 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###
     );
 
@@ -1710,14 +1704,18 @@ fn install_path_source_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(context.clean()
-        .arg("source-distribution"), @r###"
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(
+        filters,
+        context.clean().arg("source-distribution"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Removed 19 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###
     );
 
@@ -1800,23 +1798,18 @@ fn install_path_built_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    let filters = if cfg!(windows) {
-        // We do not display sizes on Windows
-        [("Removed 1 file", "Removed 1 file ([SIZE])")]
-            .into_iter()
-            .chain(context.filters())
-            .collect()
-    } else {
-        context.filters()
-    };
-    uv_snapshot!(filters, context.clean()
-        .arg("tomli"), @r###"
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(
+        filters,
+        context.clean().arg("tomli"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Removed 11 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###
     );
 
@@ -1849,7 +1842,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("tqdm @ https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl")?;
 
-    let filters = if cfg!(windows) {
+    let context_filters = if cfg!(windows) {
         [("warning: The package `tqdm` requires `colorama ; sys_platform == 'win32'`, but it's not installed\n", "")]
             .into_iter()
             .chain(context.filters())
@@ -1857,7 +1850,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     } else {
         context.filters()
     };
-    uv_snapshot!(filters, context.pip_sync()
+    uv_snapshot!(context_filters, context.pip_sync()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1877,7 +1870,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     // Re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(filters, context.pip_sync()
+    uv_snapshot!(context_filters, context.pip_sync()
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1897,18 +1890,22 @@ fn install_url_built_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(context.clean()
-        .arg("tqdm"), @r###"
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context_filters.clone())
+        .collect::<Vec<_>>();
+    uv_snapshot!(
+        filters,
+        context.clean().arg("tqdm"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Removed 43 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###
     );
 
-    uv_snapshot!(filters, context.pip_sync()
+    uv_snapshot!(context_filters, context.pip_sync()
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
