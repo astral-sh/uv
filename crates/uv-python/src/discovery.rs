@@ -1074,10 +1074,16 @@ pub fn find_best_python_installation(
 
     // First, check for an exact match (or the first available version if no Python version was provided)
     debug!("Looking for exact match for request {request}");
-    let result = find_python_installation(request, environments, preference, cache)?;
-    if let Ok(ref installation) = result {
-        warn_on_unsupported_python(installation.interpreter());
-        return Ok(result);
+    let result = find_python_installation(request, environments, preference, cache);
+    match result {
+        Ok(Ok(installation)) => {
+            warn_on_unsupported_python(installation.interpreter());
+            return Ok(Ok(installation));
+        }
+        // Continue if we can't find a matching Python and ignore non-critical discovery errors
+        Ok(Err(_)) => {}
+        Err(ref err) if !err.is_critical() => {}
+        _ => return result,
     }
 
     // If that fails, and a specific patch version was requested try again allowing a
@@ -1096,10 +1102,16 @@ pub fn find_best_python_installation(
         _ => None,
     } {
         debug!("Looking for relaxed patch version {request}");
-        let result = find_python_installation(&request, environments, preference, cache)?;
-        if let Ok(ref installation) = result {
-            warn_on_unsupported_python(installation.interpreter());
-            return Ok(result);
+        let result = find_python_installation(&request, environments, preference, cache);
+        match result {
+            Ok(Ok(installation)) => {
+                warn_on_unsupported_python(installation.interpreter());
+                return Ok(Ok(installation));
+            }
+            // Continue if we can't find a matching Python and ignore non-critical discovery errors
+            Ok(Err(_)) => {}
+            Err(ref err) if !err.is_critical() => {}
+            _ => return result,
         }
     }
 
