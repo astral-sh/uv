@@ -17672,7 +17672,7 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
 
         [[package]]
         name = "jinja2"
-        version = "3.1.3"
+        version = "3.1.4"
         source = { registry = "https://download.pytorch.org/whl/cu118" }
         resolution-markers = [
             "sys_platform == 'win32'",
@@ -17681,12 +17681,12 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
             { name = "markupsafe", marker = "sys_platform == 'win32'" },
         ]
         wheels = [
-            { url = "https://download.pytorch.org/whl/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa" },
+            { url = "https://download.pytorch.org/whl/Jinja2-3.1.4-py3-none-any.whl" },
         ]
 
         [[package]]
         name = "jinja2"
-        version = "3.1.3"
+        version = "3.1.4"
         source = { registry = "https://download.pytorch.org/whl/cu124" }
         resolution-markers = [
             "sys_platform != 'win32'",
@@ -17695,7 +17695,7 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
             { name = "markupsafe", marker = "sys_platform != 'win32'" },
         ]
         wheels = [
-            { url = "https://download.pytorch.org/whl/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa" },
+            { url = "https://download.pytorch.org/whl/Jinja2-3.1.4-py3-none-any.whl" },
         ]
 
         [[package]]
@@ -17716,8 +17716,8 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "jinja2", version = "3.1.3", source = { registry = "https://download.pytorch.org/whl/cu118" }, marker = "sys_platform == 'win32'" },
-            { name = "jinja2", version = "3.1.3", source = { registry = "https://download.pytorch.org/whl/cu124" }, marker = "sys_platform != 'win32'" },
+            { name = "jinja2", version = "3.1.4", source = { registry = "https://download.pytorch.org/whl/cu118" }, marker = "sys_platform == 'win32'" },
+            { name = "jinja2", version = "3.1.4", source = { registry = "https://download.pytorch.org/whl/cu124" }, marker = "sys_platform != 'win32'" },
         ]
 
         [package.metadata]
@@ -17798,7 +17798,7 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
 
         [[package]]
         name = "jinja2"
-        version = "3.1.3"
+        version = "3.1.4"
         source = { registry = "https://download.pytorch.org/whl/cu118" }
         resolution-markers = [
             "sys_platform == 'win32'",
@@ -17807,7 +17807,7 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
             { name = "markupsafe", marker = "sys_platform == 'win32'" },
         ]
         wheels = [
-            { url = "https://download.pytorch.org/whl/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa" },
+            { url = "https://download.pytorch.org/whl/Jinja2-3.1.4-py3-none-any.whl" },
         ]
 
         [[package]]
@@ -17848,7 +17848,7 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "jinja2", version = "3.1.3", source = { registry = "https://download.pytorch.org/whl/cu118" }, marker = "sys_platform == 'win32'" },
+            { name = "jinja2", version = "3.1.4", source = { registry = "https://download.pytorch.org/whl/cu118" }, marker = "sys_platform == 'win32'" },
             { name = "jinja2", version = "3.1.4", source = { url = "https://files.pythonhosted.org/packages/31/80/3a54838c3fb461f6fec263ebf3a3a41771bd05190238de3486aae8540c36/jinja2-3.1.4-py3-none-any.whl" }, marker = "sys_platform != 'win32'" },
         ]
 
@@ -17905,7 +17905,7 @@ fn lock_multiple_sources_index_non_total() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    error: Found duplicate package `jinja2==3.1.3 @ registry+https://download.pytorch.org/whl/cu118`
+    error: Found duplicate package `jinja2==3.1.4 @ registry+https://download.pytorch.org/whl/cu118`
     "###);
 
     Ok(())
@@ -22703,7 +22703,8 @@ fn lock_pytorch_cpu() -> Result<()> {
             "(platform_machine != 'aarch64' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (sys_platform != 'linux' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')",
             "platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu124'",
             "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124')",
-            "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (sys_platform == 'darwin' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124')",
+            "platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124'",
+            "sys_platform == 'darwin' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124'",
             "extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124'",
         ]
         conflicts = [[
@@ -23091,7 +23092,8 @@ fn lock_pytorch_cpu() -> Result<()> {
         version = "2.5.1"
         source = { registry = "https://download.pytorch.org/whl/cpu" }
         resolution-markers = [
-            "(platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'",
+            "platform_machine == 'aarch64' and sys_platform == 'linux'",
+            "sys_platform == 'darwin'",
         ]
         dependencies = [
             { name = "filelock", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'" },
@@ -23189,7 +23191,8 @@ fn lock_pytorch_cpu() -> Result<()> {
         version = "0.20.1"
         source = { registry = "https://download.pytorch.org/whl/cpu" }
         resolution-markers = [
-            "(platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'",
+            "platform_machine == 'aarch64' and sys_platform == 'linux'",
+            "sys_platform == 'darwin'",
         ]
         dependencies = [
             { name = "numpy", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'" },
