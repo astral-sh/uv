@@ -32,17 +32,41 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
     // this seems preferable to not forwarding it in the first place.
     #[cfg(unix)]
     let status = {
+        use std::ops::Deref;
+
         use nix::sys::signal;
         use nix::unistd::{getpgid, Pid};
         use tokio::select;
         use tokio::signal::unix::{signal as handle_signal, SignalKind};
 
-        // Get the parent and child process group ids
-        let child_pid = handle
-            .id()
-            .and_then(|id| id.try_into().ok())
-            .map(Pid::from_raw);
+        /// Simple new type for `Pid` allowing construction from [`Child`].
+        ///
+        /// `None` if the child process has exited or the PID is invalid.
+        struct ChildPid(Option<Pid>);
+
+        impl Deref for ChildPid {
+            type Target = Option<Pid>;
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
+
+        impl From<&Child> for ChildPid {
+            fn from(child: &Child) -> Self {
+                Self(
+                    child
+                        .id()
+                        .and_then(|id| id.try_into().ok())
+                        .map(Pid::from_raw),
+                )
+            }
+        }
+
+        // Get the parent PGID
         let parent_pgid = getpgid(None)?;
+        if let Some(child_pid) = *ChildPid::from(&handle) {
+            debug!("Spawned child {child_pid} in process group {parent_pgid}");
+        }
 
         let mut sigterm_handle = handle_signal(SignalKind::terminate())?;
         let mut sigint_handle = handle_signal(SignalKind::interrupt())?;
@@ -56,8 +80,14 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
                 _ = sigint_handle.recv() => {
                     // See above for commentary on handling of SIGINT.
 
+                    // If the child has already exited, we can't send it signals
+                    let Some(child_pid) = *ChildPid::from(&handle) else {
+                        debug!("Received SIGINT, but the child has already exited");
+                        continue;
+                    };
+
                     // Check if the child pgid has changed
-                    let child_pgid = getpgid(child_pid)?;
+                    let child_pgid = getpgid(Some(child_pid))?;
 
                     // Increment the number of interrupts seen
                     sigint_count += 1;
@@ -66,15 +96,24 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
                     // and we should forward it. If we've received multiple SIGINTs, forward it
                     // regardless.
                     if child_pgid == parent_pgid && sigint_count < 2 {
+                        debug!("Received SIGINT, assuming the child received it as part of the process group");
                         continue;
                     }
 
-                    let _ = send_signal(&handle, child_pid, signal::Signal::SIGINT);
+                    debug!("Received SIGINT, forwarding to child at {child_pid}");
+                    let _ = signal::kill(child_pid, signal::Signal::SIGINT);
                 },
                 _ = sigterm_handle.recv() => {
+                    // If the child has already exited, we can't send it signals
+                    let Some(child_pid) = *ChildPid::from(&handle) else {
+                        debug!("Received SIGINT, but the child has already exited");
+                        continue;
+                    };
+
                     // We unconditionally forward SIGTERM to the child process; unlike SIGINT, this
                     // isn't usually handled by the shell and in cases like
-                    let _ = send_signal(&handle, child_pid, signal::Signal::SIGTERM);
+                    debug!("Received SIGTERM, forwarding to child at {child_pid}");
+                    let _ = signal::kill(child_pid, signal::Signal::SIGTERM);
                 }
             };
         }
@@ -115,31 +154,4 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
         }
         Ok(ExitStatus::Failure)
     }
-}
-
-/// Send a signal to a child process on Unix.
-///
-/// Includes a safety check that the process has not exited.
-#[cfg(unix)]
-fn send_signal(
-    child: &Child,
-    child_pid: Option<nix::unistd::Pid>,
-    signal: nix::sys::signal::Signal,
-) -> anyhow::Result<()> {
-    use nix::sys::signal;
-
-    // If the child has already exited, we can't send it signals
-    let Some(child_pid) = child_pid else {
-        anyhow::bail!("Child process has already exited");
-    };
-
-    // The child can exit and a different process can take its PID; this may be
-    // overly defensive but seems better than sending a signal to the wrong process.
-    if child.id().is_none() {
-        anyhow::bail!("Child process has already exited");
-    }
-
-    signal::kill(child_pid, signal)?;
-
-    Ok(())
 }
