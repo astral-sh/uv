@@ -73,7 +73,7 @@ fn init_application() -> Result<()> {
     child.create_dir_all()?;
 
     let pyproject_toml = child.join("pyproject.toml");
-    let hello_py = child.join("hello.py");
+    let app_py = child.join("app.py");
 
     uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app"), @r###"
     success: true
@@ -101,7 +101,7 @@ fn init_application() -> Result<()> {
         );
     });
 
-    let hello = fs_err::read_to_string(hello_py)?;
+    let hello = fs_err::read_to_string(app_py)?;
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -117,7 +117,7 @@ fn init_application() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("hello.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("app.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -134,7 +134,7 @@ fn init_application() -> Result<()> {
     Ok(())
 }
 
-/// When `hello.py` already exists, we don't create it again
+/// When `app.py` already exists, we don't create it again
 #[test]
 fn init_application_hello_exists() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -143,8 +143,8 @@ fn init_application_hello_exists() -> Result<()> {
     child.create_dir_all()?;
 
     let pyproject_toml = child.join("pyproject.toml");
-    let hello_py = child.child("hello.py");
-    hello_py.touch()?;
+    let app_py = child.child("app.py");
+    app_py.touch()?;
 
     uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app"), @r###"
     success: true
@@ -172,7 +172,7 @@ fn init_application_hello_exists() -> Result<()> {
         );
     });
 
-    let hello = fs_err::read_to_string(hello_py)?;
+    let hello = fs_err::read_to_string(app_py)?;
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -184,7 +184,7 @@ fn init_application_hello_exists() -> Result<()> {
     Ok(())
 }
 
-/// When other Python files already exists, we still create `hello.py`
+/// When other Python files already exists, we still create `app.py`
 #[test]
 fn init_application_other_python_exists() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -193,7 +193,7 @@ fn init_application_other_python_exists() -> Result<()> {
     child.create_dir_all()?;
 
     let pyproject_toml = child.join("pyproject.toml");
-    let hello_py = child.join("hello.py");
+    let app_py = child.join("app.py");
     let other_py = child.child("foo.py");
     other_py.touch()?;
 
@@ -223,7 +223,7 @@ fn init_application_other_python_exists() -> Result<()> {
         );
     });
 
-    let hello = fs_err::read_to_string(hello_py)?;
+    let hello = fs_err::read_to_string(app_py)?;
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -407,15 +407,15 @@ fn init_script() -> Result<()> {
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
 
-    let script = child.join("hello.py");
+    let script = child.join("app.py");
 
-    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("hello.py"), @r###"
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("app.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Initialized script at `hello.py`
+    Initialized script at `app.py`
     "###);
 
     let script = fs_err::read_to_string(&script)?;
@@ -431,7 +431,7 @@ fn init_script() -> Result<()> {
 
 
         def main() -> None:
-            print("Hello from hello.py!")
+            print("Hello from app.py!")
 
 
         if __name__ == "__main__":
@@ -440,11 +440,11 @@ fn init_script() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("python").arg("hello.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("python").arg("app.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
-    Hello from hello.py!
+    Hello from app.py!
 
     ----- stderr -----
     "###);
@@ -818,7 +818,7 @@ fn init_application_current_dir() -> Result<()> {
     "###);
 
     let pyproject = fs_err::read_to_string(dir.join("pyproject.toml"))?;
-    let hello_py = fs_err::read_to_string(dir.join("hello.py"))?;
+    let app_py = fs_err::read_to_string(dir.join("app.py"))?;
 
     insta::with_settings!({
         filters => context.filters(),
@@ -840,7 +840,7 @@ fn init_application_current_dir() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            hello_py, @r###"
+            app_py, @r###"
         def main():
             print("Hello from foo!")
 
