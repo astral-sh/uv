@@ -27,7 +27,7 @@ impl LatestClient<'_> {
         &self,
         package: &PackageName,
         index: Option<&IndexUrl>,
-    ) -> anyhow::Result<Option<DistFilename>, uv_client::Error> {
+    ) -> Result<Option<DistFilename>, uv_client::Error> {
         debug!("Fetching latest version of: `{package}`");
 
         let archives = match self.client.simple(package, index, self.capabilities).await {
