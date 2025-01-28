@@ -7482,7 +7482,7 @@ fn universal_platform_fork() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --universal
     filelock==3.13.1
         # via torch
-    fsspec==2024.2.0
+    fsspec==2024.6.1
         # via torch
     jinja2==3.1.4
         # via torch
@@ -7490,9 +7490,9 @@ fn universal_platform_fork() -> Result<()> {
         # via jinja2
     mpmath==1.3.0
         # via sympy
-    networkx==3.2.1
+    networkx==3.3
         # via torch
-    setuptools==70.0.0
+    setuptools==70.2.0
         # via torch
     sympy==1.13.1
         # via torch

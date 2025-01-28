@@ -7099,6 +7099,7 @@ fn add_index() -> Result<()> {
         name = "markupsafe"
         version = "2.1.5"
         source = { registry = "https://download.pytorch.org/whl/cu121" }
+        sdist = { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5.tar.gz" }
         wheels = [
             { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:8dec4936e9c3100156f8a2dc89c4b88d5c435175ff03413b443469c7c8c5f4d1" },
             { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:3c6b973f22eb18a789b1460b4b91bf04ae3f0c4234a0a6aa6b0a92f6f7b951d4" },
