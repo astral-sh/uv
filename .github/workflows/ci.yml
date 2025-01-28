@@ -351,14 +351,14 @@ jobs:
         target-arch: ["x86_64", "i686"]
     steps:
       - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ github.workspace }}/crates/uv-trampoline
       - name: "Install Rust toolchain"
         working-directory: ${{ github.workspace }}/crates/uv-trampoline
         run: |
           rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
           rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: ${{ github.workspace }}/crates/uv-trampoline
       - name: "Test committed binaries"
         working-directory: ${{ github.workspace }}
         run: |
