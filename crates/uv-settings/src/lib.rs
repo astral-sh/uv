@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use etcetera::BaseStrategy;
 
 use uv_fs::Simplified;
+use uv_python::{virtualenv_from_env, virtualenv_from_working_dir};
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
 
@@ -61,6 +62,14 @@ impl FilesystemOptions {
             }
             Err(err) => Err(err),
         }
+    }
+
+    pub fn venv() -> Result<Option<Self>, Error> {
+        let Some(file) = venv_config_file() else {
+            return Ok(None);
+        };
+        tracing::debug!("Found venv configuration in: `{}`", file.display());
+        Ok(Some(Self(read_file(&file)?)))
     }
 
     pub fn system() -> Result<Option<Self>, Error> {
@@ -250,6 +259,27 @@ fn system_config_file() -> Option<PathBuf> {
             }
         }
     }
+}
+
+/// Returns the path to a venv-specific configuration file if one exists.
+fn venv_config_file() -> Option<PathBuf> {
+    // First check VIRTUAL_ENV environment variable
+    if let Some(venv_path) = virtualenv_from_env() {
+        let venv_config = venv_path.join("uv.toml");
+        if venv_config.is_file() {
+            return Some(venv_config);
+        }
+    }
+
+    // Then look for .venv in current or parent directories
+    if let Ok(Some(venv_path)) = virtualenv_from_working_dir() {
+        let venv_config = venv_path.join("uv.toml");
+        if venv_config.is_file() {
+            return Some(venv_config);
+        }
+    }
+
+    None
 }
 
 /// Load [`Options`] from a `uv.toml` file.
