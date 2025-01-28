@@ -1242,42 +1242,42 @@ impl<'de> Deserialize<'de> for Source {
         if let Some(workspace) = workspace {
             if index.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `index`",
+                    "cannot specify both `workspace` and `index`",
                 ));
             }
             if git.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `git`",
+                    "cannot specify both `workspace` and `git`",
                 ));
             }
             if url.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `url`",
+                    "cannot specify both `workspace` and `url`",
                 ));
             }
             if path.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `path`",
+                    "cannot specify both `workspace` and `path`",
                 ));
             }
             if rev.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `rev`",
+                    "cannot specify both `workspace` and `rev`",
                 ));
             }
             if tag.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `tag`",
+                    "cannot specify both `workspace` and `tag`",
                 ));
             }
             if branch.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `branch`",
+                    "cannot specify both `workspace` and `branch`",
                 ));
             }
             if editable.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `editable`",
+                    "cannot specify both `workspace` and `editable`",
                 ));
             }
 
