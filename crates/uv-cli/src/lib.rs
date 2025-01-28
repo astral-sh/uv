@@ -2618,11 +2618,11 @@ pub struct InitArgs {
     /// Invalid option name for build backend.
     #[arg(
         long,
-        value_enum,
+        required(false),
         value_parser=clap::builder::UnknownArgumentValueParser::suggest_arg("--build-backend"),
         hide(true)
     )]
-    backend: Option<ProjectBuildBackend>,
+    backend: bool,
 
     /// Do not create a `README.md` file.
     #[arg(long)]
