@@ -17624,7 +17624,7 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["jinja2>=3"]
+        dependencies = ["jinja2>=3,<3.1.4"]
 
         [tool.uv]
         constraint-dependencies = ["markupsafe<3"]
@@ -17673,7 +17673,7 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
 
         [[package]]
         name = "jinja2"
-        version = "3.1.4"
+        version = "3.1.3"
         source = { registry = "https://download.pytorch.org/whl/cu118" }
         resolution-markers = [
             "sys_platform == 'win32'",
@@ -17682,12 +17682,12 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
             { name = "markupsafe", marker = "sys_platform == 'win32'" },
         ]
         wheels = [
-            { url = "https://download.pytorch.org/whl/Jinja2-3.1.4-py3-none-any.whl" },
+            { url = "https://download.pytorch.org/whl/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa" },
         ]
 
         [[package]]
         name = "jinja2"
-        version = "3.1.4"
+        version = "3.1.3"
         source = { registry = "https://download.pytorch.org/whl/cu124" }
         resolution-markers = [
             "sys_platform != 'win32'",
@@ -17696,7 +17696,7 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
             { name = "markupsafe", marker = "sys_platform != 'win32'" },
         ]
         wheels = [
-            { url = "https://download.pytorch.org/whl/Jinja2-3.1.4-py3-none-any.whl" },
+            { url = "https://download.pytorch.org/whl/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa" },
         ]
 
         [[package]]
@@ -17718,14 +17718,14 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "jinja2", version = "3.1.4", source = { registry = "https://download.pytorch.org/whl/cu118" }, marker = "sys_platform == 'win32'" },
-            { name = "jinja2", version = "3.1.4", source = { registry = "https://download.pytorch.org/whl/cu124" }, marker = "sys_platform != 'win32'" },
+            { name = "jinja2", version = "3.1.3", source = { registry = "https://download.pytorch.org/whl/cu118" }, marker = "sys_platform == 'win32'" },
+            { name = "jinja2", version = "3.1.3", source = { registry = "https://download.pytorch.org/whl/cu124" }, marker = "sys_platform != 'win32'" },
         ]
 
         [package.metadata]
         requires-dist = [
-            { name = "jinja2", marker = "sys_platform != 'win32'", specifier = ">=3", index = "https://download.pytorch.org/whl/cu124" },
-            { name = "jinja2", marker = "sys_platform == 'win32'", specifier = ">=3", index = "https://download.pytorch.org/whl/cu118" },
+            { name = "jinja2", marker = "sys_platform != 'win32'", specifier = ">=3,<3.1.4", index = "https://download.pytorch.org/whl/cu124" },
+            { name = "jinja2", marker = "sys_platform == 'win32'", specifier = ">=3,<3.1.4", index = "https://download.pytorch.org/whl/cu118" },
         ]
         "###
         );
@@ -17755,7 +17755,7 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["jinja2>=3"]
+        dependencies = ["jinja2>=3,<3.1.4"]
 
         [tool.uv]
         constraint-dependencies = ["markupsafe<3"]
@@ -17800,7 +17800,7 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
 
         [[package]]
         name = "jinja2"
-        version = "3.1.4"
+        version = "3.1.3"
         source = { registry = "https://download.pytorch.org/whl/cu118" }
         resolution-markers = [
             "sys_platform == 'win32'",
@@ -17809,7 +17809,7 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
             { name = "markupsafe", marker = "sys_platform == 'win32'" },
         ]
         wheels = [
-            { url = "https://download.pytorch.org/whl/Jinja2-3.1.4-py3-none-any.whl" },
+            { url = "https://download.pytorch.org/whl/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa" },
         ]
 
         [[package]]
@@ -17851,14 +17851,14 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "jinja2", version = "3.1.4", source = { registry = "https://download.pytorch.org/whl/cu118" }, marker = "sys_platform == 'win32'" },
+            { name = "jinja2", version = "3.1.3", source = { registry = "https://download.pytorch.org/whl/cu118" }, marker = "sys_platform == 'win32'" },
             { name = "jinja2", version = "3.1.4", source = { url = "https://files.pythonhosted.org/packages/31/80/3a54838c3fb461f6fec263ebf3a3a41771bd05190238de3486aae8540c36/jinja2-3.1.4-py3-none-any.whl" }, marker = "sys_platform != 'win32'" },
         ]
 
         [package.metadata]
         requires-dist = [
             { name = "jinja2", marker = "sys_platform != 'win32'", url = "https://files.pythonhosted.org/packages/31/80/3a54838c3fb461f6fec263ebf3a3a41771bd05190238de3486aae8540c36/jinja2-3.1.4-py3-none-any.whl" },
-            { name = "jinja2", marker = "sys_platform == 'win32'", specifier = ">=3", index = "https://download.pytorch.org/whl/cu118" },
+            { name = "jinja2", marker = "sys_platform == 'win32'", specifier = ">=3,<3.1.4", index = "https://download.pytorch.org/whl/cu118" },
         ]
         "###
         );
@@ -17888,7 +17888,7 @@ fn lock_multiple_sources_index_non_total() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["jinja2>=3"]
+        dependencies = ["jinja2>=3,<3.1.4"]
 
         [tool.uv.sources]
         jinja2 = [
@@ -17908,7 +17908,7 @@ fn lock_multiple_sources_index_non_total() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    error: Found duplicate package `jinja2==3.1.4 @ registry+https://download.pytorch.org/whl/cu118`
+    error: Found duplicate package `jinja2==3.1.3 @ registry+https://download.pytorch.org/whl/cu118`
     "###);
 
     Ok(())
