@@ -7484,7 +7484,7 @@ fn universal_platform_fork() -> Result<()> {
         # via torch
     fsspec==2024.2.0
         # via torch
-    jinja2==3.1.3
+    jinja2==3.1.4
         # via torch
     markupsafe==3.0.2
         # via jinja2
@@ -7500,7 +7500,7 @@ fn universal_platform_fork() -> Result<()> {
         # via -r requirements.in
     torch==2.5.1+cpu ; (platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')
         # via -r requirements.in
-    typing-extensions==4.9.0
+    typing-extensions==4.12.2
         # via torch
 
     ----- stderr -----
