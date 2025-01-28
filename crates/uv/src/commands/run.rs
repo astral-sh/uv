@@ -29,7 +29,12 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
     // SIGTERM in shells. It is _possible_ to have a parent process that sends a SIGTERM to the
     // process group; for example, `tini` supports this via a `-g` option. In this case, it's
     // possible that uv will improperly send a second SIGTERM to the child process. However,
-    // this seems preferable to not forwarding it in the first place.
+    // this seems preferable to not forwarding it in the first place. In the Docker case, if `uv`
+    // is invoked directly (instead of via an init system), it's PID 1 which has a special-cased
+    // default signal handler for SIGTERM by default. Generally, if a process receives a SIGTERM and
+    // does not have a SIGTERM handler, it is terminated. However, if PID 1 receives a SIGTERM, it
+    // is not terminated. In this context, it is essential for uv to forward the SIGTERM to the
+    // child process or the process will not be killable.
     #[cfg(unix)]
     let status = {
         use std::ops::Deref;
