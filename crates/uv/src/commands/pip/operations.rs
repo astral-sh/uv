@@ -27,7 +27,7 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_install_wheel::linker::LinkMode;
-use uv_installer::{Plan, Planner, Preparer, SitePackages};
+use uv_installer::{InstalledPackages, Plan, Planner, Preparer};
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
@@ -386,7 +386,7 @@ impl Changelog {
 /// Returns a [`Changelog`] summarizing the changes made to the environment.
 pub(crate) async fn install(
     resolution: &Resolution,
-    site_packages: SitePackages,
+    installed_packages: InstalledPackages,
     modifications: Modifications,
     reinstall: &Reinstall,
     build_options: &BuildOptions,
@@ -413,7 +413,7 @@ pub(crate) async fn install(
     // downloaded (`remote`), and those that should be removed (`extraneous`).
     let plan = Planner::new(resolution)
         .build(
-            site_packages,
+            installed_packages,
             reinstall,
             build_options,
             hasher,
@@ -803,8 +803,8 @@ pub(crate) fn diagnose_environment(
     markers: &ResolverMarkerEnvironment,
     printer: Printer,
 ) -> Result<(), Error> {
-    let site_packages = SitePackages::from_environment(venv)?;
-    for diagnostic in site_packages.diagnostics(markers)? {
+    let installed_packages = InstalledPackages::from_environment(venv)?;
+    for diagnostic in installed_packages.diagnostics(markers)? {
         // Only surface diagnostics that are "relevant" to the current resolution.
         if resolution
             .distributions()

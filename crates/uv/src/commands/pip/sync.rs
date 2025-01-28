@@ -17,7 +17,7 @@ use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, Origin, Resolution};
 use uv_fs::Simplified;
 use uv_install_wheel::linker::LinkMode;
-use uv_installer::SitePackages;
+use uv_installer::InstalledPackages;
 use uv_pep508::PackageName;
 use uv_pypi_types::Conflicts;
 use uv_python::{
@@ -335,7 +335,7 @@ pub(crate) async fn pip_sync(
     );
 
     // Determine the set of installed packages.
-    let site_packages = SitePackages::from_environment(&environment)?;
+    let installed_packages = InstalledPackages::from_environment(&environment)?;
 
     let options = OptionsBuilder::new()
         .resolution_mode(resolution_mode)
@@ -356,7 +356,7 @@ pub(crate) async fn pip_sync(
         &extras,
         &groups,
         preferences,
-        site_packages.clone(),
+        installed_packages.clone(),
         &hasher,
         &reinstall,
         &upgrade,
@@ -386,7 +386,7 @@ pub(crate) async fn pip_sync(
     // Sync the environment.
     match operations::install(
         &resolution,
-        site_packages,
+        installed_packages,
         Modifications::Exact,
         &reinstall,
         &build_options,
