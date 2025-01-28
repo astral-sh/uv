@@ -39,7 +39,7 @@ use uv_distribution_types::{
     PathSourceUrl, SourceDist, SourceUrl,
 };
 use uv_extract::hash::Hasher;
-use uv_fs::{rename_with_retry, write_atomic, LockedFile};
+use uv_fs::{rename_with_retry, write_atomic};
 use uv_git::{GitHubRepository, GitOid};
 use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
@@ -392,7 +392,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
-        let _lock = lock_shard(cache_shard).await?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         // Fetch the revision for the source distribution.
         let revision = self
@@ -505,7 +505,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        let _lock = lock_shard(cache_shard).await?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         // Fetch the revision for the source distribution.
         let revision = self
@@ -753,7 +753,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         tags: &Tags,
         hashes: HashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
-        let _lock = lock_shard(cache_shard).await?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer {
@@ -847,7 +847,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        let _lock = lock_shard(cache_shard).await?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer { revision, .. } = self
@@ -1058,7 +1058,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             },
         );
 
-        let _lock = lock_shard(&cache_shard).await?;
+        // Acquire the advisory lock.
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer {
@@ -1168,7 +1169,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             },
         );
 
-        let _lock = lock_shard(&cache_shard).await?;
+        // Acquire the advisory lock.
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer { revision, .. } = self
@@ -1430,7 +1432,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         );
         let metadata_entry = cache_shard.entry(METADATA);
 
-        let _lock = lock_shard(&cache_shard).await?;
+        // Acquire the advisory lock.
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.build_context.config_settings();
@@ -1581,7 +1584,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         );
         let metadata_entry = cache_shard.entry(METADATA);
 
-        let _lock = lock_shard(&cache_shard).await?;
+        // Acquire the advisory lock.
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         let path = if let Some(subdirectory) = resource.subdirectory {
             Cow::Owned(fetch.path().join(subdirectory))
@@ -2881,17 +2885,4 @@ fn read_wheel_metadata(
     let dist_info = read_archive_metadata(filename, &mut archive)
         .map_err(|err| Error::WheelMetadata(wheel.to_path_buf(), Box::new(err)))?;
     Ok(ResolutionMetadata::parse_metadata(&dist_info)?)
-}
-
-/// Apply an advisory lock to a [`CacheShard`] to prevent concurrent builds.
-async fn lock_shard(cache_shard: &CacheShard) -> Result<LockedFile, Error> {
-    let root = cache_shard.as_ref();
-
-    fs_err::create_dir_all(root).map_err(Error::CacheWrite)?;
-
-    let lock = LockedFile::acquire(root.join(".lock"), root.display())
-        .await
-        .map_err(Error::CacheWrite)?;
-
-    Ok(lock)
 }

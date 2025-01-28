@@ -45,8 +45,11 @@ pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> std::io::Result
 
 /// Create a symlink at `dst` pointing to `src`, replacing any existing symlink.
 ///
-/// On Windows, this uses the `junction` crate to create a junction point.
-/// Note because junctions are used, the source must be a directory.
+/// On Windows, this uses the `junction` crate to create a junction point. The
+/// operation is _not_ atomic, as we first delete the junction, then create a
+/// junction at the same path.
+///
+/// Note that because junctions are used, the source must be a directory.
 #[cfg(windows)]
 pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
     // If the source is a file, we can't create a junction
@@ -79,6 +82,10 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
 }
 
 /// Create a symlink at `dst` pointing to `src`, replacing any existing symlink if necessary.
+///
+/// On Unix, this method creates a temporary file, then moves it into place.
+///
+/// TODO(charlie): Consider using the `rust-atomicwrites` crate.
 #[cfg(unix)]
 pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
     // Attempt to create the symlink directly.
