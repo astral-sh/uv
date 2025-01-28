@@ -116,7 +116,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
 
         // Apply dependency-groups
         for (group_name, group) in &metadata.dependency_groups {
-            if self.groups.contains(group_name) {
+            if self.groups.contains(group_name, false) {
                 requirements.extend(group.iter().cloned());
             }
         }
