@@ -1962,6 +1962,8 @@ pub(crate) struct PipListSettings {
     pub(crate) exclude: Vec<PackageName>,
     pub(crate) format: ListFormat,
     pub(crate) outdated: bool,
+    pub(crate) requires: bool,
+    pub(crate) required_by: bool,
     pub(crate) settings: PipSettings,
 }
 
@@ -1975,6 +1977,10 @@ impl PipListSettings {
             format,
             outdated,
             no_outdated,
+            requires,
+            no_requires,
+            required_by,
+            no_required_by,
             strict,
             no_strict,
             fetch,
@@ -1989,6 +1995,8 @@ impl PipListSettings {
             exclude,
             format,
             outdated: flag(outdated, no_outdated).unwrap_or(false),
+            requires: flag(requires, no_requires).unwrap_or(false),
+            required_by: flag(required_by, no_required_by).unwrap_or(false),
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
