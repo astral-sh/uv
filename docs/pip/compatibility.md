@@ -449,6 +449,12 @@ will include all index URLs when `--emit-index-url` is passed, including the def
 
 ## `requires-python` enforcement
 
+When evaluating `requires-python` ranges for dependencies, uv only considers lower bounds and
+ignores upper bounds entirely. For example, `>=3.8, <4` is treated as `>=3.8`. Respecting upper
+bounds on `requires-python` often leads to formally correct but practically incorrect resolutions,
+as, e.g., resolvers will backtrack to the first published version that omits the upper bound (see:
+[`Requires-Python` upper limits](https://discuss.python.org/t/requires-python-upper-limits/12663)).
+
 When evaluating Python versions against `requires-python` specifiers, uv truncates the candidate
 version to the major, minor, and patch components, ignoring (e.g.) pre-release and post-release
 identifiers.
