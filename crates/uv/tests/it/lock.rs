@@ -22620,12 +22620,12 @@ fn lock_pytorch_cpu() -> Result<()> {
 
         [project.optional-dependencies]
         cpu = [
-          "torch>=2.5.1",
-          "torchvision>=0.20.1",
+          "torch>=2.5.1,<2.5.2",
+          "torchvision>=0.20.1,<0.20.2",
         ]
         cu124 = [
-          "torch>=2.5.1",
-          "torchvision>=0.20.1",
+          "torch>=2.5.1,<2.5.2",
+          "torchvision>=0.20.1,<0.20.2",
         ]
 
         [tool.uv]
@@ -22706,8 +22706,7 @@ fn lock_pytorch_cpu() -> Result<()> {
             "(platform_machine != 'aarch64' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (sys_platform != 'linux' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')",
             "platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu124'",
             "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124')",
-            "platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124'",
-            "sys_platform == 'darwin' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124'",
+            "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (sys_platform == 'darwin' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124')",
             "extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124'",
         ]
         conflicts = [[
@@ -23063,10 +23062,10 @@ fn lock_pytorch_cpu() -> Result<()> {
         requires-dist = [
             { name = "jinja2", specifier = "<=3.1.4" },
             { name = "numpy", specifier = "<=2.2.0" },
-            { name = "torch", marker = "extra == 'cpu'", specifier = ">=2.5.1", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "project", extra = "cpu" } },
-            { name = "torch", marker = "extra == 'cu124'", specifier = ">=2.5.1", index = "https://download.pytorch.org/whl/cu124", conflict = { package = "project", extra = "cu124" } },
-            { name = "torchvision", marker = "extra == 'cpu'", specifier = ">=0.20.1", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "project", extra = "cpu" } },
-            { name = "torchvision", marker = "extra == 'cu124'", specifier = ">=0.20.1", index = "https://download.pytorch.org/whl/cu124", conflict = { package = "project", extra = "cu124" } },
+            { name = "torch", marker = "extra == 'cpu'", specifier = ">=2.5.1,<2.5.2", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "project", extra = "cpu" } },
+            { name = "torch", marker = "extra == 'cu124'", specifier = ">=2.5.1,<2.5.2", index = "https://download.pytorch.org/whl/cu124", conflict = { package = "project", extra = "cu124" } },
+            { name = "torchvision", marker = "extra == 'cpu'", specifier = ">=0.20.1,<0.20.2", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "project", extra = "cpu" } },
+            { name = "torchvision", marker = "extra == 'cu124'", specifier = ">=0.20.1,<0.20.2", index = "https://download.pytorch.org/whl/cu124", conflict = { package = "project", extra = "cu124" } },
         ]
 
         [[package]]
@@ -23095,8 +23094,7 @@ fn lock_pytorch_cpu() -> Result<()> {
         version = "2.5.1"
         source = { registry = "https://download.pytorch.org/whl/cpu" }
         resolution-markers = [
-            "platform_machine == 'aarch64' and sys_platform == 'linux'",
-            "sys_platform == 'darwin'",
+            "(platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'",
         ]
         dependencies = [
             { name = "filelock", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'" },
@@ -23194,8 +23192,7 @@ fn lock_pytorch_cpu() -> Result<()> {
         version = "0.20.1"
         source = { registry = "https://download.pytorch.org/whl/cpu" }
         resolution-markers = [
-            "platform_machine == 'aarch64' and sys_platform == 'linux'",
-            "sys_platform == 'darwin'",
+            "(platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'",
         ]
         dependencies = [
             { name = "numpy", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'" },
