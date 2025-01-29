@@ -18,10 +18,10 @@ description:
 
 uv provides both *distroful* and *distroless* Docker images. *distroful* images ship operating system files, while *distroless* images ship only the `uv` binaries.
 
-For example, to run a uv command in a container that uses an alpine-based image:
+For example, to run a uv command in a container that uses a debian-based image:
 
 ```console
-$ docker run --rm -it ghcr.io/astral-sh/uv:alpine uv --help
+$ docker run --rm -it ghcr.io/astral-sh/uv:debian uv --help
 ```
 
 The following are distroless tags:
