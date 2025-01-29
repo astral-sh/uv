@@ -16,12 +16,9 @@ variables:
   UV_VERSION: 0.5
   PYTHON_VERSION: 3.12
   BASE_LAYER: bookworm-slim
-
-stages:
-  - analysis
+  UV_LINK_MODE: copy
 
 uv:
-  stage: analysis
   image: ghcr.io/astral-sh/uv:$UV_VERSION-python$PYTHON_VERSION-$BASE_LAYER
   script:
     # your `uv` commands
