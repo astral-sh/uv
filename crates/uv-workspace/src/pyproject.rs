@@ -94,6 +94,16 @@ impl PyProjectToml {
             .is_some_and(|project| project.version.is_none())
     }
 
+    /// Returns `true` if the key is set dynamically.
+    pub fn is_key_dynamic(&self, key: &str) -> bool {
+        self.project.as_ref().is_some_and(|project| {
+            project
+                .dynamic
+                .as_ref()
+                .is_some_and(|dynamic| dynamic.iter().any(|field| field == key))
+        })
+    }
+
     /// Returns whether the project manifest contains any script table.
     pub fn has_scripts(&self) -> bool {
         if let Some(ref project) = self.project {
@@ -221,6 +231,8 @@ pub struct Project {
     pub dependencies: Option<Vec<String>>,
     /// The optional dependencies of the project.
     pub optional_dependencies: Option<BTreeMap<ExtraName, Vec<String>>>,
+    /// The dynamic attributes of the project.
+    pub dynamic: Option<Vec<String>>,
 
     /// Used to determine whether a `gui-scripts` section is present.
     #[serde(default, skip_serializing)]
@@ -266,6 +278,7 @@ impl TryFrom<ProjectWire> for Project {
             requires_python: value.requires_python,
             dependencies: value.dependencies,
             optional_dependencies: value.optional_dependencies,
+            dynamic: value.dynamic,
             gui_scripts: value.gui_scripts,
             scripts: value.scripts,
         })
