@@ -1112,7 +1112,7 @@ pub struct PipOptions {
     )]
     pub no_extra: Option<Vec<ExtraName>>,
     /// Ignore package dependencies, instead only add those packages explicitly listed
-    /// on the command line to the resulting the requirements file.
+    /// on the command line to the resulting requirements file.
     #[option(
         default = "false",
         value_type = "bool",

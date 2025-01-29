@@ -1104,7 +1104,7 @@
           }
         },
         "no-deps": {
-          "description": "Ignore package dependencies, instead only add those packages explicitly listed on the command line to the resulting the requirements file.",
+          "description": "Ignore package dependencies, instead only add those packages explicitly listed on the command line to the resulting requirements file.",
           "type": [
             "boolean",
             "null"

@@ -2521,7 +2521,7 @@ are already installed.
 <span id="no-deps"></span>
 
 Ignore package dependencies, instead only add those packages explicitly listed
-on the command line to the resulting the requirements file.
+on the command line to the resulting requirements file.
 
 **Default value**: `false`
 
