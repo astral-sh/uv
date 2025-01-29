@@ -1187,10 +1187,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await?
             .filter(|metadata| metadata.matches(source.name(), source.version()))
         {
-            debug!("Using cached metadata for: {source}");
+            // If necessary, mark the metadata as dynamic.
+            let metadata = if dynamic {
+                ResolutionMetadata {
+                    dynamic: true,
+                    ..metadata.into()
+                }
+            } else {
+                metadata.into()
+            };
+
             return Ok(ArchiveMetadata::from(
                 Metadata::from_workspace(
-                    metadata.into(),
+                    metadata,
                     resource.install_path.as_ref(),
                     None,
                     self.build_context.locations(),
@@ -1212,6 +1221,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .boxed_local()
             .await?
         {
+            // Store the metadata.
+            fs::create_dir_all(metadata_entry.dir())
+                .await
+                .map_err(Error::CacheWrite)?;
+            write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
+                .await
+                .map_err(Error::CacheWrite)?;
+
             // If necessary, mark the metadata as dynamic.
             let metadata = if dynamic {
                 ResolutionMetadata {
@@ -1221,14 +1238,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             } else {
                 metadata
             };
-
-            // Store the metadata.
-            fs::create_dir_all(metadata_entry.dir())
-                .await
-                .map_err(Error::CacheWrite)?;
-            write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
-                .await
-                .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadata::from(
                 Metadata::from_workspace(
@@ -1273,6 +1282,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         }
 
+        // Store the metadata.
+        write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
+            .await
+            .map_err(Error::CacheWrite)?;
+
         // If necessary, mark the metadata as dynamic.
         let metadata = if dynamic {
             ResolutionMetadata {
@@ -1282,11 +1296,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         } else {
             metadata
         };
-
-        // Store the metadata.
-        write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
-            .await
-            .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadata::from(
             Metadata::from_workspace(
