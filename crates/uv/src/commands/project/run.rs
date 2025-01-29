@@ -23,7 +23,7 @@ use uv_configuration::{
 use uv_distribution::LoweredRequirement;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified};
-use uv_installer::{SatisfiesResult, SitePackages};
+use uv_installer::{InstalledPackages, SatisfiesResult};
 use uv_normalize::PackageName;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
@@ -438,6 +438,7 @@ pub(crate) async fn run(
                     temp_dir.path(),
                     interpreter,
                     uv_virtualenv::Prompt::None,
+                    cache,
                     false,
                     false,
                     false,
@@ -646,6 +647,7 @@ pub(crate) async fn run(
                     temp_dir.path(),
                     interpreter,
                     uv_virtualenv::Prompt::None,
+                    cache,
                     false,
                     false,
                     false,
@@ -880,6 +882,7 @@ pub(crate) async fn run(
                     temp_dir.path(),
                     interpreter,
                     uv_virtualenv::Prompt::None,
+                    cache,
                     false,
                     false,
                     false,
@@ -930,6 +933,7 @@ pub(crate) async fn run(
                     temp_dir.path(),
                     base_interpreter.clone(),
                     uv_virtualenv::Prompt::None,
+                    cache,
                     false,
                     false,
                     false,
@@ -1139,7 +1143,7 @@ fn can_skip_ephemeral(
         return true;
     };
 
-    let Ok(site_packages) = SitePackages::from_interpreter(base_interpreter) else {
+    let Ok(installed_packages) = InstalledPackages::from_interpreter(base_interpreter) else {
         return false;
     };
 
@@ -1147,7 +1151,7 @@ fn can_skip_ephemeral(
         return false;
     }
 
-    match site_packages.satisfies(
+    match installed_packages.satisfies(
         &spec.requirements,
         &spec.constraints,
         &base_interpreter.resolver_marker_environment(),

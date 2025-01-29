@@ -530,7 +530,7 @@ pub(crate) async fn install(
             },
         };
 
-        let environment = installed_tools.create_environment(&from.name, interpreter)?;
+        let environment = installed_tools.create_environment(&from.name, interpreter, &cache)?;
 
         // At this point, we removed any existing environment, so we should remove any of its
         // executables.

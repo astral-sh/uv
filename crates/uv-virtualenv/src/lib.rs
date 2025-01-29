@@ -3,6 +3,7 @@ use std::path::Path;
 
 use thiserror::Error;
 
+use uv_cache::Cache;
 use uv_platform_tags::PlatformError;
 use uv_python::{Interpreter, PythonEnvironment};
 
@@ -12,6 +13,8 @@ mod virtualenv;
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
+    #[error(transparent)]
+    InterpreterQuery(#[from] uv_python::InterpreterError),
     #[error("Failed to determine Python interpreter to use")]
     Discovery(#[from] uv_python::DiscoveryError),
     #[error("Failed to determine Python interpreter to use")]
@@ -51,6 +54,7 @@ pub fn create_venv(
     location: &Path,
     interpreter: Interpreter,
     prompt: Prompt,
+    cache: &Cache,
     system_site_packages: bool,
     allow_existing: bool,
     relocatable: bool,
@@ -68,6 +72,6 @@ pub fn create_venv(
     )?;
 
     // Create the corresponding `PythonEnvironment`.
-    let interpreter = interpreter.with_virtualenv(virtualenv);
+    let interpreter = Interpreter::query(virtualenv.executable, cache)?;
     Ok(PythonEnvironment::from_interpreter(interpreter))
 }
