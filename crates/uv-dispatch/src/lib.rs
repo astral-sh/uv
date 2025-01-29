@@ -511,41 +511,44 @@ impl BuildContext for BuildDispatch<'_> {
 pub struct SharedState {
     /// The resolved Git references.
     git: GitResolver,
+    /// The discovered capabilities for each registry index.
+    capabilities: IndexCapabilities,
     /// The fetched package versions and metadata.
     index: InMemoryIndex,
     /// The downloaded distributions.
     in_flight: InFlight,
-    /// The discovered capabilities for each registry index.
-    capabilities: IndexCapabilities,
 }
 
 impl SharedState {
-    pub fn new(
-        git: GitResolver,
-        index: InMemoryIndex,
-        in_flight: InFlight,
-        capabilities: IndexCapabilities,
-    ) -> Self {
+    /// Fork the [`SharedState`], creating a new in-memory index and in-flight cache.
+    ///
+    /// State that is universally applicable (like the Git resolver and index capabilities)
+    /// are retained.
+    #[must_use]
+    pub fn fork(&self) -> Self {
         Self {
-            git,
-            index,
-            in_flight,
-            capabilities,
+            git: self.git.clone(),
+            capabilities: self.capabilities.clone(),
+            ..Default::default()
         }
     }
 
+    /// Return the [`GitResolver`] used by the [`SharedState`].
     pub fn git(&self) -> &GitResolver {
         &self.git
     }
 
+    /// Return the [`InMemoryIndex`] used by the [`SharedState`].
     pub fn index(&self) -> &InMemoryIndex {
         &self.index
     }
 
+    /// Return the [`InFlight`] used by the [`SharedState`].
     pub fn in_flight(&self) -> &InFlight {
         &self.in_flight
     }
 
+    /// Return the [`IndexCapabilities`] used by the [`SharedState`].
     pub fn capabilities(&self) -> &IndexCapabilities {
         &self.capabilities
     }

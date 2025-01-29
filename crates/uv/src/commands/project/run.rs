@@ -20,7 +20,6 @@ use uv_configuration::{
     Concurrency, DevGroupsManifest, DevGroupsSpecification, EditableMode, ExtrasSpecification,
     GroupsSpecification, InstallOptions, LowerBound, PreviewMode, SourceStrategy, TrustedHost,
 };
-use uv_dispatch::SharedState;
 use uv_distribution::LoweredRequirement;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified};
@@ -48,7 +47,7 @@ use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     default_dependency_groups, validate_project_requires_python, DependencyGroupsTarget,
-    EnvironmentSpecification, ProjectError, ScriptInterpreter, WorkspacePython,
+    EnvironmentSpecification, ProjectError, ScriptInterpreter, UniversalState, WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::run::run_to_completion;
@@ -125,7 +124,8 @@ pub(crate) async fn run(
     }
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let lock_state = UniversalState::default();
+    let sync_state = lock_state.fork();
 
     // Read from the `.env` file, if necessary.
     if !no_env_file {
@@ -229,7 +229,7 @@ pub(crate) async fn run(
                 target,
                 settings.as_ref().into(),
                 LowerBound::Allow,
-                &state,
+                &lock_state,
                 if show_resolution {
                     Box::new(DefaultResolveLogger)
                 } else {
@@ -256,7 +256,7 @@ pub(crate) async fn run(
                 InstallOptions::default(),
                 &settings,
                 &interpreter,
-                &state,
+                &sync_state,
                 if show_resolution {
                     Box::new(DefaultInstallLogger)
                 } else {
@@ -397,7 +397,7 @@ pub(crate) async fn run(
                     EnvironmentSpecification::from(spec),
                     &interpreter,
                     &settings,
-                    &state,
+                    &sync_state,
                     if show_resolution {
                         Box::new(DefaultResolveLogger)
                     } else {
@@ -718,7 +718,7 @@ pub(crate) async fn run(
                     project.workspace().into(),
                     settings.as_ref().into(),
                     LowerBound::Allow,
-                    &state,
+                    &lock_state,
                     if show_resolution {
                         Box::new(DefaultResolveLogger)
                     } else {
@@ -799,6 +799,7 @@ pub(crate) async fn run(
                     install_options,
                     modifications,
                     settings.as_ref().into(),
+                    &sync_state,
                     if show_resolution {
                         Box::new(DefaultInstallLogger)
                     } else {
@@ -945,7 +946,7 @@ pub(crate) async fn run(
                     ),
                     &base_interpreter,
                     &settings,
-                    &state,
+                    &sync_state,
                     if show_resolution {
                         Box::new(DefaultResolveLogger)
                     } else {

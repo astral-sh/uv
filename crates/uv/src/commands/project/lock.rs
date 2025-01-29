@@ -15,7 +15,7 @@ use uv_configuration::{
     Concurrency, Constraints, DevGroupsSpecification, ExtrasSpecification, LowerBound, PreviewMode,
     Reinstall, TrustedHost, Upgrade,
 };
-use uv_dispatch::{BuildDispatch, SharedState};
+use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
@@ -40,7 +40,9 @@ use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceMember};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::LockTarget;
-use crate::commands::project::{ProjectError, ProjectInterpreter, ScriptInterpreter};
+use crate::commands::project::{
+    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+};
 use crate::commands::reporters::ResolverReporter;
 use crate::commands::{diagnostics, pip, ExitStatus};
 use crate::printer::Printer;
@@ -151,7 +153,7 @@ pub(crate) async fn lock(
     };
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let state = UniversalState::default();
 
     // Perform the lock operation.
     match do_safe_lock(
@@ -221,7 +223,7 @@ pub(super) async fn do_safe_lock(
     target: LockTarget<'_>,
     settings: ResolverSettingsRef<'_>,
     bounds: LowerBound,
-    state: &SharedState,
+    state: &UniversalState,
     logger: Box<dyn ResolveLogger>,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -325,7 +327,7 @@ async fn do_lock(
     existing_lock: Option<Lock>,
     settings: ResolverSettingsRef<'_>,
     bounds: LowerBound,
-    state: &SharedState,
+    state: &UniversalState,
     logger: Box<dyn ResolveLogger>,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -533,7 +535,7 @@ async fn do_lock(
         index_locations,
         &flat_index,
         dependency_metadata,
-        state.clone(),
+        state.fork().into_inner(),
         index_strategy,
         config_setting,
         build_isolation,

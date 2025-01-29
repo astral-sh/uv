@@ -316,6 +316,49 @@ impl std::fmt::Display for ConflictError {
 
 impl std::error::Error for ConflictError {}
 
+/// A [`SharedState`] instance to use for universal resolution.
+#[derive(Default, Clone)]
+pub(crate) struct UniversalState(SharedState);
+
+impl std::ops::Deref for UniversalState {
+    type Target = SharedState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl UniversalState {
+    /// Fork the [`UniversalState`] to create a [`PlatformState`].
+    pub(crate) fn fork(&self) -> PlatformState {
+        PlatformState(self.0.fork())
+    }
+}
+
+/// A [`SharedState`] instance to use for platform-specific resolution.
+#[derive(Default, Clone)]
+pub(crate) struct PlatformState(SharedState);
+
+impl std::ops::Deref for PlatformState {
+    type Target = SharedState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl PlatformState {
+    /// Fork the [`PlatformState`] to create a [`UniversalState`].
+    pub(crate) fn fork(&self) -> UniversalState {
+        UniversalState(self.0.fork())
+    }
+
+    /// Create a [`SharedState`] from the [`PlatformState`].
+    pub(crate) fn into_inner(self) -> SharedState {
+        self.0
+    }
+}
+
 /// Compute the `Requires-Python` bound for the [`Workspace`].
 ///
 /// For a [`Workspace`] with multiple packages, the `Requires-Python` bound is the union of the
@@ -1137,7 +1180,7 @@ pub(crate) async fn resolve_environment(
     spec: EnvironmentSpecification<'_>,
     interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,
-    state: &SharedState,
+    state: &PlatformState,
     logger: Box<dyn ResolveLogger>,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -1266,7 +1309,7 @@ pub(crate) async fn resolve_environment(
         index_locations,
         &flat_index,
         dependency_metadata,
-        state.clone(),
+        state.clone().into_inner(),
         index_strategy,
         config_setting,
         build_isolation,
@@ -1316,7 +1359,7 @@ pub(crate) async fn sync_environment(
     venv: PythonEnvironment,
     resolution: &Resolution,
     settings: InstallerSettingsRef<'_>,
-    state: &SharedState,
+    state: &PlatformState,
     logger: Box<dyn InstallLogger>,
     installer_metadata: bool,
     connectivity: Connectivity,
@@ -1402,7 +1445,7 @@ pub(crate) async fn sync_environment(
         index_locations,
         &flat_index,
         dependency_metadata,
-        state.clone(),
+        state.clone().into_inner(),
         index_strategy,
         config_setting,
         build_isolation,

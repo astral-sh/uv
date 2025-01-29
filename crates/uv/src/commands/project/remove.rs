@@ -13,7 +13,6 @@ use uv_configuration::{
     Concurrency, DevGroupsManifest, EditableMode, ExtrasSpecification, InstallOptions, LowerBound,
     PreviewMode, TrustedHost,
 };
-use uv_dispatch::SharedState;
 use uv_fs::Simplified;
 use uv_normalize::DEV_DEPENDENCIES;
 use uv_pep508::PackageName;
@@ -32,7 +31,7 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, ProjectError, ProjectInterpreter, ScriptInterpreter,
+    default_dependency_groups, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
 };
 use crate::commands::{diagnostics, project, ExitStatus};
 use crate::printer::Printer;
@@ -266,7 +265,7 @@ pub(crate) async fn remove(
     };
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let state = UniversalState::default();
 
     // Lock and sync the environment, if necessary.
     let lock = match project::lock::do_safe_lock(
@@ -326,6 +325,8 @@ pub(crate) async fn remove(
         },
     };
 
+    let state = state.fork();
+
     match project::sync::do_sync(
         target,
         venv,
@@ -335,6 +336,7 @@ pub(crate) async fn remove(
         install_options,
         Modifications::Exact,
         settings.as_ref().into(),
+        &state,
         Box::new(DefaultInstallLogger),
         installer_metadata,
         connectivity,
