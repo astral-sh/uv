@@ -3399,8 +3399,8 @@ fn run_linked_environment_path() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [VENV]/
-    [VENV]/[BIN]/python
+    [TEMP_DIR]/target
+    [TEMP_DIR]/target/[BIN]/python
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
@@ -3414,7 +3414,7 @@ fn run_linked_environment_path() -> Result<()> {
     }, {
         assert_snapshot!(
             black_entrypoint, @r###"
-        #![VENV]/[BIN]/python
+        #![TEMP_DIR]/target/[BIN]/python
         # -*- coding: utf-8 -*-
         import sys
         from black import patched_main
