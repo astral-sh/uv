@@ -2590,6 +2590,16 @@ pub struct InitArgs {
     #[arg(long, value_enum, conflicts_with_all=["script", "no_package"])]
     pub build_backend: Option<ProjectBuildBackend>,
 
+    /// Invalid option name for build backend.
+    #[arg(
+        long,
+        required(false),
+        action(clap::ArgAction::SetTrue),
+        value_parser=clap::builder::UnknownArgumentValueParser::suggest_arg("--build-backend"),
+        hide(true)
+    )]
+    backend: Option<String>,
+
     /// Do not create a `README.md` file.
     #[arg(long)]
     pub no_readme: bool,
