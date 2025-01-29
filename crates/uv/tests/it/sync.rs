@@ -1073,7 +1073,7 @@ fn sync_relative_wheel() -> Result<()> {
         },
         {
             assert_snapshot!(
-                lock, @r###"
+                lock, @r#"
             version = 1
             requires-python = ">=3.12"
 
@@ -1090,6 +1090,7 @@ fn sync_relative_wheel() -> Result<()> {
 
             [package.metadata]
             provides-extras = []
+            requires-dist = []
 
             [[package]]
             name = "relative-wheel"
@@ -1102,7 +1103,7 @@ fn sync_relative_wheel() -> Result<()> {
             [package.metadata]
             provides-extras = []
             requires-dist = [{ name = "ok", path = "wheels/ok-1.0.0-py3-none-any.whl" }]
-            "###
+            "#
             );
         }
     );

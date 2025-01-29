@@ -56,7 +56,7 @@ Ok(
                 optional_dependencies: {},
                 dependency_groups: {},
                 metadata: PackageMetadata {
-                    requires_dist: {},
+                    requires_dist: None,
                     provides_extras: None,
                     dependency_groups: {},
                 },

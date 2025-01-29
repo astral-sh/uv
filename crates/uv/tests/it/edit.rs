@@ -1120,6 +1120,7 @@ fn add_remove_dev() -> Result<()> {
 
         [package.metadata]
         provides-extras = []
+        requires-dist = []
 
         [package.metadata.requires-dev]
         dev = [{ name = "anyio", specifier = "==3.7.0" }]
@@ -1217,6 +1218,7 @@ fn add_remove_dev() -> Result<()> {
 
         [package.metadata]
         provides-extras = []
+        requires-dist = []
 
         [package.metadata.requires-dev]
         dev = []
@@ -1425,7 +1427,7 @@ fn add_remove_optional() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -1439,7 +1441,8 @@ fn add_remove_optional() -> Result<()> {
 
         [package.metadata]
         provides-extras = ["io"]
-        "###
+        requires-dist = []
+        "#
         );
     });
 
@@ -1665,7 +1668,7 @@ fn add_remove_workspace() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -1697,7 +1700,8 @@ fn add_remove_workspace() -> Result<()> {
 
         [package.metadata]
         provides-extras = []
-        "###
+        requires-dist = []
+        "#
         );
     });
 
@@ -1772,6 +1776,7 @@ fn add_remove_workspace() -> Result<()> {
 
         [package.metadata]
         provides-extras = []
+        requires-dist = []
 
         [[package]]
         name = "child2"
@@ -1780,6 +1785,7 @@ fn add_remove_workspace() -> Result<()> {
 
         [package.metadata]
         provides-extras = []
+        requires-dist = []
         "#
         );
     });
@@ -2305,7 +2311,7 @@ fn add_workspace_editable() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -2338,6 +2344,7 @@ fn add_workspace_editable() -> Result<()> {
 
         [package.metadata]
         provides-extras = []
+        requires-dist = []
 
         [[package]]
         name = "parent"
@@ -2346,7 +2353,8 @@ fn add_workspace_editable() -> Result<()> {
 
         [package.metadata]
         provides-extras = []
-        "###
+        requires-dist = []
+        "#
         );
     });
 
@@ -2436,7 +2444,7 @@ fn add_workspace_path() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -2456,6 +2464,7 @@ fn add_workspace_path() -> Result<()> {
 
         [package.metadata]
         provides-extras = []
+        requires-dist = []
 
         [[package]]
         name = "parent"
@@ -2468,7 +2477,7 @@ fn add_workspace_path() -> Result<()> {
         [package.metadata]
         provides-extras = []
         requires-dist = [{ name = "child", editable = "child" }]
-        "###
+        "#
         );
     });
 
@@ -2563,7 +2572,7 @@ fn add_path() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -2577,6 +2586,7 @@ fn add_path() -> Result<()> {
 
         [package.metadata]
         provides-extras = []
+        requires-dist = []
 
         [[package]]
         name = "parent"
@@ -2589,7 +2599,7 @@ fn add_path() -> Result<()> {
         [package.metadata]
         provides-extras = []
         requires-dist = [{ name = "child", directory = "packages/child" }]
-        "###
+        "#
         );
     });
 
@@ -3610,7 +3620,7 @@ fn remove_registry() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -3624,7 +3634,8 @@ fn remove_registry() -> Result<()> {
 
         [package.metadata]
         provides-extras = []
-        "###
+        requires-dist = []
+        "#
         );
     });
 
@@ -8211,6 +8222,7 @@ fn add_group_comment() -> Result<()> {
 
         [package.metadata]
         provides-extras = []
+        requires-dist = []
 
         [package.metadata.requires-dev]
         dev = [
