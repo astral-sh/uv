@@ -16,23 +16,22 @@ description:
 
 ### Running uv in a container
 
-A Docker image is published with a built version of uv available. To run a uv command in a
-container:
+uv provides both *distroful* and *distroless* Docker images. *distroful* images ship operating system files, while *distroless* images ship only the `uv` binaries.
+
+For example, to run a uv command in a container that uses an alpine-based image:
 
 ```console
-$ docker run ghcr.io/astral-sh/uv --help
+$ docker run --rm -it ghcr.io/astral-sh/uv:alpine uv --help
 ```
 
-### Available images
-
-uv provides a distroless Docker image including the `uv` binary. The following tags are published:
+The following are distroless tags:
 
 - `ghcr.io/astral-sh/uv:latest`
 - `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.5.25`
 - `ghcr.io/astral-sh/uv:{major}.{minor}`, e.g., `ghcr.io/astral-sh/uv:0.5` (the latest patch
   version)
 
-In addition, uv publishes the following images:
+And these are the distroful tags:
 
 <!-- prettier-ignore -->
 - Based on `alpine:3.20`:
