@@ -8,8 +8,8 @@ description:
 # Installing Python
 
 If Python is already installed on your system, uv will
-[detect and use](#using-an-existing-python-installation) it without configuration. However, uv can
-also install and manage Python versions for you.
+[detect and use](#using-existing-python-versions) it without configuration. However, uv can also
+install and manage Python versions for you.
 
 !!! tip
 
