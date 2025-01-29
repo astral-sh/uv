@@ -5711,7 +5711,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 </dd><dt><code>--no-cache</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
-</dd><dt><code>--no-deps</code></dt><dd><p>Ignore package dependencies, instead only add those packages explicitly listed on the command line to the resulting the requirements file</p>
+</dd><dt><code>--no-deps</code></dt><dd><p>Ignore package dependencies, instead only add those packages explicitly listed on the command line to the resulting requirements file</p>
 
 </dd><dt><code>--no-emit-package</code> <i>no-emit-package</i></dt><dd><p>Specify a package to omit from the output resolution. Its dependencies will still be included in the resolution. Equivalent to pip-compile&#8217;s <code>--unsafe-package</code> option</p>
 
