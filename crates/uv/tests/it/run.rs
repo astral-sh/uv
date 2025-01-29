@@ -3350,6 +3350,59 @@ fn run_gui_script_explicit_unix() -> Result<()> {
 }
 
 #[test]
+#[cfg(unix)]
+fn run_linked_environment_path() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Create a link from `target` -> virtual environment
+    fs_err::os::unix::fs::symlink(&context.venv, context.temp_dir.child("target"))?;
+
+    // Running `uv sync` should use the environment at `target``
+    uv_snapshot!(context.filters(), context.sync()
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "target"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    // Using `uv run` should
+    uv_snapshot!(context.filters(), context.run()
+        .env_remove("VIRTUAL_ENV")  // Ignore the test context virtual environment activation
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "target")
+        .arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [VENV]/[BIN]/python
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    Ok(())
+}
+
+#[test]
 #[cfg(not(windows))]
 fn run_gui_script_explicit_stdin_unix() -> Result<()> {
     let context = TestContext::new("3.12");
