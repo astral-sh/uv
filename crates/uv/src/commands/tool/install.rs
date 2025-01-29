@@ -221,6 +221,10 @@ pub(crate) async fn install(
         }
     };
 
+    if from.name.as_str().eq_ignore_ascii_case("python") {
+        return Err(anyhow::anyhow!("Cannot install Python with `uv tool install`. Did you mean to use `uv python install`?"));
+    }
+
     // If the user passed, e.g., `ruff@latest`, we need to mark it as upgradable.
     let settings = if target.is_latest() {
         ResolverInstallerSettings {
