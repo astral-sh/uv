@@ -20363,6 +20363,125 @@ fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
     Ok(())
 }
 
+/// See: <https://github.com/astral-sh/uv/issues/11047>
+#[test]
+fn lock_dynamic_built_cache() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        requires-python = ">=3.12"
+        dynamic = ["version"]
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/__about__.py" }]
+
+        [tool.hatch.version]
+        path = "src/__about__.py"
+        scheme = "standard"
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("src")
+        .child("__about__.py")
+        .write_str("__version__ = '0.1.0'")?;
+
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    // Lock the project, which should omit the dynamic version.
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        source = { editable = "." }
+        "###
+        );
+    });
+
+    // Install the project, to force a build.
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    // Remove the lockfile.
+    fs_err::remove_file(context.temp_dir.join("uv.lock"))?;
+
+    // Lock the project, which should omit the dynamic version.
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        source = { editable = "." }
+        "###
+        );
+    });
+
+    Ok(())
+}
+
 /// Re-lock after converting a package from dynamic to static.
 #[test]
 fn lock_dynamic_to_static() -> Result<()> {
