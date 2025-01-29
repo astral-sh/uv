@@ -12,7 +12,6 @@ use uv_configuration::{
     Concurrency, DevGroupsSpecification, EditableMode, ExportFormat, ExtrasSpecification,
     InstallOptions, LowerBound, PreviewMode, TrustedHost,
 };
-use uv_dispatch::SharedState;
 use uv_normalize::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_resolver::RequirementsTxtExport;
@@ -25,7 +24,7 @@ use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     default_dependency_groups, detect_conflicts, DependencyGroupsTarget, ProjectError,
-    ProjectInterpreter, ScriptInterpreter,
+    ProjectInterpreter, ScriptInterpreter, UniversalState,
 };
 use crate::commands::{diagnostics, ExitStatus, OutputWriter};
 use crate::printer::Printer;
@@ -187,7 +186,7 @@ pub(crate) async fn export(
     };
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let state = UniversalState::default();
 
     // Lock the project.
     let lock = match do_safe_lock(

@@ -10,7 +10,6 @@ use uv_client::{Connectivity, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, DevGroupsSpecification, LowerBound, PreviewMode, TargetTriple, TrustedHost,
 };
-use uv_dispatch::SharedState;
 use uv_distribution_types::IndexCapabilities;
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
@@ -26,7 +25,7 @@ use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     default_dependency_groups, DependencyGroupsTarget, ProjectError, ProjectInterpreter,
-    ScriptInterpreter,
+    ScriptInterpreter, UniversalState,
 };
 use crate::commands::reporters::LatestVersionReporter;
 use crate::commands::{diagnostics, ExitStatus};
@@ -140,7 +139,7 @@ pub(crate) async fn tree(
     };
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let state = UniversalState::default();
 
     // Update the lockfile, if necessary.
     let lock = match do_safe_lock(

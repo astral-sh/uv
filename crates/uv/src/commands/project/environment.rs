@@ -3,7 +3,7 @@ use tracing::debug;
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::{
-    resolve_environment, sync_environment, EnvironmentSpecification, ProjectError,
+    resolve_environment, sync_environment, EnvironmentSpecification, PlatformState, ProjectError,
 };
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -13,7 +13,6 @@ use uv_client::Connectivity;
 use uv_configuration::{
     Concurrency, DevGroupsManifest, ExtrasSpecification, InstallOptions, PreviewMode, TrustedHost,
 };
-use uv_dispatch::SharedState;
 use uv_distribution_types::{Name, Resolution};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::Installable;
@@ -34,7 +33,7 @@ impl CachedEnvironment {
         spec: EnvironmentSpecification<'_>,
         interpreter: &Interpreter,
         settings: &ResolverInstallerSettings,
-        state: &SharedState,
+        state: &PlatformState,
         resolve: Box<dyn ResolveLogger>,
         install: Box<dyn InstallLogger>,
         installer_metadata: bool,
@@ -93,7 +92,7 @@ impl CachedEnvironment {
         install_options: InstallOptions,
         settings: &ResolverInstallerSettings,
         interpreter: &Interpreter,
-        state: &SharedState,
+        state: &PlatformState,
         install: Box<dyn InstallLogger>,
         installer_metadata: bool,
         connectivity: Connectivity,
@@ -143,7 +142,7 @@ impl CachedEnvironment {
         resolution: Resolution,
         interpreter: Interpreter,
         settings: &ResolverInstallerSettings,
-        state: &SharedState,
+        state: &PlatformState,
         install: Box<dyn InstallLogger>,
         installer_metadata: bool,
         connectivity: Connectivity,

@@ -15,7 +15,6 @@ use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, PreviewMode, TrustedHost};
-use uv_dispatch::SharedState;
 use uv_distribution_types::{Name, UnresolvedRequirementSpecification};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -35,7 +34,9 @@ use uv_warnings::warn_user;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
-use crate::commands::project::{resolve_names, EnvironmentSpecification, ProjectError};
+use crate::commands::project::{
+    resolve_names, EnvironmentSpecification, PlatformState, ProjectError,
+};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::run::run_to_completion;
 use crate::commands::tool::common::{matching_packages, refine_interpreter};
@@ -423,7 +424,7 @@ async fn get_or_create_environment(
     .into_interpreter();
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let state = PlatformState::default();
 
     // Resolve the `--from` requirement.
     let from = match target {

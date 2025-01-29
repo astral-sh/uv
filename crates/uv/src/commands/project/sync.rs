@@ -10,7 +10,7 @@ use uv_configuration::{
     Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, EditableMode,
     ExtrasSpecification, HashCheckingMode, InstallOptions, LowerBound, PreviewMode, TrustedHost,
 };
-use uv_dispatch::{BuildDispatch, SharedState};
+use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{
     DirectorySourceDist, Dist, Index, Resolution, ResolvedDist, SourceDist,
 };
@@ -32,7 +32,8 @@ use crate::commands::pip::operations::Modifications;
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::{
-    default_dependency_groups, detect_conflicts, DependencyGroupsTarget, ProjectError,
+    default_dependency_groups, detect_conflicts, DependencyGroupsTarget, PlatformState,
+    ProjectError, UniversalState,
 };
 use crate::commands::{diagnostics, project, ExitStatus};
 use crate::printer::Printer;
@@ -130,7 +131,7 @@ pub(crate) async fn sync(
     .await?;
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let state = UniversalState::default();
 
     // Determine the lock mode.
     let mode = if frozen {
@@ -212,6 +213,8 @@ pub(crate) async fn sync(
         }
     };
 
+    let state = state.fork();
+
     // Perform the sync operation.
     match do_sync(
         target,
@@ -222,6 +225,7 @@ pub(crate) async fn sync(
         install_options,
         modifications,
         settings.as_ref().into(),
+        &state,
         Box::new(DefaultInstallLogger),
         installer_metadata,
         connectivity,
@@ -257,6 +261,7 @@ pub(super) async fn do_sync(
     install_options: InstallOptions,
     modifications: Modifications,
     settings: InstallerSettingsRef<'_>,
+    state: &PlatformState,
     logger: Box<dyn InstallLogger>,
     installer_metadata: bool,
     connectivity: Connectivity,
@@ -267,17 +272,6 @@ pub(super) async fn do_sync(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<(), ProjectError> {
-    // Use isolated state for universal resolution. When resolving, we don't enforce that the
-    // prioritized distributions match the current platform. So if we lock here, then try to
-    // install from the same state, and we end up performing a resolution during the sync (i.e.,
-    // for the build dependencies of a source distribution), we may try to use incompatible
-    // distributions.
-    // TODO(charlie): In universal resolution, we should still track version compatibility! We
-    // just need to accept versions that are platform-incompatible. That would also make us more
-    // likely to (e.g.) download a wheel that we'll end up using when installing. This would
-    // make it safe to share the state.
-    let state = SharedState::default();
-
     // Extract the project settings.
     let InstallerSettingsRef {
         index_locations,
@@ -415,7 +409,7 @@ pub(super) async fn do_sync(
         index_locations,
         &flat_index,
         dependency_metadata,
-        state.clone(),
+        state.clone().into_inner(),
         index_strategy,
         config_setting,
         build_isolation,
