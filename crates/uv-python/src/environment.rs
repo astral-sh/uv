@@ -166,18 +166,9 @@ impl PythonEnvironment {
             "Checking for Python environment at `{}`",
             root.as_ref().user_display()
         );
-        let canonical_root = match fs_err::canonicalize(root.as_ref()) {
-            Ok(canonical_root) => {
-                if root.as_ref() != canonical_root {
-                    debug!(
-                        "Environment path `{}` canonicalized to `{}`",
-                        root.as_ref().user_display(),
-                        canonical_root.user_display()
-                    );
-                }
-                canonical_root
-            }
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+        match root.as_ref().try_exists() {
+            Ok(true) => {}
+            Ok(false) => {
                 return Err(Error::MissingEnvironment(EnvironmentNotFound {
                     preference: EnvironmentPreference::Any,
                     request: PythonRequest::Directory(root.as_ref().to_owned()),
@@ -186,56 +177,38 @@ impl PythonEnvironment {
             Err(err) => return Err(Error::Discovery(err.into())),
         };
 
-        if canonical_root.is_file() {
+        if root.as_ref().is_file() {
             return Err(InvalidEnvironment {
-                path: canonical_root,
+                path: root.as_ref().to_path_buf(),
                 kind: InvalidEnvironmentKind::NotDirectory,
             }
             .into());
         }
 
-        if canonical_root
+        if root
+            .as_ref()
             .read_dir()
             .is_ok_and(|mut dir| dir.next().is_none())
         {
             return Err(InvalidEnvironment {
-                path: canonical_root,
+                path: root.as_ref().to_path_buf(),
                 kind: InvalidEnvironmentKind::Empty,
             }
             .into());
         }
 
-        // Check if the executable exists at the non-canonicalized directory first. This is
-        // important because the path the interpreter is invoked at can determine the value of
+        // Note we do not canonicalize the root path or the executable path, this is important
+        // because the path the interpreter is invoked at can determine the value of
         // `sys.executable`.
-        //
-        // We intentionally don't require a resolved link to exist here, we're just trying to tell
-        // if this _looks_ like a Python environment.
         let executable = virtualenv_python_executable(&root);
-        let executable = if executable.is_symlink() || executable.is_file() {
-            debug!(
-                "Found possible interpreter at {}",
-                executable.user_display()
-            );
-            executable
-        } else {
-            let canonical_executable = virtualenv_python_executable(&canonical_root);
-            debug!(
-                "No interpreter at `{}`, checking `{}`",
-                executable.user_display(),
-                canonical_executable.user_display()
-            );
 
-            // If we can't find an executable, exit before querying to provide a better error.
-            if !(canonical_executable.is_symlink() || canonical_executable.is_file()) {
-                return Err(InvalidEnvironment {
-                    path: canonical_root,
-                    kind: InvalidEnvironmentKind::MissingExecutable(canonical_executable.clone()),
-                }
-                .into());
-            };
-
-            canonical_executable
+        // If we can't find an executable, exit before querying to provide a better error.
+        if !(executable.is_symlink() || executable.is_file()) {
+            return Err(InvalidEnvironment {
+                path: root.as_ref().to_path_buf(),
+                kind: InvalidEnvironmentKind::MissingExecutable(executable.clone()),
+            }
+            .into());
         };
 
         let interpreter = Interpreter::query(executable, cache)?;
