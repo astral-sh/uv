@@ -193,47 +193,14 @@ pub(crate) async fn run(
     let handle = match process.spawn() {
         Ok(handle) => Ok(handle),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            match get_entrypoints(&from.name, &site_packages) {
-                Ok(entrypoints) => {
-                    writeln!(
-                        printer.stdout(),
-                        "The executable `{}` was not found.",
-                        executable.cyan(),
-                    )?;
-                    if entrypoints.is_empty() {
-                        warn_user!(
-                            "Package `{}` does not provide any executables.",
-                            from.name.red()
-                        );
-                    } else {
-                        warn_user!(
-                            "An executable named `{}` is not provided by package `{}`.",
-                            executable.cyan(),
-                            from.name.red()
-                        );
-                        writeln!(
-                            printer.stdout(),
-                            "The following executables are provided by `{}`:",
-                            from.name.green()
-                        )?;
-                        for (name, _) in entrypoints {
-                            writeln!(printer.stdout(), "- {}", name.cyan())?;
-                        }
-                        let suggested_command = format!(
-                            "{} --from {} <EXECUTABLE_NAME>",
-                            invocation_source, from.name
-                        );
-                        writeln!(
-                            printer.stdout(),
-                            "Consider using `{}` instead.",
-                            suggested_command.green()
-                        )?;
-                    }
-                    return Ok(ExitStatus::Failure);
-                }
-                Err(err) => {
-                    warn!("Failed to get entrypoints for `{from}`: {err}");
-                }
+            if let Some(exit_status) = hint_on_not_found(
+                executable,
+                &from,
+                &site_packages,
+                invocation_source,
+                printer,
+            )? {
+                return Ok(exit_status);
             }
             Err(err)
         }
@@ -242,6 +209,61 @@ pub(crate) async fn run(
     .with_context(|| format!("Failed to spawn: `{executable}`"))?;
 
     run_to_completion(handle).await
+}
+
+/// Show a hint when a command fails due to a missing executable.
+///
+/// Returns an exit status if the caller should exit after hinting.
+fn hint_on_not_found(
+    executable: &str,
+    from: &Requirement,
+    site_packages: &SitePackages,
+    invocation_source: ToolRunCommand,
+    printer: Printer,
+) -> anyhow::Result<Option<ExitStatus>> {
+    match get_entrypoints(&from.name, site_packages) {
+        Ok(entrypoints) => {
+            writeln!(
+                printer.stdout(),
+                "The executable `{}` was not found.",
+                executable.cyan(),
+            )?;
+            if entrypoints.is_empty() {
+                warn_user!(
+                    "Package `{}` does not provide any executables.",
+                    from.name.red()
+                );
+            } else {
+                warn_user!(
+                    "An executable named `{}` is not provided by package `{}`.",
+                    executable.cyan(),
+                    from.name.red()
+                );
+                writeln!(
+                    printer.stdout(),
+                    "The following executables are provided by `{}`:",
+                    from.name.green()
+                )?;
+                for (name, _) in entrypoints {
+                    writeln!(printer.stdout(), "- {}", name.cyan())?;
+                }
+                let suggested_command = format!(
+                    "{} --from {} <EXECUTABLE_NAME>",
+                    invocation_source, from.name
+                );
+                writeln!(
+                    printer.stdout(),
+                    "Consider using `{}` instead.",
+                    suggested_command.green()
+                )?;
+            }
+            Ok(Some(ExitStatus::Failure))
+        }
+        Err(err) => {
+            warn!("Failed to get entrypoints for `{from}`: {err}");
+            Ok(None)
+        }
+    }
 }
 
 /// Return the entry points for the specified package.
