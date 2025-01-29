@@ -578,6 +578,7 @@ fn dev_dependencies_inverted() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
+
         [tool.uv]
         dev-dependencies = ["anyio"]
     "#,
@@ -595,6 +596,18 @@ fn dev_dependencies_inverted() -> Result<()> {
     sniffio v1.3.1
     └── anyio v4.3.0 (*)
     (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert").arg("--no-dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    iniconfig v2.0.0
+    └── project v0.1.0
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
