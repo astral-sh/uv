@@ -3385,7 +3385,7 @@ pub struct TreeArgs {
     /// Omit the development dependency group.
     ///
     /// This option is an alias for `--no-group dev`.
-    #[arg(long, overrides_with("dev"), conflicts_with = "invert")]
+    #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
     /// Include dependencies from the specified dependency group.
