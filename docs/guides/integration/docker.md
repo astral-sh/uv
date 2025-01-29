@@ -18,11 +18,11 @@ description:
 
 uv provides both _distroless_ Docker images, which are useful for
 [copying uv binaries](#installing-uv) into your own image builds, and images derived from popular
-base images, which are useful for running using uv in a container. The distroless images do not
-contain anything but the uv binaries. In contrast, the derived images include an operating system
-with uv pre-installed.
+base images, which are useful for using uv in a container. The distroless images do not contain
+anything but the uv binaries. In contrast, the derived images include an operating system with uv
+pre-installed.
 
-For example, to run a uv command in a container that uses a Debian-based image:
+As a basic example, to run uv in a container using a Debian-based image:
 
 ```console
 $ docker run --rm -it ghcr.io/astral-sh/uv:debian uv --help
