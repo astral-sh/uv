@@ -28,6 +28,7 @@ use crate::implementation::{
 };
 use crate::installation::PythonInstallationKey;
 use crate::libc::LibcDetectionError;
+use crate::managed::ManagedPythonInstallation;
 use crate::platform::{self, Arch, Libc, Os};
 use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
 
@@ -341,6 +342,23 @@ impl PythonDownloadRequest {
             }
         }
         true
+    }
+}
+
+impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
+    fn from(installation: &ManagedPythonInstallation) -> Self {
+        let key = installation.key();
+        Self::new(
+            Some(VersionRequest::from(&key.version())),
+            match &key.implementation {
+                LenientImplementationName::Known(implementation) => Some(*implementation),
+                LenientImplementationName::Unknown(name) => unreachable!("Managed Python installations are expected to always have known implementation names, found {name}"),
+            },
+            Some(key.arch),
+            Some(key.os),
+            Some(key.libc),
+            Some(key.prerelease.is_some()),
+        )
     }
 }
 
