@@ -17,7 +17,7 @@ variables:
   PYTHON_VERSION: 3.12
   BASE_LAYER: bookworm-slim
   # GitLab CI creates a separate mountpoint for the build directory,
-  # so we need to copy instead of hardlinking.
+  # so we need to copy instead of using hard links.
   UV_LINK_MODE: copy
 
 uv:
