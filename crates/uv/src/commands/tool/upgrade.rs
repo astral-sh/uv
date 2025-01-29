@@ -8,7 +8,6 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, PreviewMode, TrustedHost};
-use uv_dispatch::SharedState;
 use uv_fs::CWD;
 use uv_normalize::PackageName;
 use uv_pypi_types::Requirement;
@@ -24,7 +23,7 @@ use crate::commands::pip::loggers::{
     DefaultInstallLogger, SummaryResolveLogger, UpgradeInstallLogger,
 };
 use crate::commands::project::{
-    resolve_environment, sync_environment, update_environment, EnvironmentUpdate,
+    resolve_environment, sync_environment, update_environment, EnvironmentUpdate, PlatformState,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::remove_entrypoints;
@@ -286,7 +285,7 @@ async fn upgrade_tool(
     );
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let state = PlatformState::default();
 
     // Check if we need to create a new environment — if so, resolve it first, then
     // install the requested tool

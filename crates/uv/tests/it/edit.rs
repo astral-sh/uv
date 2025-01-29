@@ -875,6 +875,37 @@ fn add_raw_error() -> Result<()> {
     Ok(())
 }
 
+#[test]
+#[cfg(feature = "git")]
+fn add_editable_error() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    // Provide `--editable` with a non-source tree.
+    uv_snapshot!(context.filters(), context.add().arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl").arg("--editable"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `flask` did not resolve to a local directory, but the `--editable` flag was provided. Editable installs are only supported for local directories.
+    "###);
+
+    Ok(())
+}
+
 /// Add an unnamed requirement.
 #[test]
 #[cfg(feature = "git")]
@@ -2186,6 +2217,24 @@ fn add_workspace_editable() -> Result<()> {
     "#})?;
 
     let child1 = context.temp_dir.join("child1");
+
+    // `--no-editable` should error.
+    let mut add_cmd = context.add();
+    add_cmd
+        .arg("child2")
+        .arg("--no-editable")
+        .current_dir(&child1);
+
+    uv_snapshot!(context.filters(), add_cmd, @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Workspace dependency `child2` was marked as `--no-editable`, but workspace dependencies are always added in editable mode. Pass `--no-editable` to `uv sync` or `uv run` to install workspace dependencies in non-editable mode.
+    "###);
+
+    // `--editable` should not.
     let mut add_cmd = context.add();
     add_cmd.arg("child2").arg("--editable").current_dir(&child1);
 
@@ -6977,7 +7026,7 @@ fn add_index() -> Result<()> {
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + jinja2==3.1.3
+     + jinja2==3.1.4
      + markupsafe==2.1.5
     "###);
 
@@ -6994,7 +7043,7 @@ fn add_index() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "iniconfig==2.0.0",
-            "jinja2>=3.1.3",
+            "jinja2>=3.1.4",
         ]
 
         [tool.uv]
@@ -7037,19 +7086,20 @@ fn add_index() -> Result<()> {
 
         [[package]]
         name = "jinja2"
-        version = "3.1.3"
+        version = "3.1.4"
         source = { registry = "https://download.pytorch.org/whl/cu121" }
         dependencies = [
             { name = "markupsafe" },
         ]
         wheels = [
-            { url = "https://download.pytorch.org/whl/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa" },
+            { url = "https://download.pytorch.org/whl/Jinja2-3.1.4-py3-none-any.whl" },
         ]
 
         [[package]]
         name = "markupsafe"
         version = "2.1.5"
         source = { registry = "https://download.pytorch.org/whl/cu121" }
+        sdist = { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5.tar.gz" }
         wheels = [
             { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:8dec4936e9c3100156f8a2dc89c4b88d5c435175ff03413b443469c7c8c5f4d1" },
             { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:3c6b973f22eb18a789b1460b4b91bf04ae3f0c4234a0a6aa6b0a92f6f7b951d4" },
@@ -7071,7 +7121,7 @@ fn add_index() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "iniconfig", specifier = "==2.0.0" },
-            { name = "jinja2", specifier = ">=3.1.3", index = "https://download.pytorch.org/whl/cu121" },
+            { name = "jinja2", specifier = ">=3.1.4", index = "https://download.pytorch.org/whl/cu121" },
         ]
         "###
         );
@@ -7085,11 +7135,7 @@ fn add_index() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
-     - jinja2==3.1.3
-     + jinja2==3.1.4
+    Audited 3 packages in [TIME]
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -7105,7 +7151,7 @@ fn add_index() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "iniconfig==2.0.0",
-            "jinja2>=3.1.3",
+            "jinja2>=3.1.4",
         ]
 
         [tool.uv]
@@ -7188,7 +7234,7 @@ fn add_index() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "iniconfig", specifier = "==2.0.0" },
-            { name = "jinja2", specifier = ">=3.1.3", index = "https://test.pypi.org/simple" },
+            { name = "jinja2", specifier = ">=3.1.4", index = "https://test.pypi.org/simple" },
         ]
         "###
         );
@@ -7220,7 +7266,7 @@ fn add_index() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "iniconfig==2.0.0",
-            "jinja2>=3.1.3",
+            "jinja2>=3.1.4",
             "typing-extensions>=4.12.2",
         ]
 
@@ -7305,7 +7351,7 @@ fn add_index() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "iniconfig", specifier = "==2.0.0" },
-            { name = "jinja2", specifier = ">=3.1.3", index = "https://test.pypi.org/simple" },
+            { name = "jinja2", specifier = ">=3.1.4", index = "https://test.pypi.org/simple" },
             { name = "typing-extensions", specifier = ">=4.12.2" },
         ]
 
@@ -7345,7 +7391,7 @@ fn add_index() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "iniconfig==2.0.0",
-            "jinja2>=3.1.3",
+            "jinja2>=3.1.4",
             "typing-extensions>=4.12.2",
         ]
 
@@ -7430,7 +7476,7 @@ fn add_index() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "iniconfig", specifier = "==2.0.0" },
-            { name = "jinja2", specifier = ">=3.1.3", index = "https://test.pypi.org/simple" },
+            { name = "jinja2", specifier = ">=3.1.4", index = "https://test.pypi.org/simple" },
             { name = "typing-extensions", specifier = ">=4.12.2" },
         ]
 

@@ -39,7 +39,7 @@ use uv_distribution_types::{
     PathSourceUrl, SourceDist, SourceUrl,
 };
 use uv_extract::hash::Hasher;
-use uv_fs::{rename_with_retry, write_atomic, LockedFile};
+use uv_fs::{rename_with_retry, write_atomic};
 use uv_git::{GitHubRepository, GitOid};
 use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
@@ -392,7 +392,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
-        let _lock = lock_shard(cache_shard).await?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         // Fetch the revision for the source distribution.
         let revision = self
@@ -505,7 +505,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        let _lock = lock_shard(cache_shard).await?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         // Fetch the revision for the source distribution.
         let revision = self
@@ -753,7 +753,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         tags: &Tags,
         hashes: HashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
-        let _lock = lock_shard(cache_shard).await?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer {
@@ -847,7 +847,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        let _lock = lock_shard(cache_shard).await?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer { revision, .. } = self
@@ -1058,7 +1058,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             },
         );
 
-        let _lock = lock_shard(&cache_shard).await?;
+        // Acquire the advisory lock.
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer {
@@ -1168,7 +1169,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             },
         );
 
-        let _lock = lock_shard(&cache_shard).await?;
+        // Acquire the advisory lock.
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer { revision, .. } = self
@@ -1185,10 +1187,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await?
             .filter(|metadata| metadata.matches(source.name(), source.version()))
         {
-            debug!("Using cached metadata for: {source}");
+            // If necessary, mark the metadata as dynamic.
+            let metadata = if dynamic {
+                ResolutionMetadata {
+                    dynamic: true,
+                    ..metadata.into()
+                }
+            } else {
+                metadata.into()
+            };
+
             return Ok(ArchiveMetadata::from(
                 Metadata::from_workspace(
-                    metadata.into(),
+                    metadata,
                     resource.install_path.as_ref(),
                     None,
                     self.build_context.locations(),
@@ -1210,6 +1221,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .boxed_local()
             .await?
         {
+            // Store the metadata.
+            fs::create_dir_all(metadata_entry.dir())
+                .await
+                .map_err(Error::CacheWrite)?;
+            write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
+                .await
+                .map_err(Error::CacheWrite)?;
+
             // If necessary, mark the metadata as dynamic.
             let metadata = if dynamic {
                 ResolutionMetadata {
@@ -1219,14 +1238,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             } else {
                 metadata
             };
-
-            // Store the metadata.
-            fs::create_dir_all(metadata_entry.dir())
-                .await
-                .map_err(Error::CacheWrite)?;
-            write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
-                .await
-                .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadata::from(
                 Metadata::from_workspace(
@@ -1271,6 +1282,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         }
 
+        // Store the metadata.
+        write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
+            .await
+            .map_err(Error::CacheWrite)?;
+
         // If necessary, mark the metadata as dynamic.
         let metadata = if dynamic {
             ResolutionMetadata {
@@ -1280,11 +1296,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         } else {
             metadata
         };
-
-        // Store the metadata.
-        write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
-            .await
-            .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadata::from(
             Metadata::from_workspace(
@@ -1430,7 +1441,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         );
         let metadata_entry = cache_shard.entry(METADATA);
 
-        let _lock = lock_shard(&cache_shard).await?;
+        // Acquire the advisory lock.
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.build_context.config_settings();
@@ -1581,7 +1593,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         );
         let metadata_entry = cache_shard.entry(METADATA);
 
-        let _lock = lock_shard(&cache_shard).await?;
+        // Acquire the advisory lock.
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         let path = if let Some(subdirectory) = resource.subdirectory {
             Cow::Owned(fetch.path().join(subdirectory))
@@ -2881,17 +2894,4 @@ fn read_wheel_metadata(
     let dist_info = read_archive_metadata(filename, &mut archive)
         .map_err(|err| Error::WheelMetadata(wheel.to_path_buf(), Box::new(err)))?;
     Ok(ResolutionMetadata::parse_metadata(&dist_info)?)
-}
-
-/// Apply an advisory lock to a [`CacheShard`] to prevent concurrent builds.
-async fn lock_shard(cache_shard: &CacheShard) -> Result<LockedFile, Error> {
-    let root = cache_shard.as_ref();
-
-    fs_err::create_dir_all(root).map_err(Error::CacheWrite)?;
-
-    let lock = LockedFile::acquire(root.join(".lock"), root.display())
-        .await
-        .map_err(Error::CacheWrite)?;
-
-    Ok(lock)
 }

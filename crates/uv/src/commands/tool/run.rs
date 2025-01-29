@@ -15,7 +15,6 @@ use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, PreviewMode, TrustedHost};
-use uv_dispatch::SharedState;
 use uv_distribution_types::{Name, UnresolvedRequirementSpecification};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -35,7 +34,9 @@ use uv_warnings::warn_user;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
-use crate::commands::project::{resolve_names, EnvironmentSpecification, ProjectError};
+use crate::commands::project::{
+    resolve_names, EnvironmentSpecification, PlatformState, ProjectError,
+};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::run::run_to_completion;
 use crate::commands::tool::common::{matching_packages, refine_interpreter};
@@ -192,47 +193,14 @@ pub(crate) async fn run(
     let handle = match process.spawn() {
         Ok(handle) => Ok(handle),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            match get_entrypoints(&from.name, &site_packages) {
-                Ok(entrypoints) => {
-                    writeln!(
-                        printer.stdout(),
-                        "The executable `{}` was not found.",
-                        executable.cyan(),
-                    )?;
-                    if entrypoints.is_empty() {
-                        warn_user!(
-                            "Package `{}` does not provide any executables.",
-                            from.name.red()
-                        );
-                    } else {
-                        warn_user!(
-                            "An executable named `{}` is not provided by package `{}`.",
-                            executable.cyan(),
-                            from.name.red()
-                        );
-                        writeln!(
-                            printer.stdout(),
-                            "The following executables are provided by `{}`:",
-                            from.name.green()
-                        )?;
-                        for (name, _) in entrypoints {
-                            writeln!(printer.stdout(), "- {}", name.cyan())?;
-                        }
-                        let suggested_command = format!(
-                            "{} --from {} <EXECUTABLE_NAME>",
-                            invocation_source, from.name
-                        );
-                        writeln!(
-                            printer.stdout(),
-                            "Consider using `{}` instead.",
-                            suggested_command.green()
-                        )?;
-                    }
-                    return Ok(ExitStatus::Failure);
-                }
-                Err(err) => {
-                    warn!("Failed to get entrypoints for `{from}`: {err}");
-                }
+            if let Some(exit_status) = hint_on_not_found(
+                executable,
+                &from,
+                &site_packages,
+                invocation_source,
+                printer,
+            )? {
+                return Ok(exit_status);
             }
             Err(err)
         }
@@ -241,6 +209,61 @@ pub(crate) async fn run(
     .with_context(|| format!("Failed to spawn: `{executable}`"))?;
 
     run_to_completion(handle).await
+}
+
+/// Show a hint when a command fails due to a missing executable.
+///
+/// Returns an exit status if the caller should exit after hinting.
+fn hint_on_not_found(
+    executable: &str,
+    from: &Requirement,
+    site_packages: &SitePackages,
+    invocation_source: ToolRunCommand,
+    printer: Printer,
+) -> anyhow::Result<Option<ExitStatus>> {
+    match get_entrypoints(&from.name, site_packages) {
+        Ok(entrypoints) => {
+            writeln!(
+                printer.stdout(),
+                "The executable `{}` was not found.",
+                executable.cyan(),
+            )?;
+            if entrypoints.is_empty() {
+                warn_user!(
+                    "Package `{}` does not provide any executables.",
+                    from.name.red()
+                );
+            } else {
+                warn_user!(
+                    "An executable named `{}` is not provided by package `{}`.",
+                    executable.cyan(),
+                    from.name.red()
+                );
+                writeln!(
+                    printer.stdout(),
+                    "The following executables are provided by `{}`:",
+                    from.name.green()
+                )?;
+                for (name, _) in entrypoints {
+                    writeln!(printer.stdout(), "- {}", name.cyan())?;
+                }
+                let suggested_command = format!(
+                    "{} --from {} <EXECUTABLE_NAME>",
+                    invocation_source, from.name
+                );
+                writeln!(
+                    printer.stdout(),
+                    "Consider using `{}` instead.",
+                    suggested_command.green()
+                )?;
+            }
+            Ok(Some(ExitStatus::Failure))
+        }
+        Err(err) => {
+            warn!("Failed to get entrypoints for `{from}`: {err}");
+            Ok(None)
+        }
+    }
 }
 
 /// Return the entry points for the specified package.
@@ -423,7 +446,7 @@ async fn get_or_create_environment(
     .into_interpreter();
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let state = PlatformState::default();
 
     // Resolve the `--from` requirement.
     let from = match target {

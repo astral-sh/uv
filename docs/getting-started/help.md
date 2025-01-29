@@ -49,6 +49,11 @@ $ uv -V             # Will not include the build commit and date
 $ uv pip --version  # Can be used with a subcommand
 ```
 
+## Troubleshooting issues
+
+The reference documentation contains a
+[troubleshooting guide](../reference/troubleshooting/index.md) for common issues.
+
 ## Open an issue on GitHub
 
 The [issue tracker](https://github.com/astral-sh/uv/issues) on GitHub is a good place to report bugs

@@ -20,7 +20,7 @@ use uv_configuration::{
     ExtrasSpecification, GroupsSpecification, InstallOptions, LowerBound, PreviewMode,
     SourceStrategy, TrustedHost,
 };
-use uv_dispatch::{BuildDispatch, SharedState};
+use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{Index, IndexName, UnresolvedRequirement, VersionId};
 use uv_fs::Simplified;
@@ -47,7 +47,8 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    init_script_python_requirement, ProjectError, ProjectInterpreter, ScriptInterpreter,
+    init_script_python_requirement, PlatformState, ProjectError, ProjectInterpreter,
+    ScriptInterpreter, UniversalState,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{diagnostics, project, ExitStatus};
@@ -251,7 +252,7 @@ pub(crate) async fn add(
         RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let state = PlatformState::default();
 
     // Resolve any unnamed requirements.
     let requirements = {
@@ -327,7 +328,7 @@ pub(crate) async fn add(
                 &settings.index_locations,
                 &flat_index,
                 &settings.dependency_metadata,
-                state.clone(),
+                state.clone().into_inner(),
                 settings.index_strategy,
                 &settings.config_setting,
                 build_isolation,
@@ -606,11 +607,16 @@ pub(crate) async fn add(
         }
     });
 
+    // Use separate state for locking and syncing.
+    let lock_state = state.fork();
+    let sync_state = state;
+
     match lock_and_sync(
         target,
         &mut toml,
         &edits,
-        state,
+        lock_state,
+        sync_state,
         locked,
         &dependency_type,
         raw_sources,
@@ -647,7 +653,8 @@ async fn lock_and_sync(
     mut target: AddTarget,
     toml: &mut PyProjectTomlMut,
     edits: &[DependencyEdit],
-    state: SharedState,
+    lock_state: UniversalState,
+    sync_state: PlatformState,
     locked: bool,
     dependency_type: &DependencyType,
     raw_sources: bool,
@@ -670,7 +677,7 @@ async fn lock_and_sync(
         (&target).into(),
         settings.into(),
         LowerBound::default(),
-        &state,
+        &lock_state,
         Box::new(DefaultResolveLogger),
         connectivity,
         concurrency,
@@ -776,7 +783,7 @@ async fn lock_and_sync(
                 let url = Url::from_file_path(project.project_root())
                     .expect("project root is a valid URL");
                 let version_id = VersionId::from_url(&url);
-                let existing = state.index().distributions().remove(&version_id);
+                let existing = lock_state.index().distributions().remove(&version_id);
                 debug_assert!(existing.is_some(), "distribution should exist");
             }
 
@@ -791,7 +798,7 @@ async fn lock_and_sync(
                 (&target).into(),
                 settings.into(),
                 LowerBound::default(),
-                &state,
+                &lock_state,
                 Box::new(SummaryResolveLogger),
                 connectivity,
                 concurrency,
@@ -863,6 +870,7 @@ async fn lock_and_sync(
         InstallOptions::default(),
         Modifications::Sufficient,
         settings.into(),
+        &sync_state,
         Box::new(DefaultInstallLogger),
         installer_metadata,
         connectivity,

@@ -71,7 +71,7 @@ hello = "example:app"
 ### Plugin entry points
 
 Projects may define entry points for plugin discovery in the
-[`\[project.entry-points\]`](https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins/#using-package-metadata)
+[`[project.entry-points]`](https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins/#using-package-metadata)
 table of the `pyproject.toml`.
 
 For example, to register the `example-plugin-a` package as a plugin for `example`:

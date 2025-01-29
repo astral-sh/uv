@@ -28,7 +28,7 @@ $ docker run ghcr.io/astral-sh/uv --help
 uv provides a distroless Docker image including the `uv` binary. The following tags are published:
 
 - `ghcr.io/astral-sh/uv:latest`
-- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.5.24`
+- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.5.25`
 - `ghcr.io/astral-sh/uv:{major}.{minor}`, e.g., `ghcr.io/astral-sh/uv:0.5` (the latest patch
   version)
 
@@ -69,7 +69,7 @@ In addition, uv publishes the following images:
 
 As with the distroless image, each image is published with uv version tags as
 `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}-{base}` and
-`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.5.24-alpine`.
+`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.5.25-alpine`.
 
 For more details, see the [GitHub Container](https://github.com/astral-sh/uv/pkgs/container/uv)
 page.
@@ -107,13 +107,25 @@ Note this requires `curl` to be available.
 In either case, it is best practice to pin to a specific uv version, e.g., with:
 
 ```dockerfile
-COPY --from=ghcr.io/astral-sh/uv:0.5.24 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.5.25 /uv /uvx /bin/
 ```
+
+!!! tip
+
+    While the Dockerfile example above pins to a specific tag, it's also
+    possible to pin a specific SHA256. Pinning a specific SHA256 is considered
+    best practice in environments that require reproducible builds as tags can
+    be moved across different commit SHAs.
+
+    ```Dockerfile
+    # e.g., using a hash from a previous release
+    COPY --from=ghcr.io/astral-sh/uv@sha256:2381d6aa60c326b71fd40023f921a0a3b8f91b14d5db6b90402e65a635053709 /uv /uvx /bin/
+    ```
 
 Or, with the installer:
 
 ```dockerfile
-ADD https://astral.sh/uv/0.5.24/install.sh /uv-installer.sh
+ADD https://astral.sh/uv/0.5.25/install.sh /uv-installer.sh
 ```
 
 ### Installing a project
