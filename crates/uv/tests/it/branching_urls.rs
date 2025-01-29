@@ -326,6 +326,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
 
     [package.metadata]
     provides-extras = []
+    requires-dist = []
 
     [[package]]
     name = "iniconfig"
@@ -340,6 +341,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
 
     [package.metadata]
     provides-extras = []
+    requires-dist = []
 
     [[package]]
     name = "sniffio"
@@ -624,6 +626,7 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
 
     [package.metadata]
     provides-extras = []
+    requires-dist = []
     "#);
 
     Ok(())
@@ -702,6 +705,7 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
 
     [package.metadata]
     provides-extras = []
+    requires-dist = []
 
     [[package]]
     name = "iniconfig"
@@ -794,7 +798,7 @@ fn dont_pre_visit_url_packages() -> Result<()> {
     "###
     );
 
-    assert_snapshot!(context.read("uv.lock"), @r###"
+    assert_snapshot!(context.read("uv.lock"), @r#"
     version = 1
     requires-python = ">=3.11, <3.13"
 
@@ -836,7 +840,8 @@ fn dont_pre_visit_url_packages() -> Result<()> {
 
     [package.metadata]
     provides-extras = []
-    "###);
+    requires-dist = []
+    "#);
 
     Ok(())
 }

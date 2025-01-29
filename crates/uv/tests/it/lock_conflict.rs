@@ -1746,6 +1746,7 @@ fn group_basic() -> Result<()> {
 
         [package.metadata]
         provides-extras = []
+        requires-dist = []
 
         [package.metadata.requires-dev]
         group1 = [{ name = "sortedcontainers", specifier = "==2.3.0" }]
@@ -1901,6 +1902,7 @@ fn group_default() -> Result<()> {
 
         [package.metadata]
         provides-extras = []
+        requires-dist = []
 
         [package.metadata.requires-dev]
         group1 = [{ name = "sortedcontainers", specifier = "==2.3.0" }]
@@ -2468,6 +2470,7 @@ fn multiple_sources_index_disjoint_groups() -> Result<()> {
 
         [package.metadata]
         provides-extras = []
+        requires-dist = []
 
         [package.metadata.requires-dev]
         cu118 = [{ name = "jinja2", specifier = "==3.1.2", index = "https://download.pytorch.org/whl/cu118", conflict = { package = "project", group = "cu118" } }]
@@ -3235,6 +3238,7 @@ fn shared_optional_dependency_group1() -> Result<()> {
 
         [package.metadata]
         provides-extras = []
+        requires-dist = []
 
         [package.metadata.requires-dev]
         bar = [{ name = "idna", specifier = "==3.6" }]
@@ -3659,6 +3663,7 @@ fn shared_optional_dependency_group2() -> Result<()> {
 
         [package.metadata]
         provides-extras = []
+        requires-dist = []
 
         [package.metadata.requires-dev]
         bar = [
