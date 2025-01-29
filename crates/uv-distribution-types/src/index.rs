@@ -150,9 +150,25 @@ impl Index {
         self.url
     }
 
-    /// Return the raw [`URL`] of the index.
+    /// Return the raw [`Url`] of the index.
     pub fn raw_url(&self) -> &Url {
         self.url.url()
+    }
+
+    /// Return the root [`Url`] of the index, if applicable.
+    ///
+    /// For indexes with a `/simple` endpoint, this is simply the URL with the final segment
+    /// removed. This is useful, e.g., for credential propagation to other endpoints on the index.
+    pub fn root_url(&self) -> Option<Url> {
+        let segments = self.raw_url().path_segments()?;
+        let last = segments.last()?;
+        if !last.eq_ignore_ascii_case("simple") {
+            return None;
+        }
+
+        let mut url = self.raw_url().clone();
+        url.path_segments_mut().ok()?.pop();
+        Some(url)
     }
 
     /// Retrieve the credentials for the index, either from the environment, or from the URL itself.

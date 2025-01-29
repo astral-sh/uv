@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::env;
 use std::path::Path;
+use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
@@ -292,7 +293,11 @@ pub(crate) async fn pip_compile(
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
-            uv_auth::store_credentials(index.raw_url(), credentials);
+            let credentials = Arc::new(credentials);
+            uv_auth::store_credentials(index.raw_url(), credentials.clone());
+            if let Some(root_url) = index.root_url() {
+                uv_auth::store_credentials(&root_url, credentials.clone());
+            }
         }
     }
 
