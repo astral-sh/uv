@@ -3352,6 +3352,8 @@ fn run_gui_script_explicit_unix() -> Result<()> {
 #[test]
 #[cfg(unix)]
 fn run_linked_environment_path() -> Result<()> {
+    use anyhow::Ok;
+
     let context = TestContext::new("3.12")
         .with_filtered_virtualenv_bin()
         .with_filtered_python_names();
@@ -3363,7 +3365,7 @@ fn run_linked_environment_path() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["iniconfig"]
+        dependencies = ["black"]
         "#,
     )?;
 
@@ -3378,26 +3380,53 @@ fn run_linked_environment_path() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + iniconfig==2.0.0
+    Resolved 8 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
     "###);
 
-    // Using `uv run` should
+    // `sys.prefix` and `sys.executable` should be from the `target` directory
     uv_snapshot!(context.filters(), context.run()
-        .env_remove("VIRTUAL_ENV")  // Ignore the test context virtual environment activation
+        .env_remove("VIRTUAL_ENV")  // Ignore the test context's active virtual environment
         .env(EnvVars::UV_PROJECT_ENVIRONMENT, "target")
-        .arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r###"
+        .arg("python").arg("-c").arg("import sys; print(sys.prefix); print(sys.executable)"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
+    [VENV]/
     [VENV]/[BIN]/python
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Resolved 8 packages in [TIME]
+    Audited 6 packages in [TIME]
     "###);
+
+    // And, similarly, the entrypoint should use `target`
+    let black_entrypoint = context.read("target/bin/black");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            black_entrypoint, @r###"
+        #![VENV]/[BIN]/python
+        # -*- coding: utf-8 -*-
+        import sys
+        from black import patched_main
+        if __name__ == "__main__":
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
+            sys.exit(patched_main())
+        "###
+        );
+    });
 
     Ok(())
 }

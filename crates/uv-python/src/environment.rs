@@ -4,6 +4,7 @@ use std::env;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tracing::debug;
 use uv_cache::Cache;
 use uv_cache_key::cache_digest;
 use uv_fs::{LockedFile, Simplified};
@@ -161,8 +162,21 @@ impl PythonEnvironment {
     ///
     /// N.B. This function also works for system Python environments and users depend on this.
     pub fn from_root(root: impl AsRef<Path>, cache: &Cache) -> Result<Self, Error> {
-        let venv = match fs_err::canonicalize(root.as_ref()) {
-            Ok(venv) => venv,
+        debug!(
+            "Checking for Python environment at `{}`",
+            root.as_ref().user_display()
+        );
+        let canonical_root = match fs_err::canonicalize(root.as_ref()) {
+            Ok(canonical_root) => {
+                if root.as_ref() != canonical_root {
+                    debug!(
+                        "Environment path `{}` canonicalized to `{}`",
+                        root.as_ref().user_display(),
+                        canonical_root.user_display()
+                    );
+                }
+                canonical_root
+            }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                 return Err(Error::MissingEnvironment(EnvironmentNotFound {
                     preference: EnvironmentPreference::Any,
@@ -172,33 +186,56 @@ impl PythonEnvironment {
             Err(err) => return Err(Error::Discovery(err.into())),
         };
 
-        if venv.is_file() {
+        if canonical_root.is_file() {
             return Err(InvalidEnvironment {
-                path: venv,
+                path: canonical_root,
                 kind: InvalidEnvironmentKind::NotDirectory,
             }
             .into());
         }
 
-        if venv.read_dir().is_ok_and(|mut dir| dir.next().is_none()) {
+        if canonical_root
+            .read_dir()
+            .is_ok_and(|mut dir| dir.next().is_none())
+        {
             return Err(InvalidEnvironment {
-                path: venv,
+                path: canonical_root,
                 kind: InvalidEnvironmentKind::Empty,
             }
             .into());
         }
 
-        let executable = virtualenv_python_executable(&venv);
+        // Check if the executable exists at the non-canonicalized directory first. This is
+        // important because the path the interpreter is invoked at can determine the value of
+        // `sys.executable`.
+        //
+        // We intentionally don't require a resolved link to exist here, we're just trying to tell
+        // if this _looks_ like a Python environment.
+        let executable = virtualenv_python_executable(&root);
+        let executable = if executable.is_symlink() || executable.is_file() {
+            debug!(
+                "Found possible interpreter at {}",
+                executable.user_display()
+            );
+            executable
+        } else {
+            let canonical_executable = virtualenv_python_executable(&canonical_root);
+            debug!(
+                "No interpreter at `{}`, checking `{}`",
+                executable.user_display(),
+                canonical_executable.user_display()
+            );
 
-        // Check if the executable exists before querying so we can provide a more specific error
-        // Note we intentionally don't require a resolved link to exist here, we're just trying to
-        // tell if this _looks_ like a Python environment.
-        if !(executable.is_symlink() || executable.is_file()) {
-            return Err(InvalidEnvironment {
-                path: venv,
-                kind: InvalidEnvironmentKind::MissingExecutable(executable.clone()),
-            }
-            .into());
+            // If we can't find an executable, exit before querying to provide a better error.
+            if !(canonical_executable.is_symlink() || canonical_executable.is_file()) {
+                return Err(InvalidEnvironment {
+                    path: canonical_root,
+                    kind: InvalidEnvironmentKind::MissingExecutable(canonical_executable.clone()),
+                }
+                .into());
+            };
+
+            canonical_executable
         };
 
         let interpreter = Interpreter::query(executable, cache)?;
