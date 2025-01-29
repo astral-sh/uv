@@ -80,7 +80,7 @@ Ok(
                 dependency_groups: {},
                 metadata: PackageMetadata {
                     requires_dist: {},
-                    provides_extras: [],
+                    provides_extras: None,
                     dependency_groups: {},
                 },
             },
@@ -150,7 +150,7 @@ Ok(
                 dependency_groups: {},
                 metadata: PackageMetadata {
                     requires_dist: {},
-                    provides_extras: [],
+                    provides_extras: None,
                     dependency_groups: {},
                 },
             },

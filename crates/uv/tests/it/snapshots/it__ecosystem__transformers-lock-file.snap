@@ -5874,7 +5874,7 @@ dev = [
 ]
 
 [package.metadata]
-provides-extras = ["ja", "sklearn", "tf", "tf-cpu", "torch", "accelerate", "retrieval", "flax", "tokenizers", "ftfy", "onnxruntime", "onnx", "modelcreation", "sagemaker", "deepspeed", "optuna", "ray", "sigopt", "integrations", "serving", "audio", "speech", "torch-speech", "tf-speech", "flax-speech", "vision", "timm", "torch-vision", "codecarbon", "video", "sentencepiece", "deepspeed-testing", "quality", "all", "docs-specific", "docs", "torchhub", "agents", "dev-dependencies"]
+provides-extras = ["ja", "sklearn", "tf", "tf-cpu", "torch", "accelerate", "retrieval", "flax", "tokenizers", "ftfy", "onnxruntime", "onnx", "modelcreation", "sagemaker", "deepspeed", "optuna", "ray", "sigopt", "integrations", "serving", "audio", "speech", "torch-speech", "tf-speech", "flax-speech", "vision", "timm", "torch-vision", "codecarbon", "video", "sentencepiece", "deepspeed-testing", "quality", "all", "docs-specific", "docs", "torchhub", "agents"]
 requires-dist = [
     { name = "accelerate", marker = "extra == 'accelerate'", specifier = ">=0.21.0" },
     { name = "accelerate", marker = "extra == 'agents'", specifier = ">=0.21.0" },

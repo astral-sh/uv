@@ -1791,14 +1791,16 @@ impl Package {
                 .map_err(LockErrorKind::RequirementRelativePath)?
         };
         let provides_extras = if id.source.is_immutable() {
-            Vec::new()
+            None
         } else {
-            annotated_dist
-                .metadata
-                .as_ref()
-                .expect("metadata is present")
-                .provides_extras
-                .clone()
+            Some(
+                annotated_dist
+                    .metadata
+                    .as_ref()
+                    .expect("metadata is present")
+                    .provides_extras
+                    .clone(),
+            )
         };
         let dependency_groups = if id.source.is_immutable() {
             BTreeMap::default()
@@ -2413,10 +2415,10 @@ impl Package {
         {
             let mut metadata_table = Table::new();
 
-            if !self.metadata.provides_extras.is_empty() {
-                let provides_extras = self
-                    .metadata
-                    .provides_extras
+            // Always output this, even if it's an empty list
+            // (let's us treat its presence as a pseudo-lockfile-version without breaking compat)
+            if let Some(provides_extras) = &self.metadata.provides_extras {
+                let provides_extras = provides_extras
                     .iter()
                     .map(|extra| {
                         serde::Serialize::serialize(&extra, toml_edit::ser::ValueSerializer::new())
@@ -2659,8 +2661,10 @@ struct PackageWire {
 struct PackageMetadata {
     #[serde(default)]
     requires_dist: BTreeSet<Requirement>,
+    // This is an Option<Vec<_>> so we can distinguish whether it was there or not,
+    // so we can tell if we're dealing with a lack of info or a genuinely empty list.
     #[serde(default)]
-    provides_extras: Vec<ExtraName>,
+    provides_extras: Option<Vec<ExtraName>>,
     #[serde(default, rename = "requires-dev", alias = "dependency-groups")]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
 }

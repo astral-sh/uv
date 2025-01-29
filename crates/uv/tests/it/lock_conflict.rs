@@ -89,7 +89,7 @@ fn extra_basic() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         conflicts = [[
@@ -137,7 +137,7 @@ fn extra_basic() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
         ]
-        "###
+        "#
         );
     });
 
@@ -282,7 +282,7 @@ fn extra_basic_three_extras() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         conflicts = [[
@@ -344,7 +344,7 @@ fn extra_basic_three_extras() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
         ]
-        "###
+        "#
         );
     });
 
@@ -756,7 +756,7 @@ fn extra_multiple_independent() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         conflicts = [[
@@ -859,7 +859,7 @@ fn extra_multiple_independent() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
         ]
-        "###
+        "#
         );
     });
 
@@ -905,7 +905,7 @@ fn extra_config_change_ignore_lockfile() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         conflicts = [[
@@ -953,7 +953,7 @@ fn extra_config_change_ignore_lockfile() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
         ]
-        "###
+        "#
         );
     });
 
@@ -1719,7 +1719,7 @@ fn group_basic() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         conflicts = [[
@@ -1744,6 +1744,7 @@ fn group_basic() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
 
         [package.metadata.requires-dev]
         group1 = [{ name = "sortedcontainers", specifier = "==2.3.0" }]
@@ -1766,7 +1767,7 @@ fn group_basic() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
         ]
-        "###
+        "#
         );
     });
 
@@ -1873,7 +1874,7 @@ fn group_default() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         conflicts = [[
@@ -1898,6 +1899,7 @@ fn group_default() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
 
         [package.metadata.requires-dev]
         group1 = [{ name = "sortedcontainers", specifier = "==2.3.0" }]
@@ -1920,7 +1922,7 @@ fn group_default() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
         ]
-        "###
+        "#
         );
     });
 
@@ -2084,7 +2086,7 @@ fn mixed() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         conflicts = [[
@@ -2134,7 +2136,7 @@ fn mixed() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
         ]
-        "###
+        "#
         );
     });
 
@@ -2253,7 +2255,7 @@ fn multiple_sources_index_disjoint_extras() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         conflicts = [[
@@ -2326,7 +2328,7 @@ fn multiple_sources_index_disjoint_extras() -> Result<()> {
             { name = "jinja2", marker = "extra == 'cu118'", specifier = "==3.1.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118", conflict = { package = "project", extra = "cu118" } },
             { name = "jinja2", marker = "extra == 'cu124'", specifier = "==3.1.3", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "project", extra = "cu124" } },
         ]
-        "###
+        "#
         );
     });
 
@@ -2402,7 +2404,7 @@ fn multiple_sources_index_disjoint_groups() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         conflicts = [[
@@ -2470,11 +2472,12 @@ fn multiple_sources_index_disjoint_groups() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
 
         [package.metadata.requires-dev]
         cu118 = [{ name = "jinja2", specifier = "==3.1.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118", conflict = { package = "project", group = "cu118" } }]
         cu124 = [{ name = "jinja2", specifier = "==3.1.3", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "project", group = "cu124" } }]
-        "###
+        "#
         );
     });
 
@@ -2550,7 +2553,7 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         conflicts = [[
@@ -2642,7 +2645,7 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
             { name = "jinja2", extras = ["i18n"], marker = "extra == 'cu118'", specifier = "==3.1.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118", conflict = { package = "project", extra = "cu118" } },
             { name = "jinja2", extras = ["i18n"], marker = "extra == 'cu124'", specifier = "==3.1.3", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "project", extra = "cu124" } },
         ]
-        "###
+        "#
         );
     });
 
@@ -2718,7 +2721,7 @@ fn multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         resolution-markers = [
@@ -2817,7 +2820,7 @@ fn multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
             { name = "jinja2", marker = "sys_platform != 'darwin' and extra == 'cu118'", specifier = "==3.1.2" },
             { name = "jinja2", marker = "extra == 'cu124'", specifier = "==3.1.3", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "project", extra = "cu124" } },
         ]
-        "###
+        "#
         );
     });
 
@@ -3043,7 +3046,7 @@ fn shared_optional_dependency_extra1() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         conflicts = [[
@@ -3118,7 +3121,7 @@ fn shared_optional_dependency_extra1() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -3182,7 +3185,7 @@ fn shared_optional_dependency_group1() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         conflicts = [[
@@ -3242,6 +3245,7 @@ fn shared_optional_dependency_group1() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
 
         [package.metadata.requires-dev]
         bar = [{ name = "idna", specifier = "==3.6" }]
@@ -3256,7 +3260,7 @@ fn shared_optional_dependency_group1() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -3322,7 +3326,7 @@ fn shared_optional_dependency_mixed1() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         conflicts = [[
@@ -3399,7 +3403,7 @@ fn shared_optional_dependency_mixed1() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -3466,7 +3470,7 @@ fn shared_optional_dependency_extra2() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = "==3.11.*"
         conflicts = [[
@@ -3541,7 +3545,7 @@ fn shared_optional_dependency_extra2() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -3606,7 +3610,7 @@ fn shared_optional_dependency_group2() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = "==3.11.*"
         conflicts = [[
@@ -3665,6 +3669,7 @@ fn shared_optional_dependency_group2() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
 
         [package.metadata.requires-dev]
         bar = [
@@ -3684,7 +3689,7 @@ fn shared_optional_dependency_group2() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -3751,7 +3756,7 @@ fn shared_optional_dependency_mixed2() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = "==3.11.*"
         conflicts = [[
@@ -3832,7 +3837,7 @@ fn shared_optional_dependency_mixed2() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -3894,7 +3899,7 @@ fn shared_dependency_extra() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         conflicts = [[
@@ -3969,7 +3974,7 @@ fn shared_dependency_extra() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -4068,7 +4073,7 @@ fn shared_dependency_group() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         conflicts = [[
@@ -4128,6 +4133,7 @@ fn shared_dependency_group() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio" }]
 
         [package.metadata.requires-dev]
@@ -4142,7 +4148,7 @@ fn shared_dependency_group() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -4243,7 +4249,7 @@ fn shared_dependency_mixed() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         conflicts = [[
@@ -4322,7 +4328,7 @@ fn shared_dependency_mixed() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -4452,7 +4458,7 @@ conflicts = [
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = "==3.11.*"
         conflicts = [[
@@ -4562,7 +4568,7 @@ conflicts = [
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -4637,7 +4643,7 @@ fn jinja_no_conflict_markers1() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         conflicts = [[
@@ -4729,7 +4735,7 @@ fn jinja_no_conflict_markers1() -> Result<()> {
             { name = "jinja2", extras = ["i18n"], marker = "extra == 'cu118'", specifier = "==3.1.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118", conflict = { package = "project", extra = "cu118" } },
             { name = "jinja2", extras = ["i18n"], marker = "extra == 'cu124'", specifier = "==3.1.3", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "project", extra = "cu124" } },
         ]
-        "###
+        "#
         );
     });
 
@@ -4798,7 +4804,7 @@ fn jinja_no_conflict_markers2() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         resolution-markers = [
@@ -4897,7 +4903,7 @@ fn jinja_no_conflict_markers2() -> Result<()> {
             { name = "jinja2", marker = "sys_platform != 'darwin' and extra == 'cu118'", specifier = "==3.1.2" },
             { name = "jinja2", marker = "extra == 'cu124'", specifier = "==3.1.3", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "project", extra = "cu124" } },
         ]
-        "###
+        "#
         );
     });
 
@@ -4958,7 +4964,7 @@ fn collision_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock,
-            @r###"
+            @r#"
         version = 1
         requires-python = ">=3.12"
         conflicts = [[
@@ -5046,7 +5052,7 @@ fn collision_extra() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
         ]
-        "###
+        "#
         );
     });
 
@@ -5186,7 +5192,7 @@ fn extra_inferences() -> Result<()> {
     }, {
         assert_snapshot!(
             lock,
-            @r###"
+            @r#"
         version = 1
         requires-python = ">=3.12"
         conflicts = [[
@@ -7148,7 +7154,7 @@ fn extra_inferences() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/c5/f4/2fdc5a11503bc61818243653d836061c9ce0370e2dd9ac5917258a007675/yarl-1.9.4-cp312-cp312-win_amd64.whl", hash = "sha256:a9bd00dc3bc395a662900f33f74feb3e757429e545d831eef5bb280252631984", size = 76397 },
             { url = "https://files.pythonhosted.org/packages/4d/05/4d79198ae568a92159de0f89e710a8d19e3fa267b719a236582eee921f4a/yarl-1.9.4-py3-none-any.whl", hash = "sha256:928cecb0ef9d5a7946eb6ff58417ad2fe9375762382f1bf5c55e61645f2c43ad", size = 31638 },
         ]
-        "###
+        "#
         );
     });
 
@@ -7221,7 +7227,7 @@ fn deduplicate_resolution_markers() -> Result<()> {
     }, {
         assert_snapshot!(
             lock,
-            @r###"
+            @r#"
         version = 1
         requires-python = ">=3.12"
         resolution-markers = [
@@ -7304,7 +7310,7 @@ fn deduplicate_resolution_markers() -> Result<()> {
             { name = "markupsafe", marker = "sys_platform == 'linux' and extra == 'x2'", specifier = "==2.1.0" },
             { name = "markupsafe", marker = "sys_platform != 'linux' and extra == 'x2'", specifier = "==2.0.0" },
         ]
-        "###
+        "#
         );
     });
 
@@ -7369,7 +7375,7 @@ fn overlapping_resolution_markers() -> Result<()> {
     }, {
         assert_snapshot!(
             lock,
-            @r###"
+            @r#"
         version = 1
         requires-python = "==3.10.*"
         resolution-markers = [
@@ -7979,7 +7985,7 @@ fn overlapping_resolution_markers() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/df/b9/1d26752a7c9ff5b255c921e13a9c5176e21a0b77e53d3febf892d90c86a5/wandb-0.17.6-py3-none-win32.whl", hash = "sha256:247b1c9677fd633a460201f421d4fd4f370e7243d06257fab0ad1bb728ddcc1c", size = 6504208 },
             { url = "https://files.pythonhosted.org/packages/fc/2c/280b8891362967e54de2267454ac6033568b8412ec31225f00ecc11db7a6/wandb-0.17.6-py3-none-win_amd64.whl", hash = "sha256:51954f993b372c20812616838302183f0e3abf137614f05d80c7c17c307bfff9", size = 6504213 },
         ]
-        "###
+        "#
         );
     });
 
