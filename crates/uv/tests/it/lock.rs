@@ -43,7 +43,7 @@ fn lock_wheel_registry() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -81,6 +81,7 @@ fn lock_wheel_registry() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = "==3.7.0" }]
 
         [[package]]
@@ -91,7 +92,7 @@ fn lock_wheel_registry() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -174,7 +175,7 @@ fn lock_sdist_registry() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -187,6 +188,7 @@ fn lock_sdist_registry() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "source-distribution", specifier = "==0.0.1" }]
 
         [[package]]
@@ -194,7 +196,7 @@ fn lock_sdist_registry() -> Result<()> {
         version = "0.0.1"
         source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz", hash = "sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106", size = 2157 }
-        "###
+        "#
         );
     });
 
@@ -268,7 +270,7 @@ fn lock_sdist_git() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -284,13 +286,14 @@ fn lock_sdist_git() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1" }]
 
         [[package]]
         name = "uv-public-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
-        "###
+        "#
         );
     });
 
@@ -357,7 +360,7 @@ fn lock_sdist_git() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -373,13 +376,14 @@ fn lock_sdist_git() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }]
 
         [[package]]
         name = "uv-public-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
-        "###
+        "#
         );
     });
 
@@ -413,7 +417,7 @@ fn lock_sdist_git() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -429,13 +433,14 @@ fn lock_sdist_git() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?rev=b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }]
 
         [[package]]
         name = "uv-public-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=b270df1a2fb5d012294e9aaf05e7e0bab1e6a389#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
-        "###
+        "#
         );
     });
 
@@ -469,7 +474,7 @@ fn lock_sdist_git() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -485,13 +490,14 @@ fn lock_sdist_git() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.2" }]
 
         [[package]]
         name = "uv-public-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.2#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
-        "###
+        "#
         );
     });
 
@@ -530,7 +536,7 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -551,8 +557,9 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "example-pkg-a", git = "https://github.com/pypa/sample-namespace-packages.git?subdirectory=pkg_resources%2Fpkg_a&rev=df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45" }]
-        "###
+        "#
         );
     });
 
@@ -623,7 +630,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -639,13 +646,14 @@ fn lock_sdist_git_pep508() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0.0.1" }]
 
         [[package]]
         name = "uv-public-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
-        "###
+        "#
         );
     });
 
@@ -686,7 +694,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -702,13 +710,14 @@ fn lock_sdist_git_pep508() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }]
 
         [[package]]
         name = "uv-public-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
-        "###
+        "#
         );
     });
 
@@ -739,7 +748,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -755,13 +764,14 @@ fn lock_sdist_git_pep508() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage.git?rev=b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }]
 
         [[package]]
         name = "uv-public-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=b270df1a2fb5d012294e9aaf05e7e0bab1e6a389#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
-        "###
+        "#
         );
     });
 
@@ -792,7 +802,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -808,13 +818,14 @@ fn lock_sdist_git_pep508() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0.0.2" }]
 
         [[package]]
         name = "uv-public-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0.0.2#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
-        "###
+        "#
         );
     });
 
@@ -856,7 +867,7 @@ fn lock_sdist_git_short_rev() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -872,13 +883,14 @@ fn lock_sdist_git_short_rev() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?rev=0dacfd6" }]
 
         [[package]]
         name = "uv-public-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=0dacfd6#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
-        "###
+        "#
         );
     });
 
@@ -959,7 +971,7 @@ fn lock_wheel_url() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -1019,6 +1031,7 @@ fn lock_wheel_url() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio", url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl" }]
 
         [[package]]
@@ -1029,7 +1042,7 @@ fn lock_wheel_url() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -1112,7 +1125,7 @@ fn lock_sdist_url() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -1170,6 +1183,7 @@ fn lock_sdist_url() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio", url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz" }]
 
         [[package]]
@@ -1180,7 +1194,7 @@ fn lock_sdist_url() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -1255,7 +1269,7 @@ fn lock_sdist_url_subdirectory() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -1293,6 +1307,7 @@ fn lock_sdist_url_subdirectory() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "root", url = "https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz", subdirectory = "packages/root" }]
 
         [[package]]
@@ -1305,6 +1320,7 @@ fn lock_sdist_url_subdirectory() -> Result<()> {
         sdist = { hash = "sha256:24b55efee28d08ad3cdc58903e359e820601baa6a4a4b3424311541ebcfb09d3" }
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio" }]
 
         [[package]]
@@ -1315,7 +1331,7 @@ fn lock_sdist_url_subdirectory() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -1388,7 +1404,7 @@ fn lock_sdist_url_subdirectory_pep508() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -1426,6 +1442,7 @@ fn lock_sdist_url_subdirectory_pep508() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "root", url = "https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz", subdirectory = "packages/root" }]
 
         [[package]]
@@ -1438,6 +1455,7 @@ fn lock_sdist_url_subdirectory_pep508() -> Result<()> {
         sdist = { hash = "sha256:24b55efee28d08ad3cdc58903e359e820601baa6a4a4b3424311541ebcfb09d3" }
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio" }]
 
         [[package]]
@@ -1448,7 +1466,7 @@ fn lock_sdist_url_subdirectory_pep508() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -1524,7 +1542,7 @@ fn lock_project_extra() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -1590,7 +1608,7 @@ fn lock_project_extra() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -1894,7 +1912,7 @@ fn lock_dependency_extra() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -2000,6 +2018,7 @@ fn lock_dependency_extra() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "flask", extras = ["dotenv"] }]
 
         [[package]]
@@ -2022,7 +2041,7 @@ fn lock_dependency_extra() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl", hash = "sha256:90a285dc0e42ad56b34e696398b8122ee4c681833fb35b8334a095d82c56da10", size = 226669 },
         ]
-        "###
+        "#
         );
     });
 
@@ -2091,7 +2110,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.7"
         resolution-markers = [
@@ -2228,6 +2247,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "requests" },
             { name = "requests", extras = ["socks"], marker = "python_full_version < '3.10'" },
@@ -2287,7 +2307,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl", hash = "sha256:450b20ec296a467077128bff42b73080516e71b56ff59a60a02bef2232c4fa9d", size = 121067 },
         ]
-        "###
+        "#
         );
     });
 
@@ -2388,7 +2408,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -2489,6 +2509,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "flask", extras = ["foo"] }]
 
         [[package]]
@@ -2502,7 +2523,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl", hash = "sha256:90a285dc0e42ad56b34e696398b8122ee4c681833fb35b8334a095d82c56da10", size = 226669 },
         ]
-        "###
+        "#
         );
     });
 
@@ -2568,7 +2589,7 @@ fn lock_upgrade_log() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -2600,11 +2621,12 @@ fn lock_upgrade_log() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "iniconfig" },
             { name = "markupsafe", specifier = "<2" },
         ]
-        "###
+        "#
         );
     });
 
@@ -2649,7 +2671,7 @@ fn lock_upgrade_log() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -2684,6 +2706,7 @@ fn lock_upgrade_log() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "markupsafe" },
             { name = "typing-extensions" },
@@ -2697,7 +2720,7 @@ fn lock_upgrade_log() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
-        "###
+        "#
         );
     });
 
@@ -2736,7 +2759,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         resolution-markers = [
@@ -2775,11 +2798,12 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "markupsafe", marker = "sys_platform != 'win32'", specifier = "<2" },
             { name = "markupsafe", marker = "sys_platform == 'win32'", specifier = "==2.0.0" },
         ]
-        "###
+        "#
         );
     });
 
@@ -2821,7 +2845,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -2855,8 +2879,9 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "markupsafe" }]
-        "###
+        "#
         );
     });
 
@@ -2894,7 +2919,7 @@ fn lock_preference() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -2919,8 +2944,9 @@ fn lock_preference() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = "<2" }]
-        "###
+        "#
         );
     });
 
@@ -2953,7 +2979,7 @@ fn lock_preference() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -2978,8 +3004,9 @@ fn lock_preference() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
-        "###
+        "#
         );
     });
 
@@ -2999,7 +3026,7 @@ fn lock_preference() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -3024,8 +3051,9 @@ fn lock_preference() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
-        "###
+        "#
         );
     });
 
@@ -3067,7 +3095,7 @@ fn lock_git_plus_prefix() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -3083,13 +3111,14 @@ fn lock_git_plus_prefix() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage" }]
 
         [[package]]
         name = "uv-public-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
-        "###
+        "#
         );
     });
 
@@ -3152,7 +3181,7 @@ fn lock_partial_git() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.10"
         resolution-markers = [
@@ -3221,6 +3250,7 @@ fn lock_partial_git() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "anyio", marker = "python_full_version < '3.12'", git = "https://github.com/agronholm/anyio?rev=4.6.2" },
             { name = "anyio", marker = "python_full_version >= '3.12'" },
@@ -3243,7 +3273,7 @@ fn lock_partial_git() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
-        "###
+        "#
         );
     });
 
@@ -3441,7 +3471,7 @@ fn lock_git_sha() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -3457,13 +3487,14 @@ fn lock_git_sha() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?rev=main" }]
 
         [[package]]
         name = "uv-public-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=main#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
-        "###
+        "#
         );
     });
 
@@ -3540,7 +3571,7 @@ fn lock_requires_python() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.7"
         resolution-markers = [
@@ -3670,6 +3701,7 @@ fn lock_requires_python() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "pygls" }]
 
         [[package]]
@@ -3797,7 +3829,7 @@ fn lock_requires_python() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/5b/fa/c9e82bbe1af6266adf08afb563905eb87cab83fde00a0a08963510621047/zipp-3.15.0-py3-none-any.whl", hash = "sha256:48904fc76a60e542af151aded95726c1a5c34ed43ab4134b597665c86d7ad556", size = 6758 },
         ]
-        "###
+        "#
         );
     });
 
@@ -3830,7 +3862,7 @@ fn lock_requires_python() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.7.9"
         resolution-markers = [
@@ -3951,6 +3983,7 @@ fn lock_requires_python() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "pygls" }]
 
         [[package]]
@@ -4016,7 +4049,7 @@ fn lock_requires_python() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/5b/fa/c9e82bbe1af6266adf08afb563905eb87cab83fde00a0a08963510621047/zipp-3.15.0-py3-none-any.whl", hash = "sha256:48904fc76a60e542af151aded95726c1a5c34ed43ab4134b597665c86d7ad556", size = 6758 },
         ]
-        "###
+        "#
         );
     });
 
@@ -4049,7 +4082,7 @@ fn lock_requires_python() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -4099,6 +4132,7 @@ fn lock_requires_python() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "pygls" }]
 
         [[package]]
@@ -4113,7 +4147,7 @@ fn lock_requires_python() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/4e/1e/643070d8f5c851958662e7e5df16d9c3a068a598a7ee7bb2eb8d95b4e5d7/pygls-1.3.0-py3-none-any.whl", hash = "sha256:d4a01414b6ed4e34e7e8fd29b77d3e88c29615df7d0bbff49bf019e15ec04b8f", size = 56031 },
         ]
-        "###
+        "#
         );
     });
 
@@ -4182,7 +4216,7 @@ fn lock_requires_python_upper() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = "==3.11.*"
 
@@ -4253,8 +4287,9 @@ fn lock_requires_python_upper() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "pydantic" }]
-        "###
+        "#
         );
     });
 
@@ -4306,7 +4341,7 @@ fn lock_requires_python_exact() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = "==3.13"
 
@@ -4331,8 +4366,9 @@ fn lock_requires_python_exact() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
-        "###
+        "#
         );
     });
 
@@ -4383,7 +4419,7 @@ fn lock_requires_python_fork() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.9"
 
@@ -4424,8 +4460,9 @@ fn lock_requires_python_fork() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "uv", marker = "python_full_version >= '3.8'" }]
-        "###
+        "#
         );
     });
 
@@ -4477,7 +4514,7 @@ fn lock_requires_python_wheels() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = "==3.12.*"
 
@@ -4517,8 +4554,9 @@ fn lock_requires_python_wheels() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "frozenlist" }]
-        "###
+        "#
         );
     });
 
@@ -4560,7 +4598,7 @@ fn lock_requires_python_wheels() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = "==3.11.*"
 
@@ -4600,8 +4638,9 @@ fn lock_requires_python_wheels() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "frozenlist" }]
-        "###
+        "#
         );
     });
 
@@ -4653,7 +4692,7 @@ fn lock_requires_python_star() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = "==3.11.*"
 
@@ -4713,6 +4752,7 @@ fn lock_requires_python_star() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "linehaul" }]
 
         [[package]]
@@ -4723,7 +4763,7 @@ fn lock_requires_python_star() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/9d/ea/6d76df31432a0e6fdf81681a895f009a4bb47b3c39036db3e1b528191d52/pyparsing-3.1.2-py3-none-any.whl", hash = "sha256:f9db75911801ed778fe61bb643079ff86601aca99fcae6345aa67292038fb742", size = 103245 },
         ]
-        "###
+        "#
         );
     });
 
@@ -4774,7 +4814,7 @@ fn lock_requires_python_not_equal() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">3.10, !=3.10.9, !=3.10.10, !=3.11.*, <3.13"
 
@@ -4799,8 +4839,9 @@ fn lock_requires_python_not_equal() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
-        "###
+        "#
         );
     });
 
@@ -4852,7 +4893,7 @@ fn lock_requires_python_pre() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.11"
 
@@ -4912,6 +4953,7 @@ fn lock_requires_python_pre() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "linehaul" }]
 
         [[package]]
@@ -4922,7 +4964,7 @@ fn lock_requires_python_pre() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/9d/ea/6d76df31432a0e6fdf81681a895f009a4bb47b3c39036db3e1b528191d52/pyparsing-3.1.2-py3-none-any.whl", hash = "sha256:f9db75911801ed778fe61bb643079ff86601aca99fcae6345aa67292038fb742", size = 103245 },
         ]
-        "###
+        "#
         );
     });
 
@@ -4973,7 +5015,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = "<=3.12"
         resolution-markers = [
@@ -5018,8 +5060,9 @@ fn lock_requires_python_unbounded() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
-        "###
+        "#
         );
     });
 
@@ -5113,7 +5156,7 @@ fn lock_requires_python_maximum_version() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
@@ -5218,8 +5261,9 @@ fn lock_requires_python_maximum_version() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "numpy" }]
-        "###
+        "#
         );
     });
 
@@ -5271,7 +5315,7 @@ fn lock_requires_python_fewest_versions() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
 
@@ -5323,8 +5367,9 @@ fn lock_requires_python_fewest_versions() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "numpy" }]
-        "###
+        "#
         );
     });
 
@@ -5387,7 +5432,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
@@ -5429,6 +5474,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "attrs", marker = "python_full_version < '3.11'" },
             { name = "attrs", marker = "python_full_version >= '3.11'" },
@@ -5446,7 +5492,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
-        "###
+        "#
         );
     });
 
@@ -5497,7 +5543,7 @@ fn lock_dev() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -5527,6 +5573,7 @@ fn lock_dev() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [package.metadata.requires-dev]
@@ -5539,7 +5586,10 @@ fn lock_dev() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d" },
         ]
-        "###
+
+        [package.metadata]
+        provides-extras = []
+        "#
         );
     });
 
@@ -5610,7 +5660,7 @@ fn lock_conditional_unconditional() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -5635,11 +5685,12 @@ fn lock_conditional_unconditional() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "iniconfig" },
             { name = "iniconfig", marker = "python_full_version < '3.12'" },
         ]
-        "###
+        "#
         );
     });
 
@@ -5687,7 +5738,7 @@ fn lock_multiple_markers() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -5712,11 +5763,12 @@ fn lock_multiple_markers() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "iniconfig", marker = "python_full_version < '3.12'" },
             { name = "iniconfig", marker = "implementation_name == 'cpython'" },
         ]
-        "###
+        "#
         );
     });
 
@@ -5819,6 +5871,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "b", directory = "b" },
             { name = "c", directory = "c" },
@@ -5829,10 +5882,16 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         version = "0.1.0"
         source = { directory = "b" }
 
+        [package.metadata]
+        provides-extras = []
+
         [[package]]
         name = "c"
         version = "0.1.0"
         source = { directory = "c" }
+
+        [package.metadata]
+        provides-extras = []
         "###
         );
     });
@@ -5881,7 +5940,7 @@ fn lock_cycles() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -5948,6 +6007,7 @@ fn lock_cycles() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "fixtures", specifier = "==3.0.0" },
             { name = "testtools", specifier = "==2.3.0" },
@@ -6014,7 +6074,7 @@ fn lock_cycles() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/72/20/7f0f433060a962200b7272b8c12ba90ef5b903e218174301d0abfd523813/unittest2-1.1.0-py2.py3-none-any.whl", hash = "sha256:13f77d0875db6d9b435e1d4f41e74ad4cc2eb6e1d5c824996092b3430f088bb8", size = 96379 },
         ]
-        "###
+        "#
         );
     });
 
@@ -6083,7 +6143,7 @@ fn lock_new_extras() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -6141,6 +6201,7 @@ fn lock_new_extras() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "requests", specifier = "==2.31.0" }]
 
         [[package]]
@@ -6166,7 +6227,7 @@ fn lock_new_extras() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl", hash = "sha256:450b20ec296a467077128bff42b73080516e71b56ff59a60a02bef2232c4fa9d", size = 121067 },
         ]
-        "###
+        "#
         );
     });
 
@@ -6207,7 +6268,7 @@ fn lock_new_extras() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -6265,6 +6326,7 @@ fn lock_new_extras() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "requests", extras = ["socks"], specifier = "==2.31.0" }]
 
         [[package]]
@@ -6304,7 +6366,7 @@ fn lock_new_extras() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl", hash = "sha256:450b20ec296a467077128bff42b73080516e71b56ff59a60a02bef2232c4fa9d", size = 121067 },
         ]
-        "###
+        "#
         );
     });
 
@@ -6450,7 +6512,7 @@ fn lock_resolution_mode() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -6488,6 +6550,7 @@ fn lock_resolution_mode() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = ">=3" }]
 
         [[package]]
@@ -6498,7 +6561,7 @@ fn lock_resolution_mode() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -6530,7 +6593,7 @@ fn lock_resolution_mode() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -6569,6 +6632,7 @@ fn lock_resolution_mode() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = ">=3" }]
 
         [[package]]
@@ -6579,7 +6643,7 @@ fn lock_resolution_mode() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -6691,7 +6755,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         resolution-markers = [
@@ -6746,6 +6810,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = "==3.7.0" }]
 
         [[package]]
@@ -6760,6 +6825,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = "==3.0.0" }]
 
         [[package]]
@@ -6781,6 +6847,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "dependency", marker = "sys_platform != 'darwin'", directory = "v2" },
             { name = "dependency", marker = "sys_platform == 'darwin'", directory = "v1" },
@@ -6794,7 +6861,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -6928,12 +6995,16 @@ fn lock_exclusion() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "project", virtual = "../" }]
 
         [[package]]
         name = "project"
         version = "0.1.0"
         source = { virtual = "../" }
+
+        [package.metadata]
+        provides-extras = []
         "###
         );
     });
@@ -7234,6 +7305,9 @@ fn lock_peer_member() -> Result<()> {
         version = "0.1.0"
         source = { editable = "../child" }
 
+        [package.metadata]
+        provides-extras = []
+
         [[package]]
         name = "project"
         version = "0.1.0"
@@ -7243,6 +7317,7 @@ fn lock_peer_member() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "child", editable = "../child" }]
         "###
         );
@@ -7338,7 +7413,7 @@ fn lock_index_workspace_member() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -7360,6 +7435,7 @@ fn lock_index_workspace_member() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = ">=2", index = "https://pypi-proxy.fly.dev/basic-auth/simple" }]
 
         [[package]]
@@ -7380,8 +7456,9 @@ fn lock_index_workspace_member() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "child", editable = "child" }]
-        "###
+        "#
         );
     });
 
@@ -7486,7 +7563,7 @@ fn lock_dev_transitive() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -7510,6 +7587,7 @@ fn lock_dev_transitive() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "baz", editable = "baz" },
             { name = "foo", virtual = "../foo" },
@@ -7527,6 +7605,7 @@ fn lock_dev_transitive() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
 
         [package.metadata.requires-dev]
         dev = [{ name = "typing-extensions", specifier = ">4" }]
@@ -7537,6 +7616,7 @@ fn lock_dev_transitive() -> Result<()> {
         source = { virtual = "../foo" }
 
         [package.metadata]
+        provides-extras = []
 
         [package.metadata.requires-dev]
         dev = [{ name = "anyio" }]
@@ -7558,7 +7638,7 @@ fn lock_dev_transitive() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
-        "###
+        "#
         );
     });
 
@@ -7618,7 +7698,7 @@ fn lock_redact_https() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -7634,6 +7714,7 @@ fn lock_redact_https() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [[package]]
@@ -7644,7 +7725,7 @@ fn lock_redact_https() -> Result<()> {
         wheels = [
             { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
         ]
-        "###
+        "#
         );
     });
 
@@ -7805,7 +7886,7 @@ fn lock_redact_git_pep508() -> Result<()> {
         filters => filters.clone(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -7821,13 +7902,14 @@ fn lock_redact_git_pep508() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "uv-private-pypackage", git = "https://github.com/astral-test/uv-private-pypackage" }]
 
         [[package]]
         name = "uv-private-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-private-pypackage#d780faf0ac91257d4d5a4f0c5a0e4509608c0071" }
-        "###
+        "#
         );
     });
 
@@ -7897,7 +7979,7 @@ fn lock_redact_git_sources() -> Result<()> {
         filters => filters.clone(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -7913,13 +7995,14 @@ fn lock_redact_git_sources() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "uv-private-pypackage", git = "https://github.com/astral-test/uv-private-pypackage" }]
 
         [[package]]
         name = "uv-private-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-private-pypackage#d780faf0ac91257d4d5a4f0c5a0e4509608c0071" }
-        "###
+        "#
         );
     });
 
@@ -7987,7 +8070,7 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
         filters => filters.clone(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -8003,7 +8086,7 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
         name = "uv-private-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-private-pypackage#d780faf0ac91257d4d5a4f0c5a0e4509608c0071" }
-        "###
+        "#
         );
     });
 
@@ -8076,7 +8159,7 @@ fn lock_redact_index_sources() -> Result<()> {
         filters => filters.clone(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -8092,6 +8175,7 @@ fn lock_redact_index_sources() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = ">=2", index = "https://pypi-proxy.fly.dev/basic-auth/simple" }]
 
         [[package]]
@@ -8102,7 +8186,7 @@ fn lock_redact_index_sources() -> Result<()> {
         wheels = [
             { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
         ]
-        "###
+        "#
         );
     });
 
@@ -8184,6 +8268,7 @@ fn lock_redact_url_sources() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig", url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }]
 
         [[package]]
@@ -8193,6 +8278,9 @@ fn lock_redact_url_sources() -> Result<()> {
         wheels = [
             { url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
         ]
+
+        [package.metadata]
+        provides-extras = []
         "###
         );
     });
@@ -8275,7 +8363,7 @@ fn lock_env_credentials() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -8291,6 +8379,7 @@ fn lock_env_credentials() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [[package]]
@@ -8301,7 +8390,7 @@ fn lock_env_credentials() -> Result<()> {
         wheels = [
             { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
         ]
-        "###
+        "#
         );
     });
 
@@ -8342,7 +8431,7 @@ fn lock_relative_index() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -8358,6 +8447,7 @@ fn lock_relative_index() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [[package]]
@@ -8368,7 +8458,7 @@ fn lock_relative_index() -> Result<()> {
         wheels = [
             { url = "https://pypi-proxy.fly.dev/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
         ]
-        "###
+        "#
         );
     });
 
@@ -8453,7 +8543,7 @@ fn lock_no_sources() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -8469,6 +8559,7 @@ fn lock_no_sources() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [[package]]
@@ -8494,6 +8585,7 @@ fn lock_no_sources() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio", directory = "anyio" }]
 
         [package.metadata.requires-dev]
@@ -8507,7 +8599,7 @@ fn lock_no_sources() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
-        "###
+        "#
         );
     });
 
@@ -8541,7 +8633,7 @@ fn lock_no_sources() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -8584,6 +8676,7 @@ fn lock_no_sources() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio" }]
 
         [package.metadata.requires-dev]
@@ -8606,7 +8699,7 @@ fn lock_no_sources() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
-        "###
+        "#
         );
     });
 
@@ -8709,7 +8802,7 @@ fn lock_migrate() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -8747,6 +8840,7 @@ fn lock_migrate() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio" }]
 
         [[package]]
@@ -8757,7 +8851,7 @@ fn lock_migrate() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -8807,7 +8901,7 @@ fn lock_upgrade_package() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -8846,6 +8940,7 @@ fn lock_upgrade_package() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "anyio", specifier = "<=2" },
             { name = "idna", specifier = "<=3" },
@@ -8859,7 +8954,7 @@ fn lock_upgrade_package() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -8902,7 +8997,7 @@ fn lock_upgrade_package() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -8941,6 +9036,7 @@ fn lock_upgrade_package() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "anyio" },
             { name = "idna" },
@@ -8954,7 +9050,7 @@ fn lock_upgrade_package() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -8985,7 +9081,7 @@ fn lock_upgrade_package() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -9024,6 +9120,7 @@ fn lock_upgrade_package() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "anyio" },
             { name = "idna" },
@@ -9037,7 +9134,7 @@ fn lock_upgrade_package() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -9174,7 +9271,7 @@ fn lock_find_links_local_wheel() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -9190,6 +9287,7 @@ fn lock_find_links_local_wheel() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "tqdm", specifier = "==1000.0.0" }]
 
         [[package]]
@@ -9199,7 +9297,7 @@ fn lock_find_links_local_wheel() -> Result<()> {
         wheels = [
             { path = "tqdm-1000.0.0-py3-none-any.whl" },
         ]
-        "###
+        "#
         );
     });
 
@@ -9287,7 +9385,7 @@ fn lock_find_links_local_sdist() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -9303,6 +9401,7 @@ fn lock_find_links_local_sdist() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "tqdm", specifier = "==999.0.0" }]
 
         [[package]]
@@ -9310,7 +9409,7 @@ fn lock_find_links_local_sdist() -> Result<()> {
         version = "999.0.0"
         source = { registry = "../links" }
         sdist = { path = "tqdm-999.0.0.tar.gz" }
-        "###
+        "#
         );
     });
 
@@ -9377,7 +9476,7 @@ fn lock_find_links_http_wheel() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -9402,8 +9501,9 @@ fn lock_find_links_http_wheel() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "packaging", specifier = "==23.2" }]
-        "###
+        "#
         );
     });
 
@@ -9467,7 +9567,7 @@ fn lock_find_links_http_sdist() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -9492,8 +9592,9 @@ fn lock_find_links_http_sdist() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "packaging", specifier = "==23.2" }]
-        "###
+        "#
         );
     });
 
@@ -9597,7 +9698,7 @@ fn lock_local_index() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -9610,6 +9711,7 @@ fn lock_local_index() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "tqdm" }]
 
         [[package]]
@@ -9619,7 +9721,7 @@ fn lock_local_index() -> Result<()> {
         wheels = [
             { path = "tqdm/tqdm-1000.0.0-py3-none-any.whl" },
         ]
-        "###
+        "#
         );
     });
 
@@ -9683,7 +9785,7 @@ fn lock_sources_url() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -9721,6 +9823,7 @@ fn lock_sources_url() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "workspace", url = "https://github.com/user-attachments/files/16592193/workspace.zip" }]
 
         [[package]]
@@ -9742,8 +9845,9 @@ fn lock_sources_url() -> Result<()> {
         sdist = { hash = "sha256:ba690a925dc3d1b53e0675201c9ec26ab59eeec72ab271562f53297bf1817263" }
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio" }]
-        "###
+        "#
         );
     });
 
@@ -9818,7 +9922,7 @@ fn lock_sources_archive() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -9856,6 +9960,7 @@ fn lock_sources_archive() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "workspace", path = "workspace.zip" }]
 
         [[package]]
@@ -9877,8 +9982,9 @@ fn lock_sources_archive() -> Result<()> {
         sdist = { hash = "sha256:ba690a925dc3d1b53e0675201c9ec26ab59eeec72ab271562f53297bf1817263" }
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio" }]
-        "###
+        "#
         );
     });
 
@@ -9980,6 +10086,9 @@ fn lock_sources_source_tree() -> Result<()> {
         version = "0.1.0"
         source = { editable = "workspace/anyio" }
 
+        [package.metadata]
+        provides-extras = []
+
         [[package]]
         name = "project"
         version = "0.1.0"
@@ -9989,6 +10098,7 @@ fn lock_sources_source_tree() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "workspace", directory = "workspace" }]
 
         [[package]]
@@ -10000,6 +10110,7 @@ fn lock_sources_source_tree() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio", editable = "workspace/anyio" }]
         "###
         );
@@ -10126,12 +10237,16 @@ fn lock_editable() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "library", directory = "library" }]
 
         [[package]]
         name = "library"
         version = "0.1.0"
         source = { directory = "library" }
+
+        [package.metadata]
+        provides-extras = []
 
         [[package]]
         name = "workspace"
@@ -10142,6 +10257,7 @@ fn lock_editable() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "library", directory = "library" }]
         "###
         );
@@ -10187,7 +10303,7 @@ fn lock_editable() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -10209,12 +10325,16 @@ fn lock_editable() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "library", editable = "library" }]
 
         [[package]]
         name = "library"
         version = "0.1.0"
         source = { editable = "library" }
+
+        [package.metadata]
+        provides-extras = []
 
         [[package]]
         name = "workspace"
@@ -10225,8 +10345,9 @@ fn lock_editable() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "library", directory = "library" }]
-        "###
+        "#
         );
     });
 
@@ -10354,7 +10475,7 @@ fn lock_mixed_extras() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -10439,8 +10560,9 @@ fn lock_mixed_extras() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "leaf2", editable = "../workspace2/packages/leaf2" }]
-        "###
+        "#
         );
     });
 
@@ -10550,7 +10672,7 @@ fn lock_transitive_extra() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -10616,7 +10738,7 @@ fn lock_transitive_extra() -> Result<()> {
             { name = "leaf", extras = ["async"], marker = "extra == 'async'", editable = "packages/leaf" },
             { name = "typing-extensions", marker = "extra == 'async'", specifier = ">=4" },
         ]
-        "###
+        "#
         );
     });
 
@@ -10700,7 +10822,7 @@ fn lock_mismatched_sources() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -10716,13 +10838,14 @@ fn lock_mismatched_sources() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1" }]
 
         [[package]]
         name = "uv-public-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
-        "###
+        "#
         );
     });
 
@@ -10742,7 +10865,7 @@ fn lock_mismatched_sources() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -10758,13 +10881,14 @@ fn lock_mismatched_sources() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?rev=0.0.2" }]
 
         [[package]]
         name = "uv-public-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=0.0.2#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
-        "###
+        "#
         );
     });
 
@@ -10809,7 +10933,7 @@ fn lock_mismatched_versions() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -10825,13 +10949,14 @@ fn lock_mismatched_versions() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1" }]
 
         [[package]]
         name = "uv-public-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
-        "###
+        "#
         );
     });
 
@@ -10924,7 +11049,7 @@ fn lock_change_index() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -10949,8 +11074,9 @@ fn lock_change_index() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
-        "###
+        "#
         );
     });
 
@@ -10970,7 +11096,7 @@ fn lock_change_index() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -10995,8 +11121,9 @@ fn lock_change_index() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
-        "###
+        "#
         );
     });
 
@@ -11067,7 +11194,7 @@ fn lock_remove_member() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -11111,6 +11238,7 @@ fn lock_remove_member() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = ">3" }]
 
         [[package]]
@@ -11122,6 +11250,7 @@ fn lock_remove_member() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "leaf", virtual = "leaf" }]
 
         [[package]]
@@ -11132,7 +11261,7 @@ fn lock_remove_member() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -11188,7 +11317,7 @@ fn lock_remove_member() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -11199,7 +11328,10 @@ fn lock_remove_member() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { virtual = "." }
-        "###
+
+        [package.metadata]
+        provides-extras = []
+        "#
         );
     });
 
@@ -11256,6 +11388,9 @@ fn lock_add_member() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { virtual = "." }
+
+        [package.metadata]
+        provides-extras = []
         "###
         );
     });
@@ -11355,7 +11490,7 @@ fn lock_add_member() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -11399,12 +11534,16 @@ fn lock_add_member() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = ">3" }]
 
         [[package]]
         name = "project"
         version = "0.1.0"
         source = { virtual = "." }
+
+        [package.metadata]
+        provides-extras = []
 
         [[package]]
         name = "sniffio"
@@ -11414,7 +11553,7 @@ fn lock_add_member() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -11458,7 +11597,7 @@ fn lock_redundant_add_member() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -11496,6 +11635,7 @@ fn lock_redundant_add_member() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio" }]
 
         [[package]]
@@ -11506,7 +11646,7 @@ fn lock_redundant_add_member() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -11562,7 +11702,7 @@ fn lock_redundant_add_member() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -11601,6 +11741,7 @@ fn lock_redundant_add_member() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "anyio" },
             { name = "idna" },
@@ -11614,7 +11755,7 @@ fn lock_redundant_add_member() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -11653,7 +11794,7 @@ fn lock_new_constraints() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -11691,6 +11832,7 @@ fn lock_new_constraints() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio" }]
 
         [[package]]
@@ -11701,7 +11843,7 @@ fn lock_new_constraints() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -11759,7 +11901,7 @@ fn lock_new_constraints() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -11800,6 +11942,7 @@ fn lock_new_constraints() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio" }]
 
         [[package]]
@@ -11810,7 +11953,7 @@ fn lock_new_constraints() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -11863,7 +12006,7 @@ fn lock_remove_member_non_project() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -11906,6 +12049,7 @@ fn lock_remove_member_non_project() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = ">3" }]
 
         [[package]]
@@ -11916,7 +12060,7 @@ fn lock_remove_member_non_project() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -12017,7 +12161,7 @@ fn lock_rename_project() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -12042,8 +12186,9 @@ fn lock_rename_project() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
-        "###
+        "#
         );
     });
 
@@ -12097,7 +12242,7 @@ fn lock_rename_project() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -12122,8 +12267,9 @@ fn lock_rename_project() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
-        "###
+        "#
         );
     });
 
@@ -12212,7 +12358,7 @@ fn lock_missing_metadata() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -12250,6 +12396,7 @@ fn lock_missing_metadata() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = "==3.7.0" }]
 
         [[package]]
@@ -12260,7 +12407,7 @@ fn lock_missing_metadata() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -12362,7 +12509,7 @@ fn lock_dev_dependencies_alias() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -12392,6 +12539,7 @@ fn lock_dev_dependencies_alias() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "typing-extensions" }]
 
         [package.metadata.requires-dev]
@@ -12405,7 +12553,7 @@ fn lock_dev_dependencies_alias() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
-        "###
+        "#
         );
     });
 
@@ -12444,7 +12592,7 @@ fn lock_reorder() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -12492,6 +12640,7 @@ fn lock_reorder() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "anyio" },
             { name = "iniconfig" },
@@ -12505,7 +12654,7 @@ fn lock_reorder() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -12593,7 +12742,7 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.7, <4"
         resolution-markers = [
@@ -12615,6 +12764,7 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [[package]]
@@ -12635,8 +12785,9 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "dependency", marker = "python_full_version >= '3.10'", virtual = "dependency" }]
-        "###
+        "#
         );
     });
 
@@ -12703,7 +12854,7 @@ fn lock_narrowed_python_version() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.7"
         resolution-markers = [
@@ -12724,6 +12875,7 @@ fn lock_narrowed_python_version() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [[package]]
@@ -12744,11 +12896,12 @@ fn lock_narrowed_python_version() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "dependency", marker = "python_full_version < '3.9'", directory = "dependency" },
             { name = "dependency", marker = "python_full_version >= '3.11'", directory = "dependency" },
         ]
-        "###
+        "#
         );
     });
 
@@ -12802,7 +12955,7 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         resolution-markers = [
@@ -12835,6 +12988,7 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "anyio", marker = "python_full_version >= '3.11'" },
             { name = "anyio", marker = "sys_platform == 'darwin'" },
@@ -12857,7 +13011,7 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -12909,7 +13063,7 @@ fn lock_constrained_environment() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         resolution-markers = [
@@ -12995,8 +13149,9 @@ fn lock_constrained_environment() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "black" }]
-        "###
+        "#
         );
     });
 
@@ -13086,7 +13241,7 @@ fn lock_constrained_environment() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -13179,8 +13334,9 @@ fn lock_constrained_environment() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "black" }]
-        "###
+        "#
         );
     });
 
@@ -13231,7 +13387,7 @@ fn lock_constrained_environment_legacy() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         resolution-markers = [
@@ -13277,6 +13433,7 @@ fn lock_constrained_environment_legacy() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "black" }]
 
         [[package]]
@@ -13323,7 +13480,7 @@ fn lock_constrained_environment_legacy() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717 },
         ]
-        "###
+        "#
         );
     });
 
@@ -13419,7 +13576,7 @@ fn lock_non_project_fork() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.10"
         resolution-markers = [
@@ -13507,7 +13664,7 @@ fn lock_non_project_fork() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
-        "###
+        "#
         );
     });
 
@@ -13611,7 +13768,7 @@ fn lock_non_project_conditional() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -13653,7 +13810,7 @@ fn lock_non_project_conditional() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -13719,7 +13876,7 @@ fn lock_non_project_group() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.10"
 
@@ -13794,7 +13951,7 @@ fn lock_non_project_group() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
-        "###
+        "#
         );
     });
 
@@ -13878,6 +14035,9 @@ fn lock_non_project_sources() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl", hash = "sha256:14475042e284991034cb48e06f6851428fb14c4dc953acd9be9a5e95c7b6dd7a" },
         ]
+
+        [package.metadata]
+        provides-extras = []
         "###
         );
     });
@@ -13941,7 +14101,7 @@ fn lock_dropped_dev_extra() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -13977,10 +14137,11 @@ fn lock_dropped_dev_extra() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
 
         [package.metadata.requires-dev]
         dev = [{ name = "coverage", extras = ["toml"] }]
-        "###
+        "#
         );
     });
 
@@ -14054,7 +14215,7 @@ fn lock_empty_dev_dependencies() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -14079,11 +14240,12 @@ fn lock_empty_dev_dependencies() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [package.metadata.requires-dev]
         dev = []
-        "###
+        "#
         );
     });
 
@@ -14157,7 +14319,7 @@ fn lock_empty_dependency_group() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -14182,11 +14344,12 @@ fn lock_empty_dependency_group() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [package.metadata.requires-dev]
         empty = []
-        "###
+        "#
         );
     });
 
@@ -14260,7 +14423,7 @@ fn lock_trailing_slash() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -14298,6 +14461,7 @@ fn lock_trailing_slash() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = "==3.7.0" }]
 
         [[package]]
@@ -14308,7 +14472,7 @@ fn lock_trailing_slash() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -14435,7 +14599,7 @@ fn lock_explicit_index() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -14483,6 +14647,7 @@ fn lock_explicit_index() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "anyio", specifier = "==3.7.0" },
             { name = "iniconfig", specifier = "==2.0.0", index = "https://test.pypi.org/simple" },
@@ -14496,7 +14661,7 @@ fn lock_explicit_index() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -14542,7 +14707,7 @@ fn lock_explicit_default_index() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -14567,8 +14732,9 @@ fn lock_explicit_default_index() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = "==2.0.0", index = "https://test.pypi.org/simple" }]
-        "###
+        "#
         );
     });
 
@@ -14627,7 +14793,7 @@ fn lock_explicit_default_index() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -14652,8 +14818,9 @@ fn lock_explicit_default_index() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = "==2.0.0", index = "https://test.pypi.org/simple" }]
-        "###
+        "#
         );
     });
 
@@ -14703,7 +14870,7 @@ fn lock_named_index() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -14719,6 +14886,7 @@ fn lock_named_index() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "typing-extensions" }]
 
         [[package]]
@@ -14729,7 +14897,7 @@ fn lock_named_index() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
-        "###
+        "#
         );
     });
 
@@ -14771,7 +14939,7 @@ fn lock_default_index() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -14796,8 +14964,9 @@ fn lock_default_index() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
-        "###
+        "#
         );
     });
 
@@ -14833,7 +15002,7 @@ fn lock_default_index() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -14858,8 +15027,9 @@ fn lock_default_index() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
-        "###
+        "#
         );
     });
 
@@ -14912,7 +15082,7 @@ fn lock_named_index_cli() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -14944,8 +15114,9 @@ fn lock_named_index_cli() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "jinja2", specifier = "==3.1.2", index = "https://download.pytorch.org/whl/cu121" }]
-        "###
+        "#
         );
     });
 
@@ -14996,7 +15167,7 @@ fn lock_repeat_named_index() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -15021,8 +15192,9 @@ fn lock_repeat_named_index() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
-        "###
+        "#
         );
     });
 
@@ -15069,7 +15241,7 @@ fn lock_repeat_named_index_cli() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -15110,8 +15282,9 @@ fn lock_repeat_named_index_cli() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "jinja2", specifier = "==3.1.2" }]
-        "###
+        "#
         );
     });
 
@@ -15132,7 +15305,7 @@ fn lock_repeat_named_index_cli() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -15178,8 +15351,9 @@ fn lock_repeat_named_index_cli() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "jinja2", specifier = "==3.1.2" }]
-        "###
+        "#
         );
     });
 
@@ -15227,7 +15401,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -15347,6 +15521,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "black" }]
 
         [package.metadata.requires-dev]
@@ -15360,7 +15535,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -15444,7 +15619,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -15564,6 +15739,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "black" }]
 
         [package.metadata.requires-dev]
@@ -15577,7 +15753,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -15671,7 +15847,7 @@ fn lock_implicit_virtual_path() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -15700,6 +15876,7 @@ fn lock_implicit_virtual_path() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = ">1" }]
 
         [[package]]
@@ -15730,6 +15907,7 @@ fn lock_implicit_virtual_path() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "anyio", specifier = ">3" },
             { name = "child", virtual = "child" },
@@ -15743,7 +15921,7 @@ fn lock_implicit_virtual_path() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -15853,7 +16031,7 @@ fn lock_split_python_environment() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.7"
         resolution-markers = [
@@ -15877,6 +16055,7 @@ fn lock_split_python_environment() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "uv", marker = "python_full_version >= '3.8'" }]
 
         [[package]]
@@ -15902,7 +16081,7 @@ fn lock_split_python_environment() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/c0/8b/a83689be89c764c98dd19be9e1a044e64ad9c1d17643c5c08262f640908f/uv-0.1.24-py3-none-win32.whl", hash = "sha256:a273f468f170b12e6cb6362aa90a65dd12a397db02df55ffb47a21c11b577d8c", size = 8143891 },
             { url = "https://files.pythonhosted.org/packages/d6/7d/55d81e3ecab3595ba9f7be7b394fec61d1e33c1852452e7997bc8022b6f0/uv-0.1.24-py3-none-win_amd64.whl", hash = "sha256:87cce6b44a86e761f845a85e52ea0de44fcd579b9a63b2d856118b0d1847bca7", size = 9178836 },
         ]
-        "###
+        "#
         );
     });
 
@@ -15963,7 +16142,7 @@ fn lock_python_upper_bound() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
@@ -16199,6 +16378,7 @@ fn lock_python_upper_bound() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "magika", marker = "python_full_version < '3.13'" }]
 
         [[package]]
@@ -16269,7 +16449,7 @@ fn lock_python_upper_bound() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/2a/14/e75e52d521442e2fcc9f1df3c5e456aead034203d4797867980de558ab34/tqdm-4.66.2-py3-none-any.whl", hash = "sha256:1ee4f8a893eb9bef51c6e35730cebf234d5d0b6bd112b0271e10ed7c24a02bd9", size = 78296 },
         ]
-        "###
+        "#
         );
     });
 
@@ -16334,7 +16514,7 @@ fn lock_simplified_environments() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = "==3.11.*"
         resolution-markers = [
@@ -16367,8 +16547,9 @@ fn lock_simplified_environments() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
-        "###
+        "#
         );
     });
 
@@ -16443,7 +16624,7 @@ fn lock_dependency_metadata() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -16487,8 +16668,9 @@ fn lock_dependency_metadata() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = "==3.7.0" }]
-        "###
+        "#
         );
     });
 
@@ -16648,7 +16830,7 @@ fn lock_dependency_metadata_git() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -16688,8 +16870,9 @@ fn lock_dependency_metadata_git() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio", git = "https://github.com/agronholm/anyio?tag=4.6.2" }]
-        "###
+        "#
         );
     });
 
@@ -16775,6 +16958,9 @@ fn lock_strip_fragment() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
         ]
 
+        [package.metadata]
+        provides-extras = []
+
         [[package]]
         name = "project"
         version = "0.1.0"
@@ -16784,6 +16970,7 @@ fn lock_strip_fragment() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }]
         "###
         );
@@ -17159,7 +17346,7 @@ fn lock_change_requires_python() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         resolution-markers = [
@@ -17221,6 +17408,7 @@ fn lock_change_requires_python() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "anyio", marker = "python_full_version == '3.12.*'", specifier = "<3" },
             { name = "anyio", marker = "python_full_version >= '3.13'", specifier = ">3,<4" },
@@ -17234,7 +17422,7 @@ fn lock_change_requires_python() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -17268,7 +17456,7 @@ fn lock_change_requires_python() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.10"
         resolution-markers = [
@@ -17331,6 +17519,7 @@ fn lock_change_requires_python() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "anyio", marker = "python_full_version == '3.12.*'", specifier = "<3" },
             { name = "anyio", marker = "python_full_version >= '3.13'", specifier = ">3" },
@@ -17344,7 +17533,7 @@ fn lock_change_requires_python() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -17412,7 +17601,7 @@ fn lock_keyring_credentials() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -17428,6 +17617,7 @@ fn lock_keyring_credentials() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [[package]]
@@ -17438,7 +17628,7 @@ fn lock_keyring_credentials() -> Result<()> {
         wheels = [
             { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
         ]
-        "###
+        "#
         );
     });
 
@@ -17501,6 +17691,9 @@ fn lock_multiple_sources() -> Result<()> {
         ]
         sdist = { hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3" }
 
+        [package.metadata]
+        provides-extras = []
+
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
@@ -17512,6 +17705,9 @@ fn lock_multiple_sources() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
         ]
 
+        [package.metadata]
+        provides-extras = []
+
         [[package]]
         name = "project"
         version = "0.1.0"
@@ -17522,6 +17718,7 @@ fn lock_multiple_sources() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "iniconfig", marker = "sys_platform != 'win32'", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
             { name = "iniconfig", marker = "sys_platform == 'win32'", url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz" },
@@ -17668,7 +17865,7 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         resolution-markers = [
@@ -17731,11 +17928,12 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "jinja2", marker = "sys_platform != 'win32'", specifier = ">=3,<3.1.4", index = "https://download.pytorch.org/whl/cu124" },
             { name = "jinja2", marker = "sys_platform == 'win32'", specifier = ">=3,<3.1.4", index = "https://download.pytorch.org/whl/cu118" },
         ]
-        "###
+        "#
         );
     });
 
@@ -17795,7 +17993,7 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         resolution-markers = [
@@ -17865,11 +18063,12 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "jinja2", marker = "sys_platform != 'win32'", url = "https://files.pythonhosted.org/packages/31/80/3a54838c3fb461f6fec263ebf3a3a41771bd05190238de3486aae8540c36/jinja2-3.1.4-py3-none-any.whl" },
             { name = "jinja2", marker = "sys_platform == 'win32'", specifier = ">=3,<3.1.4", index = "https://download.pytorch.org/whl/cu118" },
         ]
-        "###
+        "#
         );
     });
 
@@ -17963,7 +18162,7 @@ fn lock_multiple_sources_index_explicit() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         resolution-markers = [
@@ -18032,11 +18231,12 @@ fn lock_multiple_sources_index_explicit() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "jinja2", marker = "sys_platform != 'win32'", specifier = ">=3" },
             { name = "jinja2", marker = "sys_platform == 'win32'", specifier = ">=3", index = "https://test.pypi.org/simple" },
         ]
-        "###
+        "#
         );
     });
 
@@ -18088,7 +18288,7 @@ fn lock_multiple_sources_non_total() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         resolution-markers = [
@@ -18122,6 +18322,9 @@ fn lock_multiple_sources_non_total() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
         ]
 
+        [package.metadata]
+        provides-extras = []
+
         [[package]]
         name = "project"
         version = "0.1.0"
@@ -18132,11 +18335,12 @@ fn lock_multiple_sources_non_total() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "iniconfig", marker = "sys_platform != 'darwin'" },
             { name = "iniconfig", marker = "sys_platform == 'darwin'", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
         ]
-        "###
+        "#
         );
     });
 
@@ -18188,7 +18392,7 @@ fn lock_multiple_sources_respect_marker() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -18213,8 +18417,9 @@ fn lock_multiple_sources_respect_marker() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig", marker = "sys_platform == 'win32'" }]
-        "###
+        "#
         );
     });
 
@@ -18283,6 +18488,9 @@ fn lock_multiple_sources_extra() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
         ]
+
+        [package.metadata]
+        provides-extras = []
 
         [[package]]
         name = "project"
@@ -18696,7 +18904,7 @@ fn lock_group_include() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -18777,6 +18985,7 @@ fn lock_group_include() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "typing-extensions" }]
 
         [package.metadata.requires-dev]
@@ -18838,7 +19047,7 @@ fn lock_group_include() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
-        "###
+        "#
         );
     });
 
@@ -19224,7 +19433,7 @@ fn lock_group_workspace() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -19267,6 +19476,7 @@ fn lock_group_workspace() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = ">1" }]
 
         [package.metadata.requires-dev]
@@ -19335,6 +19545,7 @@ fn lock_group_workspace() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "child", editable = "child" }]
 
         [package.metadata.requires-dev]
@@ -19373,7 +19584,7 @@ fn lock_group_workspace() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
-        "###
+        "#
         );
     });
 
@@ -19414,7 +19625,7 @@ fn lock_transitive_git() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -19430,6 +19641,7 @@ fn lock_transitive_git() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "c", git = "https://github.com/astral-sh/workspace-virtual-root-test?subdirectory=packages%2Fc&rev=fac39c8d4c5d0ef32744e2bb309bbe34a759fd46" }]
 
         [[package]]
@@ -19478,7 +19690,7 @@ fn lock_transitive_git() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -19586,6 +19798,9 @@ fn lock_dynamic_version() -> Result<()> {
         [[package]]
         name = "project"
         source = { editable = "." }
+
+        [package.metadata]
+        provides-extras = []
         "###
         );
     });
@@ -19614,7 +19829,7 @@ fn lock_dynamic_version() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -19624,7 +19839,10 @@ fn lock_dynamic_version() -> Result<()> {
         [[package]]
         name = "project"
         source = { editable = "." }
-        "###
+
+        [package.metadata]
+        provides-extras = []
+        "#
         );
     });
 
@@ -19769,7 +19987,7 @@ fn lock_dynamic_version_workspace_member() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -19785,6 +20003,9 @@ fn lock_dynamic_version_workspace_member() -> Result<()> {
         [[package]]
         name = "dynamic"
         source = { editable = "dynamic" }
+
+        [package.metadata]
+        provides-extras = []
 
         [[package]]
         name = "iniconfig"
@@ -19805,11 +20026,12 @@ fn lock_dynamic_version_workspace_member() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "dynamic", editable = "dynamic" },
             { name = "iniconfig", specifier = ">=2" },
         ]
-        "###
+        "#
         );
     });
 
@@ -19838,7 +20060,7 @@ fn lock_dynamic_version_workspace_member() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -19854,6 +20076,9 @@ fn lock_dynamic_version_workspace_member() -> Result<()> {
         [[package]]
         name = "dynamic"
         source = { editable = "dynamic" }
+
+        [package.metadata]
+        provides-extras = []
 
         [[package]]
         name = "iniconfig"
@@ -19874,11 +20099,12 @@ fn lock_dynamic_version_workspace_member() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "dynamic", editable = "dynamic" },
             { name = "iniconfig", specifier = ">=2" },
         ]
-        "###
+        "#
         );
     });
 
@@ -19955,7 +20181,7 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -19965,6 +20191,9 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
         [[package]]
         name = "dynamic"
         source = { directory = "dynamic" }
+
+        [package.metadata]
+        provides-extras = []
 
         [[package]]
         name = "iniconfig"
@@ -19985,11 +20214,12 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "dynamic", directory = "dynamic" },
             { name = "iniconfig", specifier = ">=2" },
         ]
-        "###
+        "#
         );
     });
 
@@ -20018,7 +20248,7 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -20028,6 +20258,9 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
         [[package]]
         name = "dynamic"
         source = { directory = "dynamic" }
+
+        [package.metadata]
+        provides-extras = []
 
         [[package]]
         name = "iniconfig"
@@ -20048,11 +20281,12 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "dynamic", directory = "dynamic" },
             { name = "iniconfig", specifier = ">=2" },
         ]
-        "###
+        "#
         );
     });
 
@@ -20119,7 +20353,7 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -20185,7 +20419,7 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d", size = 37438 },
         ]
-        "###
+        "#
         );
     });
 
@@ -20280,7 +20514,7 @@ fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -20346,7 +20580,7 @@ fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d", size = 37438 },
         ]
-        "###
+        "#
         );
     });
 
@@ -20441,6 +20675,9 @@ fn lock_dynamic_built_cache() -> Result<()> {
         [[package]]
         name = "project"
         source = { editable = "." }
+
+        [package.metadata]
+        provides-extras = []
         "###
         );
     });
@@ -20477,7 +20714,7 @@ fn lock_dynamic_built_cache() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -20487,7 +20724,10 @@ fn lock_dynamic_built_cache() -> Result<()> {
         [[package]]
         name = "project"
         source = { editable = "." }
-        "###
+
+        [package.metadata]
+        provides-extras = []
+        "#
         );
     });
 
@@ -20554,7 +20794,7 @@ fn lock_shared_build_dependency() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
@@ -20678,6 +20918,7 @@ fn lock_shared_build_dependency() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "libcst", specifier = ">=1.1.0" }]
 
         [[package]]
@@ -20761,7 +21002,7 @@ fn lock_shared_build_dependency() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/65/f3/107a22063bf27bdccf2024833d3445f4eea42b2e598abfbd46f6a63b6cb0/typing_inspect-0.9.0-py3-none-any.whl", hash = "sha256:9ee6fc59062311ef8547596ab6b955e1b8aa46242d854bfc78f4f6b0eff35f9f", size = 8827 },
         ]
-        "###
+        "#
         );
     });
 
@@ -20843,6 +21084,9 @@ fn lock_dynamic_to_static() -> Result<()> {
         [[package]]
         name = "project"
         source = { editable = "." }
+
+        [package.metadata]
+        provides-extras = []
         "###
         );
     });
@@ -20889,7 +21133,7 @@ fn lock_dynamic_to_static() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -20900,7 +21144,10 @@ fn lock_dynamic_to_static() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
-        "###
+
+        [package.metadata]
+        provides-extras = []
+        "#
         );
     });
 
@@ -20953,6 +21200,9 @@ fn lock_static_to_dynamic() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
+
+        [package.metadata]
+        provides-extras = []
         "###
         );
     });
@@ -21018,7 +21268,7 @@ fn lock_static_to_dynamic() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -21028,7 +21278,10 @@ fn lock_static_to_dynamic() -> Result<()> {
         [[package]]
         name = "project"
         source = { editable = "." }
-        "###
+
+        [package.metadata]
+        provides-extras = []
+        "#
         );
     });
 
@@ -21076,6 +21329,9 @@ fn lock_bump_static_version() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { virtual = "." }
+
+        [package.metadata]
+        provides-extras = []
         "###
         );
     });
@@ -21118,7 +21374,7 @@ fn lock_bump_static_version() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -21129,7 +21385,10 @@ fn lock_bump_static_version() -> Result<()> {
         name = "project"
         version = "0.2.0"
         source = { virtual = "." }
-        "###
+
+        [package.metadata]
+        provides-extras = []
+        "#
         );
     });
 
@@ -21463,7 +21722,7 @@ fn lock_relative_project() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -21479,6 +21738,7 @@ fn lock_relative_project() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "typing-extensions" }]
 
         [[package]]
@@ -21489,7 +21749,7 @@ fn lock_relative_project() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
-        "###
+        "#
         );
     });
 
@@ -21564,7 +21824,7 @@ fn lock_recursive_extra() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -21611,7 +21871,7 @@ fn lock_recursive_extra() -> Result<()> {
             { name = "project", extras = ["bop"], marker = "python_full_version == '3.12.*' and extra == 'qux'" },
             { name = "project", extras = ["foo"], marker = "extra == 'bar'" },
         ]
-        "###
+        "#
         );
     });
 
@@ -21702,7 +21962,7 @@ fn lock_no_build_static_metadata() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -21718,6 +21978,7 @@ fn lock_no_build_static_metadata() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [[package]]
@@ -21728,7 +21989,7 @@ fn lock_no_build_static_metadata() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
         ]
-        "###
+        "#
         );
     });
 
@@ -21824,7 +22085,7 @@ fn lock_self_compatible() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -21840,6 +22101,7 @@ fn lock_self_compatible() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "project" },
             { name = "typing-extensions" },
@@ -21853,7 +22115,7 @@ fn lock_self_compatible() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
-        "###
+        "#
         );
     });
 
@@ -21923,7 +22185,7 @@ fn lock_self_exact() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -21939,6 +22201,7 @@ fn lock_self_exact() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "project", specifier = "==0.1.0" },
             { name = "typing-extensions" },
@@ -21952,7 +22215,7 @@ fn lock_self_exact() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
-        "###
+        "#
         );
     });
 
@@ -22055,7 +22318,7 @@ fn lock_self_extra_to_extra_compatible() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -22085,7 +22348,7 @@ fn lock_self_extra_to_extra_compatible() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
-        "###
+        "#
         );
     });
 
@@ -22225,7 +22488,7 @@ fn lock_self_extra_compatible() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -22255,7 +22518,7 @@ fn lock_self_extra_compatible() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
-        "###
+        "#
         );
     });
 
@@ -22358,7 +22621,7 @@ fn lock_self_marker_compatible() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -22374,6 +22637,7 @@ fn lock_self_marker_compatible() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [
             { name = "project", marker = "sys_platform == 'win32'" },
             { name = "typing-extensions" },
@@ -22387,7 +22651,7 @@ fn lock_self_marker_compatible() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
-        "###
+        "#
         );
     });
 
@@ -22489,7 +22753,7 @@ fn lock_split_on_windows() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -22505,6 +22769,7 @@ fn lock_split_on_windows() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "pyqt5-qt5" }]
 
         [[package]]
@@ -22515,7 +22780,7 @@ fn lock_split_on_windows() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/40/dc/96d9d0ba0d13256343b53efffe8729f278e62409ab4c937bb22e70ab98ac/PyQt5_Qt5-5.15.13-py3-none-macosx_10_13_x86_64.whl", hash = "sha256:92575a9e96a27c4ed67c56c7048ded7461a1655d5d21f0e05064664e6e9fcbdf", size = 38771962 },
             { url = "https://files.pythonhosted.org/packages/c9/8b/4441c208c8ca29b50fab6467ebfa32b6401d16c5c915a031a48dc85dfa7a/PyQt5_Qt5-5.15.13-py3-none-macosx_11_0_arm64.whl", hash = "sha256:141859f2ffe04cc6c5db970e2b6ad9f98897805d886a14c52614e3799daab6d6", size = 36663754 },
         ]
-        "###
+        "#
         );
     });
 
@@ -22588,7 +22853,7 @@ fn lock_arm() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         resolution-markers = [
@@ -22621,8 +22886,9 @@ fn lock_arm() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "numpy" }]
-        "###
+        "#
         );
     });
 
@@ -22662,7 +22928,7 @@ fn lock_x86_64() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         resolution-markers = [
@@ -22696,8 +22962,9 @@ fn lock_x86_64() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "numpy" }]
-        "###
+        "#
         );
     });
 
@@ -22737,7 +23004,7 @@ fn lock_x86() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
         resolution-markers = [
@@ -22768,8 +23035,9 @@ fn lock_x86() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "numpy" }]
-        "###
+        "#
         );
     });
 
@@ -22808,7 +23076,7 @@ fn lock_script() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.11"
 
@@ -22848,7 +23116,7 @@ fn lock_script() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -22944,7 +23212,7 @@ fn lock_script_path() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.11"
 
@@ -22979,6 +23247,7 @@ fn lock_script_path() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [[package]]
@@ -23007,7 +23276,7 @@ fn lock_script_path() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -23118,7 +23387,7 @@ fn lock_pytorch_cpu() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12.[X]"
         resolution-markers = [
@@ -23693,7 +23962,7 @@ fn lock_pytorch_cpu() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d", size = 37438 },
         ]
-        "###
+        "#
         );
     });
 
@@ -23767,7 +24036,7 @@ fn lock_pytorch_preferences() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.10.0"
         resolution-markers = [
@@ -24188,7 +24457,7 @@ fn lock_pytorch_preferences() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d", size = 37438 },
         ]
-        "###
+        "#
         );
     });
 

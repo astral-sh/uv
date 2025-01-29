@@ -663,6 +663,7 @@ dependencies = [
 ]
 
 [package.metadata]
+provides-extras = []
 requires-dist = [
     { name = "aiodns", specifier = "==3.2.0" },
     { name = "aiohttp", specifier = "==3.9.5" },

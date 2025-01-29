@@ -1221,6 +1221,7 @@ fn workspace_inherit_sources() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "library", editable = "../library" }]
 
         [[package]]
@@ -1228,10 +1229,16 @@ fn workspace_inherit_sources() -> Result<()> {
         version = "0.1.0"
         source = { editable = "../library" }
 
+        [package.metadata]
+        provides-extras = []
+
         [[package]]
         name = "workspace"
         version = "0.1.0"
         source = { editable = "." }
+
+        [package.metadata]
+        provides-extras = []
         "###
         );
     });

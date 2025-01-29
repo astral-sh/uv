@@ -816,7 +816,7 @@ fn run_pep723_script_lock() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.11"
 
@@ -834,7 +834,7 @@ fn run_pep723_script_lock() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
         ]
-        "###
+        "#
         );
     });
 
@@ -1728,7 +1728,7 @@ fn run_locked() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            existing, @r###"
+            existing, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -1766,6 +1766,7 @@ fn run_locked() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = "==3.7.0" }]
 
         [[package]]
@@ -1776,7 +1777,7 @@ fn run_locked() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###);
+        "#);
         }
     );
 
