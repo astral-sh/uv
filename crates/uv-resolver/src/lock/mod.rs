@@ -2413,6 +2413,23 @@ impl Package {
         {
             let mut metadata_table = Table::new();
 
+            if !self.metadata.provides_extras.is_empty() {
+                let provides_extras = self
+                    .metadata
+                    .provides_extras
+                    .iter()
+                    .map(|extra| {
+                        serde::Serialize::serialize(
+                            &extra,
+                            toml_edit::ser::ValueSerializer::new(),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                // This is just a list of names, so linebreaking it is excessive
+                let provides_extras = Array::from_iter(provides_extras);
+                metadata_table.insert("provides-extras", value(provides_extras));
+            }
+
             if !self.metadata.requires_dist.is_empty() {
                 let requires_dist = self
                     .metadata

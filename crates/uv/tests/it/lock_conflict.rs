@@ -114,6 +114,7 @@ fn extra_basic() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = ["extra1", "extra2"]
         requires-dist = [
             { name = "sortedcontainers", marker = "extra == 'extra1'", specifier = "==2.3.0" },
             { name = "sortedcontainers", marker = "extra == 'extra2'", specifier = "==2.4.0" },
@@ -310,6 +311,7 @@ fn extra_basic_three_extras() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = ["extra1", "extra2", "project3"]
         requires-dist = [
             { name = "sortedcontainers", marker = "extra == 'extra1'", specifier = "==2.2.0" },
             { name = "sortedcontainers", marker = "extra == 'extra2'", specifier = "==2.3.0" },
@@ -823,6 +825,7 @@ fn extra_multiple_independent() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = ["extra1", "extra2", "project3", "project4"]
         requires-dist = [
             { name = "anyio", marker = "extra == 'project3'", specifier = "==4.1.0" },
             { name = "anyio", marker = "extra == 'project4'", specifier = "==4.2.0" },
@@ -927,6 +930,7 @@ fn extra_config_change_ignore_lockfile() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = ["extra1", "extra2"]
         requires-dist = [
             { name = "sortedcontainers", marker = "extra == 'extra1'", specifier = "==2.3.0" },
             { name = "sortedcontainers", marker = "extra == 'extra2'", specifier = "==2.4.0" },
@@ -2107,6 +2111,7 @@ fn mixed() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = ["extra1"]
         requires-dist = [{ name = "sortedcontainers", marker = "extra == 'extra1'", specifier = "==2.4.0" }]
 
         [package.metadata.requires-dev]
@@ -2316,6 +2321,7 @@ fn multiple_sources_index_disjoint_extras() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = ["cu118", "cu124"]
         requires-dist = [
             { name = "jinja2", marker = "extra == 'cu118'", specifier = "==3.1.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118", conflict = { package = "project", extra = "cu118" } },
             { name = "jinja2", marker = "extra == 'cu124'", specifier = "==3.1.3", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "project", extra = "cu124" } },
@@ -2631,6 +2637,7 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = ["cu118", "cu124"]
         requires-dist = [
             { name = "jinja2", extras = ["i18n"], marker = "extra == 'cu118'", specifier = "==3.1.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118", conflict = { package = "project", extra = "cu118" } },
             { name = "jinja2", extras = ["i18n"], marker = "extra == 'cu124'", specifier = "==3.1.3", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "project", extra = "cu124" } },
@@ -2804,6 +2811,7 @@ fn multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = ["cu118", "cu124"]
         requires-dist = [
             { name = "jinja2", marker = "sys_platform == 'darwin' and extra == 'cu118'", specifier = "==3.1.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118", conflict = { package = "project", extra = "cu118" } },
             { name = "jinja2", marker = "sys_platform != 'darwin' and extra == 'cu118'", specifier = "==3.1.2" },
@@ -3095,6 +3103,7 @@ fn shared_optional_dependency_extra1() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = ["foo", "bar", "baz"]
         requires-dist = [
             { name = "anyio", marker = "extra == 'baz'" },
             { name = "idna", marker = "extra == 'bar'", specifier = "==3.6" },
@@ -3375,6 +3384,7 @@ fn shared_optional_dependency_mixed1() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = ["foo"]
         requires-dist = [{ name = "idna", marker = "extra == 'foo'", specifier = "==3.5" }]
 
         [package.metadata.requires-dev]
@@ -3515,6 +3525,7 @@ fn shared_optional_dependency_extra2() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = ["foo", "bar"]
         requires-dist = [
             { name = "anyio", marker = "extra == 'bar'" },
             { name = "anyio", marker = "extra == 'foo'" },
@@ -3801,6 +3812,7 @@ fn shared_optional_dependency_mixed2() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = ["foo"]
         requires-dist = [
             { name = "anyio", marker = "extra == 'foo'" },
             { name = "idna", marker = "extra == 'foo'", specifier = "==3.5" },
@@ -3942,6 +3954,7 @@ fn shared_dependency_extra() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = ["foo", "bar"]
         requires-dist = [
             { name = "anyio" },
             { name = "idna", marker = "extra == 'bar'", specifier = "==3.6" },
@@ -4292,6 +4305,7 @@ fn shared_dependency_mixed() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = ["foo"]
         requires-dist = [
             { name = "anyio" },
             { name = "idna", marker = "extra == 'foo'", specifier = "==3.5" },
@@ -4513,6 +4527,7 @@ conflicts = [
         ]
 
         [package.metadata]
+        provides-extras = ["x1"]
         requires-dist = [
             { name = "anyio", specifier = ">=4" },
             { name = "idna", marker = "extra == 'x1'", specifier = "==3.6" },
@@ -4533,6 +4548,7 @@ conflicts = [
         ]
 
         [package.metadata]
+        provides-extras = ["x2", "x3"]
         requires-dist = [
             { name = "idna", marker = "extra == 'x2'", specifier = "==3.4" },
             { name = "idna", marker = "extra == 'x3'", specifier = "==3.5" },
@@ -4708,6 +4724,7 @@ fn jinja_no_conflict_markers1() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = ["cu118", "cu124"]
         requires-dist = [
             { name = "jinja2", extras = ["i18n"], marker = "extra == 'cu118'", specifier = "==3.1.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118", conflict = { package = "project", extra = "cu118" } },
             { name = "jinja2", extras = ["i18n"], marker = "extra == 'cu124'", specifier = "==3.1.3", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "project", extra = "cu124" } },
@@ -4874,6 +4891,7 @@ fn jinja_no_conflict_markers2() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = ["cu118", "cu124"]
         requires-dist = [
             { name = "jinja2", marker = "sys_platform == 'darwin' and extra == 'cu118'", specifier = "==3.1.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118", conflict = { package = "project", extra = "cu118" } },
             { name = "jinja2", marker = "sys_platform != 'darwin' and extra == 'cu118'", specifier = "==3.1.2" },
@@ -5003,6 +5021,7 @@ fn collision_extra() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = ["foo", "bar", "extra-3-pkg-foo"]
         requires-dist = [
             { name = "anyio" },
             { name = "idna", marker = "extra == 'bar'", specifier = "==3.6" },
@@ -6539,6 +6558,7 @@ fn extra_inferences() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = ["x1", "x2"]
         requires-dist = [
             { name = "apache-airflow", marker = "extra == 'x1'", specifier = "==2.5.0" },
             { name = "apache-airflow", marker = "extra == 'x2'", specifier = "==2.6.0" },
@@ -7277,6 +7297,7 @@ fn deduplicate_resolution_markers() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = ["x1", "x2"]
         requires-dist = [
             { name = "idna", marker = "sys_platform == 'linux' and extra == 'x1'", specifier = "==3.6" },
             { name = "idna", marker = "sys_platform != 'linux' and extra == 'x1'", specifier = "==3.5" },
@@ -7388,6 +7409,7 @@ fn overlapping_resolution_markers() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = ["cpu", "cu118"]
         requires-dist = [
             { name = "torch", marker = "sys_platform == 'darwin' and extra == 'cpu'", specifier = "==2.2.2" },
             { name = "torch", marker = "sys_platform != 'darwin' and extra == 'cpu'", specifier = "==2.2.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cpu", conflict = { package = "ads-mega-model", extra = "cpu" } },
