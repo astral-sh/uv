@@ -106,7 +106,7 @@ $ uv venv
 Note that when an automatic Python installation occurs, the `python` command will not be added to the shell. Use `uv python install-shim` to ensure the `python` shim is installed.
 -->
 
-## Using an existing Python installation
+## Using existing Python versions
 
 uv will use existing Python installations if present on your system. There is no configuration
 necessary for this behavior: uv will use the system Python if it satisfies the requirements of the
