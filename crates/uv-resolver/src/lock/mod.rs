@@ -625,6 +625,11 @@ impl Lock {
         })
     }
 
+    /// Returns the package whose name matches [`PackageName`].
+    pub fn find_package(&self, name: &PackageName) -> Option<&Package> {
+        self.packages.iter().find(|package| package.name() == name)
+    }
+
     /// Returns the supported environments that were used to generate this
     /// lock.
     ///
@@ -2584,6 +2589,11 @@ impl Package {
     /// Returns `true` if the package is a dynamic source tree.
     fn is_dynamic(&self) -> bool {
         self.id.version.is_none()
+    }
+
+    /// Returns `true` if the package contains the [`ExtraName`].
+    pub fn contains_extra(&self, name: &ExtraName) -> bool {
+        self.optional_dependencies.contains_key(name)
     }
 }
 
