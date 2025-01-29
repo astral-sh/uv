@@ -177,9 +177,8 @@ fn tool_install() {
 
 #[test]
 fn tool_install_with_editable() -> Result<()> {
-    static EXCLUDE_NEWER: &str = "2025-01-18T00:00:00Z";
-
     let context = TestContext::new("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
@@ -191,7 +190,6 @@ fn tool_install_with_editable() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.tool_install()
-        .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
         .arg("--with-editable")
         .arg("./src/anyio_local")
         .arg("--with")
@@ -219,19 +217,19 @@ fn tool_install_with_editable() -> Result<()> {
 
 #[test]
 fn tool_install_suggest_other_packages_with_executable() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    // FastAPI 0.111 is only available from this date onwards.
+    let context = TestContext::new("3.12")
+        .with_exclude_newer("2024-05-04T00:00:00Z")
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let mut filters = context.filters();
     filters.push(("\\+ uvloop(.+)\n ", ""));
 
     uv_snapshot!(filters, context.tool_install()
-    .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-    .arg("fastapi==0.111.0")
-    .env(EnvVars::UV_EXCLUDE_NEWER, "2024-05-04T00:00:00Z") // TODO: Remove this once EXCLUDE_NEWER is bumped past 2024-05-04
-    // (FastAPI 0.111 is only available from this date onwards)
-    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .arg("fastapi==0.111.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2593,9 +2591,8 @@ fn tool_install_bad_receipt() -> Result<()> {
 /// that isn't properly normalized).
 #[test]
 fn tool_install_malformed_dist_info() {
-    static EXCLUDE_NEWER: &str = "2025-01-18T00:00:00Z";
-
     let context = TestContext::new("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
@@ -2603,7 +2600,6 @@ fn tool_install_malformed_dist_info() {
 
     // Install `executable-application`
     uv_snapshot!(context.filters(), context.tool_install()
-        .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
         .arg("executable-application")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
@@ -2941,16 +2937,14 @@ fn tool_install_at_latest() {
 /// Test installing a tool with `uv tool install {package} --from {package}@latest`.
 #[test]
 fn tool_install_from_at_latest() {
-    static EXCLUDE_NEWER: &str = "2025-01-18T00:00:00Z";
-
     let context = TestContext::new("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
-        .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
         .arg("app")
         .arg("--from")
         .arg("executable-application@latest")
@@ -2988,16 +2982,14 @@ fn tool_install_from_at_latest() {
 /// Test installing a tool with `uv tool install {package} --from {package}@{version}`.
 #[test]
 fn tool_install_from_at_version() {
-    static EXCLUDE_NEWER: &str = "2025-01-18T00:00:00Z";
-
     let context = TestContext::new("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
-        .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
         .arg("app")
         .arg("--from")
         .arg("executable-application@0.2.0")

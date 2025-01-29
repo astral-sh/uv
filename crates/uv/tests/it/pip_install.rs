@@ -1611,10 +1611,9 @@ fn install_no_index_version() {
 /// Ref: <https://github.com/astral-sh/uv/issues/1600>
 #[test]
 fn install_extra_index_url_has_priority() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2024-03-09T00:00:00Z");
 
     uv_snapshot!(context.pip_install()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg("https://test.pypi.org/simple")
         .arg("--extra-index-url")
@@ -1627,9 +1626,7 @@ fn install_extra_index_url_has_priority() {
         // the fix, uv will check pypi.org first since it is given
         // priority via --extra-index-url.
         .arg("black==24.2.0")
-        .arg("--no-deps")
-        .arg("--exclude-newer")
-        .arg("2024-03-09"), @r###"
+        .arg("--no-deps"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2454,7 +2451,7 @@ fn only_binary_editable_setup_py() {
 /// don't propagate the `--prerelease` flag to the source distribution build regardless.
 #[test]
 fn no_prerelease_hint_source_builds() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2018-10-08");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -2469,7 +2466,7 @@ fn no_prerelease_hint_source_builds() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.pip_install().arg(".").env(EnvVars::UV_EXCLUDE_NEWER, "2018-10-08"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install().arg("."), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4499,12 +4496,11 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
 /// Ref: <https://github.com/astral-sh/uv/issues/2276>
 #[test]
 fn install_utf16le_requirements() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_binary(&utf8_to_utf16_with_bom_le("tomli<=2.0.1"))?;
 
     uv_snapshot!(context.pip_install()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("-r")
         .arg("requirements.txt"), @r###"
     success: true
@@ -4526,12 +4522,11 @@ fn install_utf16le_requirements() -> Result<()> {
 /// Ref: <https://github.com/astral-sh/uv/issues/2276>
 #[test]
 fn install_utf16be_requirements() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_binary(&utf8_to_utf16_with_bom_be("tomli<=2.0.1"))?;
 
     uv_snapshot!(context.pip_install()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("-r")
         .arg("requirements.txt"), @r###"
     success: true
@@ -6485,9 +6480,7 @@ fn require_hashes_override() -> Result<()> {
 /// Critically, one package (`requests`) depends on another (`urllib3`).
 #[test]
 fn require_hashes_marker() -> Result<()> {
-    static EXCLUDE_NEWER: &str = "2025-01-01T00:00:00Z";
-
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
 
     // Write to a requirements file.
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -6600,7 +6593,6 @@ fn require_hashes_marker() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.pip_install()
-        .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
         .arg("-r")
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
@@ -8268,14 +8260,11 @@ fn static_metadata_already_installed() -> Result<()> {
 /// `circular-one` was a runtime dependency.
 #[test]
 fn cyclic_build_dependency() {
-    static EXCLUDE_NEWER: &str = "2025-01-02T00:00:00Z";
-
-    let context = TestContext::new("3.13");
+    let context = TestContext::new("3.13").with_exclude_newer("2025-01-02T00:00:00Z");
 
     // Installing with `--no-binary circular-one` should fail, since we'll end up in a recursive
     // build.
     uv_snapshot!(context.filters(), context.pip_install()
-        .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
         .arg("circular-one")
         .arg("--extra-index-url")
         .arg("https://test.pypi.org/simple")
@@ -8297,7 +8286,6 @@ fn cyclic_build_dependency() {
 
     // Installing without `--no-binary circular-one` should succeed, since we can use the wheel.
     uv_snapshot!(context.filters(), context.pip_install()
-        .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
         .arg("circular-one")
         .arg("--extra-index-url")
         .arg("https://test.pypi.org/simple")

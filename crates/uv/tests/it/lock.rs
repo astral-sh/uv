@@ -146,7 +146,7 @@ fn lock_wheel_registry() -> Result<()> {
 /// Lock a requirement from PyPI.
 #[test]
 fn lock_sdist_registry() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -159,7 +159,7 @@ fn lock_sdist_registry() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -177,6 +177,9 @@ fn lock_sdist_registry() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2025-01-29T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -199,7 +202,7 @@ fn lock_sdist_registry() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -209,7 +212,7 @@ fn lock_sdist_registry() -> Result<()> {
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -221,7 +224,7 @@ fn lock_sdist_registry() -> Result<()> {
     "###);
 
     // Re-install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4148,7 +4151,7 @@ fn lock_requires_python() -> Result<()> {
 /// upper-bound.
 #[test]
 fn lock_requires_python_upper() -> Result<()> {
-    let context = TestContext::new("3.11");
+    let context = TestContext::new("3.11").with_exclude_newer("2024-08-29T00:00:00Z");
 
     let lockfile = context.temp_dir.join("uv.lock");
 
@@ -4164,7 +4167,7 @@ fn lock_requires_python_upper() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_EXCLUDE_NEWER, "2024-08-29T00:00:00Z"), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4256,7 +4259,7 @@ fn lock_requires_python_upper() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").env(EnvVars::UV_EXCLUDE_NEWER, "2024-08-29T00:00:00Z"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4350,7 +4353,7 @@ fn lock_requires_python_exact() -> Result<()> {
 /// Fork, even with a single dependency, if the minimum Python version is increased.
 #[test]
 fn lock_requires_python_fork() -> Result<()> {
-    let context = TestContext::new("3.11");
+    let context = TestContext::new("3.11").with_exclude_newer("2024-08-29T00:00:00Z");
 
     let lockfile = context.temp_dir.join("uv.lock");
 
@@ -4365,7 +4368,7 @@ fn lock_requires_python_fork() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_EXCLUDE_NEWER, "2024-08-29T00:00:00Z"), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4427,7 +4430,7 @@ fn lock_requires_python_fork() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").env(EnvVars::UV_EXCLUDE_NEWER, "2024-08-29T00:00:00Z"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6342,6 +6345,9 @@ fn lock_invalid_hash() -> Result<()> {
         version = 1
         requires-python = ">=3.12"
 
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
         [[package]]
         name = "anyio"
         version = "3.7.0"
@@ -6384,7 +6390,7 @@ fn lock_invalid_hash() -> Result<()> {
         "#)?;
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -6395,7 +6401,7 @@ fn lock_invalid_hash() -> Result<()> {
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -20054,9 +20060,7 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
 /// N.B. `hatchling` "flattens" recursive extras.
 #[test]
 fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
-    static EXCLUDE_NEWER: &str = "2025-01-01T00:00:00Z";
-
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -20094,7 +20098,7 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
         .child("__about__.py")
         .write_str("__version__ = '0.1.0'")?;
 
-    uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -20179,7 +20183,7 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
     });
 
     // Re-run with `--locked`. We should accept the lockfile, since the metadata is unchanged.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -20191,7 +20195,7 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
     fs_err::remove_dir_all(&context.cache_dir)?;
 
     // Running with `--offline` should also succeed.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -20208,9 +20212,7 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
 /// N.B. `setuptools` does not "flatten" recursive extras.
 #[test]
 fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
-    static EXCLUDE_NEWER: &str = "2025-01-01T00:00:00Z";
-
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -20254,7 +20256,7 @@ fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
         .child("__init__.py")
         .write_str("__version__ = '0.1.0'")?;
 
-    uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -20339,7 +20341,7 @@ fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
     });
 
     // Re-run with `--locked`. We should accept the lockfile, since the metadata is unchanged.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -20351,7 +20353,7 @@ fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
     fs_err::remove_dir_all(&context.cache_dir)?;
 
     // Running with `--offline` should also succeed.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -20485,9 +20487,7 @@ fn lock_dynamic_built_cache() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/11047>
 #[test]
 fn lock_shared_build_dependency() -> Result<()> {
-    static EXCLUDE_NEWER: &str = "2025-01-28T00:00:00Z";
-
-    let context = TestContext::new("3.13");
+    let context = TestContext::new("3.13").with_exclude_newer("2025-01-28T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -20525,7 +20525,6 @@ fn lock_shared_build_dependency() -> Result<()> {
         .touch()?;
 
     uv_snapshot!(context.filters(), context.lock()
-        .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
         .arg("--no-build-package")
         .arg("libcst"), @r###"
     success: true
@@ -20754,7 +20753,6 @@ fn lock_shared_build_dependency() -> Result<()> {
     });
 
     uv_snapshot!(context.filters(), context.lock()
-        .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
         .arg("--locked"), @r###"
     success: true
     exit_code: 0
