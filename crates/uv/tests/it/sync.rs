@@ -2564,6 +2564,7 @@ fn sync_group_self() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = ["test"]
         requires-dist = [
             { name = "idna", marker = "extra == 'test'", specifier = ">=3" },
             { name = "iniconfig", specifier = ">=2" },
@@ -4485,6 +4486,7 @@ fn sync_dynamic_extra() -> Result<()> {
             ]
 
             [package.metadata]
+            provides-extras = ["dev"]
             requires-dist = [
                 { name = "iniconfig" },
                 { name = "typing-extensions", marker = "extra == 'dev'" },

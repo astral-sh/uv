@@ -1334,6 +1334,7 @@ fn add_remove_optional() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = ["io"]
         requires-dist = [{ name = "anyio", marker = "extra == 'io'", specifier = "==3.7.0" }]
 
         [[package]]
@@ -1427,6 +1428,9 @@ fn add_remove_optional() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
+
+        [package.metadata]
+        provides-extras = ["io"]
         "###
         );
     });
@@ -4294,6 +4298,7 @@ fn add_lower_bound_optional() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = ["io"]
         requires-dist = [{ name = "anyio", marker = "extra == 'io'", specifier = ">=4.3.0" }]
 
         [[package]]

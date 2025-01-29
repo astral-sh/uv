@@ -2419,10 +2419,7 @@ impl Package {
                     .provides_extras
                     .iter()
                     .map(|extra| {
-                        serde::Serialize::serialize(
-                            &extra,
-                            toml_edit::ser::ValueSerializer::new(),
-                        )
+                        serde::Serialize::serialize(&extra, toml_edit::ser::ValueSerializer::new())
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 // This is just a list of names, so linebreaking it is excessive

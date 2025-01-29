@@ -57,8 +57,8 @@ fn packse_add_remove_one_package() {
              { name = "pypiserver" },
              { name = "watchfiles" },
          ]
-        @@ -334,20 +335,21 @@
-         [package.metadata]
+        @@ -335,20 +336,21 @@
+         provides-extras = ["index", "serve"]
          requires-dist = [
              { name = "chevron-blue", specifier = ">=0.2.1" },
              { name = "hatchling", specifier = ">=1.20.0" },
@@ -79,7 +79,7 @@ fn packse_add_remove_one_package() {
              { name = "syrupy", specifier = ">=4.6.0" },
          ]
 
-        @@ -599,20 +601,29 @@
+        @@ -600,20 +602,29 @@
              { name = "rfc3986" },
              { name = "rich" },
              { name = "urllib3" },
@@ -145,8 +145,8 @@ fn packse_add_remove_one_package() {
              { name = "pypiserver" },
              { name = "watchfiles" },
          ]
-        @@ -335,21 +334,20 @@
-         [package.metadata]
+        @@ -336,21 +335,20 @@
+         provides-extras = ["index", "serve"]
          requires-dist = [
              { name = "chevron-blue", specifier = ">=0.2.1" },
              { name = "hatchling", specifier = ">=1.20.0" },
@@ -167,7 +167,7 @@ fn packse_add_remove_one_package() {
              { name = "syrupy", specifier = ">=4.6.0" },
          ]
 
-        @@ -598,29 +596,20 @@
+        @@ -599,29 +597,20 @@
              { name = "readme-renderer" },
              { name = "requests" },
              { name = "requests-toolbelt" },
@@ -299,9 +299,9 @@ fn packse_promote_transitive_to_direct_then_remove() {
          serve = [
              { name = "pypiserver" },
              { name = "watchfiles" },
-        @@ -333,20 +334,21 @@
-
+        @@ -334,20 +335,21 @@
          [package.metadata]
+         provides-extras = ["index", "serve"]
          requires-dist = [
              { name = "chevron-blue", specifier = ">=0.2.1" },
              { name = "hatchling", specifier = ">=1.20.0" },
@@ -357,9 +357,9 @@ fn packse_promote_transitive_to_direct_then_remove() {
          serve = [
              { name = "pypiserver" },
              { name = "watchfiles" },
-        @@ -334,21 +333,20 @@
-
+        @@ -335,21 +334,20 @@
          [package.metadata]
+         provides-extras = ["index", "serve"]
          requires-dist = [
              { name = "chevron-blue", specifier = ">=0.2.1" },
              { name = "hatchling", specifier = ">=1.20.0" },
