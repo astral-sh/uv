@@ -4752,6 +4752,7 @@ dependencies = [
  "hex",
  "seahash",
  "url",
+ "urlencoding",
 ]
 
 [[package]]
