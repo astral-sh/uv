@@ -166,11 +166,10 @@ numpy. Each numpy release support 4 Python minor versions, e.g., numpy 2.0.0 has
 3.9 through 3.12 and declares `requires-python = ">=3.9"`, while numpy 2.1.0 has wheels for CPython
 3.10 through 3.13 and declares `requires-python = ">=3.10"`. The means that when we resolve a
 `numpy>=2,<3` requirement in a project with `requires-python = ">=3.9"`, we resolve numpy 2.0.0 and
-the lockfile doesn't install on Python 3.13 or newer. To alleviate this,
-`--fork-strategy requires-python` introduces a different forking scheme: Whenever we reject a
-version due to a too high Python requirement, we fork on that Python version. In the example case,
-upon encountering numpy 2.1.0 we fork into Python versions `>=3.9,<3.10` and `>=3.10` and resolve
-two different numpy versions:
+the lockfile doesn't install on Python 3.13 or newer. To alleviate this, whenever we reject a
+version due to a too high Python requirement, we fork on that Python version. This behavior is
+controlled by `--fork-strategy`. In the example case, upon encountering numpy 2.1.0 we fork into
+Python versions `>=3.9,<3.10` and `>=3.10` and resolve two different numpy versions:
 
 ```
 numpy==2.0.0; python_version >= "3.9" and python_version < "3.10"
