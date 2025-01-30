@@ -26,11 +26,6 @@ impl CanonicalUrl {
             return Self(url);
         }
 
-        // If the URL has no host, then it's not a valid URL anyway.
-        if !url.has_host() {
-            return Self(url);
-        }
-
         // Strip credentials.
         let _ = url.set_password(None);
         let _ = url.set_username("");
