@@ -54,7 +54,7 @@ fn python_install() {
     "###);
 
     // You can opt-in to a reinstall
-    uv_snapshot!(context.filters(), context.python_install().arg("--reinstall"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13").arg("--reinstall"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -88,6 +88,82 @@ fn python_install() {
     Searching for Python versions matching: Python 3.13
     Uninstalled Python 3.13.1 in [TIME]
      - cpython-3.13.1-[PLATFORM]
+    "###);
+}
+
+#[test]
+fn python_reinstall() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    // Install a couple versions
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12").arg("3.13"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed 2 versions in [TIME]
+     + cpython-3.12.8-[PLATFORM]
+     + cpython-3.13.1-[PLATFORM]
+    "###);
+
+    // Reinstall a single version
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13").arg("--reinstall"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.13.1 in [TIME]
+     ~ cpython-3.13.1-[PLATFORM]
+    "###);
+
+    // Reinstall multiple versions
+    uv_snapshot!(context.filters(), context.python_install().arg("--reinstall"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed 2 versions in [TIME]
+     ~ cpython-3.12.8-[PLATFORM]
+     ~ cpython-3.13.1-[PLATFORM]
+    "###);
+}
+
+#[test]
+fn python_reinstall_patch() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    // Install a couple patch versions
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.6").arg("3.12.7"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed 2 versions in [TIME]
+     + cpython-3.12.6-[PLATFORM]
+     + cpython-3.12.7-[PLATFORM]
+    "###);
+
+    // Reinstall all "3.12" versions
+    // TODO(zanieb): This doesn't work today, because we need this to install the "latest" as there
+    // is no workflow for `--upgrade` yet
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12").arg("--reinstall"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.8 in [TIME]
+     + cpython-3.12.8-[PLATFORM]
     "###);
 }
 

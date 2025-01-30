@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::Write;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -164,7 +165,12 @@ pub(crate) async fn install(
         .unwrap_or_else(|| {
             // If no version file is found and no requests were made
             is_default_install = true;
-            vec![PythonRequest::Default]
+            vec![if reinstall {
+                // On bare `--reinstall`, reinstall all Python versions
+                PythonRequest::Any
+            } else {
+                PythonRequest::Default
+            }]
         })
         .into_iter()
         .map(InstallRequest::new)
@@ -193,35 +199,76 @@ pub(crate) async fn install(
 
     // Find requests that are already satisfied
     let mut changelog = Changelog::default();
-    let (satisfied, unsatisfied): (Vec<_>, Vec<_>) = requests.iter().partition_map(|request| {
-        if let Some(installation) = existing_installations
-            .iter()
-            .find(|installation| request.matches_installation(installation))
-        {
-            changelog.existing.insert(installation.key().clone());
-            if reinstall {
-                debug!(
-                    "Ignoring match `{}` for request `{}` due to `--reinstall` flag",
-                    installation.key().green(),
-                    request.cyan()
-                );
+    let (satisfied, unsatisfied): (Vec<_>, Vec<_>) = if reinstall {
+        // In the reinstall case, we want to iterate over all matching installations instead of
+        // stopping at the first match.
 
-                Either::Right(request)
-            } else {
+        let mut unsatisfied: Vec<Cow<InstallRequest>> =
+            Vec::with_capacity(existing_installations.len() + requests.len());
+
+        for request in &requests {
+            if existing_installations.is_empty() {
+                debug!("No installation found for request `{}`", request.cyan());
+                unsatisfied.push(Cow::Borrowed(request));
+            }
+
+            for installation in existing_installations
+                .iter()
+                .filter(|installation| request.matches_installation(installation))
+            {
+                changelog.existing.insert(installation.key().clone());
+                if matches!(&request.request, &PythonRequest::Any) {
+                    // Construct a install request matching the existing installation
+                    match InstallRequest::new(PythonRequest::Key(installation.into())) {
+                        Ok(request) => {
+                            debug!("Will reinstall `{}`", installation.key().green());
+                            unsatisfied.push(Cow::Owned(request));
+                        }
+                        Err(err) => {
+                            // This shouldn't really happen, but maybe a new version of uv dropped
+                            // support for a key we previously supported
+                            warn_user!(
+                                "Failed to create reinstall request for existing installation `{}`: {err}",
+                                installation.key().green()
+                            );
+                        }
+                    }
+                } else {
+                    // TODO(zanieb): This isn't really right! But we need `--upgrade` or similar
+                    // to handle this case correctly without causing a breaking change.
+
+                    // If we have real requests, just ignore the existing installation
+                    debug!(
+                        "Ignoring match `{}` for request `{}` due to `--reinstall` flag",
+                        installation.key().green(),
+                        request.cyan()
+                    );
+                    unsatisfied.push(Cow::Borrowed(request));
+                    break;
+                }
+            }
+        }
+
+        (vec![], unsatisfied)
+    } else {
+        // If we can find one existing installation that matches the request, it is satisfied
+        requests.iter().partition_map(|request| {
+            if let Some(installation) = existing_installations
+                .iter()
+                .find(|installation| request.matches_installation(installation))
+            {
                 debug!(
                     "Found `{}` for request `{}`",
                     installation.key().green(),
                     request.cyan(),
                 );
-
                 Either::Left(installation)
+            } else {
+                debug!("No installation found for request `{}`", request.cyan());
+                Either::Right(Cow::Borrowed(request))
             }
-        } else {
-            debug!("No installation found for request `{}`", request.cyan());
-
-            Either::Right(request)
-        }
-    });
+        })
+    };
 
     // Check if Python downloads are banned
     if matches!(python_downloads, PythonDownloads::Never) && !unsatisfied.is_empty() {
