@@ -241,9 +241,13 @@ fn tool_run_suggest_valid_commands() {
 
 #[test]
 fn tool_run_warn_executable_not_in_from() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    // FastAPI 0.111 is only available from this date onwards.
+    let context = TestContext::new("3.12")
+        .with_exclude_newer("2024-05-04T00:00:00Z")
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
+
     let mut filters = context.filters();
     filters.push(("\\+ uvloop(.+)\n ", ""));
     // Strip off the `fastapi` command output.
@@ -253,8 +257,6 @@ fn tool_run_warn_executable_not_in_from() {
         .arg("--from")
         .arg("fastapi")
         .arg("fastapi")
-        .env(EnvVars::UV_EXCLUDE_NEWER, "2024-05-04T00:00:00Z") // TODO: Remove this once EXCLUDE_NEWER is bumped past 2024-05-04
-        // (FastAPI 0.111 is only available from this date onwards)
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: false

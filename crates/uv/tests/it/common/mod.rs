@@ -120,6 +120,13 @@ impl TestContext {
         new
     }
 
+    /// Set the "exclude newer" timestamp for all commands in this context.
+    pub fn with_exclude_newer(mut self, exclude_newer: &str) -> Self {
+        self.extra_env
+            .push((EnvVars::UV_EXCLUDE_NEWER.into(), exclude_newer.into()));
+        self
+    }
+
     /// Add extra standard filtering for messages like "Resolved 10 packages" which
     /// can differ between platforms.
     ///
@@ -784,7 +791,6 @@ impl TestContext {
         let mut command = self.new_command();
         command.arg("tool").arg("install");
         self.add_shared_args(&mut command, false);
-        command.env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER);
         command
     }
 

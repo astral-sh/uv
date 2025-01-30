@@ -191,7 +191,7 @@ fn prune_stale_symlink() -> Result<()> {
 /// `cache prune --ci` should remove all unzipped archives.
 #[test]
 fn prune_unzipped() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-01T00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc! { r"
@@ -204,7 +204,7 @@ fn prune_unzipped() -> Result<()> {
         .collect();
 
     // Install a requirement, to populate the cache.
-    uv_snapshot!(&filters, context.pip_install().arg("-r").env_remove(EnvVars::UV_EXCLUDE_NEWER).arg("requirements.txt").arg("--reinstall"), @r###"
+    uv_snapshot!(&filters, context.pip_install().arg("-r").arg("requirements.txt").arg("--reinstall"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -234,7 +234,7 @@ fn prune_unzipped() -> Result<()> {
     requirements_txt.write_str(indoc! { r"
         source-distribution==0.0.1
     " })?;
-    uv_snapshot!(&filters, context.pip_install().arg("-r").env_remove(EnvVars::UV_EXCLUDE_NEWER).arg("requirements.txt").arg("--offline"), @r###"
+    uv_snapshot!(&filters, context.pip_install().arg("-r").arg("requirements.txt").arg("--offline"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -250,7 +250,7 @@ fn prune_unzipped() -> Result<()> {
     requirements_txt.write_str(indoc! { r"
         iniconfig
     " })?;
-    uv_snapshot!(&filters, context.pip_install().arg("-r").env_remove(EnvVars::UV_EXCLUDE_NEWER).arg("requirements.txt").arg("--offline"), @r###"
+    uv_snapshot!(&filters, context.pip_install().arg("-r").arg("requirements.txt").arg("--offline"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----

@@ -4421,10 +4421,10 @@ fn compile_html() -> Result<()> {
     requirements_in.write_str("jinja2<=3.1.2")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-            .arg("requirements.in")
-            .arg("--index-url")
-            .arg("https://download.pytorch.org/whl"), @r###"
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("requirements.in")
+        .arg("--index-url")
+        .arg("https://download.pytorch.org/whl"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4451,9 +4451,9 @@ fn trailing_slash() -> Result<()> {
     requirements_in.write_str("jinja2")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in")
-            .arg("--index-url")
-            .arg("https://test.pypi.org/simple"), @r###"
+        .arg("requirements.in")
+        .arg("--index-url")
+        .arg("https://test.pypi.org/simple"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4470,9 +4470,9 @@ fn trailing_slash() -> Result<()> {
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in")
-            .arg("--index-url")
-            .arg("https://test.pypi.org/simple/"), @r###"
+        .arg("requirements.in")
+        .arg("--index-url")
+        .arg("https://test.pypi.org/simple/"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5086,13 +5086,12 @@ coverage = ["example[test]", "extras>=0.0.1,<=0.0.2"]
 /// and avoiding building 0.15.1 at all.
 #[test]
 fn requires_python_prefetch() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.8").with_exclude_newer("2025-01-01T00:00:00Z");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("voluptuous<=0.15.1")?;
 
     uv_snapshot!(context
         .pip_compile()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -7573,11 +7572,11 @@ fn universal_platform_fork() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .arg("requirements.in")
-            .arg("--universal")
-            .arg("-c")
-            .arg("constraints.txt")
-            .env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+        .arg("requirements.in")
+        .arg("--universal")
+        .arg("-c")
+        .arg("constraints.txt")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8318,9 +8317,7 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
 /// Respect an existing pre-release preference, even if preferences aren't enabled.
 #[test]
 fn existing_prerelease_preference() -> Result<()> {
-    static EXCLUDE_NEWER: &str = "2024-07-17T00:00:00Z";
-
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc::indoc! {r"
         cffi
@@ -8333,7 +8330,6 @@ fn existing_prerelease_preference() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .arg("requirements.in")
             .arg("-o")
             .arg("requirements.txt"), @r###"
@@ -8358,9 +8354,7 @@ fn existing_prerelease_preference() -> Result<()> {
 /// Requested distinct pre-release strategies with disjoint markers.
 #[test]
 fn universal_disjoint_prereleases() -> Result<()> {
-    static EXCLUDE_NEWER: &str = "2024-07-17T00:00:00Z";
-
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc::indoc! {r"
         cffi >= 1.16.0rc1 ; os_name != 'linux'
@@ -8368,7 +8362,6 @@ fn universal_disjoint_prereleases() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .arg("requirements.in")
             .arg("--universal"), @r###"
     success: true
@@ -8392,9 +8385,7 @@ fn universal_disjoint_prereleases() -> Result<()> {
 /// Requested distinct pre-release strategies with disjoint markers.
 #[test]
 fn universal_disjoint_prereleases_preference() -> Result<()> {
-    static EXCLUDE_NEWER: &str = "2024-07-17T00:00:00Z";
-
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc::indoc! {r"
         cffi ; os_name != 'linux'
@@ -8408,7 +8399,6 @@ fn universal_disjoint_prereleases_preference() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .arg("requirements.in")
             .arg("-o")
             .arg("requirements.txt")
@@ -8436,9 +8426,7 @@ fn universal_disjoint_prereleases_preference() -> Result<()> {
 /// TODO(charlie): This should resolve to two different `cffi` versions, one for each fork.
 #[test]
 fn universal_disjoint_prereleases_preference_marker() -> Result<()> {
-    static EXCLUDE_NEWER: &str = "2024-07-17T00:00:00Z";
-
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc::indoc! {r"
         cffi ; os_name != 'linux'
@@ -8453,7 +8441,6 @@ fn universal_disjoint_prereleases_preference_marker() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .arg("requirements.in")
             .arg("-o")
             .arg("requirements.txt")
@@ -8480,9 +8467,7 @@ fn universal_disjoint_prereleases_preference_marker() -> Result<()> {
 /// doesn't include a pre-release marker.
 #[test]
 fn universal_disjoint_prereleases_allow() -> Result<()> {
-    static EXCLUDE_NEWER: &str = "2024-07-17T00:00:00Z";
-
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc::indoc! {r"
         cffi >= 1.15.0, < 1.17.0 ; os_name == 'linux'
@@ -8490,7 +8475,6 @@ fn universal_disjoint_prereleases_allow() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .arg("requirements.in")
             .arg("--universal")
             .arg("--prerelease")
@@ -8519,9 +8503,7 @@ fn universal_disjoint_prereleases_allow() -> Result<()> {
 /// that is also present as a transitive dependency.
 #[test]
 fn universal_transitive_disjoint_prerelease_requirement() -> Result<()> {
-    static EXCLUDE_NEWER: &str = "2024-07-17T00:00:00Z";
-
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc::indoc! {r"
         cffi ; os_name == 'linux'
@@ -8530,7 +8512,6 @@ fn universal_transitive_disjoint_prerelease_requirement() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .arg("requirements.in")
             .arg("--universal"), @r###"
     success: true
@@ -8562,9 +8543,7 @@ fn universal_transitive_disjoint_prerelease_requirement() -> Result<()> {
 /// Ensure that the global pre-release mode is respected across forks.
 #[test]
 fn universal_prerelease_mode() -> Result<()> {
-    static EXCLUDE_NEWER: &str = "2024-07-17T00:00:00Z";
-
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc::indoc! {r"
         cffi ; os_name == 'linux'
@@ -8572,7 +8551,6 @@ fn universal_prerelease_mode() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .arg("--prerelease=allow")
             .arg("requirements.in")
             .arg("--universal"), @r###"
@@ -8598,9 +8576,7 @@ fn universal_prerelease_mode() -> Result<()> {
 /// we should prefer the pre-release version in both forks.
 #[test]
 fn universal_overlapping_prerelease_requirement() -> Result<()> {
-    static EXCLUDE_NEWER: &str = "2024-07-17T00:00:00Z";
-
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -8620,7 +8596,6 @@ fn universal_overlapping_prerelease_requirement() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .arg("requirements.in")
             .arg("--universal"), @r###"
     success: true
@@ -8649,9 +8624,7 @@ fn universal_overlapping_prerelease_requirement() -> Result<()> {
 /// we should fork the root requirement.
 #[test]
 fn universal_disjoint_prerelease_requirement() -> Result<()> {
-    static EXCLUDE_NEWER: &str = "2024-07-17T00:00:00Z";
-
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -8674,7 +8647,6 @@ fn universal_disjoint_prerelease_requirement() -> Result<()> {
     // Some marker expressions on the output here are missing due to https://github.com/astral-sh/uv/issues/5086,
     // but the pre-release versions are still respected correctly.
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .arg("requirements.in")
             .arg("--universal"), @r###"
     success: true
@@ -12984,13 +12956,12 @@ fn file_url() -> Result<()> {
 /// Allow `--no-binary` to override `--only-binary`, to allow select source distributions.
 #[test]
 fn no_binary_only_binary() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("source-distribution<=0.0.1")?;
 
     uv_snapshot!(context
         .pip_compile()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--only-binary")
         .arg(":all:"), @r###"
@@ -13009,7 +12980,6 @@ fn no_binary_only_binary() -> Result<()> {
 
     uv_snapshot!(context
         .pip_compile()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--only-binary")
         .arg(":all:")
@@ -13306,13 +13276,12 @@ fn universal_constrained_environment() -> Result<()> {
 /// Resolve a package that has no versions that satisfy the current Python version.
 #[test]
 fn compile_enumerate_no_versions() -> Result<()> {
-    let context = TestContext::new("3.10");
+    let context = TestContext::new("3.10").with_exclude_newer("2024-12-01");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("rooster-blue")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("requirements.in")
-        .env(EnvVars::UV_EXCLUDE_NEWER, "2024-12-01"),
+        .arg("requirements.in"),
     @r###"
     success: false
     exit_code: 1
@@ -13725,15 +13694,14 @@ fn prune_unreachable() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/8767>
 #[test]
 fn unsupported_requires_python_static_metadata() -> Result<()> {
-    let context = TestContext::new("3.11");
+    let context = TestContext::new("3.11").with_exclude_newer("2024-11-04T00:00:00Z");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("interpreters-pep-734 <= 0.4.1 ; python_version >= '3.13'")?;
 
     uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("--universal")
-        .arg("requirements.in")
-        .env(EnvVars::UV_EXCLUDE_NEWER, "2024-11-04T00:00:00Z"), @r###"
+        .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13755,15 +13723,14 @@ fn unsupported_requires_python_static_metadata() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/8767>
 #[test]
 fn unsupported_requires_python_dynamic_metadata() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.8").with_exclude_newer("2024-11-04T00:00:00Z");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("source-distribution==0.0.3 ; python_version >= '3.10'")?;
 
     uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("--universal")
-        .arg("requirements.in")
-        .env(EnvVars::UV_EXCLUDE_NEWER, "2024-11-04T00:00:00Z"), @r###"
+        .arg("requirements.in"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -14255,7 +14222,7 @@ fn compile_lowest_extra_unpinned_warning() -> Result<()> {
 
 #[test]
 fn disjoint_requires_python() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.8").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc::indoc! {r"
@@ -14265,8 +14232,7 @@ fn disjoint_requires_python() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("--universal")
-        .arg(requirements_in.path())
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+        .arg(requirements_in.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14356,9 +14322,7 @@ fn dynamic_version_source_dist() -> Result<()> {
 
 #[test]
 fn max_python_requirement() -> Result<()> {
-    static EXCLUDE_NEWER: &str = "2024-12-18T00:00:00Z";
-
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.8").with_exclude_newer("2024-12-18T00:00:00Z");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc::indoc! {r"
         nox >=2024.04.15
@@ -14366,7 +14330,6 @@ fn max_python_requirement() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .arg("requirements.in")
             .arg("--fork-strategy")
             .arg("requires-python")
@@ -14434,7 +14397,6 @@ fn max_python_requirement() -> Result<()> {
     );
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
             .arg("requirements.in")
             .arg("--fork-strategy")
             .arg("fewest")
@@ -14541,15 +14503,12 @@ fn respect_index_preference() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/10957>
 #[test]
 fn compile_preserve_requires_python_split() -> Result<()> {
-    static EXCLUDE_NEWER: &str = "2025-01-01T00:00:00Z";
-
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.8").with_exclude_newer("2025-01-01T00:00:00Z");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("zipp")?;
 
     uv_snapshot!(context
         .pip_compile()
-        .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
         .arg("--python-version")
         .arg("3.8")
         .arg("--universal")
@@ -14573,7 +14532,6 @@ fn compile_preserve_requires_python_split() -> Result<()> {
     // Re-running shouldn't change the output.
     uv_snapshot!(context
         .pip_compile()
-        .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
         .arg("--python-version")
         .arg("3.8")
         .arg("--universal")
