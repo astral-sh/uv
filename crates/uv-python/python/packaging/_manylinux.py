@@ -204,13 +204,13 @@ def _is_compatible(arch: str, version: _GLibCVersion) -> bool:
     return True
 
 
-_LEGACY_MANYLINUX_MAP = {
+_LEGACY_MANYLINUX_MAP: dict[_GLibCVersion, str] = {
     # CentOS 7 w/ glibc 2.17 (PEP 599)
-    (2, 17): "manylinux2014",
+    _GLibCVersion(2, 17): "manylinux2014",
     # CentOS 6 w/ glibc 2.12 (PEP 571)
-    (2, 12): "manylinux2010",
+    _GLibCVersion(2, 12): "manylinux2010",
     # CentOS 5 w/ glibc 2.5 (PEP 513)
-    (2, 5): "manylinux1",
+    _GLibCVersion(2, 5): "manylinux1",
 }
 
 
