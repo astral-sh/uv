@@ -382,7 +382,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         Self::reprioritize_conflicts(&mut state);
 
                         trace!(
-                            "assigned packages: {}",
+                            "Assigned packages: {}",
                             state
                                 .pubgrub
                                 .partial_solution
@@ -1974,7 +1974,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // supported by the root, skip it.
         if python_marker.is_disjoint(requirement.marker) {
             trace!(
-                "skipping {requirement} because of Requires-Python: {requires_python}",
+                "Skipping {requirement} because of Requires-Python: {requires_python}",
                 requires_python = python_requirement.target(),
             );
             return false;
@@ -1983,7 +1983,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // If we're in a fork in universal mode, ignore any dependency that isn't part of
         // this fork (but will be part of another fork).
         if !env.included_by_marker(requirement.marker) {
-            trace!("skipping {requirement} because of {env}");
+            trace!("Skipping {requirement} because of {env}");
             return false;
         }
 
@@ -2022,7 +2022,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                         if marker.is_false() {
                             trace!(
-                                "skipping {constraint} because of disjoint markers: `{}` vs. `{}`",
+                                "Skipping {constraint} because of disjoint markers: `{}` vs. `{}`",
                                 constraint.marker.try_to_string().unwrap(),
                                 requirement.marker.try_to_string().unwrap(),
                             );
@@ -2046,7 +2046,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                     if marker.is_false() {
                         trace!(
-                            "skipping {constraint} because of disjoint markers: `{}` vs. `{}`",
+                            "Skipping {constraint} because of disjoint markers: `{}` vs. `{}`",
                             constraint.marker.try_to_string().unwrap(),
                             requirement.marker.try_to_string().unwrap(),
                         );
@@ -2058,7 +2058,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     // constraint should only apply when _both_ markers are true.
                     if python_marker.is_disjoint(marker) {
                         trace!(
-                            "skipping constraint {requirement} because of Requires-Python: {requires_python}"
+                            "Skipping constraint {requirement} because of Requires-Python: {requires_python}"
                         );
                         return None;
                     }
@@ -2080,7 +2080,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // If we're in a fork in universal mode, ignore any dependency that isn't part of
                 // this fork (but will be part of another fork).
                 if !env.included_by_marker(constraint.marker) {
-                    trace!("skipping {constraint} because of {env}");
+                    trace!("Skipping {constraint} because of {env}");
                     return None;
                 }
 
