@@ -14,25 +14,28 @@ description:
     Check out the [`uv-docker-example`](https://github.com/astral-sh/uv-docker-example) project for
     an example of best practices when using uv to build an application in Docker.
 
-### Running uv in a container
+uv provides both _distroless_ Docker images, which are useful for
+[copying uv binaries](#installing-uv) into your own image builds, and images derived from popular
+base images, which are useful for using uv in a container. The distroless images do not contain
+anything but the uv binaries. In contrast, the derived images include an operating system with uv
+pre-installed.
 
-A Docker image is published with a built version of uv available. To run a uv command in a
-container:
+As an example, to run uv in a container using a Debian-based image:
 
 ```console
-$ docker run ghcr.io/astral-sh/uv --help
+$ docker run --rm -it ghcr.io/astral-sh/uv:debian uv --help
 ```
 
 ### Available images
 
-uv provides a distroless Docker image including the `uv` binary. The following tags are published:
+The following distroless images are available:
 
 - `ghcr.io/astral-sh/uv:latest`
 - `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.5.25`
 - `ghcr.io/astral-sh/uv:{major}.{minor}`, e.g., `ghcr.io/astral-sh/uv:0.5` (the latest patch
   version)
 
-In addition, uv publishes the following images:
+And the following derived images are available:
 
 <!-- prettier-ignore -->
 - Based on `alpine:3.20`:
@@ -67,7 +70,7 @@ In addition, uv publishes the following images:
     - `ghcr.io/astral-sh/uv:python3.8-bookworm-slim`
 <!-- prettier-ignore-end -->
 
-As with the distroless image, each image is published with uv version tags as
+As with the distroless image, each derived image is published with uv version tags as
 `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}-{base}` and
 `ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.5.25-alpine`.
 
