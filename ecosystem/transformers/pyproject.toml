@@ -241,7 +241,8 @@ agents = [
     "Pillow>=10.0.1,<=15.0"
 ]
 
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "GitPython<3.1.19",
     "Pillow>=10.0.1,<=15.0",
     "accelerate>=0.21.0",
