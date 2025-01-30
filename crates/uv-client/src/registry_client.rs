@@ -489,7 +489,7 @@ impl RegistryClient {
         &self,
         built_dist: &BuiltDist,
         capabilities: &IndexCapabilities,
-    ) -> Result<ResolutionMetadata, Error> {
+    ) -> Result<OwnedArchive<ResolutionMetadata>, Error> {
         let metadata = match &built_dist {
             BuiltDist::Registry(wheels) => {
                 #[derive(Debug, Clone)]
@@ -539,13 +539,16 @@ impl RegistryClient {
                             .map_err(|err| {
                                 ErrorKind::Metadata(path.to_string_lossy().to_string(), err)
                             })?;
-                        ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
-                            ErrorKind::MetadataParseError(
-                                wheel.filename.clone(),
-                                built_dist.to_string(),
-                                Box::new(err),
-                            )
-                        })?
+                        let unarchived =
+                            ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
+                                ErrorKind::MetadataParseError(
+                                    wheel.filename.clone(),
+                                    built_dist.to_string(),
+                                    Box::new(err),
+                                )
+                            })?;
+                        let archived = OwnedArchive::from_unarchived(&unarchived)?;
+                        archived
                     }
                     WheelLocation::Url(url) => {
                         self.wheel_metadata_registry(&wheel.index, &wheel.file, &url, capabilities)
@@ -573,13 +576,14 @@ impl RegistryClient {
                     .map_err(|err| {
                         ErrorKind::Metadata(wheel.install_path.to_string_lossy().to_string(), err)
                     })?;
-                ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
+                let unarchived = ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
                     ErrorKind::MetadataParseError(
                         wheel.filename.clone(),
                         built_dist.to_string(),
                         Box::new(err),
                     )
-                })?
+                })?;
+                OwnedArchive::from_unarchived(&unarchived)?
             }
         };
 
@@ -600,7 +604,7 @@ impl RegistryClient {
         file: &File,
         url: &Url,
         capabilities: &IndexCapabilities,
-    ) -> Result<ResolutionMetadata, Error> {
+    ) -> Result<OwnedArchive<ResolutionMetadata>, Error> {
         // If the metadata file is available at its own url (PEP 658), download it from there.
         let filename = WheelFilename::from_str(&file.filename).map_err(ErrorKind::WheelFilename)?;
         if file.dist_info_metadata {
@@ -634,7 +638,7 @@ impl RegistryClient {
                     .await
                     .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
 
-                info_span!("parse_metadata21")
+                let unarchived = info_span!("parse_metadata21")
                     .in_scope(|| ResolutionMetadata::parse_metadata(bytes.as_ref()))
                     .map_err(|err| {
                         Error::from(ErrorKind::MetadataParseError(
@@ -642,7 +646,9 @@ impl RegistryClient {
                             url.to_string(),
                             Box::new(err),
                         ))
-                    })
+                    })?;
+                let archived = OwnedArchive::from_unarchived(&unarchived)?;
+                Ok::<_, Error>(archived)
             };
             let req = self
                 .uncached_client(&url)
@@ -651,7 +657,7 @@ impl RegistryClient {
                 .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
             Ok(self
                 .cached_client()
-                .get_serde_with_retry(req, &cache_entry, cache_control, response_callback)
+                .get_cacheable_with_retry(req, &cache_entry, cache_control, response_callback)
                 .await?)
         } else {
             // If we lack PEP 658 support, try using HTTP range requests to read only the
@@ -676,7 +682,7 @@ impl RegistryClient {
         index: Option<&'data IndexUrl>,
         cache_shard: WheelCache<'data>,
         capabilities: &'data IndexCapabilities,
-    ) -> Result<ResolutionMetadata, Error> {
+    ) -> Result<OwnedArchive<ResolutionMetadata>, Error> {
         let cache_entry = self.cache.entry(
             CacheBucket::Wheels,
             cache_shard.wheel_dir(filename.name.as_ref()),
@@ -730,7 +736,7 @@ impl RegistryClient {
                     .map_err(|err| ErrorKind::AsyncHttpRangeReader(url.clone(), err))?;
                     trace!("Getting metadata for {filename} by range request");
                     let text = wheel_metadata_from_remote_zip(filename, url, &mut reader).await?;
-                    let metadata =
+                    let unarchived =
                         ResolutionMetadata::parse_metadata(text.as_bytes()).map_err(|err| {
                             Error::from(ErrorKind::MetadataParseError(
                                 filename.clone(),
@@ -738,7 +744,8 @@ impl RegistryClient {
                                 Box::new(err),
                             ))
                         })?;
-                    Ok::<ResolutionMetadata, CachedClientError<Error>>(metadata)
+                    let archived = OwnedArchive::from_unarchived(&unarchived)?;
+                    Ok(archived)
                 }
                 .boxed_local()
                 .instrument(info_span!("read_metadata_range_request", wheel = %filename))
@@ -746,7 +753,7 @@ impl RegistryClient {
 
             let result = self
                 .cached_client()
-                .get_serde_with_retry(
+                .get_cacheable_with_retry(
                     req,
                     &cache_entry,
                     cache_control,
@@ -796,15 +803,17 @@ impl RegistryClient {
                     .map_err(|err| self.handle_response_errors(err))
                     .into_async_read();
 
-                read_metadata_async_stream(filename, url.as_ref(), reader)
+                let unarchived = read_metadata_async_stream(filename, url.as_ref(), reader)
                     .await
-                    .map_err(|err| ErrorKind::Metadata(url.to_string(), err))
+                    .map_err(|err| ErrorKind::Metadata(url.to_string(), err))?;
+                let archived = OwnedArchive::from_unarchived(&unarchived)?;
+                Ok(archived)
             }
             .instrument(info_span!("read_metadata_stream", wheel = %filename))
         };
 
         self.cached_client()
-            .get_serde_with_retry(req, &cache_entry, cache_control, read_metadata_stream)
+            .get_cacheable_with_retry(req, &cache_entry, cache_control, read_metadata_stream)
             .await
             .map_err(crate::Error::from)
     }

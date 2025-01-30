@@ -2,8 +2,6 @@ use std::borrow::Cow;
 use std::cmp::PartialEq;
 use std::str::FromStr;
 
-use serde::{Deserialize, Deserializer, Serialize};
-
 use uv_small_str::SmallString;
 
 use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNameError};
@@ -22,7 +20,7 @@ use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNam
     PartialOrd,
     Ord,
     Hash,
-    Serialize,
+    serde::Serialize,
     rkyv::Archive,
     rkyv::Deserialize,
     rkyv::Serialize,
@@ -83,10 +81,10 @@ impl FromStr for PackageName {
     }
 }
 
-impl<'de> Deserialize<'de> for PackageName {
+impl<'de> serde::Deserialize<'de> for PackageName {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'de>,
+        D: serde::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
         Self::from_str(&s).map_err(serde::de::Error::custom)

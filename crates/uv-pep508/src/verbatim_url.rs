@@ -6,22 +6,99 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
-use arcstr::ArcStr;
 use regex::Regex;
 use thiserror::Error;
-use url::{ParseError, Url};
 
 use uv_fs::{normalize_absolute_path, normalize_url_path};
+use uv_small_str::SmallString;
 
 use crate::Pep508Url;
 
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
+struct Url(url::Url);
+
+impl Url {
+    pub fn parse(s: &str) -> Result<Self, url::ParseError> {
+        Ok(Self(url::Url::parse(s)?))
+    }
+
+    pub fn from_file_path(path: impl AsRef<Path>) -> Result<Self, ()> {
+        Ok(Self(url::Url::from_file_path(path)?))
+    }
+
+    pub fn set_fragment(&mut self, fragment: Option<&str>) {
+        self.0.set_fragment(fragment);
+    }
+
+    pub fn to_file_path(&self) -> Result<PathBuf, ()> {
+        self.0.to_file_path().map_err(|_| ())
+    }
+}
+
+impl core::fmt::Debug for Url {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Debug::fmt(&self.0, f)
+    }
+}
+
+impl core::fmt::Display for Url {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl std::str::FromStr for Url {
+    type Err = url::ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::parse(s)
+    }
+}
+
+/// An [`rkyv`] implementation for [`SmallString`].
+impl rkyv::Archive for Url {
+    type Archived = rkyv::string::ArchivedString;
+    type Resolver = rkyv::string::StringResolver;
+
+    #[inline]
+    fn resolve(&self, resolver: Self::Resolver, out: rkyv::Place<Self::Archived>) {
+        rkyv::string::ArchivedString::resolve_from_str(self.0.as_str(), resolver, out);
+    }
+}
+
+impl<S> rkyv::Serialize<S> for Url
+where
+    S: rkyv::rancor::Fallible + rkyv::ser::Allocator + rkyv::ser::Writer + ?Sized,
+    S::Error: rkyv::rancor::Source,
+{
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        rkyv::string::ArchivedString::serialize_from_str(self.0.as_str(), serializer)
+    }
+}
+
+impl<D: rkyv::rancor::Fallible + ?Sized> rkyv::Deserialize<Url, D>
+    for rkyv::string::ArchivedString
+{
+    fn deserialize(&self, _deserializer: &mut D) -> Result<Url, D::Error> {
+        Ok(Url::parse(self.as_str()).unwrap())
+    }
+}
+
 /// A wrapper around [`Url`] that preserves the original string.
 #[derive(Debug, Clone, Eq)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+)]
+#[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 pub struct VerbatimUrl {
     /// The parsed URL.
     url: Url,
     /// The URL as it was provided by the user.
-    given: Option<ArcStr>,
+    given: Option<SmallString>,
 }
 
 impl Hash for VerbatimUrl {
@@ -38,12 +115,15 @@ impl PartialEq for VerbatimUrl {
 
 impl VerbatimUrl {
     /// Create a [`VerbatimUrl`] from a [`Url`].
-    pub fn from_url(url: Url) -> Self {
-        Self { url, given: None }
+    pub fn from_url(url: url::Url) -> Self {
+        Self {
+            url: Url(url),
+            given: None,
+        }
     }
 
     /// Parse a URL from a string, expanding any environment variables.
-    pub fn parse_url(given: impl AsRef<str>) -> Result<Self, ParseError> {
+    pub fn parse_url(given: impl AsRef<str>) -> Result<Self, url::ParseError> {
         let url = Url::parse(given.as_ref())?;
         Ok(Self { url, given: None })
     }
@@ -144,7 +224,7 @@ impl VerbatimUrl {
     #[must_use]
     pub fn with_given(self, given: impl AsRef<str>) -> Self {
         Self {
-            given: Some(ArcStr::from(given.as_ref())),
+            given: Some(SmallString::from(given.as_ref())),
             ..self
         }
     }
@@ -155,18 +235,18 @@ impl VerbatimUrl {
     }
 
     /// Return the underlying [`Url`].
-    pub fn raw(&self) -> &Url {
-        &self.url
+    pub fn raw(&self) -> &url::Url {
+        &self.url.0
     }
 
     /// Convert a [`VerbatimUrl`] into a [`Url`].
-    pub fn to_url(&self) -> Url {
-        self.url.clone()
+    pub fn to_url(&self) -> url::Url {
+        self.url.0.clone()
     }
 
     /// Convert a [`VerbatimUrl`] into a [`Url`].
-    pub fn into_url(self) -> Url {
-        self.url
+    pub fn into_url(self) -> url::Url {
+        self.url.0
     }
 
     /// Return the underlying [`Path`], if the URL is a file URL.
@@ -205,15 +285,15 @@ impl std::fmt::Display for VerbatimUrl {
 }
 
 impl Deref for VerbatimUrl {
-    type Target = Url;
+    type Target = url::Url;
 
     fn deref(&self) -> &Self::Target {
-        &self.url
+        &self.url.0
     }
 }
 
-impl From<Url> for VerbatimUrl {
-    fn from(url: Url) -> Self {
+impl From<url::Url> for VerbatimUrl {
+    fn from(url: url::Url) -> Self {
         VerbatimUrl::from_url(url)
     }
 }
@@ -234,7 +314,7 @@ impl<'de> serde::Deserialize<'de> for VerbatimUrl {
     where
         D: serde::Deserializer<'de>,
     {
-        let url = Url::deserialize(deserializer)?;
+        let url = url::Url::deserialize(deserializer)?;
         Ok(VerbatimUrl::from_url(url))
     }
 }
@@ -318,7 +398,7 @@ impl Pep508Url for VerbatimUrl {
 pub enum VerbatimUrlError {
     /// Failed to parse a URL.
     #[error(transparent)]
-    Url(#[from] ParseError),
+    Url(#[from] url::ParseError),
 
     /// Received a relative path, but no working directory was provided.
     #[error("relative path without a working directory: {0}")]
@@ -427,7 +507,7 @@ pub fn strip_host(path: &str) -> &str {
 }
 
 /// Returns `true` if a URL looks like a reference to a Git repository (e.g., `https://github.com/user/repo.git`).
-pub fn looks_like_git_repository(url: &Url) -> bool {
+pub fn looks_like_git_repository(url: &url::Url) -> bool {
     matches!(
         url.host_str(),
         Some("github.com" | "gitlab.com" | "bitbucket.org")
@@ -628,49 +708,49 @@ mod tests {
 
     #[test]
     fn git_repository() {
-        let url = Url::parse("https://github.com/user/repo.git").unwrap();
+        let url = url::Url::parse("https://github.com/user/repo.git").unwrap();
         assert!(looks_like_git_repository(&url));
 
-        let url = Url::parse("https://gitlab.com/user/repo.git").unwrap();
+        let url = url::Url::parse("https://gitlab.com/user/repo.git").unwrap();
         assert!(looks_like_git_repository(&url));
 
-        let url = Url::parse("https://bitbucket.org/user/repo.git").unwrap();
+        let url = url::Url::parse("https://bitbucket.org/user/repo.git").unwrap();
         assert!(looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/user/repo").unwrap();
+        let url = url::Url::parse("https://github.com/user/repo").unwrap();
         assert!(looks_like_git_repository(&url));
 
-        let url = Url::parse("https://example.com/user/repo.git").unwrap();
+        let url = url::Url::parse("https://example.com/user/repo.git").unwrap();
         assert!(!looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/user").unwrap();
+        let url = url::Url::parse("https://github.com/user").unwrap();
         assert!(!looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/user/repo.zip").unwrap();
+        let url = url::Url::parse("https://github.com/user/repo.zip").unwrap();
         assert!(!looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/").unwrap();
+        let url = url::Url::parse("https://github.com/").unwrap();
         assert!(!looks_like_git_repository(&url));
 
-        let url = Url::parse("").unwrap_err();
+        let url = url::Url::parse("").unwrap_err();
         assert_eq!(url.to_string(), "relative URL without a base");
 
-        let url = Url::parse("github.com/user/repo.git").unwrap_err();
+        let url = url::Url::parse("github.com/user/repo.git").unwrap_err();
         assert_eq!(url.to_string(), "relative URL without a base");
 
-        let url = Url::parse("https://github.com/user/repo/extra.git").unwrap();
+        let url = url::Url::parse("https://github.com/user/repo/extra.git").unwrap();
         assert!(!looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/user/repo.GIT").unwrap();
+        let url = url::Url::parse("https://github.com/user/repo.GIT").unwrap();
         assert!(looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/user/repo.git?foo=bar").unwrap();
+        let url = url::Url::parse("https://github.com/user/repo.git?foo=bar").unwrap();
         assert!(looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/user/repo.git#readme").unwrap();
+        let url = url::Url::parse("https://github.com/user/repo.git#readme").unwrap();
         assert!(looks_like_git_repository(&url));
 
-        let url = Url::parse("https://github.com/pypa/pip/archive/1.3.1.zip#sha1=da9234ee9982d4bbb3c72346a6de940a148ea686").unwrap();
+        let url = url::Url::parse("https://github.com/pypa/pip/archive/1.3.1.zip#sha1=da9234ee9982d4bbb3c72346a6de940a148ea686").unwrap();
         assert!(!looks_like_git_repository(&url));
     }
 }

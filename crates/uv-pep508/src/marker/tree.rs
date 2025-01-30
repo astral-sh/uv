@@ -20,6 +20,7 @@ use crate::marker::lowering::{
 use crate::marker::parse;
 use crate::{
     MarkerEnvironment, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter, TracingReporter,
+    VerbatimUrl,
 };
 
 /// Ways in which marker evaluation can fail
@@ -660,6 +661,40 @@ impl FromStr for MarkerTree {
 
     fn from_str(markers: &str) -> Result<Self, Self::Err> {
         parse::parse_markers(markers, &mut TracingReporter)
+    }
+}
+
+/// An [`rkyv`] implementation for [`SmallString`].
+impl rkyv::Archive for MarkerTree {
+    type Archived = rkyv::string::ArchivedString;
+    type Resolver = rkyv::string::StringResolver;
+
+    #[inline]
+    fn resolve(&self, resolver: Self::Resolver, out: rkyv::Place<Self::Archived>) {
+        let s = self.try_to_string().unwrap_or_else(|| "true".to_string());
+        rkyv::string::ArchivedString::resolve_from_str(&s, resolver, out);
+    }
+}
+
+impl<S> rkyv::Serialize<S> for MarkerTree
+where
+    S: rkyv::rancor::Fallible + rkyv::ser::Allocator + rkyv::ser::Writer + ?Sized,
+    S::Error: rkyv::rancor::Source,
+{
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        let s = self.try_to_string().unwrap_or_else(|| "true".to_string());
+        rkyv::string::ArchivedString::serialize_from_str(&s, serializer)
+    }
+}
+
+impl<D: rkyv::rancor::Fallible + ?Sized> rkyv::Deserialize<MarkerTree, D>
+    for rkyv::string::ArchivedString
+{
+    fn deserialize(&self, _deserializer: &mut D) -> Result<MarkerTree, D::Error> {
+        match self.as_str() {
+            "true" => Ok(MarkerTree::TRUE),
+            s => Ok(MarkerTree::parse_str::<VerbatimUrl>(s).unwrap()),
+        }
     }
 }
 

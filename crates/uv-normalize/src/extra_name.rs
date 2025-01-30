@@ -2,8 +2,6 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
-use serde::{Deserialize, Deserializer, Serialize};
-
 use uv_small_str::SmallString;
 
 use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNameError};
@@ -16,8 +14,21 @@ use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNam
 /// See:
 /// - <https://peps.python.org/pep-0685/#specification/>
 /// - <https://packaging.python.org/en/latest/specifications/name-normalization/>
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[rkyv(derive(Debug))]
 pub struct ExtraName(SmallString);
 
 impl ExtraName {
@@ -40,10 +51,10 @@ impl FromStr for ExtraName {
     }
 }
 
-impl<'de> Deserialize<'de> for ExtraName {
+impl<'de> serde::Deserialize<'de> for ExtraName {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'de>,
+        D: serde::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
         Self::from_str(&s).map_err(serde::de::Error::custom)

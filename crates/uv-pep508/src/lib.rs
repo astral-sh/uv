@@ -16,12 +16,13 @@
 
 #![warn(missing_docs)]
 
+use rkyv::string::ArchivedString;
+use rkyv::Place;
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::path::Path;
 use std::str::FromStr;
-
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
 
@@ -41,6 +42,7 @@ pub use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 // https://github.com/konstin/pep508_rs/issues/19
 pub use uv_pep440;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
+use uv_small_str::SmallString;
 pub use verbatim_url::{
     expand_env_vars, looks_like_git_repository, split_scheme, strip_host, Scheme, VerbatimUrl,
     VerbatimUrlError,
@@ -118,7 +120,12 @@ impl<E: Error + Debug, T: Pep508Url<Err = E>> std::error::Error for Pep508Error<
 
 /// A PEP 508 dependency specifier.
 #[derive(Hash, Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub struct Requirement<T: Pep508Url = VerbatimUrl> {
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+)]
+// #[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
+pub struct Requirement<T: Pep508Url> {
     /// The distribution name such as `requests` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
     pub name: PackageName,
@@ -233,7 +240,7 @@ impl<T: Pep508Url> Requirement<T> {
 }
 
 /// Type to parse URLs from `name @ <url>` into. Defaults to [`Url`].
-pub trait Pep508Url: Display + Debug + Sized {
+pub trait Pep508Url: Display + Debug + Sized + rkyv::Archive {
     /// String to URL parsing error
     type Err: Error + Debug;
 
@@ -241,13 +248,13 @@ pub trait Pep508Url: Display + Debug + Sized {
     fn parse_url(url: &str, working_dir: Option<&Path>) -> Result<Self, Self::Err>;
 }
 
-impl Pep508Url for Url {
-    type Err = url::ParseError;
-
-    fn parse_url(url: &str, _working_dir: Option<&Path>) -> Result<Self, Self::Err> {
-        Url::parse(url)
-    }
-}
+// impl Pep508Url for Url {
+//     type Err = url::ParseError;
+//
+//     fn parse_url(url: &str, _working_dir: Option<&Path>) -> Result<Self, Self::Err> {
+//         Url::parse(url)
+//     }
+// }
 
 /// A reporter for warnings that occur during marker parsing or evaluation.
 pub trait Reporter {
@@ -345,12 +352,71 @@ impl Extras {
 
 /// The actual version specifier or URL to install.
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+)]
+// #[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 pub enum VersionOrUrl<T: Pep508Url = VerbatimUrl> {
     /// A PEP 440 version specifier set
     VersionSpecifier(VersionSpecifiers),
     /// A installable URL
     Url(T),
 }
+
+// impl<T: Pep508Url + rkyv::Archive> rkyv::Archive for VersionOrUrl<T> {
+//     type Archived = ArchivedString;
+//     type Resolver = T::Resolver;
+//
+//     fn resolve(&self, resolver: Self::Resolver, out: Place<Self::Archived>) {
+//         match self {
+//             Self::VersionSpecifier(version_specifier) => {
+//                 let archived = VersionOrUrl::VersionSpecifier(version_specifier.clone());
+//                 archived.resolve(resolver, out);
+//             }
+//             Self::Url(url) => {
+//                 let archived = VersionOrUrl::Url(url.clone());
+//                 archived.resolve(resolver, out);
+//             }
+//         }
+//     }
+// }
+//
+// impl<S, T: Pep508Url + rkyv::Serialize<S>> rkyv::Serialize<S> for VersionOrUrl<T>
+// where
+//     S: rkyv::rancor::Fallible + rkyv::ser::Allocator + rkyv::ser::Writer + ?Sized,
+//     S::Error: rkyv::rancor::Source,
+// {
+//     fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+//         match self {
+//             Self::VersionSpecifier(version_specifier) => {
+//                 let archived = VersionOrUrl::VersionSpecifier(version_specifier.clone());
+//                 archived.serialize(serializer)
+//             }
+//             Self::Url(url) => {
+//                 let archived = VersionOrUrl::Url(url.clone());
+//                 archived.serialize(serializer)
+//             }
+//         }
+//     }
+// }
+//
+// impl<D: rkyv::rancor::Fallible + ?Sized, T: Pep508Url + rkyv::Deserialize<T, D>> rkyv::Deserialize<VersionOrUrl<T>, D>
+// for VersionOrUrl<T> {
+//     fn deserialize(&self, deserializer: &mut D) -> Result<VersionOrUrl<T>, D::Error> {
+//         match self {
+//             Self::VersionSpecifier(version_specifier) => {
+//                 let archived = VersionOrUrl::VersionSpecifier(version_specifier.clone());
+//                 archived.deserialize(deserializer)
+//             }
+//             Self::Url(url) => {
+//                 let archived = VersionOrUrl::Url(url.clone());
+//                 archived.deserialize(deserializer)
+//             }
+//         }
+//     }
+// }
+//
 
 impl<T: Pep508Url> Display for VersionOrUrl<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

@@ -36,7 +36,19 @@ pub enum ParsedUrlError {
     MissingExtensionPath(PathBuf, ExtensionError),
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(
+    Debug,
+    Clone,
+    Hash,
+    PartialEq,
+    PartialOrd,
+    Eq,
+    Ord,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
 pub struct VerbatimParsedUrl {
     pub parsed_url: ParsedUrl,
     pub verbatim: VerbatimUrl,
@@ -158,7 +170,19 @@ impl Display for VerbatimParsedUrl {
 /// * A remote archive (`https://`), optional with a subdirectory (source dist only).
 ///
 /// A URL in a requirement `foo @ <url>` must be one of the above.
-#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    PartialOrd,
+    Hash,
+    Ord,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
 pub enum ParsedUrl {
     /// The direct URL is a path to a local file.
     Path(ParsedPathUrl),
@@ -186,7 +210,19 @@ impl ParsedUrl {
 /// Examples:
 /// * `file:///home/ferris/my_project/my_project-0.1.0.tar.gz`
 /// * `file:///home/ferris/my_project/my_project-0.1.0-py3-none-any.whl`
-#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    PartialOrd,
+    Hash,
+    Ord,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
 pub struct ParsedPathUrl {
     pub url: Url,
     /// The absolute path to the distribution which we use for installing.
@@ -210,7 +246,19 @@ impl ParsedPathUrl {
 ///
 /// Examples:
 /// * `file:///home/ferris/my_project`
-#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    PartialOrd,
+    Hash,
+    Ord,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
 pub struct ParsedDirectoryUrl {
     pub url: Url,
     /// The absolute path to the distribution which we use for installing.
@@ -236,7 +284,19 @@ impl ParsedDirectoryUrl {
 /// Examples:
 /// * `git+https://git.example.com/MyProject.git`
 /// * `git+https://git.example.com/MyProject.git@v1.0#egg=pkg&subdirectory=pkg_dir`
-#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    PartialOrd,
+    Hash,
+    Ord,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
 pub struct ParsedGitUrl {
     pub url: GitUrl,
     pub subdirectory: Option<PathBuf>,
@@ -286,7 +346,19 @@ impl TryFrom<Url> for ParsedGitUrl {
 /// * A built distribution: `https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1-py2.py3-none-any.whl`
 /// * A source distribution with a valid name: `https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz`
 /// * A source dist with a recognizable extension but invalid name: `https://github.com/foo-labs/foo/archive/master.zip#egg=pkg&subdirectory=packages/bar`
-#[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    Hash,
+    PartialOrd,
+    Ord,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
 pub struct ParsedArchiveUrl {
     pub url: Url,
     pub subdirectory: Option<PathBuf>,

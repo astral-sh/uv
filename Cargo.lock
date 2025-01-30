@@ -5305,6 +5305,7 @@ dependencies = [
  "insta",
  "itertools 0.14.0",
  "regex",
+ "rkyv",
  "rustc-hash",
  "schemars",
  "serde",
@@ -5318,6 +5319,7 @@ dependencies = [
  "uv-fs",
  "uv-normalize",
  "uv-pep440",
+ "uv-small-str",
  "version-ranges",
 ]
 
