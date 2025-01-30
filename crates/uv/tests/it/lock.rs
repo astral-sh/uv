@@ -23093,6 +23093,37 @@ fn lock_script_path() -> Result<()> {
 }
 
 #[test]
+fn lock_script_error() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to read `script.py` (not found); run `uv init --script script.py` to create a PEP 723 script
+    "###);
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! { r"
+        import anyio
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `script.py` does not contain a PEP 723 metadata tag; run `uv init --script script.py` to initialize the script
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn lock_pytorch_cpu() -> Result<()> {
     let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
