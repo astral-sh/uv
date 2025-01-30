@@ -24266,3 +24266,35 @@ fn lock_pytorch_preferences() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn no_warning_repeated_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        dependencies = [
+          "anyio>=4,<5",
+        ]
+
+        [project.optional-dependencies]
+        cpu = [
+          "anyio",
+        ]"#
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "###);
+
+    Ok(())
+}

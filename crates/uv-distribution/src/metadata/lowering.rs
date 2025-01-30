@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -46,6 +46,7 @@ impl LoweredRequirement {
         locations: &'data IndexLocations,
         workspace: &'data Workspace,
         lower_bound: LowerBound,
+        constrained_packages: &'data HashSet<PackageName>,
         git_member: Option<&'data GitWorkspaceMember<'data>>,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + 'data {
         // Identify the source from the `tool.uv.sources` table.
@@ -140,6 +141,7 @@ impl LoweredRequirement {
             if matches!(lower_bound, LowerBound::Warn) {
                 // Support recursive editable inclusions.
                 if has_sources
+                    && !constrained_packages.contains(&requirement.name)
                     && requirement.version_or_url.is_none()
                     && project_name.is_none_or(|project_name| *project_name != requirement.name)
                 {
@@ -256,6 +258,7 @@ impl LoweredRequirement {
                                 &requirement,
                                 index.into_url(),
                                 conflict,
+                                constrained_packages,
                                 lower_bound,
                             );
                             (source, marker)
@@ -477,6 +480,7 @@ impl LoweredRequirement {
                                 &requirement,
                                 index.into_url(),
                                 conflict,
+                                &HashSet::new(),
                                 lower_bound,
                             );
                             (source, marker)
@@ -652,11 +656,14 @@ fn registry_source(
     requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
     index: Url,
     conflict: Option<ConflictItem>,
+    constrained_packages: &HashSet<PackageName>,
     bounds: LowerBound,
 ) -> RequirementSource {
     match &requirement.version_or_url {
         None => {
-            if matches!(bounds, LowerBound::Warn) {
+            if matches!(bounds, LowerBound::Warn)
+                && !constrained_packages.contains(&requirement.name)
+            {
                 warn_user_once!(
                     "Missing version constraint (e.g., a lower bound) for `{}`",
                     requirement.name
@@ -674,7 +681,9 @@ fn registry_source(
             conflict,
         },
         Some(VersionOrUrl::Url(_)) => {
-            if matches!(bounds, LowerBound::Warn) {
+            if matches!(bounds, LowerBound::Warn)
+                && !constrained_packages.contains(&requirement.name)
+            {
                 warn_user_once!(
                     "Missing version constraint (e.g., a lower bound) for `{}` due to use of a URL specifier",
                     requirement.name
