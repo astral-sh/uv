@@ -46,8 +46,8 @@ name = "project"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-  "torch>=2.5.1",
-  "torchvision>=0.20.1",
+  "torch>=2.6.0",
+  "torchvision>=0.21.0",
 ]
 ```
 
@@ -228,8 +228,8 @@ name = "project"
 version = "0.1.0"
 requires-python = ">=3.12.0"
 dependencies = [
-  "torch>=2.5.1",
-  "torchvision>=0.20.1",
+  "torch>=2.6.0",
+  "torchvision>=0.21.0",
 ]
 
 [tool.uv.sources]
@@ -261,8 +261,8 @@ name = "project"
 version = "0.1.0"
 requires-python = ">=3.12.0"
 dependencies = [
-  "torch>=2.5.1",
-  "torchvision>=0.20.1",
+  "torch>=2.6.0",
+  "torchvision>=0.21.0",
 ]
 
 [tool.uv.sources]
@@ -295,8 +295,8 @@ name = "project"
 version = "0.1.0"
 requires-python = ">=3.12.0"
 dependencies = [
-  "torch>=2.5.1",
-  "torchvision>=0.20.1",
+  "torch>=2.6.0",
+  "torchvision>=0.21.0",
   "pytorch-triton-xpu>=3.2.0 ; sys_platform == 'linux'",
 ]
 
@@ -336,12 +336,12 @@ dependencies = []
 
 [project.optional-dependencies]
 cpu = [
-  "torch>=2.5.1",
-  "torchvision>=0.20.1",
+  "torch>=2.6.0",
+  "torchvision>=0.21.0",
 ]
 cu124 = [
-  "torch>=2.5.1",
-  "torchvision>=0.20.1",
+  "torch>=2.6.0",
+  "torchvision>=0.21.0",
 ]
 
 [tool.uv]
