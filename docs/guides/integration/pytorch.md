@@ -142,53 +142,53 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
 
 === "CUDA 11.8"
 
-    PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `platform_system` to instruct uv to ignore
-    the PyTorch index when resolving for macOS.
+    PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `platform_system` to instruct uv to use
+    the PyTorch index on Linux and Windows, but fall back to PyPI on macOS:
 
     ```toml
     [tool.uv.sources]
     torch = [
-      { index = "pytorch-cu118", marker = "platform_system != 'Darwin'" },
+      { index = "pytorch-cu118", marker = "platform_system == 'Linux' or platform_system == 'Windows'" },
     ]
     torchvision = [
-      { index = "pytorch-cu118", marker = "platform_system != 'Darwin'" },
+      { index = "pytorch-cu118", marker = "platform_system == 'Linux' or platform_system == 'Windows'" },
     ]
     ```
 
 === "CUDA 12.1"
 
-    PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `platform_system` to instruct uv to ignore
-    the PyTorch index when resolving for macOS.
+    PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `platform_system` to instruct uv to limit
+    the PyTorch index to Linux and Windows, falling back to PyPI on macOS:
 
     ```toml
     [tool.uv.sources]
     torch = [
-      { index = "pytorch-cu121", marker = "platform_system != 'Darwin'" },
+      { index = "pytorch-cu121", marker = "platform_system == 'Linux' or platform_system == 'Windows'" },
     ]
     torchvision = [
-      { index = "pytorch-cu121", marker = "platform_system != 'Darwin'" },
+      { index = "pytorch-cu121", marker = "platform_system == 'Linux' or platform_system == 'Windows'" },
     ]
     ```
 
 === "CUDA 12.4"
 
-    PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `platform_system` to instruct uv to ignore
-    the PyTorch index when resolving for macOS.
+    PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `platform_system` to instruct uv to limit
+    the PyTorch index to Linux and Windows, falling back to PyPI on macOS:
 
     ```toml
     [tool.uv.sources]
     torch = [
-      { index = "pytorch-cu124", marker = "platform_system != 'Darwin'" },
+      { index = "pytorch-cu124", marker = "platform_system == 'Linux' or platform_system == 'Windows'" },
     ]
     torchvision = [
-      { index = "pytorch-cu124", marker = "platform_system != 'Darwin'" },
+      { index = "pytorch-cu124", marker = "platform_system == 'Linux' or platform_system == 'Windows'" },
     ]
     ```
 
 === "ROCm6"
 
-    PyTorch doesn't publish ROCm6 builds for macOS or Windows. As such, we gate on `platform_system` to instruct uv to
-    ignore the PyTorch index when resolving for those platforms.
+    PyTorch doesn't publish ROCm6 builds for macOS or Windows. As such, we gate on `platform_system` to instruct uv
+    to limit the PyTorch index to Linux, falling back to PyPI on macOS and Windows:
 
     ```toml
     [tool.uv.sources]
@@ -202,16 +202,16 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
 
 === "Intel GPUs"
 
-    PyTorch doesn't publish Intel GPU builds for macOS. As such, we gate on `platform_system` to instruct uv to ignore
-    the PyTorch index when resolving for macOS.
+    PyTorch doesn't publish Intel GPU builds for macOS. As such, we gate on `platform_system` to instruct uv to limit
+    the PyTorch index to Linux and Windows, falling back to PyPI on macOS:
 
     ```toml
     [tool.uv.sources]
     torch = [
-      { index = "pytorch-xpu", marker = "platform_system != 'Darwin'" },
+      { index = "pytorch-xpu", marker = "platform_system == 'Linux' or platform_system == 'Windows'" },
     ]
     torchvision = [
-      { index = "pytorch-xpu", marker = "platform_system != 'Darwin'" },
+      { index = "pytorch-xpu", marker = "platform_system == 'Linux' or platform_system == 'Windows'" },
     ]
     # Intel GPU support relies on `pytorch-triton-xpu` on Linux, which should also be installed from the PyTorch index
     # (and included in `project.dependencies`).
