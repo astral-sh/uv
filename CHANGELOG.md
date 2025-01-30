@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.5.26
+
+### Enhancements
+
+- Add support for `uvx python` ([#11076](https://github.com/astral-sh/uv/pull/11076))
+- Allow `--no-dev --invert` in `uv tree` ([#11068](https://github.com/astral-sh/uv/pull/11068))
+- Update `uv python install --reinstall` to reinstall all previous versions ([#11072](https://github.com/astral-sh/uv/pull/11072))
+- Consistently write log messages with capitalized first word ([#11111](https://github.com/astral-sh/uv/pull/11111))
+- Suggest `--build-backend` when `--backend` is passed to `uv init` ([#10958](https://github.com/astral-sh/uv/pull/10958))
+- Improve retry trace message ([#11108](https://github.com/astral-sh/uv/pull/11108))
+
+### Performance
+
+- Remove unnecessary UTF-8 conversion in hash parsing ([#11110](https://github.com/astral-sh/uv/pull/11110))
+
+### Bug fixes
+
+- Ignore non-hash fragments in HTML API responses ([#11107](https://github.com/astral-sh/uv/pull/11107))
+- Avoid resolving symbolic links when querying Python interpreters ([#11083](https://github.com/astral-sh/uv/pull/11083))
+- Avoid sharing state between universal and non-universal resolves ([#11051](https://github.com/astral-sh/uv/pull/11051))
+- Error when `--script` is passing a non-PEP 723 script ([#11118](https://github.com/astral-sh/uv/pull/11118))
+- Make metadata deserialization failures non-fatal in the cache ([#11105](https://github.com/astral-sh/uv/pull/11105))
+- Mark metadata as dynamic when reading from built wheel cache ([#11046](https://github.com/astral-sh/uv/pull/11046))
+- Propagate credentials for `<index>/simple` to `<index>/...` endpoints ([#11074](https://github.com/astral-sh/uv/pull/11074))
+- Fix conflicting extra bug during `uv sync` ([#11075](https://github.com/astral-sh/uv/pull/11075))
+
+### Documentation
+
+- Add PyTorch XPU instructions to the PyTorch guide ([#11109](https://github.com/astral-sh/uv/pull/11109))
+- Add docs for signal handling ([#11041](https://github.com/astral-sh/uv/pull/11041))
+- Explain build frontend vs. build backend ([#11094](https://github.com/astral-sh/uv/pull/11094))
+- Fix formatting of `RUST_LOG` documentation ([#10053](https://github.com/astral-sh/uv/pull/10053))
+- Fix typo in `--no-deps` description ([#11073](https://github.com/astral-sh/uv/pull/11073))
+- Reflow CLI documentation comments ([#11040](https://github.com/astral-sh/uv/pull/11040))
+- Shorten "Using existing Python versions" nav item so it fits on one line ([#11077](https://github.com/astral-sh/uv/pull/11077))
+- Some minor touch-ups to the Python install guide ([#11116](https://github.com/astral-sh/uv/pull/11116))
+- Update Dependabot tracking issue link ([#11054](https://github.com/astral-sh/uv/pull/11054))
+- Update documentation for running in a container ([#11052](https://github.com/astral-sh/uv/pull/11052))
+- Upgrade PyTorch version in documentation ([#11114](https://github.com/astral-sh/uv/pull/11114))
+- Use `sys_platform` in lieu of `platform_system` in PyTorch docs ([#11113](https://github.com/astral-sh/uv/pull/11113))
+- Use positive (rather than negative) markers in PyTorch examples ([#11112](https://github.com/astral-sh/uv/pull/11112))
+- Fix unnecessary backslashes in brackets ([#11059](https://github.com/astral-sh/uv/pull/11059))
+- Suggest setting copy link mode in GitLab integration guide ([#11067](https://github.com/astral-sh/uv/pull/11067))
+
 ## 0.5.25
 
 ### Enhancements
