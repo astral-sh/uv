@@ -12,7 +12,7 @@ pre-built artifacts that can be installed directly.
 
     When running `uv build`, uv is the build frontend and only determines the Python version. The
     contents of the files and their filenames are determined by the build backend, as defined
-    in `[build-system]`. Information about build configuration can be bound in the respective tool's
+    in `[build-system]`. Information about build configuration can be found in the respective tool's
     documentation.
 
 ## Using `uv build`
