@@ -39,7 +39,7 @@ pub fn store_credentials_from_url(url: &Url) -> bool {
 /// Populate the global authentication store with credentials on a URL, if there are any.
 ///
 /// Returns `true` if the store was updated.
-pub fn store_credentials(url: &Url, credentials: Credentials) {
+pub fn store_credentials(url: &Url, credentials: Arc<Credentials>) {
     trace!("Caching credentials for {url}");
-    CREDENTIALS_CACHE.insert(url, Arc::new(credentials));
+    CREDENTIALS_CACHE.insert(url, credentials);
 }

@@ -8347,15 +8347,14 @@ fn lock_multiple_indexes_same_realm_different_credentials() -> Result<()> {
         .env(EnvVars::index_password("INTERNAL_PROXY_HERON"), "heron")
         .env(EnvVars::index_username("INTERNAL_PROXY_EAGLE"), "public")
         .env(EnvVars::index_password("INTERNAL_PROXY_EAGLE"), "eagle"), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     warning: Missing version constraint (e.g., a lower bound) for `iniconfig`
     warning: Missing version constraint (e.g., a lower bound) for `anyio`
-    error: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth-heron/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl.metadata`
-      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth-heron/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl.metadata)
+    Resolved 5 packages in [TIME]
     "###);
 
     Ok(())
