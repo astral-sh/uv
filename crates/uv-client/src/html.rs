@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use jiff::Timestamp;
 use tl::HTMLTag;
 use tracing::{instrument, warn};
 use url::Url;
@@ -167,6 +168,28 @@ impl SimpleHtml {
             None
         };
 
+        // Extract the `size` field, which should be set on the `data-size` attribute. This isn't
+        // included in PEP 700, which omits the HTML API, but we respect it anyway. Since this
+        // field isn't standardized, we discard errors.
+        let size = link
+            .attributes()
+            .get("data-size")
+            .flatten()
+            .and_then(|size| std::str::from_utf8(size.as_bytes()).ok())
+            .map(|size| html_escape::decode_html_entities(size))
+            .and_then(|size| size.parse().ok());
+
+        // Extract the `upload-time` field, which should be set on the `data-upload-time` attribute. This isn't
+        // included in PEP 700, which omits the HTML API, but we respect it anyway. Since this
+        // field isn't standardized, we discard errors.
+        let upload_time = link
+            .attributes()
+            .get("data-upload-time")
+            .flatten()
+            .and_then(|upload_time| std::str::from_utf8(upload_time.as_bytes()).ok())
+            .map(|upload_time| html_escape::decode_html_entities(upload_time))
+            .and_then(|upload_time| Timestamp::from_str(&upload_time).ok());
+
         Ok(Some(File {
             core_metadata,
             dist_info_metadata: None,
@@ -176,8 +199,8 @@ impl SimpleHtml {
             hashes,
             filename: filename.to_string(),
             url: decoded.to_string(),
-            size: None,
-            upload_time: None,
+            size,
+            upload_time,
         }))
     }
 }

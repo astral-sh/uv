@@ -6930,7 +6930,7 @@ fn add_no_warn_index_url() -> Result<()> {
 /// Add an index provided via `--index`.
 #[test]
 fn add_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -6944,7 +6944,7 @@ fn add_index() -> Result<()> {
         constraint-dependencies = ["markupsafe<3"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").arg("--index").arg("https://pypi.org/simple").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").arg("--index").arg("https://pypi.org/simple"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6990,6 +6990,9 @@ fn add_index() -> Result<()> {
         version = 1
         requires-python = ">=3.12"
 
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
+
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
 
@@ -7017,7 +7020,7 @@ fn add_index() -> Result<()> {
     });
 
     // Adding a subsequent index should put it _above_ the existing index.
-    uv_snapshot!(context.filters(), context.add().arg("jinja2").arg("--index").arg("pytorch=https://download.pytorch.org/whl/cu121").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("jinja2").arg("--index").arg("pytorch=https://astral-sh.github.io/pytorch-mirror/whl/cu121"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7051,7 +7054,7 @@ fn add_index() -> Result<()> {
 
         [[tool.uv.index]]
         name = "pytorch"
-        url = "https://download.pytorch.org/whl/cu121"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu121"
 
         [tool.uv.sources]
         jinja2 = { index = "pytorch" }
@@ -7072,6 +7075,9 @@ fn add_index() -> Result<()> {
         version = 1
         requires-python = ">=3.12"
 
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
+
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
 
@@ -7087,7 +7093,7 @@ fn add_index() -> Result<()> {
         [[package]]
         name = "jinja2"
         version = "3.1.4"
-        source = { registry = "https://download.pytorch.org/whl/cu121" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu121" }
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -7098,7 +7104,7 @@ fn add_index() -> Result<()> {
         [[package]]
         name = "markupsafe"
         version = "2.1.5"
-        source = { registry = "https://download.pytorch.org/whl/cu121" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu121" }
         sdist = { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5.tar.gz" }
         wheels = [
             { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:8dec4936e9c3100156f8a2dc89c4b88d5c435175ff03413b443469c7c8c5f4d1" },
@@ -7121,14 +7127,14 @@ fn add_index() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "iniconfig", specifier = "==2.0.0" },
-            { name = "jinja2", specifier = ">=3.1.4", index = "https://download.pytorch.org/whl/cu121" },
+            { name = "jinja2", specifier = ">=3.1.4", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu121" },
         ]
         "###
         );
     });
 
     // Adding a subsequent index with the same name should replace it.
-    uv_snapshot!(context.filters(), context.add().arg("jinja2").arg("--index").arg("pytorch=https://test.pypi.org/simple").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("jinja2").arg("--index").arg("pytorch=https://test.pypi.org/simple"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7179,6 +7185,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
 
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
@@ -7241,7 +7250,7 @@ fn add_index() -> Result<()> {
     });
 
     // Adding a subsequent index with the same URL should bump it to the top.
-    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--index").arg("https://pypi.org/simple").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--index").arg("https://pypi.org/simple"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7295,6 +7304,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
 
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
@@ -7368,7 +7380,7 @@ fn add_index() -> Result<()> {
     });
 
     // Adding a subsequent index with the same URL should bump it to the top, but retain the name.
-    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--index").arg("https://test.pypi.org/simple").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--index").arg("https://test.pypi.org/simple"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7420,6 +7432,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
 
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]

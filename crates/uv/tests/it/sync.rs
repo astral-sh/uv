@@ -5011,7 +5011,7 @@ fn sync_all_groups() -> Result<()> {
 
 #[test]
 fn sync_multiple_sources_index_disjoint_extras() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5043,24 +5043,20 @@ fn sync_multiple_sources_index_disjoint_extras() -> Result<()> {
 
         [[tool.uv.index]]
         name = "torch-cu118"
-        url = "https://download.pytorch.org/whl/cu118"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu118"
         explicit = true
 
         [[tool.uv.index]]
         name = "torch-cu124"
-        url = "https://download.pytorch.org/whl/cu124"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu124"
         explicit = true
         "#,
     )?;
 
     // Generate a lockfile.
-    context
-        .lock()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .assert()
-        .success();
+    context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("cu124").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("cu124"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
