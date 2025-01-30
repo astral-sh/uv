@@ -142,81 +142,81 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
 
 === "CUDA 11.8"
 
-    PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `platform_system` to instruct uv to use
+    PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `sys_platform` to instruct uv to use
     the PyTorch index on Linux and Windows, but fall back to PyPI on macOS:
 
     ```toml
     [tool.uv.sources]
     torch = [
-      { index = "pytorch-cu118", marker = "platform_system == 'Linux' or platform_system == 'Windows'" },
+      { index = "pytorch-cu118", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     ]
     torchvision = [
-      { index = "pytorch-cu118", marker = "platform_system == 'Linux' or platform_system == 'Windows'" },
+      { index = "pytorch-cu118", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     ]
     ```
 
 === "CUDA 12.1"
 
-    PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `platform_system` to instruct uv to limit
+    PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `sys_platform` to instruct uv to limit
     the PyTorch index to Linux and Windows, falling back to PyPI on macOS:
 
     ```toml
     [tool.uv.sources]
     torch = [
-      { index = "pytorch-cu121", marker = "platform_system == 'Linux' or platform_system == 'Windows'" },
+      { index = "pytorch-cu121", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     ]
     torchvision = [
-      { index = "pytorch-cu121", marker = "platform_system == 'Linux' or platform_system == 'Windows'" },
+      { index = "pytorch-cu121", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     ]
     ```
 
 === "CUDA 12.4"
 
-    PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `platform_system` to instruct uv to limit
+    PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `sys_platform` to instruct uv to limit
     the PyTorch index to Linux and Windows, falling back to PyPI on macOS:
 
     ```toml
     [tool.uv.sources]
     torch = [
-      { index = "pytorch-cu124", marker = "platform_system == 'Linux' or platform_system == 'Windows'" },
+      { index = "pytorch-cu124", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     ]
     torchvision = [
-      { index = "pytorch-cu124", marker = "platform_system == 'Linux' or platform_system == 'Windows'" },
+      { index = "pytorch-cu124", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     ]
     ```
 
 === "ROCm6"
 
-    PyTorch doesn't publish ROCm6 builds for macOS or Windows. As such, we gate on `platform_system` to instruct uv
+    PyTorch doesn't publish ROCm6 builds for macOS or Windows. As such, we gate on `sys_platform` to instruct uv
     to limit the PyTorch index to Linux, falling back to PyPI on macOS and Windows:
 
     ```toml
     [tool.uv.sources]
     torch = [
-      { index = "pytorch-rocm", marker = "platform_system == 'Linux'" },
+      { index = "pytorch-rocm", marker = "sys_platform == 'linux'" },
     ]
     torchvision = [
-      { index = "pytorch-rocm", marker = "platform_system == 'Linux'" },
+      { index = "pytorch-rocm", marker = "sys_platform == 'linux'" },
     ]
     ```
 
 === "Intel GPUs"
 
-    PyTorch doesn't publish Intel GPU builds for macOS. As such, we gate on `platform_system` to instruct uv to limit
+    PyTorch doesn't publish Intel GPU builds for macOS. As such, we gate on `sys_platform` to instruct uv to limit
     the PyTorch index to Linux and Windows, falling back to PyPI on macOS:
 
     ```toml
     [tool.uv.sources]
     torch = [
-      { index = "pytorch-xpu", marker = "platform_system == 'Linux' or platform_system == 'Windows'" },
+      { index = "pytorch-xpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     ]
     torchvision = [
-      { index = "pytorch-xpu", marker = "platform_system == 'Linux' or platform_system == 'Windows'" },
+      { index = "pytorch-xpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     ]
     # Intel GPU support relies on `pytorch-triton-xpu` on Linux, which should also be installed from the PyTorch index
     # (and included in `project.dependencies`).
     pytorch-triton-xpu = [
-      { index = "pytorch-xpu", marker = "platform_system == 'Linux'" },
+      { index = "pytorch-xpu", marker = "sys_platform == 'linux'" },
     ]
     ```
 
@@ -267,12 +267,12 @@ dependencies = [
 
 [tool.uv.sources]
 torch = [
-  { index = "pytorch-cpu", marker = "platform_system == 'Windows'" },
-  { index = "pytorch-cu124", marker = "platform_system == 'Linux'" },
+  { index = "pytorch-cpu", marker = "sys_platform == 'win32'" },
+  { index = "pytorch-cu124", marker = "sys_platform == 'linux'" },
 ]
 torchvision = [
-  { index = "pytorch-cpu", marker = "platform_system == 'Windows'" },
-  { index = "pytorch-cu124", marker = "platform_system == 'Linux'" },
+  { index = "pytorch-cpu", marker = "sys_platform == 'win32'" },
+  { index = "pytorch-cu124", marker = "sys_platform == 'linux'" },
 ]
 
 [[tool.uv.index]]
@@ -297,18 +297,18 @@ requires-python = ">=3.12.0"
 dependencies = [
   "torch>=2.5.1",
   "torchvision>=0.20.1",
-  "pytorch-triton-xpu>=3.2.0 ; platform_system == 'Linux'",
+  "pytorch-triton-xpu>=3.2.0 ; sys_platform == 'linux'",
 ]
 
 [tool.uv.sources]
 torch = [
-  { index = "pytorch-xpu", marker = "platform_system == 'Windows' or platform_system == 'Linux'" },
+  { index = "pytorch-xpu", marker = "sys_platform == 'win32' or sys_platform == 'linux'" },
 ]
 torchvision = [
-  { index = "pytorch-xpu", marker = "platform_system == 'Windows' or platform_system == 'Linux'" },
+  { index = "pytorch-xpu", marker = "sys_platform == 'win32' or sys_platform == 'linux'" },
 ]
 pytorch-triton-xpu = [
-  { index = "pytorch-xpu", marker = "platform_system == 'Linux'" },
+  { index = "pytorch-xpu", marker = "sys_platform == 'linux'" },
 ]
 
 [[tool.uv.index]]
