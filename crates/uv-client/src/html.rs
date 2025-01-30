@@ -2,12 +2,12 @@ use std::str::FromStr;
 
 use jiff::Timestamp;
 use tl::HTMLTag;
-use tracing::{instrument, warn};
+use tracing::{debug, instrument, warn};
 use url::Url;
 
 use uv_pep440::VersionSpecifiers;
-use uv_pypi_types::LenientVersionSpecifiers;
 use uv_pypi_types::{BaseUrl, CoreMetadata, File, Hashes, Yanked};
+use uv_pypi_types::{HashError, LenientVersionSpecifiers};
 
 /// A parsed structure from PyPI "HTML" index format for a single package.
 #[derive(Debug, Clone)]
@@ -99,7 +99,24 @@ impl SimpleHtml {
                 if fragment.trim().is_empty() {
                     Hashes::default()
                 } else {
-                    Hashes::parse_fragment(&fragment)?
+                    match Hashes::parse_fragment(&fragment) {
+                        Ok(hashes) => hashes,
+                        Err(
+                            err
+                            @ (HashError::InvalidFragment(..) | HashError::InvalidStructure(..)),
+                        ) => {
+                            // If the URL includes an irrelevant hash (e.g., `#main`), ignore it.
+                            debug!("{err}");
+                            Hashes::default()
+                        }
+                        Err(
+                            err
+                            @ (HashError::UnsupportedHashAlgorithm(..) | HashError::NonUtf8(..)),
+                        ) => {
+                            // If the URL references a hash, but it's unsupported, error.
+                            return Err(err.into());
+                        }
+                    }
                 },
             )
         } else {
@@ -836,20 +853,61 @@ mod tests {
     }
 
     #[test]
-    fn parse_missing_hash_value() {
+    fn parse_unknown_fragment() {
         let text = r#"
 <!DOCTYPE html>
 <html>
 <body>
 <h1>Links for jinja2</h1>
-<a href="/whl/Jinja2-3.1.2-py3-none-any.whl#sha256">Jinja2-3.1.2-py3-none-any.whl</a><br/>
+<a href="/whl/Jinja2-3.1.2-py3-none-any.whl#main">Jinja2-3.1.2-py3-none-any.whl</a><br/>
 </body>
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap_err();
-        insta::assert_snapshot!(result, @"Unexpected fragment (expected `#sha256=...` or similar) on URL: sha256");
+        let result = SimpleHtml::parse(text, &base);
+        insta::assert_debug_snapshot!(result, @r###"
+        Ok(
+            SimpleHtml {
+                base: BaseUrl(
+                    Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "download.pytorch.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/whl/jinja2/",
+                        query: None,
+                        fragment: None,
+                    },
+                ),
+                files: [
+                    File {
+                        core_metadata: None,
+                        dist_info_metadata: None,
+                        data_dist_info_metadata: None,
+                        filename: "Jinja2-3.1.2-py3-none-any.whl",
+                        hashes: Hashes {
+                            md5: None,
+                            sha256: None,
+                            sha384: None,
+                            sha512: None,
+                        },
+                        requires_python: None,
+                        size: None,
+                        upload_time: None,
+                        url: "/whl/Jinja2-3.1.2-py3-none-any.whl#main",
+                        yanked: None,
+                    },
+                ],
+            },
+        )
+        "###);
     }
 
     #[test]
