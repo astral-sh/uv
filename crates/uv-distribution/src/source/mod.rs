@@ -551,15 +551,21 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
-        if let Some(metadata) = CachedMetadata::read(&metadata_entry)
-            .await?
-            .filter(|metadata| metadata.matches(source.name(), source.version()))
-        {
-            debug!("Using cached metadata for: {source}");
-            return Ok(ArchiveMetadata {
-                metadata: Metadata::from_metadata23(metadata.into()),
-                hashes: revision.into_hashes(),
-            });
+        match CachedMetadata::read(&metadata_entry).await {
+            Ok(Some(metadata)) => {
+                if metadata.matches(source.name(), source.version()) {
+                    debug!("Using cached metadata for: {source}");
+                    return Ok(ArchiveMetadata {
+                        metadata: Metadata::from_metadata23(metadata.into()),
+                        hashes: revision.into_hashes(),
+                    });
+                }
+                debug!("Cached metadata does not match expected name and version for: {source}");
+            }
+            Ok(None) => {}
+            Err(err) => {
+                debug!("Failed to deserialize cached metadata for: {source} ({err})");
+            }
         }
 
         // Otherwise, we need a wheel.
@@ -882,15 +888,21 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
-        if let Some(metadata) = CachedMetadata::read(&metadata_entry)
-            .await?
-            .filter(|metadata| metadata.matches(source.name(), source.version()))
-        {
-            debug!("Using cached metadata for: {source}");
-            return Ok(ArchiveMetadata {
-                metadata: Metadata::from_metadata23(metadata.into()),
-                hashes: revision.into_hashes(),
-            });
+        match CachedMetadata::read(&metadata_entry).await {
+            Ok(Some(metadata)) => {
+                if metadata.matches(source.name(), source.version()) {
+                    debug!("Using cached metadata for: {source}");
+                    return Ok(ArchiveMetadata {
+                        metadata: Metadata::from_metadata23(metadata.into()),
+                        hashes: revision.into_hashes(),
+                    });
+                }
+                debug!("Cached metadata does not match expected name and version for: {source}");
+            }
+            Ok(None) => {}
+            Err(err) => {
+                debug!("Failed to deserialize cached metadata for: {source} ({err})");
+            }
         }
 
         // Otherwise, we need a source distribution.
@@ -1183,31 +1195,38 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
-        if let Some(metadata) = CachedMetadata::read(&metadata_entry)
-            .await?
-            .filter(|metadata| metadata.matches(source.name(), source.version()))
-        {
-            // If necessary, mark the metadata as dynamic.
-            let metadata = if dynamic {
-                ResolutionMetadata {
-                    dynamic: true,
-                    ..metadata.into()
-                }
-            } else {
-                metadata.into()
-            };
+        match CachedMetadata::read(&metadata_entry).await {
+            Ok(Some(metadata)) => {
+                if metadata.matches(source.name(), source.version()) {
+                    debug!("Using cached metadata for: {source}");
 
-            return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(
-                    metadata,
-                    resource.install_path.as_ref(),
-                    None,
-                    self.build_context.locations(),
-                    self.build_context.sources(),
-                    self.build_context.bounds(),
-                )
-                .await?,
-            ));
+                    // If necessary, mark the metadata as dynamic.
+                    let metadata = if dynamic {
+                        ResolutionMetadata {
+                            dynamic: true,
+                            ..metadata.into()
+                        }
+                    } else {
+                        metadata.into()
+                    };
+                    return Ok(ArchiveMetadata::from(
+                        Metadata::from_workspace(
+                            metadata,
+                            resource.install_path.as_ref(),
+                            None,
+                            self.build_context.locations(),
+                            self.build_context.sources(),
+                            self.build_context.bounds(),
+                        )
+                        .await?,
+                    ));
+                }
+                debug!("Cached metadata does not match expected name and version for: {source}");
+            }
+            Ok(None) => {}
+            Err(err) => {
+                debug!("Failed to deserialize cached metadata for: {source} ({err})");
+            }
         }
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
@@ -1635,27 +1654,35 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheRead)?
             .is_fresh()
         {
-            if let Some(metadata) = CachedMetadata::read(&metadata_entry)
-                .await?
-                .filter(|metadata| metadata.matches(source.name(), source.version()))
-            {
-                let git_member = GitWorkspaceMember {
-                    fetch_root: fetch.path(),
-                    git_source: resource,
-                };
+            match CachedMetadata::read(&metadata_entry).await {
+                Ok(Some(metadata)) => {
+                    if metadata.matches(source.name(), source.version()) {
+                        debug!("Using cached metadata for: {source}");
 
-                debug!("Using cached metadata for: {source}");
-                return Ok(ArchiveMetadata::from(
-                    Metadata::from_workspace(
-                        metadata.into(),
-                        &path,
-                        Some(&git_member),
-                        self.build_context.locations(),
-                        self.build_context.sources(),
-                        self.build_context.bounds(),
-                    )
-                    .await?,
-                ));
+                        let git_member = GitWorkspaceMember {
+                            fetch_root: fetch.path(),
+                            git_source: resource,
+                        };
+                        return Ok(ArchiveMetadata::from(
+                            Metadata::from_workspace(
+                                metadata.into(),
+                                &path,
+                                Some(&git_member),
+                                self.build_context.locations(),
+                                self.build_context.sources(),
+                                self.build_context.bounds(),
+                            )
+                            .await?,
+                        ));
+                    }
+                    debug!(
+                        "Cached metadata does not match expected name and version for: {source}"
+                    );
+                }
+                Ok(None) => {}
+                Err(err) => {
+                    debug!("Failed to deserialize cached metadata for: {source} ({err})");
+                }
             }
         }
 
