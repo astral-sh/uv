@@ -1496,7 +1496,7 @@ fn tool_run_python_at_version() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Received multiple Python version requests: `3.12` and `Python 3.11`
+    error: Received multiple Python version requests: `3.12` and `3.11`
     "###);
 
     // Request a version that does not exist

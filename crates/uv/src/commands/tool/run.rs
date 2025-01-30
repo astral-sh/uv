@@ -482,7 +482,9 @@ async fn get_or_create_environment(
         if let Some(target_request) = &target_request {
             if let Some(python) = python {
                 return Err(anyhow::anyhow!(
-                    "Received multiple Python version requests: `{python}` and `{target_request}`"
+                    "Received multiple Python version requests: `{}` and `{}`",
+                    python.to_string().cyan(),
+                    target_request.to_canonical_string().cyan(),
                 )
                 .into());
             }
@@ -562,7 +564,9 @@ async fn get_or_create_environment(
                 if let UnresolvedRequirement::Named(requirement) = &spec.requirement {
                     if requirement.name.as_str() == "python" {
                         return Err(anyhow::anyhow!(
-                            "Using `--from python<specifier>` is not supported. Use `python@<version>` instead."
+                            "Using `{}` is not supported. Use `{}` instead.",
+                            "--from python<specifier>".cyan(),
+                            "python@<version>".cyan(),
                         )
                         .into());
                     }
