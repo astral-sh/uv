@@ -109,10 +109,7 @@ impl SimpleHtml {
                             debug!("{err}");
                             Hashes::default()
                         }
-                        Err(
-                            err
-                            @ (HashError::UnsupportedHashAlgorithm(..) | HashError::NonUtf8(..)),
-                        ) => {
+                        Err(err @ HashError::UnsupportedHashAlgorithm(..)) => {
                             // If the URL references a hash, but it's unsupported, error.
                             return Err(err.into());
                         }
