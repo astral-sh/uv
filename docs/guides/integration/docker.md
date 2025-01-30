@@ -14,21 +14,21 @@ description:
     Check out the [`uv-docker-example`](https://github.com/astral-sh/uv-docker-example) project for
     an example of best practices when using uv to build an application in Docker.
 
-### Running uv in a container
-
 uv provides both _distroless_ Docker images, which are useful for
 [copying uv binaries](#installing-uv) into your own image builds, and images derived from popular
 base images, which are useful for using uv in a container. The distroless images do not contain
 anything but the uv binaries. In contrast, the derived images include an operating system with uv
 pre-installed.
 
-As a basic example, to run uv in a container using a Debian-based image:
+As an example, to run uv in a container using a Debian-based image:
 
 ```console
 $ docker run --rm -it ghcr.io/astral-sh/uv:debian uv --help
 ```
 
-The distroless images are available:
+### Available images
+
+The following distroless images are available:
 
 - `ghcr.io/astral-sh/uv:latest`
 - `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.5.25`
