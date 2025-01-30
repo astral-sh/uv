@@ -464,7 +464,7 @@ impl GitCheckout {
     fn reset(&self) -> Result<()> {
         let ok_file = self.repo.path.join(CHECKOUT_READY_LOCK);
         let _ = paths::remove_file(&ok_file);
-        debug!("reset {} to {}", self.repo.path.display(), self.revision);
+        debug!("Reset {} to {}", self.repo.path.display(), self.revision);
 
         // Perform the hard reset.
         ProcessBuilder::new(GIT.as_ref()?)
@@ -508,7 +508,7 @@ fn fetch(
         Ok(FastPathRev::NeedsFetch(rev)) => Some(rev),
         Ok(FastPathRev::Indeterminate) => None,
         Err(e) => {
-            debug!("failed to check github {:?}", e);
+            debug!("Failed to check GitHub {:?}", e);
             None
         }
     };
@@ -589,7 +589,7 @@ fn fetch(
                     // Stop after the first success and log failures
                     match fetch_result {
                         Err(ref err) => {
-                            debug!("failed to fetch refspec `{refspec}`: {err}");
+                            debug!("Failed to fetch refspec `{refspec}`: {err}");
                             Some(fetch_result)
                         }
                         Ok(()) => None,
