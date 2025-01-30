@@ -8,6 +8,13 @@ distributions (wheels). The former is typically a `.tar.gz` or `.zip` file conta
 source code along with some additional metadata, while the latter is a `.whl` file containing
 pre-built artifacts that can be installed directly.
 
+!!! important
+
+    When running `uv build`, uv is the build frontend and only determines the Python version. The
+    contents of the files and their filenames are determined by the build backend, as defined
+    in `[build-system]`. Information about build configuration can be bound in the respective tool's
+    documentation.
+
 ## Using `uv build`
 
 `uv build` can be used to build both source distributions and binary distributions for your project.
