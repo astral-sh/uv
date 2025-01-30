@@ -150,7 +150,7 @@ def _glibc_version_string() -> str | None:
     return _glibc_version_string_confstr() or _glibc_version_string_ctypes()
 
 
-def _parse_glibc_version(version_str: str) -> tuple[int, int]:
+def _parse_glibc_version(version_str: str) -> _GLibCVersion:
     """Parse glibc version.
 
     We use a regexp instead of str.split because we want to discard any
@@ -165,15 +165,15 @@ def _parse_glibc_version(version_str: str) -> tuple[int, int]:
             f" got: {version_str}",
             RuntimeWarning,
         )
-        return -1, -1
-    return int(m.group("major")), int(m.group("minor"))
+        return _GLibCVersion(-1, -1)
+    return _GLibCVersion(int(m.group("major")), int(m.group("minor")))
 
 
 @functools.lru_cache()
-def _get_glibc_version() -> tuple[int, int]:
+def _get_glibc_version() -> _GLibCVersion:
     version_str = _glibc_version_string()
     if version_str is None:
-        return (-1, -1)
+        return _GLibCVersion(-1, -1)
     return _parse_glibc_version(version_str)
 
 
