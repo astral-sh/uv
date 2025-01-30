@@ -113,6 +113,15 @@ In such cases, the first step is to add the relevant PyTorch index to your `pypr
     explicit = true
     ```
 
+=== "Intel GPUs"
+
+    ```toml
+    [[tool.uv.index]]
+    name = "pytorch-xpu"
+    url = "https://download.pytorch.org/whl/xpu"
+    explicit = true
+    ```
+
 We recommend the use of `explicit = true` to ensure that the index is _only_ used for `torch`,
 `torchvision`, and other PyTorch-related packages, as opposed to generic dependencies like `jinja2`,
 which should continue to be sourced from the default index (PyPI).
@@ -139,10 +148,10 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
     ```toml
     [tool.uv.sources]
     torch = [
-      { index = "pytorch-cu118", marker = "platform_system != 'Darwin'"},
+      { index = "pytorch-cu118", marker = "platform_system != 'Darwin'" },
     ]
     torchvision = [
-      { index = "pytorch-cu118", marker = "platform_system != 'Darwin'"},
+      { index = "pytorch-cu118", marker = "platform_system != 'Darwin'" },
     ]
     ```
 
@@ -154,10 +163,10 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
     ```toml
     [tool.uv.sources]
     torch = [
-      { index = "pytorch-cu121", marker = "platform_system != 'Darwin'"},
+      { index = "pytorch-cu121", marker = "platform_system != 'Darwin'" },
     ]
     torchvision = [
-      { index = "pytorch-cu121", marker = "platform_system != 'Darwin'"},
+      { index = "pytorch-cu121", marker = "platform_system != 'Darwin'" },
     ]
     ```
 
@@ -169,10 +178,10 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
     ```toml
     [tool.uv.sources]
     torch = [
-      { index = "pytorch-cu124", marker = "platform_system != 'Darwin'"},
+      { index = "pytorch-cu124", marker = "platform_system != 'Darwin'" },
     ]
     torchvision = [
-      { index = "pytorch-cu124", marker = "platform_system != 'Darwin'"},
+      { index = "pytorch-cu124", marker = "platform_system != 'Darwin'" },
     ]
     ```
 
@@ -184,10 +193,30 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
     ```toml
     [tool.uv.sources]
     torch = [
-      { index = "pytorch-rocm", marker = "platform_system == 'Linux'"},
+      { index = "pytorch-rocm", marker = "platform_system == 'Linux'" },
     ]
     torchvision = [
-      { index = "pytorch-rocm", marker = "platform_system == 'Linux'"},
+      { index = "pytorch-rocm", marker = "platform_system == 'Linux'" },
+    ]
+    ```
+
+=== "Intel GPUs"
+
+    PyTorch doesn't publish Intel GPU builds for macOS. As such, we gate on `platform_system` to instruct uv to ignore
+    the PyTorch index when resolving for macOS.
+
+    ```toml
+    [tool.uv.sources]
+    torch = [
+      { index = "pytorch-xpu", marker = "platform_system != 'Darwin'" },
+    ]
+    torchvision = [
+      { index = "pytorch-xpu", marker = "platform_system != 'Darwin'" },
+    ]
+    # Intel GPU support relies on `pytorch-triton-xpu` on Linux, which should also be installed from the PyTorch index
+    # (and included in `project.dependencies`).
+    pytorch-triton-xpu = [
+      { index = "pytorch-xpu", marker = "platform_system == 'Linux'" },
     ]
     ```
 
@@ -254,6 +283,37 @@ explicit = true
 [[tool.uv.index]]
 name = "pytorch-cu124"
 url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+```
+
+Similarly, the following configuration would use PyTorch's Intel GPU builds on Windows and Linux,
+and CPU-only builds on macOS (by way of falling back to PyPI):
+
+```toml
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12.0"
+dependencies = [
+  "torch>=2.5.1",
+  "torchvision>=0.20.1",
+  "pytorch-triton-xpu>=3.2.0 ; platform_system == 'Linux'",
+]
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-xpu", marker = "platform_system == 'Windows' or platform_system == 'Linux'" },
+]
+torchvision = [
+  { index = "pytorch-xpu", marker = "platform_system == 'Windows' or platform_system == 'Linux'" },
+]
+pytorch-triton-xpu = [
+  { index = "pytorch-xpu", marker = "platform_system == 'Linux'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-xpu"
+url = "https://download.pytorch.org/whl/xpu"
 explicit = true
 ```
 
