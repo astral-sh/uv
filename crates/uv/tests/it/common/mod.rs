@@ -1388,16 +1388,16 @@ pub fn make_project(dir: &Path, name: &str, body: &str) -> anyhow::Result<()> {
 // This is a fine-grained token that only has read-only access to the `uv-private-pypackage` repository
 pub const READ_ONLY_GITHUB_TOKEN: &[&str] = &[
     "Z2l0aHViX3BhdA==",
-    "MTFCR0laQTdRMGdXeGsweHV6ekR2Mg==",
-    "NVZMaExzZmtFMHZ1ZEVNd0pPZXZkV040WUdTcmk2WXREeFB4TFlybGlwRTZONEpHV01FMnFZQWJVUm4=",
+    "MTFCR0laQTdRMGdSQ0JRQVdRTklyQgo=",
+    "cU5vakhySFV2a0ljNUVZY1pzd1k0bUFUWlBuU3VLVDV5eXR0WUxvcHh3UFI0NlpWTlRTblhvVHJHSXEK",
 ];
 
 // This is a fine-grained token that only has read-only access to the `uv-private-pypackage-2` repository
 #[cfg(not(windows))]
 pub const READ_ONLY_GITHUB_TOKEN_2: &[&str] = &[
     "Z2l0aHViX3BhdA==",
-    "MTFCR0laQTdRMHV1MEpwaFp4dFFyRwo=",
-    "cnNmNXJwMHk2WWpteVZvb2ZFc0c5WUs5b2NPcFY1aVpYTnNmdE05eEhaM0lGSExSSktDWTcxeVBVZXkK",
+    "MTFCR0laQTdRMGthWlY4dHppTDdQSwo=",
+    "SHIzUG1tRVZRSHMzQTl2a3NiVnB4Tmk0eTR3R2JVYklLck1qY05naHhMSFVMTDZGVElIMXNYeFhYN2gK",
 ];
 
 /// Decode a split, base64 encoded authentication token.
