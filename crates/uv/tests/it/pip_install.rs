@@ -7485,6 +7485,74 @@ fn install_relocatable() -> Result<()> {
     Ok(())
 }
 
+/// Install requesting Python 3.12 when the virtual environment uses 3.11
+#[test]
+fn install_incompatible_python_version() {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"]);
+
+    // Initialize the virtual environment with 3.11
+    context.reset_venv();
+
+    // Request Python 3.12; which should fail
+    uv_snapshot!(context.filters(), context.pip_install().arg("-p").arg("3.12")
+        .arg("anyio"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No virtual environment found for Python 3.12; run `uv venv` to create an environment, or pass `--system` to install into a non-virtual environment
+    "###
+    );
+}
+
+/// Install requesting Python 3.12 when the virtual environment uses 3.11, but there's also
+/// a broken interpreter in the PATH.
+#[test]
+#[cfg(unix)]
+fn install_incompatible_python_version_interpreter_broken_in_path() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let context = TestContext::new_with_versions(&["3.11", "3.12"]);
+
+    // Initialize the virtual environment with 3.11
+    context.reset_venv();
+
+    // Create a "broken" Python executable in the test context `bin`
+    let contents = r"#!/bin/sh
+    echo 'error: intentionally broken python executable' >&2
+    exit 1";
+    let python = context
+        .bin_dir
+        .join(format!("python3{}", std::env::consts::EXE_SUFFIX));
+    fs_err::write(&python, contents)?;
+
+    let mut perms = fs_err::metadata(&python)?.permissions();
+    perms.set_mode(0o755);
+    fs_err::set_permissions(&python, perms)?;
+
+    // Request Python 3.12; which should fail
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-p").arg("3.12")
+        .arg("anyio")
+        // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
+        .env("UV_TEST_PYTHON_PATH", context.bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to inspect Python interpreter from search path at `[BIN]/python3`
+      Caused by: Querying Python at `[BIN]/python3` failed with exit status exit status: 1
+
+    [stderr]
+    error: intentionally broken python executable
+    "###
+    );
+
+    Ok(())
+}
+
 /// Include a `build_constraints.txt` file with an incompatible constraint.
 #[test]
 fn incompatible_build_constraint() -> Result<()> {
