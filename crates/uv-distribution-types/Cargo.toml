@@ -34,6 +34,7 @@ fs-err = { workspace = true }
 itertools = { workspace = true }
 jiff = { workspace = true }
 owo-colors = { workspace = true }
+percent-encoding = { workspace = true }
 petgraph = { workspace = true }
 rkyv = { workspace = true }
 rustc-hash = { workspace = true }
@@ -43,5 +44,4 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
-urlencoding = { workspace = true }
 version-ranges = { workspace = true }
