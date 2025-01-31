@@ -397,9 +397,11 @@ fn python_executables_from_installed<'a>(
 
 /// Lazily iterate over all discoverable Python executables.
 ///
-/// Note that Python executables may be excluded by the given [`EnvironmentPreference`] and [`PythonPreference`].
+/// Note that Python executables may be excluded by the given [`EnvironmentPreference`] and
+/// [`PythonPreference`]. However, these filters are only applied for performance. We cannot
+/// guarantee that the [`EnvironmentPreference`] is satisfied until we query the interpreter.
 ///
-/// See [`python_executables_from_installed`] and [`python_executables_from_environments`]
+/// See [`python_executables_from_installed`] and [`python_executables_from_virtual_environments`]
 /// for more information on discovery.
 fn python_executables<'a>(
     version: &'a VersionRequest,
@@ -427,8 +429,9 @@ fn python_executables<'a>(
     let from_virtual_environments = python_executables_from_virtual_environments();
     let from_installed = python_executables_from_installed(version, implementation, preference);
 
-    // Limit the search to the relevant environment preference; we later validate that they match
-    // the preference but queries are expensive and we query less interpreters this way.
+    // Limit the search to the relevant environment preference; this avoids unnecessary work like
+    // traversal of the file system. Subsequent filtering should be done by the caller with
+    // `source_satisfies_environment_preference` and `interpreter_satisfies_environment_preference`.
     match environments {
         EnvironmentPreference::OnlyVirtual => {
             Box::new(from_parent_interpreter.chain(from_virtual_environments))
@@ -602,7 +605,14 @@ fn python_interpreters<'a>(
     cache: &'a Cache,
 ) -> impl Iterator<Item = Result<(PythonSource, Interpreter), Error>> + 'a {
     python_interpreters_from_executables(
-        python_executables(version, implementation, environments, preference),
+        // Perform filtering on the discovered executables based on their source. This avoids
+        // unnecessary interpreter queries, which are generally expensive. We'll filter again
+        // with `interpreter_satisfies_environment_preference` after querying.
+        python_executables(version, implementation, environments, preference).filter_ok(
+            move |(source, path)| {
+                source_satisfies_environment_preference(*source, path, environments)
+            },
+        ),
         cache,
     )
     .filter(move |result| result_satisfies_environment_preference(result, environments))
@@ -630,8 +640,13 @@ fn python_interpreters_from_executables<'a>(
     })
 }
 
-/// Returns true if a Python interpreter matches the [`EnvironmentPreference`].
-fn satisfies_environment_preference(
+/// Whether a [`Interpreter`] matches the [`EnvironmentPreference`].
+///
+/// This is the correct way to determine if an interpreter matches the preference. In contrast,
+/// [`source_satisfies_environment_preference`] only checks if a [`PythonSource`] **could** satisfy
+/// preference as a pre-filtering step. We cannot definitively know if a Python interpreter is in
+/// a virtual environment until we query it.
+fn interpreter_satisfies_environment_preference(
     source: PythonSource,
     interpreter: &Interpreter,
     preference: EnvironmentPreference,
@@ -680,6 +695,55 @@ fn satisfies_environment_preference(
     }
 }
 
+/// Returns true if a [`PythonSource`] could satisfy the [`EnvironmentPreference`].
+///
+/// This is useful as a pre-filtering step. Use of [`interpreter_satisfies_environment_preference`]
+/// is required to determine if an [`Interpreter`] satisfies the preference.
+///
+/// The interpreter path is only used for debug messages.
+fn source_satisfies_environment_preference(
+    source: PythonSource,
+    interpreter_path: &Path,
+    preference: EnvironmentPreference,
+) -> bool {
+    match preference {
+        EnvironmentPreference::Any => true,
+        EnvironmentPreference::OnlyVirtual => {
+            if source.is_maybe_virtualenv() {
+                true
+            } else {
+                debug!(
+                    "Ignoring Python interpreter at `{}`: only virtual environments allowed",
+                    interpreter_path.display()
+                );
+                false
+            }
+        }
+        EnvironmentPreference::ExplicitSystem => {
+            if source.is_maybe_virtualenv() {
+                true
+            } else {
+                debug!(
+                    "Ignoring Python interpreter at `{}`: system interpreter not explicitly requested",
+                    interpreter_path.display()
+                );
+                false
+            }
+        }
+        EnvironmentPreference::OnlySystem => {
+            if source.is_maybe_system() {
+                true
+            } else {
+                debug!(
+                    "Ignoring Python interpreter at `{}`: system interpreter required",
+                    interpreter_path.display()
+                );
+                false
+            }
+        }
+    }
+}
+
 /// Utility for applying [`VersionRequest::matches_interpreter`] to a result type.
 fn result_satisfies_version_request(
     result: &Result<(PythonSource, Interpreter), Error>,
@@ -705,7 +769,7 @@ fn result_satisfies_environment_preference(
     preference: EnvironmentPreference,
 ) -> bool {
     result.as_ref().ok().map_or(true, |(source, interpreter)| {
-        satisfies_environment_preference(*source, interpreter, preference)
+        interpreter_satisfies_environment_preference(*source, interpreter, preference)
     })
 }
 
@@ -1573,6 +1637,40 @@ impl PythonSource {
             | Self::ParentInterpreter
             | Self::ActiveEnvironment
             | Self::DiscoveredEnvironment => true,
+        }
+    }
+
+    /// Whether this source **could** be a virtual environment.
+    ///
+    /// This excludes the [`PythonSource::SearchPath`] although it could be in a virtual
+    /// environment; pragmatically, that's not common and saves us from querying a bunch of system
+    /// interpreters for no reason. It seems dubious to consider an interpreter in the `PATH` as a
+    /// target virtual environment if it's not discovered through our virtual environment-specific
+    /// patterns.
+    pub(crate) fn is_maybe_virtualenv(self) -> bool {
+        match self {
+            Self::ProvidedPath
+            | Self::ActiveEnvironment
+            | Self::DiscoveredEnvironment
+            | Self::CondaPrefix
+            | Self::BaseCondaPrefix
+            | Self::ParentInterpreter => true,
+            Self::Managed | Self::SearchPath | Self::Registry | Self::MicrosoftStore => false,
+        }
+    }
+
+    /// Whether this source **could** be a system interpreter.
+    pub(crate) fn is_maybe_system(self) -> bool {
+        match self {
+            Self::CondaPrefix
+            | Self::BaseCondaPrefix
+            | Self::ParentInterpreter
+            | Self::ProvidedPath
+            | Self::Managed
+            | Self::SearchPath
+            | Self::Registry
+            | Self::MicrosoftStore => true,
+            Self::ActiveEnvironment | Self::DiscoveredEnvironment => false,
         }
     }
 }

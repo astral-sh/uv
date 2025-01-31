@@ -7542,11 +7542,7 @@ fn install_incompatible_python_version_interpreter_broken_in_path() -> Result<()
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to inspect Python interpreter from search path at `[BIN]/python3`
-      Caused by: Querying Python at `[BIN]/python3` failed with exit status exit status: 1
-
-    [stderr]
-    error: intentionally broken python executable
+    error: No virtual environment found for Python 3.12; run `uv venv` to create an environment, or pass `--system` to install into a non-virtual environment
     "###
     );
 
