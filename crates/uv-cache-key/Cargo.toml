@@ -18,6 +18,7 @@ workspace = true
 
 [dependencies]
 hex = { workspace = true }
+memchr = { workspace = true }
 seahash = { workspace = true }
 url = { workspace = true }
 urlencoding = { workspace = true }

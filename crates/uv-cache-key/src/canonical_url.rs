@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
@@ -72,8 +73,20 @@ impl CanonicalUrl {
         }
 
         // Decode any percent-encoded characters in the path.
-        if let Ok(path) = urlencoding::decode(url.path()).map(|path| path.to_string()) {
-            url.set_path(&path);
+        if memchr::memchr(b'%', url.path().as_bytes()).is_some() {
+            let decoded = url
+                .path_segments()
+                .unwrap()
+                .map(|segment| {
+                    urlencoding::decode(segment)
+                        .unwrap_or(Cow::Borrowed(segment))
+                        .into_owned()
+                })
+                .collect::<Vec<_>>();
+
+            let mut path_segments = url.path_segments_mut().unwrap();
+            path_segments.clear();
+            path_segments.extend(decoded);
         }
 
         Self(url)
@@ -274,6 +287,38 @@ mod tests {
         assert_eq!(
             CanonicalUrl::parse("git+https:://github.com/pypa/sample-namespace-packages.git")?,
             CanonicalUrl::parse("git+https:://github.com/pypa/sample-namespace-packages.git")?,
+        );
+
+        // Two URLs should _not_ be considered equal based on percent-decoding slashes.
+        assert_ne!(
+            CanonicalUrl::parse("https://github.com/pypa/sample%2Fnamespace%2Fpackages")?,
+            CanonicalUrl::parse("https://github.com/pypa/sample/namespace/packages")?,
+        );
+
+        // Two URLs should be considered equal regardless of percent-encoding.
+        assert_eq!(
+            CanonicalUrl::parse("https://github.com/pypa/sample%2Bnamespace%2Bpackages")?,
+            CanonicalUrl::parse("https://github.com/pypa/sample+namespace+packages")?,
+        );
+
+        // Two URLs should _not_ be considered equal based on percent-decoding slashes.
+        assert_ne!(
+            CanonicalUrl::parse(
+                "file:///home/ferris/my_project%2Fmy_project-0.1.0-py3-none-any.whl"
+            )?,
+            CanonicalUrl::parse(
+                "file:///home/ferris/my_project/my_project-0.1.0-py3-none-any.whl"
+            )?,
+        );
+
+        // Two URLs should be considered equal regardless of percent-encoding.
+        assert_eq!(
+            CanonicalUrl::parse(
+                "file:///home/ferris/my_project/my_project-0.1.0+foo-py3-none-any.whl"
+            )?,
+            CanonicalUrl::parse(
+                "file:///home/ferris/my_project/my_project-0.1.0%2Bfoo-py3-none-any.whl"
+            )?,
         );
 
         Ok(())
