@@ -615,8 +615,21 @@ fn python_interpreters<'a>(
         ),
         cache,
     )
-    .filter(move |result| result_satisfies_environment_preference(result, environments))
-    .filter(move |result| result_satisfies_version_request(result, version))
+    .filter_ok(move |(source, interpreter)| {
+        interpreter_satisfies_environment_preference(*source, interpreter, environments)
+    })
+    .filter_ok(move |(source, interpreter)| {
+        let request = version.clone().into_request_for_source(*source);
+        if request.matches_interpreter(interpreter) {
+            true
+        } else {
+            debug!(
+                "Skipping interpreter at `{}` from {source}: does not satisfy request `{request}`",
+                interpreter.sys_executable().user_display()
+            );
+            false
+        }
+    })
 }
 
 /// Lazily convert Python executables into interpreters.
@@ -742,35 +755,6 @@ fn source_satisfies_environment_preference(
             }
         }
     }
-}
-
-/// Utility for applying [`VersionRequest::matches_interpreter`] to a result type.
-fn result_satisfies_version_request(
-    result: &Result<(PythonSource, Interpreter), Error>,
-    request: &VersionRequest,
-) -> bool {
-    result.as_ref().ok().map_or(true, |(source, interpreter)| {
-        let request = request.clone().into_request_for_source(*source);
-        if request.matches_interpreter(interpreter) {
-            true
-        } else {
-            debug!(
-                "Skipping interpreter at `{}` from {source}: does not satisfy request `{request}`",
-                interpreter.sys_executable().user_display()
-            );
-            false
-        }
-    })
-}
-
-/// Utility for applying [`satisfies_environment_preference`] to a result type.
-fn result_satisfies_environment_preference(
-    result: &Result<(PythonSource, Interpreter), Error>,
-    preference: EnvironmentPreference,
-) -> bool {
-    result.as_ref().ok().map_or(true, |(source, interpreter)| {
-        interpreter_satisfies_environment_preference(*source, interpreter, preference)
-    })
 }
 
 /// Check if an encountered error is critical and should stop discovery.
@@ -927,10 +911,14 @@ pub fn find_python_installations<'a>(
                 debug!("Searching for Python interpreter with {request}");
                 Box::new(
                     python_interpreters_with_executable_name(name, cache)
-                        .filter(move |result| {
-                            result_satisfies_environment_preference(result, environments)
+                        .filter_ok(move |(source, interpreter)| {
+                            interpreter_satisfies_environment_preference(
+                                *source,
+                                interpreter,
+                                environments,
+                            )
                         })
-                        .map(|result| result.map(PythonInstallation::from_tuple).map(Ok)),
+                        .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple))),
                 )
             } else {
                 Box::new(iter::once(Err(Error::SourceNotAllowed(
@@ -943,7 +931,7 @@ pub fn find_python_installations<'a>(
         PythonRequest::Any => Box::new({
             debug!("Searching for any Python interpreter in {sources}");
             python_interpreters(&VersionRequest::Any, None, environments, preference, cache)
-                .map(|result| result.map(PythonInstallation::from_tuple).map(Ok))
+                .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
         }),
         PythonRequest::Default => Box::new({
             debug!("Searching for default Python interpreter in {sources}");
@@ -954,7 +942,7 @@ pub fn find_python_installations<'a>(
                 preference,
                 cache,
             )
-            .map(|result| result.map(PythonInstallation::from_tuple).map(Ok))
+            .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
         }),
         PythonRequest::Version(version) => {
             if let Err(err) = version.check_supported() {
@@ -963,7 +951,7 @@ pub fn find_python_installations<'a>(
             Box::new({
                 debug!("Searching for {request} in {sources}");
                 python_interpreters(version, None, environments, preference, cache)
-                    .map(|result| result.map(PythonInstallation::from_tuple).map(Ok))
+                    .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
             })
         }
         PythonRequest::Implementation(implementation) => Box::new({
@@ -975,13 +963,12 @@ pub fn find_python_installations<'a>(
                 preference,
                 cache,
             )
-            .filter(|result| match result {
-                Err(_) => true,
-                Ok((_source, interpreter)) => interpreter
+            .filter_ok(|(_source, interpreter)| {
+                interpreter
                     .implementation_name()
-                    .eq_ignore_ascii_case(implementation.into()),
+                    .eq_ignore_ascii_case(implementation.into())
             })
-            .map(|result| result.map(PythonInstallation::from_tuple).map(Ok))
+            .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
         }),
         PythonRequest::ImplementationVersion(implementation, version) => {
             if let Err(err) = version.check_supported() {
@@ -996,13 +983,12 @@ pub fn find_python_installations<'a>(
                     preference,
                     cache,
                 )
-                .filter(|result| match result {
-                    Err(_) => true,
-                    Ok((_source, interpreter)) => interpreter
+                .filter_ok(|(_source, interpreter)| {
+                    interpreter
                         .implementation_name()
-                        .eq_ignore_ascii_case(implementation.into()),
+                        .eq_ignore_ascii_case(implementation.into())
                 })
-                .map(|result| result.map(PythonInstallation::from_tuple).map(Ok))
+                .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
             })
         }
         PythonRequest::Key(request) => {
@@ -1020,11 +1006,8 @@ pub fn find_python_installations<'a>(
                     preference,
                     cache,
                 )
-                .filter(|result| match result {
-                    Err(_) => true,
-                    Ok((_source, interpreter)) => request.satisfied_by_interpreter(interpreter),
-                })
-                .map(|result| result.map(PythonInstallation::from_tuple).map(Ok))
+                .filter_ok(|(_source, interpreter)| request.satisfied_by_interpreter(interpreter))
+                .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
             })
         }
     }
