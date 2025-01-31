@@ -107,7 +107,9 @@ jobs:
       plan: ${{ needs.plan.outputs.val }}
     secrets: inherit
     permissions:
+      "attestations": "write"
       "contents": "read"
+      "id-token": "write"
       "packages": "write"
 
   # Build and package all the platform-agnostic(ish) things

@@ -39,6 +39,8 @@ jobs:
 
       # Login to DockerHub first, to avoid rate-limiting
       - uses: docker/login-action@v3
+        # PRs from forks don't have access to secrets, disable this step in that case.
+        if: ${{ github.event.pull_request.head.repo.full_name == 'astral-sh/uv' }}
         with:
           username: astralshbot
           password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
@@ -164,6 +166,10 @@ jobs:
     needs:
       - docker-publish
     if: ${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
+    permissions:
+      packages: write
+      attestations: write # needed to push image attestations to the Github attestation store
+      id-token: write # needed for signing the images with GitHub OIDC Token
     strategy:
       fail-fast: false
       matrix:
@@ -260,6 +266,7 @@ jobs:
             ${{ env.TAG_PATTERNS }}
 
       - name: Build and push
+        id: build-and-push
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -272,6 +279,13 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
 
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.UV_BASE_IMG }}
+          subject-digest: ${{ steps.build-and-push.outputs.digest }}
+          # push-to-registry is explicitly not enabled to maintain full control over the top image
+
   # This is effectively a duplicate of `docker-publish` to make https://github.com/astral-sh/uv/pkgs/container/uv
   # show the uv base image first since GitHub always shows the last updated image digests
   # This works by annotating the original digests (previously non-annotated) which triggers an update to ghcr.io
@@ -283,6 +297,10 @@ jobs:
     needs:
       - docker-publish-extra
     if: ${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
+    permissions:
+      packages: write
+      attestations: write # needed to push image attestations to the Github attestation store
+      id-token: write # needed for signing the images with GitHub OIDC Token
     steps:
       # Login to DockerHub first, to avoid rate-limiting
       - uses: docker/login-action@v3
@@ -330,3 +348,29 @@ jobs:
             "${annotations[@]}" \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf '${{ env.UV_BASE_IMG }}@sha256:%s ' *)
+
+      - name: Share manifest digest
+        id: manifest-digest
+        # To sign the manifest, we need it's digest. Unfortunately "docker
+        # buildx imagetools create" does not (yet) have a clean way of sharing
+        # the digest of the manifest it creates (see docker/buildx#2407), so
+        # we use a separate command to retrieve it.
+        # imagetools inspect [TAG] --format '{{json .Manifest}}' gives us
+        # the machine readable JSON description of the manifest, and the
+        # jq command extracts the digest from this. The digest is then
+        # sent to the Github step output file for sharing with other steps.
+        run: |
+          digest="$(
+            docker buildx imagetools inspect \
+              "${UV_BASE_IMG}:${DOCKER_METADATA_OUTPUT_VERSION}" \
+              --format '{{json .Manifest}}' \
+            | jq -r '.digest'
+          )"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.UV_BASE_IMG }}
+          subject-digest: ${{ steps.manifest-digest.outputs.digest }}
+          # push-to-registry is explicitly not enabled to maintain full control over the top image
