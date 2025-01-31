@@ -131,7 +131,15 @@ impl KeyringProvider {
             "Should only use keyring with a username"
         );
 
-        let host = url.host().expect("Url should contain a host!");
+        let host = if let Some(port) = url.port() {
+            format!(
+                "{}:{}",
+                url.host_str().expect("Url should have a host"),
+                port
+            )
+        } else {
+            url.host_str().expect("Url should have a host").to_string()
+        };
         trace!(
             "Creating entry in keyring for host {host} (from url {url}) and username {username}"
         );

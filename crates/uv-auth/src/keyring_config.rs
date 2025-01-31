@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::io::{self, Write};
 use std::path::PathBuf;
 use thiserror::Error;
+use tracing::debug;
+use url::Url;
 
 #[derive(Error, Debug)]
 pub enum ConfigError {
@@ -70,16 +72,19 @@ pub struct Index {
 }
 
 impl AuthConfig {
-    pub fn add_entry(&mut self, index_name: String, username: String) {
-        self.indexes.entry(index_name).or_insert(Index { username });
+    pub fn add_entry(&mut self, index_url: &Url, username: String) {
+        let host = self.url_to_host(index_url);
+        self.indexes.entry(host).or_insert(Index { username });
     }
 
-    pub fn find_entry(&self, index_name: &str) -> Option<&Index> {
-        self.indexes.get(index_name)
+    pub fn find_entry(&self, index_url: &Url) -> Option<&Index> {
+        let host = self.url_to_host(index_url);
+        self.indexes.get(&host)
     }
 
-    pub fn delete_entry(&mut self, index_name: &str) {
-        self.indexes.remove(index_name);
+    pub fn delete_entry(&mut self, index_url: &Url) {
+        let host = self.url_to_host(index_url);
+        self.indexes.remove(&host);
     }
 
     pub fn load_from_path(path: &PathBuf) -> Result<Self, ConfigError> {
@@ -96,9 +101,31 @@ impl AuthConfig {
 
     pub fn store_to_path(&self, path: &PathBuf) -> Result<(), ConfigError> {
         let contents = toml::to_string_pretty(self)?;
+        let dir = path
+            .parent()
+            .expect("Path to auth config should have a parent directory!");
+
+        if !dir.exists() {
+            debug!("Creating directory {dir:?}");
+            fs::create_dir_all(dir).unwrap();
+        }
+
         let mut file = fs::File::create(path)?;
         file.write_all(contents.as_bytes())?;
         Ok(())
+    }
+
+    fn url_to_host(&self, url: &Url) -> String {
+        let host = if let Some(port) = url.port() {
+            format!(
+                "{}:{}",
+                url.host_str().expect("Url should have a host"),
+                port
+            )
+        } else {
+            url.host_str().expect("Url should have a host").to_string()
+        };
+        return host;
     }
 }
 
@@ -144,6 +171,7 @@ mod tests {
     #[test]
     fn test_store_no_config_file() {
         // Prepare a fake file path for the test
+        let url = Url::parse("https://example.com/secure/pypi").unwrap();
         let path = Path::new("test_auth.toml");
         remove_temp_file(path).ok();
 
@@ -151,7 +179,7 @@ mod tests {
         assert!(config.is_ok());
         let mut config = config.unwrap();
 
-        config.add_entry("index1".to_string(), "user1".to_string());
+        config.add_entry(&url, "user1".to_string());
 
         let result = config.store_to_path(&path.to_path_buf());
         assert!(result.is_ok());
@@ -160,7 +188,7 @@ mod tests {
         assert!(path.exists());
 
         let contents = fs::read_to_string(path).expect("Failed to read config file");
-        assert!(contents.contains("index1"));
+        assert!(contents.contains("example.com"));
         assert!(contents.contains("user1"));
 
         // Clean up
@@ -169,18 +197,21 @@ mod tests {
 
     #[test]
     fn test_find_entry() {
+        let url = Url::parse("https://example.com/secure/pypi").unwrap();
+        let url_not_existing = Url::parse("https://other-domain.com/secure/pypi").unwrap();
+
         let mut config = AuthConfig {
             indexes: HashMap::new(),
         };
-        config.add_entry("index1".to_string(), "user1".to_string());
+        config.add_entry(&url, "user1".to_string());
 
         // Test finding an existing entry
-        let entry = config.find_entry("index1");
+        let entry = config.find_entry(&url);
         assert!(entry.is_some());
         assert_eq!(entry.unwrap().username, "user1");
 
         // Test finding a non-existing entry
-        let entry = config.find_entry("nonexistent");
+        let entry = config.find_entry(&url_not_existing);
         assert!(entry.is_none());
     }
 }

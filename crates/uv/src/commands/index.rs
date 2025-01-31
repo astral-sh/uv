@@ -21,9 +21,8 @@ pub(crate) async fn set_credentials(
             .unwrap_or(false)
     });
 
-    let index = match index {
-        Some(obj) => obj,
-        None => panic!("No index found with the name '{}'", name),
+    let Some(index) = index else {
+        panic!("No index found with the name '{name}'")
     };
 
     let username = match username {
@@ -47,7 +46,7 @@ pub(crate) async fn set_credentials(
     keyring_provider
         .to_provider()
         .expect("Keyring Provider is not available")
-        .set(&url, &username, &password)
+        .set(url, &username, &password)
         .await;
 
     debug!(
@@ -56,8 +55,10 @@ pub(crate) async fn set_credentials(
     );
     let mut auth_config =
         AuthConfig::load().inspect_err(|err| warn!("Could not load auth config due to: {err}"))?;
-    auth_config.add_entry(name, username);
-    auth_config.store()?;
+    auth_config.add_entry(index.raw_url(), username);
+    auth_config
+        .store()
+        .inspect_err(|err| warn!("Could not save auth config due to: {err}"))?;
 
     Ok(())
 }
@@ -73,20 +74,25 @@ pub(crate) async fn list_credentials(
         .to_provider()
         .expect("Keyring Provider is not available");
 
+    let num_indexes = indexes.len();
+    debug!("Found {num_indexes} indexes");
     for index in indexes {
-        if let Some(index_name) = index.name {
-            if let Some(auth_index) = auth_config.indexes.get(&index_name.to_string()) {
-                let username = auth_index.username.clone();
-                let password = keyring_provider.fetch(&index.url, &username).await;
+        let index_url = index.raw_url();
 
-                match password {
-                    Some(_) => println!(
-                        "Index: '{}' authenticates with username '{}'.",
-                        index_name, username
-                    ),
-                    None => println!("Index: '{}' has no credentials.", index_name),
-                }
+        if let Some(auth_index) = auth_config.find_entry(index_url) {
+            let username = auth_index.username.clone();
+            let password = keyring_provider.fetch(&index.url, &username).await;
+
+            let index_name = index.name.expect("Index should have a name").to_string();
+            match password {
+                Some(_) => println!(
+                    "Index: '{}' authenticates with username '{}'.",
+                    index_name, username
+                ),
+                None => println!("Index: '{}' has no credentials.", index_name),
             }
+        } else {
+            debug!("Could not find the index with url {index_url} in auth config");
         }
     }
 
@@ -128,7 +134,7 @@ pub(crate) async fn unset_credentials(
     let mut auth_config =
         AuthConfig::load().inspect_err(|err| warn!("Could not load auth config due to: {err}"))?;
 
-    auth_config.delete_entry(&name);
+    auth_config.delete_entry(index.raw_url());
     auth_config.store()?;
 
     Ok(())

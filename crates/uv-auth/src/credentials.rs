@@ -6,10 +6,9 @@ use netrc::Netrc;
 use reqwest::header::HeaderValue;
 use reqwest::Request;
 
-use futures::executor;
 use std::io::Read;
 use std::io::Write;
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, warn};
 
 use url::Url;
 
@@ -17,7 +16,6 @@ use uv_static::EnvVars;
 
 use crate::keyring_config::AuthConfig;
 use crate::keyring_config::ConfigFile;
-use crate::KeyringProvider;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Credentials {
@@ -126,7 +124,25 @@ impl Credentials {
     /// Returns [`None`] if both [`Url::username`] and [`Url::password`] are not populated.
     pub fn from_url(url: &Url) -> Option<Self> {
         if url.username().is_empty() && url.password().is_none() {
-            return None;
+            debug!("Trying to read username for url {url}");
+
+            let auth_config = match AuthConfig::load() {
+                Ok(auth_config) => auth_config,
+                Err(e) => {
+                    error!("Error loading auth config: {e}");
+                    return None;
+                }
+            };
+
+            let Some(index) = auth_config.find_entry(url) else {
+                warn!("Could not find entry for {url}");
+                return None;
+            };
+
+            return Some(Self {
+                username: Username::new(Some(index.username.clone())),
+                password: None,
+            });
         }
         Some(Self {
             // Remove percent-encoding from URL credentials
@@ -161,37 +177,6 @@ impl Credentials {
         } else {
             Some(Self::new(username, password))
         }
-    }
-
-    /// Extract the [`Credentials`] from keyring, given a named source.
-    ///
-    /// Look up the username stored for the named source in the user-level config.
-    /// Load the credentials from keyring for the service and username.
-    pub fn from_keyring(
-        name: &str,
-        url: &Url,
-        keyring_provider: Option<KeyringProvider>,
-    ) -> Option<Self> {
-        debug!("Trying to read credentials for index {name} with url {url}");
-        if keyring_provider.is_none() {
-            trace!("No keyring provider available");
-            return None;
-        }
-
-        let auth_config = match AuthConfig::load() {
-            Ok(auth_config) => auth_config,
-            Err(e) => {
-                error!("Error loading auth config: {e}");
-                return None;
-            }
-        };
-
-        let Some(index) = auth_config.find_entry(name) else {
-            warn!("Could not find entry for {name}");
-            return None;
-        };
-
-        executor::block_on(keyring_provider.unwrap().fetch(url, &index.username))
     }
 
     /// Parse [`Credentials`] from an HTTP request, if any.
@@ -332,6 +317,27 @@ mod tests {
     }
 
     #[test]
+    fn from_url_with_configured_user() {
+        let url = &Url::parse("https://example.com/simple/first/").unwrap();
+        let username = "user";
+
+        let temp_dir = tempdir().unwrap();
+        let auth_config_path = temp_dir.into_path().join("test_auth.toml");
+
+        set_test_config_path(auth_config_path);
+
+        let mut auth_config = AuthConfig::load().unwrap();
+        auth_config.add_entry(url, username.to_string());
+        auth_config.store().unwrap();
+
+        let credentials = Credentials::from_url(&url).unwrap();
+        assert_eq!(credentials.username(), Some(username));
+        assert_eq!(credentials.password(), None);
+
+        reset_config_path();
+    }
+
+    #[test]
     fn authenticated_request_from_url() {
         let url = Url::parse("https://example.com/simple/first/").unwrap();
         let mut auth_url = url.clone();
@@ -395,36 +401,5 @@ mod tests {
 
         assert_debug_snapshot!(header, @r###""Basic dXNlcjpwYXNzd29yZD09""###);
         assert_eq!(Credentials::from_header_value(&header), Some(credentials));
-    }
-
-    #[test]
-    fn from_keyring() {
-        let username = "user";
-        let password = "password";
-        let index = "test_index";
-
-        let url = Url::parse("https://example.com").unwrap();
-        let keyring = KeyringProvider::dummy([((url.host_str().unwrap(), username), password)]);
-        let temp_dir = tempdir().unwrap();
-        let auth_config_path = temp_dir.into_path().join("test_auth.toml");
-
-        set_test_config_path(auth_config_path);
-
-        let mut auth_config = AuthConfig::load().unwrap();
-        auth_config.add_entry(index.to_string(), username.to_string());
-        auth_config.store().unwrap();
-
-        // Act
-        let credentials = Credentials::from_keyring(index, &url, Some(keyring));
-
-        assert_eq!(
-            credentials,
-            Some(Credentials::new(
-                Some(username.to_string()),
-                Some(password.to_string())
-            ))
-        );
-
-        reset_config_path();
     }
 }

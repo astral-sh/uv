@@ -3,7 +3,7 @@ use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
 
-use uv_auth::{Credentials, KeyringProvider};
+use uv_auth::Credentials;
 
 use crate::index_name::{IndexName, IndexNameError};
 use crate::origin::Origin;
@@ -155,19 +155,12 @@ impl Index {
     }
 
     /// Retrieve the credentials for the index, either from the environment, or from the URL itself.
-    pub fn credentials(&self, keyring_provider: Option<KeyringProvider>) -> Option<Credentials> {
+    pub fn credentials(&self) -> Option<Credentials> {
         // If the index is named, try to load credentials for the named index.
 
         if let Some(name) = self.name.as_ref() {
             // If credentials are provided via the environment, prefer those.
             if let Some(credentials) = Credentials::from_env(name.to_env_var()) {
-                return Some(credentials);
-            }
-
-            // Otherwise try to read the credentials from keyring.
-            if let Some(credentials) =
-                Credentials::from_keyring(name, self.url.url(), keyring_provider)
-            {
                 return Some(credentials);
             }
         }
