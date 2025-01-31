@@ -923,7 +923,7 @@ impl RemoteSource for Url {
         let last = path_segments.last().expect("path segments is non-empty");
 
         // Decode the filename, which may be percent-encoded.
-        let filename = urlencoding::decode(last)?;
+        let filename = percent_encoding::percent_decode_str(last).decode_utf8()?;
 
         Ok(filename)
     }
@@ -943,7 +943,7 @@ impl RemoteSource for UrlString {
             .ok_or_else(|| Error::MissingPathSegments(self.to_string()))?;
 
         // Decode the filename, which may be percent-encoded.
-        let filename = urlencoding::decode(last)?;
+        let filename = percent_encoding::percent_decode_str(last).decode_utf8()?;
 
         Ok(filename)
     }

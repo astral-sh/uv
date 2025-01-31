@@ -78,7 +78,8 @@ impl CanonicalUrl {
                 .path_segments()
                 .unwrap()
                 .map(|segment| {
-                    urlencoding::decode(segment)
+                    percent_encoding::percent_decode_str(segment)
+                        .decode_utf8()
                         .unwrap_or(Cow::Borrowed(segment))
                         .into_owned()
                 })

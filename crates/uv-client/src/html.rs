@@ -93,7 +93,7 @@ impl SimpleHtml {
         // Extract the hash, which should be in the fragment.
         let decoded = html_escape::decode_html_entities(href);
         let (path, hashes) = if let Some((path, fragment)) = decoded.split_once('#') {
-            let fragment = urlencoding::decode(fragment)?;
+            let fragment = percent_encoding::percent_decode_str(fragment).decode_utf8()?;
             (
                 path,
                 if fragment.trim().is_empty() {
@@ -131,7 +131,8 @@ impl SimpleHtml {
         let filename = filename.split('?').next().unwrap_or(filename);
 
         // Unquote the filename.
-        let filename = urlencoding::decode(filename)
+        let filename = percent_encoding::percent_decode_str(filename)
+            .decode_utf8()
             .map_err(|_| Error::UnsupportedFilename(filename.to_string()))?;
 
         // Extract the `requires-python` value, which should be set on the
