@@ -629,7 +629,7 @@ fn python_interpreters_from_executables<'a>(
 ///
 /// This is the correct way to determine if an interpreter matches the preference. In contrast,
 /// [`source_satisfies_environment_preference`] only checks if a [`PythonSource`] **could** satisfy
-/// preference as a pre-filtering step. We cannot definitely know if a Python interpreter is in
+/// preference as a pre-filtering step. We cannot definitively know if a Python interpreter is in
 /// a virtual environment until we query it.
 fn interpreter_satisfies_environment_preference(
     source: PythonSource,
