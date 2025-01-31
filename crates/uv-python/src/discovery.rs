@@ -398,7 +398,8 @@ fn python_executables_from_installed<'a>(
 /// Lazily iterate over all discoverable Python executables.
 ///
 /// Note that Python executables may be excluded by the given [`EnvironmentPreference`] and
-/// [`PythonPreference`].
+/// [`PythonPreference`]. However, these filters are only applied for performance. We cannot
+/// guarantee that the [`EnvironmentPreference`] is satisfied until we query the interpreter.
 ///
 /// See [`python_executables_from_installed`] and [`python_executables_from_virtual_environments`]
 /// for more information on discovery.
@@ -407,7 +408,7 @@ fn python_executables<'a>(
     implementation: Option<&'a ImplementationName>,
     environments: EnvironmentPreference,
     preference: PythonPreference,
-) -> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a {
+) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
     // Always read from `UV_INTERNAL__PARENT_INTERPRETER` — it could be a system interpreter
     let from_parent_interpreter = iter::once_with(|| {
         env::var_os(EnvVars::UV_INTERNAL__PARENT_INTERPRETER)
@@ -428,18 +429,25 @@ fn python_executables<'a>(
     let from_virtual_environments = python_executables_from_virtual_environments();
     let from_installed = python_executables_from_installed(version, implementation, preference);
 
-    // Limit the search to the relevant environment preference; we later validate that they match
-    // the preference but queries are expensive and we query less interpreters this way.
-    from_parent_interpreter
-        .chain(from_virtual_environments)
-        .chain(from_base_conda_environment)
-        .chain(from_installed)
-        .filter(move |result| {
-            result.is_err()
-                || result.as_ref().is_ok_and(|(source, path)| {
-                    source_satisfies_environment_preference(*source, path, environments)
-                })
-        })
+    // Limit the search to the relevant environment preference; this avoids unnecessary work like
+    // traversal of the file system. Subsequent filtering should be done by the caller with
+    // `source_satisfies_environment_preference` and `interpreter_satisfies_environment_preference`.
+    match environments {
+        EnvironmentPreference::OnlyVirtual => {
+            Box::new(from_parent_interpreter.chain(from_virtual_environments))
+        }
+        EnvironmentPreference::ExplicitSystem | EnvironmentPreference::Any => Box::new(
+            from_parent_interpreter
+                .chain(from_virtual_environments)
+                .chain(from_base_conda_environment)
+                .chain(from_installed),
+        ),
+        EnvironmentPreference::OnlySystem => Box::new(
+            from_parent_interpreter
+                .chain(from_base_conda_environment)
+                .chain(from_installed),
+        ),
+    }
 }
 
 /// Lazily iterate over Python executables in the `PATH`.
@@ -597,7 +605,14 @@ fn python_interpreters<'a>(
     cache: &'a Cache,
 ) -> impl Iterator<Item = Result<(PythonSource, Interpreter), Error>> + 'a {
     python_interpreters_from_executables(
-        python_executables(version, implementation, environments, preference),
+        // Perform filtering on the discovered executables based on their source. This avoids
+        // unnecessary interpreter queries, which are generally expensive. We'll filter again
+        // with `interpreter_satisfies_environment_preference` after querying.
+        python_executables(version, implementation, environments, preference).filter_ok(
+            move |(source, path)| {
+                source_satisfies_environment_preference(*source, path, environments)
+            },
+        ),
         cache,
     )
     .filter(move |result| result_satisfies_environment_preference(result, environments))
