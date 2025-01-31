@@ -4750,8 +4750,10 @@ name = "uv-cache-key"
 version = "0.0.1"
 dependencies = [
  "hex",
+ "memchr",
  "seahash",
  "url",
+ "urlencoding",
 ]
 
 [[package]]
