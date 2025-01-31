@@ -37,9 +37,9 @@ This is equivalent to the `--locked` flag for other commands.
 
 ### Upgrading locked package versions
 
-By default, uv will prefer the locked versions of packages when running `uv sync` and `uv lock`.
-Package versions will only change if the project's dependency constraints exclude the previous,
-locked version.
+By default, uv will prefer the locked versions of packages when running `uv sync` and `uv lock` with
+an existing `uv.lock` file. Package versions will only change if the project's dependency
+constraints exclude the previous, locked version.
 
 To upgrade all packages:
 
@@ -60,7 +60,12 @@ To upgrade a single package to a specific version:
 $ uv lock --upgrade-package <package>==<version>
 ```
 
+In all cases, upgrades are limited to the project's dependency constraints. For example, if the
+project defines an upper bound for a package then an upgrade will not go beyond that version.
+
 !!! note
 
-    In all cases, upgrades are limited to the project's dependency constraints. For example, if the
-    project defines an upper bound for a package then an upgrade will not go beyond that version.
+    uv applies similar logic to Git dependencies. For example, if a Git dependency references
+    the `main` branch, uv will prefer the locked commit SHA in an existing `uv.lock` file over
+    the latest commit on the `main` branch, unless the `--upgrade` or `--upgrade-package` flags
+    are used.
