@@ -232,7 +232,7 @@ def platform_tags(archs: Sequence[str]) -> Iterator[str]:
     if set(archs) & {"x86_64", "i686"}:
         # On x86/i686 also oldest glibc to be supported is (2, 5).
         too_old_glibc2 = _GLibCVersion(2, 4)
-    current_glibc = _GLibCVersion(*_get_glibc_version())
+    current_glibc = _get_glibc_version()
     glibc_max_list = [current_glibc]
     # We can assume compatibility across glibc major versions.
     # https://sourceware.org/bugzilla/show_bug.cgi?id=24636
