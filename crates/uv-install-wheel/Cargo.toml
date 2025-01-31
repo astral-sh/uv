@@ -54,6 +54,7 @@ walkdir = { workspace = true }
 zip = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
+nanoid = { workspace = true }
 same-file = { workspace = true }
 self-replace = { workspace = true }
 

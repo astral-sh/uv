@@ -5151,6 +5151,7 @@ dependencies = [
  "fs-err 3.1.0",
  "indoc",
  "mailparse",
+ "nanoid",
  "pathdiff",
  "platform-info",
  "reflink-copy",

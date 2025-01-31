@@ -3,7 +3,7 @@ use std::path::{Component, Path, PathBuf};
 
 use fs_err as fs;
 use std::sync::{LazyLock, Mutex};
-use tracing::trace;
+use tracing::{trace};
 use uv_fs::write_atomic_sync;
 
 use crate::wheel::read_record_file;
@@ -66,6 +66,44 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
             }
         }
 
+        // On Windows, when deleting executables, we first move them to a temporary location. If we
+        // fail to remove the file, we log a warning, rather than failing the entire operation.
+        #[cfg(windows)]
+        if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
+        {
+            if path.is_file() {
+                let temp_dir = tempfile::env::temp_dir().join("uv-uninstall");
+                let temp_path = temp_dir.join(nanoid::nanoid!());
+                fs::create_dir_all(temp_dir)?;
+                fs::rename(&path, &temp_path)?;
+
+                match fs::remove_file(&temp_path) {
+                    Ok(()) => {
+                        trace!("Removed executable: {}", path.display());
+                        file_count += 1;
+                        if let Some(parent) = path.parent() {
+                            visited.insert(normalize_path(parent));
+                        }
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(err) => {
+                        tracing::warn!(
+                            "Failed to remove executable: {} (error: {err}); renamed to: {}",
+                            path.display(),
+                            temp_path.display()
+                        );
+                        file_count += 1;
+                        if let Some(parent) = path.parent() {
+                            visited.insert(normalize_path(parent));
+                        }
+                    }
+                }
+                continue;
+            }
+        }
+
         match fs::remove_file(&path) {
             Ok(()) => {
                 trace!("Removed file: {}", path.display());
@@ -75,14 +113,17 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-            Err(err) => match fs::remove_dir_all(&path) {
-                Ok(()) => {
-                    trace!("Removed directory: {}", path.display());
-                    dir_count += 1;
+            Err(err) if err.kind() == std::io::ErrorKind::IsADirectory => {
+                match fs::remove_dir_all(&path) {
+                    Ok(()) => {
+                        trace!("Removed directory: {}", path.display());
+                        dir_count += 1;
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(err) => return Err(err.into()),
                 }
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-                Err(_) => return Err(err.into()),
-            },
+            }
+            Err(err) => return Err(err.into()),
         }
     }
 
