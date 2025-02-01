@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -7,8 +8,10 @@ use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime};
 
 use futures::TryStreamExt;
+use once_cell::sync::OnceCell;
 use owo_colors::OwoColorize;
 use reqwest_retry::RetryPolicy;
+use serde::Deserialize;
 use thiserror::Error;
 use tokio::io::{AsyncRead, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -20,6 +23,7 @@ use uv_client::{is_extended_transient_error, WrappedReqwestError};
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, Simplified};
+use uv_pep440::{Prerelease, PrereleaseKind};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_static::EnvVars;
 
@@ -29,13 +33,16 @@ use crate::implementation::{
 use crate::installation::PythonInstallationKey;
 use crate::libc::LibcDetectionError;
 use crate::managed::ManagedPythonInstallation;
-use crate::platform::{self, Arch, Libc, Os};
+use crate::platform::{self, Arch, ArchVariant, Libc, Os};
+use crate::PythonVariant;
 use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
+    #[error(transparent)]
+    SerdeJson(#[from] serde_json::Error),
     #[error(transparent)]
     ImplementationError(#[from] ImplementationError),
     #[error("Expected download URL (`{0}`) to end in a supported file extension: {1}")]
@@ -86,6 +93,8 @@ pub enum Error {
     Mirror(&'static str, &'static str),
     #[error(transparent)]
     LibcDetection(#[from] LibcDetectionError),
+    #[error("Remote python downloads JSON is not yet supported, please use a local path (without `file://` prefix)")]
+    RemoteJSONNotSupported(),
 }
 
 #[derive(Debug, PartialEq)]
@@ -245,9 +254,11 @@ impl PythonDownloadRequest {
     }
 
     /// Iterate over all [`PythonDownload`]'s that match this request.
-    pub fn iter_downloads(&self) -> impl Iterator<Item = &'static ManagedPythonDownload> + '_ {
-        ManagedPythonDownload::iter_all()
-            .filter(move |download| self.satisfied_by_download(download))
+    pub fn iter_downloads(
+        &self,
+    ) -> Result<impl Iterator<Item = &'static ManagedPythonDownload> + use<'_>, Error> {
+        Ok(ManagedPythonDownload::iter_all()?
+            .filter(move |download| self.satisfied_by_download(download)))
     }
 
     /// Whether this request is satisfied by the key of an existing installation.
@@ -443,7 +454,28 @@ impl FromStr for PythonDownloadRequest {
     }
 }
 
-include!("downloads.inc");
+static PYTHON_DOWNLOADS: OnceCell<Vec<ManagedPythonDownload>> = OnceCell::new();
+
+#[derive(Debug, Deserialize, Clone)]
+struct JsonPythonDownload {
+    name: String,
+    arch: JsonArch,
+    os: String,
+    libc: String,
+    major: u8,
+    minor: u8,
+    patch: u8,
+    prerelease: Option<String>,
+    url: String,
+    sha256: Option<String>,
+    variant: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+struct JsonArch {
+    family: String,
+    variant: Option<String>,
+}
 
 #[derive(Debug, Clone)]
 pub enum DownloadResult {
@@ -457,18 +489,120 @@ impl ManagedPythonDownload {
         request: &PythonDownloadRequest,
     ) -> Result<&'static ManagedPythonDownload, Error> {
         request
-            .iter_downloads()
+            .iter_downloads()?
             .next()
             .ok_or(Error::NoDownloadFound(request.clone()))
     }
 
     /// Iterate over all [`ManagedPythonDownload`]s.
-    pub fn iter_all() -> impl Iterator<Item = &'static ManagedPythonDownload> {
-        PYTHON_DOWNLOADS
-            .iter()
-            // TODO(konsti): musl python-build-standalone builds are currently broken (statically
-            // linked), so we pretend they don't exist. https://github.com/astral-sh/uv/issues/4242
-            .filter(|download| download.key.libc != Libc::Some(target_lexicon::Environment::Musl))
+    pub fn iter_all() -> Result<impl Iterator<Item = &'static ManagedPythonDownload>, Error> {
+        Ok(PYTHON_DOWNLOADS.get_or_try_init(|| {
+            if let Ok(json_source) = std::env::var(EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL) {
+                let result: Result<std::vec::Vec<ManagedPythonDownload>, Error>  = if Url::parse(&json_source).is_ok() {
+                    Err(Error::RemoteJSONNotSupported())
+                } else {
+                    let file = match fs_err::File::open(&json_source) {
+                        Ok(file) => file,
+                        Err(e) => {
+                            Err(Error::Io(e))
+                        }?
+                    };
+
+                    let json_downloads: HashMap<String, JsonPythonDownload> = serde_json::from_reader(file)?;
+
+                    Ok(json_downloads.into_iter()
+                        .filter_map(|(key, entry)| {
+                            let implementation = match entry.name.as_str() {
+                                "cpython" => LenientImplementationName::Known(ImplementationName::CPython),
+                                "pypy" => LenientImplementationName::Known(ImplementationName::PyPy),
+                                _ => LenientImplementationName::Unknown(entry.name.clone()),
+                            };
+
+
+                            let arch_str = if let Some(variant) = entry.arch.variant {
+                                format!("{}_{}", entry.arch.family, variant)
+                            } else {
+                                entry.arch.family
+                            };
+
+                            let arch = match Arch::from_str(&arch_str) {
+                                Ok(arch) => arch,
+                                Err(e) => {
+                                    debug!("Skipping entry {key}: Invalid arch '{arch_str}' - {e}");
+                                    return None;
+                                }
+                            };
+
+                            let os = match Os::from_str(&entry.os) {
+                                Ok(os) => os,
+                                Err(e) => {
+                                    debug!("Skipping entry {}: Invalid OS '{}' - {}", key, entry.os, e);
+                                    return None;
+                                }
+                            };
+
+                            let libc = match Libc::from_str(&entry.libc) {
+                                Ok(libc) => libc,
+                                Err(e) => {
+                                    debug!("Skipping entry {}: Invalid libc '{}' - {}", key, entry.libc, e);
+                                    return None;
+                                }
+                            };
+
+                            let variant = entry.variant.as_deref()
+                                .map(PythonVariant::from_str)
+                                .transpose()
+                                .unwrap_or_else(|()| {
+                                    debug!("Skipping entry {key}: Unknown python variant - {}", entry.variant.unwrap_or_default());
+                                    None
+                                })
+                                .unwrap_or(PythonVariant::Default);
+
+                            let version_str = format!("{}.{}.{}{}",
+                                entry.major,
+                                entry.minor,
+                                entry.patch,
+                                entry.prerelease.as_deref().unwrap_or_default()
+                            );
+
+                            let version = match PythonVersion::from_str(&version_str) {
+                                Ok(version) => version,
+                                Err(e) => {
+                                    debug!("Skipping entry {key}: Invalid version '{version_str}' - {e}");
+                                    return None;
+                                }
+                            };
+
+                            let url = Box::leak(entry.url.into_boxed_str()) as &'static str;
+                            let sha256 = entry.sha256.map(|s| Box::leak(s.into_boxed_str()) as &'static str);
+
+                            Some(ManagedPythonDownload {
+                                key: PythonInstallationKey::new_from_version(
+                                    implementation,
+                                    &version,
+                                    os,
+                                    arch,
+                                    libc,
+                                    variant,
+                                ),
+                                url,
+                                sha256,
+                            })
+                        })
+                        .collect())
+                };
+                result
+            } else {
+                #[allow(incomplete_include)]
+                let mut downloads = include!("downloads.inc");
+                downloads.retain(|download| {
+                    // TODO(konsti): musl python-build-standalone builds are currently broken (statically
+                    // linked), so we pretend they don't exist. https://github.com/astral-sh/uv/issues/4242
+                    download.key.libc != Libc::Some(target_lexicon::Environment::Musl)
+                });
+                Ok(downloads)
+            }
+        })?.iter())
     }
 
     pub fn url(&self) -> &'static str {
