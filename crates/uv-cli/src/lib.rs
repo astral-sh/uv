@@ -2703,7 +2703,7 @@ pub struct RunArgs {
     /// Exclude dependencies from default groups.
     ///
     /// `--group` can be used to include specific groups.
-    #[arg(long, conflicts_with_all = ["no_group", "only_group"])]
+    #[arg(long, conflicts_with_all = ["only_group"])]
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
@@ -2717,7 +2717,7 @@ pub struct RunArgs {
     /// Include dependencies from all dependency groups.
     ///
     /// `--no-group` can be used to exclude specific groups.
-    #[arg(long, conflicts_with_all = [ "group", "only_group" ])]
+    #[arg(long, conflicts_with_all = ["group", "only_group"])]
     pub all_groups: bool,
 
     /// Run a Python module.
@@ -2971,7 +2971,7 @@ pub struct SyncArgs {
     /// Exclude dependencies from default groups.
     ///
     /// `--group` can be used to include specific groups.
-    #[arg(long, conflicts_with_all = ["no_group", "only_group"])]
+    #[arg(long, conflicts_with_all = ["only_group"])]
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
@@ -2985,7 +2985,7 @@ pub struct SyncArgs {
     /// Include dependencies from all dependency groups.
     ///
     /// `--no-group` can be used to exclude specific groups.
-    #[arg(long, conflicts_with_all = [ "group", "only_group" ])]
+    #[arg(long, conflicts_with_all = ["group", "only_group"])]
     pub all_groups: bool,
 
     /// Install any editable dependencies, including the project and any workspace members, as
@@ -3413,7 +3413,7 @@ pub struct TreeArgs {
     /// Exclude dependencies from default groups.
     ///
     /// `--group` can be used to include specific groups.
-    #[arg(long, conflicts_with_all = ["no_group", "only_group"])]
+    #[arg(long, conflicts_with_all = ["only_group"])]
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
@@ -3427,7 +3427,7 @@ pub struct TreeArgs {
     /// Include dependencies from all dependency groups.
     ///
     /// `--no-group` can be used to exclude specific groups.
-    #[arg(long, conflicts_with_all = [ "group", "only_group" ])]
+    #[arg(long, conflicts_with_all = ["group", "only_group"])]
     pub all_groups: bool,
 
     /// Assert that the `uv.lock` will remain unchanged.
@@ -3581,7 +3581,7 @@ pub struct ExportArgs {
     /// Exclude dependencies from default groups.
     ///
     /// `--group` can be used to include specific groups.
-    #[arg(long, conflicts_with_all = ["no_group", "only_group"])]
+    #[arg(long, conflicts_with_all = ["only_group"])]
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
@@ -3595,7 +3595,7 @@ pub struct ExportArgs {
     /// Include dependencies from all dependency groups.
     ///
     /// `--no-group` can be used to exclude specific groups.
-    #[arg(long, conflicts_with_all = [ "group", "only_group" ])]
+    #[arg(long, conflicts_with_all = ["group", "only_group"])]
     pub all_groups: bool,
 
     /// Exclude the comment header at the top of the generated output file.
