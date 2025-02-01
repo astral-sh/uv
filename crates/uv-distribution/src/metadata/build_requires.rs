@@ -7,7 +7,7 @@ use uv_normalize::PackageName;
 use uv_workspace::pyproject::ToolUvSources;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, ProjectWorkspace, Workspace};
 
-use crate::metadata::{LoweredRequirement, MetadataError};
+use crate::metadata::{get_constrained_packages, LoweredRequirement, MetadataError};
 
 /// Lowered requirements from a `[build-system.requires]` field in a `pyproject.toml` file.
 #[derive(Debug, Clone)]
@@ -100,6 +100,8 @@ impl BuildRequires {
             SourceStrategy::Disabled => &empty,
         };
 
+        let constrained_packages = get_constrained_packages(&metadata.requires_dist);
+
         // Lower the requirements.
         let requires_dist = metadata.requires_dist.into_iter();
         let requires_dist = match source_strategy {
@@ -119,6 +121,7 @@ impl BuildRequires {
                         locations,
                         project_workspace.workspace(),
                         lower_bound,
+                        &constrained_packages,
                         None,
                     )
                     .map(move |requirement| match requirement {
@@ -177,6 +180,8 @@ impl BuildRequires {
             SourceStrategy::Disabled => &empty,
         };
 
+        let constrained_packages = get_constrained_packages(&metadata.requires_dist);
+
         // Lower the requirements.
         let requires_dist = metadata.requires_dist.into_iter();
         let requires_dist = match source_strategy {
@@ -196,6 +201,7 @@ impl BuildRequires {
                         locations,
                         workspace,
                         lower_bound,
+                        &constrained_packages,
                         None,
                     )
                     .map(move |requirement| match requirement {

@@ -12,7 +12,9 @@ use uv_workspace::dependency_groups::FlatDependencyGroups;
 use uv_workspace::pyproject::{Sources, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, ProjectWorkspace};
 
-use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
+use crate::metadata::{
+    get_constrained_packages, GitWorkspaceMember, LoweredRequirement, MetadataError,
+};
 use crate::Metadata;
 
 #[derive(Debug, Clone)]
@@ -157,6 +159,8 @@ impl RequiresDist {
         // a valid extra or group, if present.
         Self::validate_sources(project_sources, &metadata, &dependency_groups)?;
 
+        let constrained_packages = get_constrained_packages(&metadata.requires_dist);
+
         // Lower the dependency groups.
         let dependency_groups = dependency_groups
             .into_iter()
@@ -179,6 +183,7 @@ impl RequiresDist {
                                 locations,
                                 project_workspace.workspace(),
                                 lower_bound,
+                                &constrained_packages,
                                 git_member,
                             )
                             .map(
@@ -224,6 +229,7 @@ impl RequiresDist {
                         locations,
                         project_workspace.workspace(),
                         lower_bound,
+                        &constrained_packages,
                         git_member,
                     )
                     .map(move |requirement| match requirement {

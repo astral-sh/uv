@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
 use thiserror::Error;
@@ -6,8 +6,9 @@ use thiserror::Error;
 use uv_configuration::{LowerBound, SourceStrategy};
 use uv_distribution_types::{GitSourceUrl, IndexLocations};
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep440::{Version, VersionSpecifiers};
-use uv_pypi_types::{HashDigest, ResolutionMetadata};
+use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
+use uv_pep508::{Requirement, VersionOrUrl};
+use uv_pypi_types::{HashDigest, ResolutionMetadata, VerbatimParsedUrl};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::WorkspaceError;
 
@@ -159,4 +160,25 @@ pub struct GitWorkspaceMember<'a> {
     /// workspace root.
     pub fetch_root: &'a Path,
     pub git_source: &'a GitSourceUrl<'a>,
+}
+
+/// Return the names of packages that have lower bounds.
+///
+/// When a requirement is listed multiple times in the requirements, for example once in
+/// `dependencies` and then in `optional-dependencies`, we don't want to warn if the second
+/// occurrence doesn't have a lower bound.
+pub(crate) fn get_constrained_packages(
+    requires_dist: &[Requirement<VerbatimParsedUrl>],
+) -> HashSet<PackageName> {
+    requires_dist
+        .iter()
+        .filter(|requirement| match &requirement.version_or_url {
+            None => false,
+            Some(VersionOrUrl::VersionSpecifier(specifiers)) => {
+                specifiers.iter().any(VersionSpecifier::has_lower_bound)
+            }
+            Some(VersionOrUrl::Url(_)) => true,
+        })
+        .map(|requirement| requirement.name.clone())
+        .collect()
 }
