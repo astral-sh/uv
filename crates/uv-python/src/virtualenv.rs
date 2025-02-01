@@ -32,6 +32,8 @@ pub struct PyVenvConfiguration {
     pub(crate) uv: bool,
     /// Is the virtual environment relocatable?
     pub(crate) relocatable: bool,
+    /// At which root was the environment originally created?
+    pub(crate) uv_venv_path: Option<PathBuf>,
     /// Was the virtual environment populated with seed packages?
     pub(crate) seed: bool,
 }
@@ -185,6 +187,7 @@ impl PyVenvConfiguration {
         let mut uv = false;
         let mut relocatable = false;
         let mut seed = false;
+        let mut uv_venv_path = None;
 
         // Per https://snarky.ca/how-virtual-environments-work/, the `pyvenv.cfg` file is not a
         // valid INI file, and is instead expected to be parsed by partitioning each line on the
@@ -208,6 +211,9 @@ impl PyVenvConfiguration {
                 "seed" => {
                     seed = value.trim().to_lowercase() == "true";
                 }
+                "uv-venv-path" => {
+                    uv_venv_path = Some(PathBuf::from(value.trim()));
+                }
                 _ => {}
             }
         }
@@ -216,6 +222,7 @@ impl PyVenvConfiguration {
             virtualenv,
             uv,
             relocatable,
+            uv_venv_path,
             seed,
         })
     }

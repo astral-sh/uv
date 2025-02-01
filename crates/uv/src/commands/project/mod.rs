@@ -660,6 +660,8 @@ impl ProjectInterpreter {
                     }
                     // If the environment is an empty directory, it's fine to use
                     InvalidEnvironmentKind::Empty => {}
+                    // If it's "only" relocated, it is also fine to use (will be deleted later)
+                    InvalidEnvironmentKind::RelocatedFrom(_) => {}
                 };
             }
             Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(path))) => {

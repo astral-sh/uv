@@ -3,6 +3,7 @@ use assert_cmd::prelude::*;
 use assert_fs::{fixture::ChildPath, prelude::*};
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
+use itertools::Itertools;
 
 use crate::common::{download_to_disk, uv_snapshot, venv_bin_path, TestContext};
 use predicates::prelude::predicate;
@@ -4397,6 +4398,57 @@ fn sync_invalid_environment() -> Result<()> {
     Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    // Similarly, if the venv is invalid due to being relocated...
+    let cfg_p = context.temp_dir.join(".venv").join("pyvenv.cfg");
+    let cfg = fs_err::read_to_string(&cfg_p)?;
+    let alt_venv_line = "uv-venv-path = /not/the/right/path";
+    fs_err::write(
+        &cfg_p,
+        cfg.lines()
+            .map(|line| {
+                if line.starts_with("uv-venv-path = ") {
+                    alt_venv_line
+                } else {
+                    line
+                }
+            })
+            .join("\n"),
+    )?;
+    // We should still delete and recreate
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+    // A missing uv-venv-path also counts as a relocated venv...
+    fs_err::write(
+        &cfg_p,
+        cfg.lines()
+            .filter(|&l| !l.starts_with("uv-venv-path"))
+            .join("\n"),
+    )?;
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);

@@ -372,6 +372,11 @@ pub(crate) fn create(
 
     if relocatable {
         pyvenv_cfg_data.push(("relocatable".to_string(), "true".to_string()));
+    } else {
+        pyvenv_cfg_data.push((
+            "uv-venv-path".to_string(),
+            location.simplified().to_str().unwrap().to_string(),
+        ));
     }
 
     if seed {

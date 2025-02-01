@@ -46,6 +46,7 @@ pub enum InvalidEnvironmentKind {
     NotDirectory,
     Empty,
     MissingExecutable(PathBuf),
+    RelocatedFrom(Option<PathBuf>),
 }
 
 impl From<PythonNotFound> for EnvironmentNotFound {
@@ -130,6 +131,12 @@ impl fmt::Display for InvalidEnvironmentKind {
             Self::MissingExecutable(path) => {
                 write!(f, "missing Python executable at `{}`", path.user_display())
             }
+            Self::RelocatedFrom(Some(path)) => {
+                write!(f, "relocated from `{}`", path.user_display())
+            }
+            Self::RelocatedFrom(None) => {
+                write!(f, "missing uv-venv-path in pyvenv.cfg")
+            }
             Self::Empty => write!(f, "directory is empty"),
         }
     }
@@ -212,11 +219,41 @@ impl PythonEnvironment {
         };
 
         let interpreter = Interpreter::query(executable, cache)?;
-
-        Ok(Self(Arc::new(PythonEnvironmentShared {
+        let env = Self(Arc::new(PythonEnvironmentShared {
             root: interpreter.sys_prefix().to_path_buf(),
             interpreter,
-        })))
+        }));
+
+        // Check if the environment is relocatable and if it was relocated from a different path.
+        match env.cfg() {
+            Ok(cfg) if !cfg.is_relocatable() => {
+                if let Some(uv_venv_path) = cfg.uv_venv_path.as_ref() {
+                    if std::path::absolute(root.as_ref())
+                        .ok()
+                        .map(|p| p.simplified() != uv_venv_path)
+                        .unwrap_or(true)
+                    {
+                        return Err(InvalidEnvironment {
+                            path: root.as_ref().to_path_buf(),
+                            kind: InvalidEnvironmentKind::RelocatedFrom(Some(uv_venv_path.clone())),
+                        }
+                        .into());
+                    }
+                } else if cfg.uv {
+                    return Err(InvalidEnvironment {
+                        path: root.as_ref().to_path_buf(),
+                        kind: InvalidEnvironmentKind::RelocatedFrom(None),
+                    }
+                    .into());
+                }
+            }
+            // System Python environments don't have a `pyvenv.cfg` file.
+            // However we should consider what to do if the file exists but some
+            // other error occurred while parsing it. For now, continue with previous
+            // behaviour (which did not consider the file's existence at this stage).
+            _ => {}
+        };
+        Ok(env)
     }
 
     /// Create a [`PythonEnvironment`] from an existing [`PythonInstallation`].
