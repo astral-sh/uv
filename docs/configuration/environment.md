@@ -66,7 +66,8 @@ this URL as the default index when searching for packages.
 
 ### `UV_ENV_FILE`
 
-`.env` files from which to load environment variables when executing `uv run` commands.
+`.env` files from which to load environment variables when executing `uv run` commands.  
+See [.env](files.md#env) for more information about using it.
 
 ### `UV_EXCLUDE_NEWER`
 
