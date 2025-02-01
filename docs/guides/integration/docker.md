@@ -500,3 +500,50 @@ RUN uv pip install -r pyproject.toml
 COPY . .
 RUN uv pip install -e .
 ```
+
+## Verifying image provenance
+
+The docker images are signed during the build process, and you can verify that a given image was
+produced by the uv project with the [GitHub cli tool `gh`](https://cli.github.com/):
+
+```console
+$ gh attestation verify --owner astral-sh oci://ghcr.io/astral-sh/uv:latest
+Loaded digest sha256:a0c0e6aed043f5138957ea89744536eed81f1db633dc9bb3be2b882116060be2 for oci://ghcr.io/astral-sh/uv:latest
+Loaded 1 attestation from GitHub API
+
+The following policy criteria will be enforced:
+- OIDC Issuer must match:................... https://token.actions.githubusercontent.com
+- Source Repository Owner URI must match:... https://github.com/astral-sh
+- Predicate type must match:................ https://slsa.dev/provenance/v1
+- Subject Alternative Name must match regex: (?i)^https://github.com/astral-sh/uv/
+
+✓ Verification succeeded!
+
+sha256:5ba754217671dd08bb37c827193c5a64186f3195dfff401c633c23ac7892aa07 was attested by:
+REPO          PREDICATE_TYPE                  WORKFLOW
+astral-sh/uv  https://slsa.dev/provenance/v1  .github/workflows/release.yml@5ef3d515ef3d513903c623a0c2bec278ff087b5470c3930
+```
+
+This tells you that the specific Docker image was built by the official uv Github release workflow
+and hasn't been tampered with since.
+
+GitHub attestations build on the [sigstore.dev infrastructure](https://www.sigstore.dev/). As such
+you can also use the [`cosign` command](https://github.com/sigstore/cosign) to verify the
+attestation blob:
+
+```console
+$ REPO=astral-sh/uv
+$ gh attestation download --repo $REPO oci://ghcr.io/${REPO}:latest
+$ docker buildx imagetools inspect ghcr.io/${REPO}:latest --format "{{json .Manifest}}" > manifest.json
+$ cosign verify-blob-attestation \
+    --new-bundle-format \
+    --bundle "$(jq -r .digest manifest.json).jsonl"  \
+    --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
+    --certificate-identity-regexp="^https://github\.com/${REPO}/.*" \
+    <(jq -j '.|del(.digest,.size)' manifest.json)
+Wrote attestations to file sha256:a0c0e6aed043f5138957ea89744536eed81f1db633dc9bb3be2b882116060be2.jsonl.
+Any previous content has been overwritten
+
+The trusted metadata is now available at sha256:a0c0e6aed043f5138957ea89744536eed81f1db633dc9bb3be2b882116060be2.jsonl
+Verified OK
+```
