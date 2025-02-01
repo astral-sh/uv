@@ -1,13 +1,13 @@
+use rkyv::option::ArchivedOption;
 use std::collections::BTreeMap;
 use std::path::Path;
-
 use thiserror::Error;
-
+use uv_client::OwnedArchive;
 use uv_configuration::{LowerBound, SourceStrategy};
 use uv_distribution_types::{GitSourceUrl, IndexLocations};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pypi_types::{HashDigest, ResolutionMetadata};
+use uv_pypi_types::{HashDigest, ResolutionMetadata, VerbatimParsedUrl};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::WorkspaceError;
 
@@ -128,6 +128,49 @@ pub struct ArchiveMetadata {
 }
 
 impl ArchiveMetadata {
+    /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
+    /// dependencies.
+    pub fn from_owned_archive(metadata: OwnedArchive<ResolutionMetadata>) -> Self {
+        let name = rkyv::deserialize::<PackageName, rkyv::rancor::Error>(&metadata.name).unwrap();
+        let version = rkyv::deserialize::<Version, rkyv::rancor::Error>(&metadata.version).unwrap();
+        let requires_dist = metadata
+            .requires_dist
+            .iter()
+            .map(|requirement| {
+                rkyv::deserialize::<uv_pep508::Requirement<VerbatimParsedUrl>, rkyv::rancor::Error>(
+                    requirement,
+                )
+                .unwrap()
+            })
+            .map(uv_pypi_types::Requirement::from)
+            .collect();
+        let requires_python = match &metadata.requires_python {
+            ArchivedOption::Some(requires_python) => Some(
+                rkyv::deserialize::<VersionSpecifiers, rkyv::rancor::Error>(requires_python)
+                    .unwrap(),
+            ),
+            ArchivedOption::None => None,
+        };
+        let provides_extras = metadata
+            .provides_extras
+            .iter()
+            .map(|extra| rkyv::deserialize::<ExtraName, rkyv::rancor::Error>(extra).unwrap())
+            .collect();
+        let dynamic = rkyv::deserialize::<bool, rkyv::rancor::Error>(&metadata.dynamic).unwrap();
+        Self {
+            metadata: Metadata {
+                name,
+                version,
+                requires_dist,
+                requires_python,
+                provides_extras,
+                dependency_groups: BTreeMap::default(),
+                dynamic,
+            },
+            hashes: vec![],
+        }
+    }
+
     /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
     /// dependencies.
     pub fn from_metadata23(metadata: ResolutionMetadata) -> Self {

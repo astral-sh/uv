@@ -87,7 +87,6 @@ impl fmt::Display for Os {
     serde::Deserialize,
     serde::Serialize,
 )]
-#[rkyv(derive(Debug))]
 #[serde(rename_all = "lowercase")]
 pub enum Arch {
     #[serde(alias = "arm64")]

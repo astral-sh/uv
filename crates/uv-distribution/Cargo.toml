@@ -44,6 +44,7 @@ nanoid = { workspace = true }
 owo-colors = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
+rkyv = { workspace = true }
 rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

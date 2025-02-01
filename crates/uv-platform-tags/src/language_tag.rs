@@ -18,7 +18,6 @@ use std::str::FromStr;
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[rkyv(derive(Debug))]
 pub enum LanguageTag {
     /// Ex) `none`
     None,

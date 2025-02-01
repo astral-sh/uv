@@ -17,8 +17,18 @@ mod resolver;
 mod source;
 
 /// A URL reference to a Git repository.
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Hash, Ord, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[rkyv(derive(Debug))]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    PartialOrd,
+    Eq,
+    Hash,
+    Ord,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
 pub struct GitUrl {
     /// The URL of the Git repository, with any query parameters, fragments, and leading `git+`
     /// removed.

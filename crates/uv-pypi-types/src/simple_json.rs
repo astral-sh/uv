@@ -98,7 +98,6 @@ impl CoreMetadata {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[rkyv(derive(Debug))]
 pub enum Yanked {
     Bool(bool),
     Reason(String),
@@ -308,7 +307,6 @@ impl FromStr for Hashes {
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[rkyv(derive(Debug))]
 pub enum HashAlgorithm {
     Md5,
     Sha256,
@@ -356,7 +354,6 @@ impl std::fmt::Display for HashAlgorithm {
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[rkyv(derive(Debug))]
 pub struct HashDigest {
     pub algorithm: HashAlgorithm,
     pub digest: Box<str>,

@@ -28,7 +28,6 @@ use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNam
     rkyv::Serialize,
 )]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[rkyv(derive(Debug))]
 pub struct ExtraName(SmallString);
 
 impl ExtraName {

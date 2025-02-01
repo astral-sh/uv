@@ -21,7 +21,6 @@ use crate::Pep508Url;
     feature = "rkyv",
     derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
 )]
-#[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 pub struct VerbatimUrl {
     /// The parsed URL.
     #[cfg_attr(feature = "rkyv", rkyv(with = uv_rkyv::AsStr))]
@@ -45,10 +44,7 @@ impl PartialEq for VerbatimUrl {
 impl VerbatimUrl {
     /// Create a [`VerbatimUrl`] from a [`Url`].
     pub fn from_url(url: url::Url) -> Self {
-        Self {
-            url,
-            given: None,
-        }
+        Self { url, given: None }
     }
 
     /// Parse a URL from a string, expanding any environment variables.

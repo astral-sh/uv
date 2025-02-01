@@ -27,7 +27,7 @@ use uv_distribution_types::{
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
 use uv_platform_tags::Tags;
-use uv_pypi_types::HashDigest;
+use uv_pypi_types::{HashDigest, ResolutionMetadata};
 use uv_types::{BuildContext, BuildStack};
 
 use crate::archive::Archive;
@@ -453,7 +453,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         match result {
             Ok(metadata) => {
                 // Validate that the metadata is consistent with the distribution.
-                Ok(ArchiveMetadata::from_metadata23(metadata))
+                Ok(ArchiveMetadata::from_owned_archive(metadata))
             }
             Err(err) if err.is_http_streaming_unsupported() => {
                 warn!("Streaming unsupported when fetching metadata for {dist}; downloading wheel directly ({err})");

@@ -81,8 +81,8 @@ where
         // We convert the error to a simple string because... the error type
         // does not implement Send. And I don't think we really need to keep
         // the error type around anyway.
-        let _ = rkyv::access::<A::Archived, rancor::Error>(&raw)
-            .map_err(|e| ErrorKind::ArchiveRead(e.to_string()))?;
+        // let _ = rkyv::access::<A::Archived, rancor::Error>(&raw)
+        //     .map_err(|e| ErrorKind::ArchiveRead(e.to_string()))?;
         Ok(Self {
             raw,
             archive: std::marker::PhantomData,

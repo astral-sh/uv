@@ -6,8 +6,19 @@ use thiserror::Error;
 /// Unique identity of any Git object (commit, tree, blob, tag).
 ///
 /// Note this type does not validate whether the input is a valid hash.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[rkyv(derive(Debug))]
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
 pub struct GitOid {
     len: usize,
     bytes: [u8; 40],

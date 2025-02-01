@@ -640,7 +640,6 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[rkyv(derive(Debug))]
 pub enum BinaryFormat {
     Arm64,
     Fat,

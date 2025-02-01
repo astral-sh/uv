@@ -22,7 +22,6 @@ use uv_pep440::{Version, VersionParseError};
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[rkyv(derive(Debug))]
 pub struct SourceDistFilename {
     pub name: PackageName,
     pub version: Version,

@@ -25,7 +25,6 @@ use crate::{Arch, BinaryFormat};
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[rkyv(derive(Debug))]
 pub enum PlatformTag {
     /// Ex) `any`
     Any,

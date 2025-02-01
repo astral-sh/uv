@@ -28,7 +28,6 @@ use crate::{metadata, LenientVersionSpecifiers, MetadataError, VerbatimParsedUrl
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[rkyv(derive(Debug))]
 #[serde(rename_all = "kebab-case")]
 pub struct ResolutionMetadata {
     // Mandatory fields

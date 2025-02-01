@@ -29,7 +29,6 @@ use crate::{BuildTag, BuildTagError};
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[rkyv(derive(Debug))]
 pub struct WheelFilename {
     pub name: PackageName,
     pub version: Version,

@@ -10,7 +10,6 @@ use uv_normalize::PackageName;
     feature = "rkyv",
     derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
 )]
-#[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 #[serde(rename_all = "kebab-case")]
 pub enum RequirementOrigin {
     /// The requirement was provided via a standalone file (e.g., a `requirements.txt` file).

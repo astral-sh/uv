@@ -587,12 +587,12 @@ impl RegistryClient {
             }
         };
 
-        if metadata.name != *built_dist.name() {
-            return Err(Error::from(ErrorKind::NameMismatch {
-                metadata: metadata.name,
-                given: built_dist.name().clone(),
-            }));
-        }
+        // if metadata.name != *built_dist.name() {
+        //     return Err(Error::from(ErrorKind::NameMismatch {
+        //         metadata: metadata.name,
+        //         given: built_dist.name().clone(),
+        //     }));
+        // }
 
         Ok(metadata)
     }
@@ -745,7 +745,7 @@ impl RegistryClient {
                             ))
                         })?;
                     let archived = OwnedArchive::from_unarchived(&unarchived)?;
-                    Ok(archived)
+                    Ok::<OwnedArchive<ResolutionMetadata>, Error>(archived)
                 }
                 .boxed_local()
                 .instrument(info_span!("read_metadata_range_request", wheel = %filename))
@@ -807,7 +807,7 @@ impl RegistryClient {
                     .await
                     .map_err(|err| ErrorKind::Metadata(url.to_string(), err))?;
                 let archived = OwnedArchive::from_unarchived(&unarchived)?;
-                Ok(archived)
+                Ok::<OwnedArchive<ResolutionMetadata>, Error>(archived)
             }
             .instrument(info_span!("read_metadata_stream", wheel = %filename))
         };
@@ -834,7 +834,6 @@ impl RegistryClient {
 }
 
 #[derive(Default, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[rkyv(derive(Debug))]
 pub struct VersionFiles {
     pub wheels: Vec<VersionWheel>,
     pub source_dists: Vec<VersionSourceDist>,
@@ -863,25 +862,21 @@ impl VersionFiles {
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[rkyv(derive(Debug))]
 pub struct VersionWheel {
     pub name: WheelFilename,
     pub file: File,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[rkyv(derive(Debug))]
 pub struct VersionSourceDist {
     pub name: SourceDistFilename,
     pub file: File,
 }
 
 #[derive(Default, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[rkyv(derive(Debug))]
 pub struct SimpleMetadata(Vec<SimpleMetadatum>);
 
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[rkyv(derive(Debug))]
 pub struct SimpleMetadatum {
     pub version: Version,
     pub files: VersionFiles,

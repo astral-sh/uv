@@ -31,7 +31,6 @@ pub(crate) type TagSet<T> = smallvec::SmallVec<[T; 3]>;
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[rkyv(derive(Debug))]
 pub(crate) enum WheelTag {
     Small { small: WheelTagSmall },
     Large { large: Box<WheelTagLarge> },
@@ -58,7 +57,6 @@ impl Display for WheelTag {
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[rkyv(derive(Debug))]
 #[allow(clippy::struct_field_names)]
 pub(crate) struct WheelTagSmall {
     /// The Python tag, e.g., `py3` in `1.2.3-py3-none-any`.
@@ -91,7 +89,6 @@ impl Display for WheelTagSmall {
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[rkyv(derive(Debug))]
 #[allow(clippy::struct_field_names)]
 pub(crate) struct WheelTagLarge {
     /// The optional build tag, e.g., `73` in `1.2.3-73-py3-none-any`.

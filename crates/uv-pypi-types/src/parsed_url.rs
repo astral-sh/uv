@@ -48,7 +48,6 @@ pub enum ParsedUrlError {
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[rkyv(derive(Debug))]
 pub struct VerbatimParsedUrl {
     pub parsed_url: ParsedUrl,
     pub verbatim: VerbatimUrl,
@@ -182,7 +181,6 @@ impl Display for VerbatimParsedUrl {
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[rkyv(derive(Debug))]
 pub enum ParsedUrl {
     /// The direct URL is a path to a local file.
     Path(ParsedPathUrl),
@@ -222,7 +220,6 @@ impl ParsedUrl {
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[rkyv(derive(Debug))]
 pub struct ParsedPathUrl {
     #[rkyv(with = uv_rkyv::AsStr)]
     pub url: Url,
@@ -260,7 +257,6 @@ impl ParsedPathUrl {
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[rkyv(derive(Debug))]
 pub struct ParsedDirectoryUrl {
     #[rkyv(with = uv_rkyv::AsStr)]
     pub url: Url,
@@ -300,7 +296,6 @@ impl ParsedDirectoryUrl {
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[rkyv(derive(Debug))]
 pub struct ParsedGitUrl {
     pub url: GitUrl,
     #[rkyv(with = rkyv::with::Map<rkyv::with::AsString>)]
@@ -363,7 +358,6 @@ impl TryFrom<Url> for ParsedGitUrl {
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[rkyv(derive(Debug))]
 pub struct ParsedArchiveUrl {
     #[rkyv(with = uv_rkyv::AsStr)]
     pub url: Url,

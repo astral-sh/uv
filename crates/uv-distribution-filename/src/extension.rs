@@ -4,12 +4,21 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash,     Serialize,
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
     Deserialize,
     rkyv::Archive,
     rkyv::Deserialize,
-    rkyv::Serialize,)]
-#[rkyv(derive(Debug))]
+    rkyv::Serialize,
+)]
 pub enum DistExtension {
     Wheel,
     Source(SourceDistExtension),
@@ -30,7 +39,6 @@ pub enum DistExtension {
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[rkyv(derive(Debug))]
 pub enum SourceDistExtension {
     Zip,
     TarGz,
