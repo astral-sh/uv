@@ -22,6 +22,7 @@ uv-git = { workspace = true }
 uv-normalize = { workspace = true, features = ["schemars"] }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true, features = ["rkyv"] }
+uv-rkyv = { workspace = true }
 
 hashbrown = { workspace = true }
 indexmap = { workspace = true, features = ["serde"] }

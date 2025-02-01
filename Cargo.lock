@@ -5124,6 +5124,7 @@ dependencies = [
  "fs-err 3.1.0",
  "reqwest",
  "reqwest-middleware",
+ "rkyv",
  "serde",
  "thiserror 2.0.11",
  "tokio",
@@ -5132,6 +5133,7 @@ dependencies = [
  "uv-auth",
  "uv-cache-key",
  "uv-fs",
+ "uv-rkyv",
  "uv-static",
  "uv-version",
  "which",
@@ -5319,6 +5321,7 @@ dependencies = [
  "uv-fs",
  "uv-normalize",
  "uv-pep440",
+ "uv-rkyv",
  "uv-small-str",
  "version-ranges",
 ]
@@ -5414,6 +5417,7 @@ dependencies = [
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
+ "uv-rkyv",
 ]
 
 [[package]]
@@ -5589,6 +5593,13 @@ dependencies = [
  "uv-types",
  "uv-warnings",
  "uv-workspace",
+]
+
+[[package]]
+name = "uv-rkyv"
+version = "0.1.0"
+dependencies = [
+ "rkyv",
 ]
 
 [[package]]

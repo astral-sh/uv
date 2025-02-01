@@ -22,6 +22,7 @@ workspace = true
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
+uv-rkyv = { workspace = true, optional = true }
 uv-small-str = { workspace = true }
 
 arcstr = { workspace = true}
@@ -48,7 +49,7 @@ tracing-test = { version = "0.2.5" }
 [features]
 tracing = ["dep:tracing", "uv-pep440/tracing"]
 schemars = ["dep:schemars"]
-rkyv = ["dep:rkyv"]
+rkyv = ["dep:rkyv", "dep:uv-rkyv"]
 # PEP 508 allows only URLs such as `foo @ https://example.org/foo` or `foo @ file:///home/ferris/foo`, and
 # arguably does not allow relative paths in file URLs (`foo @ file://./foo`,
 # `foo @ file:foo-3.0.0-py3-none-any.whl`, `foo @ file://foo-3.0.0-py3-none-any.whl`), as they are not part of the

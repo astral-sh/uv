@@ -56,6 +56,7 @@ uv-python = { path = "crates/uv-python" }
 uv-requirements = { path = "crates/uv-requirements" }
 uv-requirements-txt = { path = "crates/uv-requirements-txt" }
 uv-resolver = { path = "crates/uv-resolver" }
+uv-rkyv = { path = "crates/uv-rkyv" }
 uv-scripts = { path = "crates/uv-scripts" }
 uv-settings = { path = "crates/uv-settings" }
 uv-shell = { path = "crates/uv-shell" }

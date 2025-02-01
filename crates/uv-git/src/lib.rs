@@ -17,10 +17,12 @@ mod resolver;
 mod source;
 
 /// A URL reference to a Git repository.
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Hash, Ord)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Hash, Ord, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[rkyv(derive(Debug))]
 pub struct GitUrl {
     /// The URL of the Git repository, with any query parameters, fragments, and leading `git+`
     /// removed.
+    #[rkyv(with = uv_rkyv::AsStr)]
     repository: Url,
     /// The reference to the commit to use, which could be a branch, tag or revision.
     reference: GitReference,

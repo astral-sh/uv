@@ -49,7 +49,8 @@ enum RefspecStrategy {
 }
 
 /// A reference to commit or commit-ish.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[rkyv(derive(Debug))]
 pub enum GitReference {
     /// A specific branch.
     Branch(String),

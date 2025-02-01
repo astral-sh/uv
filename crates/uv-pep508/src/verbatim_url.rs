@@ -7,85 +7,13 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use regex::Regex;
+use rkyv::with::ArchiveWith;
 use thiserror::Error;
-
+use url::Url;
 use uv_fs::{normalize_absolute_path, normalize_url_path};
 use uv_small_str::SmallString;
 
 use crate::Pep508Url;
-
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, serde::Serialize, serde::Deserialize)]
-#[serde(transparent)]
-struct Url(url::Url);
-
-impl Url {
-    pub fn parse(s: &str) -> Result<Self, url::ParseError> {
-        Ok(Self(url::Url::parse(s)?))
-    }
-
-    pub fn from_file_path(path: impl AsRef<Path>) -> Result<Self, ()> {
-        Ok(Self(url::Url::from_file_path(path)?))
-    }
-
-    pub fn set_fragment(&mut self, fragment: Option<&str>) {
-        self.0.set_fragment(fragment);
-    }
-
-    pub fn to_file_path(&self) -> Result<PathBuf, ()> {
-        self.0.to_file_path().map_err(|_| ())
-    }
-}
-
-impl core::fmt::Debug for Url {
-    #[inline]
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        core::fmt::Debug::fmt(&self.0, f)
-    }
-}
-
-impl core::fmt::Display for Url {
-    #[inline]
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        core::fmt::Display::fmt(&self.0, f)
-    }
-}
-
-impl std::str::FromStr for Url {
-    type Err = url::ParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse(s)
-    }
-}
-
-/// An [`rkyv`] implementation for [`SmallString`].
-impl rkyv::Archive for Url {
-    type Archived = rkyv::string::ArchivedString;
-    type Resolver = rkyv::string::StringResolver;
-
-    #[inline]
-    fn resolve(&self, resolver: Self::Resolver, out: rkyv::Place<Self::Archived>) {
-        rkyv::string::ArchivedString::resolve_from_str(self.0.as_str(), resolver, out);
-    }
-}
-
-impl<S> rkyv::Serialize<S> for Url
-where
-    S: rkyv::rancor::Fallible + rkyv::ser::Allocator + rkyv::ser::Writer + ?Sized,
-    S::Error: rkyv::rancor::Source,
-{
-    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
-        rkyv::string::ArchivedString::serialize_from_str(self.0.as_str(), serializer)
-    }
-}
-
-impl<D: rkyv::rancor::Fallible + ?Sized> rkyv::Deserialize<Url, D>
-    for rkyv::string::ArchivedString
-{
-    fn deserialize(&self, _deserializer: &mut D) -> Result<Url, D::Error> {
-        Ok(Url::parse(self.as_str()).unwrap())
-    }
-}
 
 /// A wrapper around [`Url`] that preserves the original string.
 #[derive(Debug, Clone, Eq)]
@@ -96,6 +24,7 @@ impl<D: rkyv::rancor::Fallible + ?Sized> rkyv::Deserialize<Url, D>
 #[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 pub struct VerbatimUrl {
     /// The parsed URL.
+    #[cfg_attr(feature = "rkyv", rkyv(with = uv_rkyv::AsStr))]
     url: Url,
     /// The URL as it was provided by the user.
     given: Option<SmallString>,
@@ -117,14 +46,14 @@ impl VerbatimUrl {
     /// Create a [`VerbatimUrl`] from a [`Url`].
     pub fn from_url(url: url::Url) -> Self {
         Self {
-            url: Url(url),
+            url,
             given: None,
         }
     }
 
     /// Parse a URL from a string, expanding any environment variables.
     pub fn parse_url(given: impl AsRef<str>) -> Result<Self, url::ParseError> {
-        let url = Url::parse(given.as_ref())?;
+        let url = url::Url::parse(given.as_ref())?;
         Ok(Self { url, given: None })
     }
 
@@ -151,7 +80,7 @@ impl VerbatimUrl {
         let (path, fragment) = split_fragment(&path);
 
         // Convert to a URL.
-        let mut url = Url::from_file_path(path.clone())
+        let mut url = url::Url::from_file_path(path.clone())
             .map_err(|()| VerbatimUrlError::UrlConversion(path.to_path_buf()))?;
 
         // Set the fragment, if it exists.
@@ -181,7 +110,7 @@ impl VerbatimUrl {
         let (path, fragment) = split_fragment(&path);
 
         // Convert to a URL.
-        let mut url = Url::from_file_path(path.clone())
+        let mut url = url::Url::from_file_path(path.clone())
             .unwrap_or_else(|()| panic!("path is absolute: {}", path.display()));
 
         // Set the fragment, if it exists.
@@ -209,7 +138,7 @@ impl VerbatimUrl {
         let (path, fragment) = split_fragment(path);
 
         // Convert to a URL.
-        let mut url = Url::from_file_path(path.clone())
+        let mut url = url::Url::from_file_path(path.clone())
             .unwrap_or_else(|()| panic!("path is absolute: {}", path.display()));
 
         // Set the fragment, if it exists.
@@ -236,17 +165,17 @@ impl VerbatimUrl {
 
     /// Return the underlying [`Url`].
     pub fn raw(&self) -> &url::Url {
-        &self.url.0
+        &self.url
     }
 
     /// Convert a [`VerbatimUrl`] into a [`Url`].
     pub fn to_url(&self) -> url::Url {
-        self.url.0.clone()
+        self.url.clone()
     }
 
     /// Convert a [`VerbatimUrl`] into a [`Url`].
     pub fn into_url(self) -> url::Url {
-        self.url.0
+        self.url
     }
 
     /// Return the underlying [`Path`], if the URL is a file URL.
@@ -288,7 +217,7 @@ impl Deref for VerbatimUrl {
     type Target = url::Url;
 
     fn deref(&self) -> &Self::Target {
-        &self.url.0
+        &self.url
     }
 }
 

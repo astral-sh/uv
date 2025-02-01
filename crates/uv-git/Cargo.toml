@@ -16,9 +16,10 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-auth = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
-uv-auth = { workspace = true }
+uv-rkyv = { workspace = true }
 uv-static = { workspace = true}
 uv-version = { workspace = true }
 
@@ -28,6 +29,7 @@ dashmap = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 reqwest = { workspace = true, features = ["blocking"] }
 reqwest-middleware = { workspace = true }
+rkyv = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

@@ -224,8 +224,10 @@ impl ParsedUrl {
 )]
 #[rkyv(derive(Debug))]
 pub struct ParsedPathUrl {
+    #[rkyv(with = uv_rkyv::AsStr)]
     pub url: Url,
     /// The absolute path to the distribution which we use for installing.
+    #[rkyv(with = rkyv::with::AsString)]
     pub install_path: PathBuf,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
     pub ext: DistExtension,
@@ -260,8 +262,10 @@ impl ParsedPathUrl {
 )]
 #[rkyv(derive(Debug))]
 pub struct ParsedDirectoryUrl {
+    #[rkyv(with = uv_rkyv::AsStr)]
     pub url: Url,
     /// The absolute path to the distribution which we use for installing.
+    #[rkyv(with = rkyv::with::AsString)]
     pub install_path: PathBuf,
     pub editable: bool,
     pub r#virtual: bool,
@@ -299,6 +303,7 @@ impl ParsedDirectoryUrl {
 #[rkyv(derive(Debug))]
 pub struct ParsedGitUrl {
     pub url: GitUrl,
+    #[rkyv(with = rkyv::with::Map<rkyv::with::AsString>)]
     pub subdirectory: Option<PathBuf>,
 }
 
@@ -360,7 +365,9 @@ impl TryFrom<Url> for ParsedGitUrl {
 )]
 #[rkyv(derive(Debug))]
 pub struct ParsedArchiveUrl {
+    #[rkyv(with = uv_rkyv::AsStr)]
     pub url: Url,
+    #[rkyv(with = rkyv::with::Map<rkyv::with::AsString>)]
     pub subdirectory: Option<PathBuf>,
     pub ext: DistExtension,
 }

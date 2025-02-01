@@ -124,7 +124,7 @@ impl<E: Error + Debug, T: Pep508Url<Err = E>> std::error::Error for Pep508Error<
     feature = "rkyv",
     derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
 )]
-// #[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
+#[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 pub struct Requirement<T: Pep508Url> {
     /// The distribution name such as `requests` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
@@ -356,12 +356,21 @@ impl Extras {
     feature = "rkyv",
     derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
 )]
-// #[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 pub enum VersionOrUrl<T: Pep508Url = VerbatimUrl> {
     /// A PEP 440 version specifier set
     VersionSpecifier(VersionSpecifiers),
     /// A installable URL
     Url(T),
+}
+
+#[cfg(feature = "rkyv")]
+impl<T: Pep508Url> Debug for ArchivedVersionOrUrl<T> where T::Archived: Debug {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::VersionSpecifier(version_specifier) => Debug::fmt(version_specifier, f),
+            Self::Url(url) => Debug::fmt(url, f),
+        }
+    }
 }
 
 // impl<T: Pep508Url + rkyv::Archive> rkyv::Archive for VersionOrUrl<T> {
