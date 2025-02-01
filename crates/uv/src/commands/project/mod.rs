@@ -176,6 +176,12 @@ pub(crate) enum ProjectError {
     #[error("Failed to parse PEP 723 script metadata")]
     Pep723ScriptTomlParse(#[source] toml::de::Error),
 
+    #[error("Failed to remove ephemeral overlay")]
+    OverlayRemoval(#[source] std::io::Error),
+
+    #[error("Failed to find `site-packages` directory for environment")]
+    NoSitePackages,
+
     #[error(transparent)]
     DependencyGroup(#[from] DependencyGroupError),
 

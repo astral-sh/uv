@@ -766,5 +766,8 @@ async fn get_or_create_environment(
         },
     };
 
+    // Clear any existing overlay.
+    environment.clear_overlay()?;
+
     Ok((from, environment.into()))
 }
