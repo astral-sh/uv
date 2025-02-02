@@ -2445,7 +2445,7 @@ pub struct VenvArgs {
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
     #[arg(long, value_enum, env = EnvVars::UV_LINK_MODE)]
-    pub link_mode: Option<uv_install_wheel::linker::LinkMode>,
+    pub link_mode: Option<uv_install_wheel::LinkMode>,
 
     #[command(flatten)]
     pub refresh: RefreshArgs,
@@ -4170,7 +4170,7 @@ pub struct ToolUpgradeArgs {
         env = EnvVars::UV_LINK_MODE,
         help_heading = "Installer options"
     )]
-    pub link_mode: Option<uv_install_wheel::linker::LinkMode>,
+    pub link_mode: Option<uv_install_wheel::LinkMode>,
 
     /// Compile Python files to bytecode after installation.
     ///
@@ -4790,7 +4790,7 @@ pub struct InstallerArgs {
         env = EnvVars::UV_LINK_MODE,
         help_heading = "Installer options"
     )]
-    pub link_mode: Option<uv_install_wheel::linker::LinkMode>,
+    pub link_mode: Option<uv_install_wheel::LinkMode>,
 
     /// Compile Python files to bytecode after installation.
     ///
@@ -4986,7 +4986,7 @@ pub struct ResolverArgs {
         env = EnvVars::UV_LINK_MODE,
         help_heading = "Installer options"
     )]
-    pub link_mode: Option<uv_install_wheel::linker::LinkMode>,
+    pub link_mode: Option<uv_install_wheel::LinkMode>,
 
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
     /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
@@ -5174,7 +5174,7 @@ pub struct ResolverInstallerArgs {
         env = EnvVars::UV_LINK_MODE,
         help_heading = "Installer options"
     )]
-    pub link_mode: Option<uv_install_wheel::linker::LinkMode>,
+    pub link_mode: Option<uv_install_wheel::LinkMode>,
 
     /// Compile Python files to bytecode after installation.
     ///

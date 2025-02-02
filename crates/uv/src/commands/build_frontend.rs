@@ -31,7 +31,7 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, SourceDist};
 use uv_fs::{relative_to, Simplified};
-use uv_install_wheel::linker::LinkMode;
+use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_python::{
