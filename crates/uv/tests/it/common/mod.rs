@@ -555,6 +555,9 @@ impl TestContext {
             .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
             .env(EnvVars::UV_TEST_PYTHON_PATH, self.python_path())
             .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
+            // Since downloads, fetches and builds run in parallel, their message output order is
+            // non-deterministic, so can't capture them in test output.
+            .env(EnvVars::UV_TEST_NO_CLI_PROGRESS, "1")
             .env_remove(EnvVars::UV_CACHE_DIR)
             .env_remove(EnvVars::UV_TOOL_BIN_DIR)
             .current_dir(self.temp_dir.path());

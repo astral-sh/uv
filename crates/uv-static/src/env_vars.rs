@@ -575,6 +575,10 @@ impl EnvVars {
     #[attr_hidden]
     pub const UV_TEST_INDEX_URL: &'static str = "UV_TEST_INDEX_URL";
 
+    /// Hide progress messages with non-deterministic order in tests.
+    #[attr_hidden]
+    pub const UV_TEST_NO_CLI_PROGRESS: &'static str = "UV_TEST_NO_CLI_PROGRESS";
+
     /// `.env` files from which to load environment variables when executing `uv run` commands.
     pub const UV_ENV_FILE: &'static str = "UV_ENV_FILE";
 
