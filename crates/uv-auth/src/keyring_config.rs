@@ -127,7 +127,9 @@ impl AuthConfig {
                 port
             )
         } else {
-            url.host_str().expect(&format!("Url {url:?} has no host")).to_string()
+            url.host_str()
+                .expect(&format!("Url {url:?} has no host"))
+                .to_string()
         };
         host
     }
