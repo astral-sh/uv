@@ -11,7 +11,7 @@ use uv_configuration::{
 use uv_distribution_types::{
     Index, IndexUrl, IndexUrlError, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
 };
-use uv_install_wheel::linker::LinkMode;
+use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::Requirement;

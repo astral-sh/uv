@@ -28,7 +28,7 @@ use uv_configuration::{
     SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl};
-use uv_install_wheel::linker::LinkMode;
+use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep508::{ExtraName, RequirementOrigin};
 use uv_pypi_types::{Requirement, SupportedEnvironments};

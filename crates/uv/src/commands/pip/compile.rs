@@ -23,7 +23,7 @@ use uv_distribution_types::{
     Origin, UnresolvedRequirementSpecification, Verbatim,
 };
 use uv_fs::Simplified;
-use uv_install_wheel::linker::LinkMode;
+use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pypi_types::{Conflicts, Requirement, SupportedEnvironments};
 use uv_python::{

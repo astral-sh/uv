@@ -17,7 +17,7 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, Origin, Resolution};
 use uv_fs::Simplified;
-use uv_install_wheel::linker::LinkMode;
+use uv_install_wheel::LinkMode;
 use uv_installer::SitePackages;
 use uv_pep508::PackageName;
 use uv_pypi_types::Conflicts;

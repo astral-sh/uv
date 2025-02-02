@@ -20,7 +20,7 @@ use uv_distribution_types::{
     UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
-use uv_install_wheel::linker::LinkMode;
+use uv_install_wheel::LinkMode;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_pep508::PackageName;
 use uv_pypi_types::{Conflicts, Requirement};

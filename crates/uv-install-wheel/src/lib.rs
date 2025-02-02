@@ -7,15 +7,19 @@ use platform_info::PlatformInfoError;
 use thiserror::Error;
 use zip::result::ZipError;
 
-pub use uninstall::{uninstall_egg, uninstall_legacy_editable, uninstall_wheel, Uninstall};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::{Arch, Os};
 use uv_pypi_types::Scheme;
+
+pub use install::install_wheel;
+pub use linker::{LinkMode, Locks};
+pub use uninstall::{uninstall_egg, uninstall_legacy_editable, uninstall_wheel, Uninstall};
 pub use wheel::{parse_wheel_file, read_record_file, LibKind};
 
-pub mod linker;
+mod install;
+mod linker;
 mod record;
 mod script;
 mod uninstall;
