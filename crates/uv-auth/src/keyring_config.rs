@@ -73,17 +73,17 @@ pub struct Index {
 
 impl AuthConfig {
     pub fn add_entry(&mut self, index_url: &Url, username: String) {
-        let host = self.url_to_host(index_url);
+        let host = AuthConfig::url_to_string(index_url);
         self.indexes.entry(host).or_insert(Index { username });
     }
 
     pub fn find_entry(&self, index_url: &Url) -> Option<&Index> {
-        let host = self.url_to_host(index_url);
+        let host = AuthConfig::url_to_string(index_url);
         self.indexes.get(&host)
     }
 
     pub fn delete_entry(&mut self, index_url: &Url) {
-        let host = self.url_to_host(index_url);
+        let host = AuthConfig::url_to_string(index_url);
         self.indexes.remove(&host);
     }
 
@@ -115,17 +115,21 @@ impl AuthConfig {
         Ok(())
     }
 
-    fn url_to_host(&self, url: &Url) -> String {
+    fn url_to_string(url: &Url) -> String {
+        if !url.has_host() {
+            return url.as_str().to_string();
+        }
+
         let host = if let Some(port) = url.port() {
             format!(
                 "{}:{}",
-                url.host_str().expect("Url should have a host"),
+                url.host_str().expect(&format!("Url {url:?} has no host")),
                 port
             )
         } else {
-            url.host_str().expect("Url should have a host").to_string()
+            url.host_str().expect(&format!("Url {url:?} has no host")).to_string()
         };
-        return host;
+        host
     }
 }
 

@@ -489,6 +489,7 @@ pub enum Commands {
         ),
     )]
     Help(HelpArgs),
+    /// Manage uv's indexes
     Index(IndexNamespace),
 }
 
