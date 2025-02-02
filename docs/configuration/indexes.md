@@ -140,8 +140,8 @@ While `unsafe-best-match` is the closest to pip's behavior, it exposes users to 
 Most private registries require authentication to access packages, typically via a username and
 password (or access token).
 
-To authenticate with a provided index, either provide credentials via environment variables, manage credentials via the CLI or embed
-them in the URL.
+To authenticate with a provided index, either provide credentials via environment variables, manage
+credentials via the CLI or embed them in the URL.
 
 For example, given an index named `internal-proxy` that requires a username (`public`) and password
 (`koala`), define the index (without credentials) in your `pyproject.toml`:
@@ -153,6 +153,7 @@ url = "https://example.com/simple"
 ```
 
 ### Provide credentials via environment variables
+
 From there, you can set the `UV_INDEX_INTERNAL_PROXY_USERNAME` and
 `UV_INDEX_INTERNAL_PROXY_PASSWORD` environment variables, where `INTERNAL_PROXY` is the uppercase
 version of the index name, with non-alphanumeric characters replaced by underscores:
@@ -166,7 +167,8 @@ By providing credentials via environment variables, you can avoid storing sensit
 the plaintext `pyproject.toml` file.
 
 ### Use the `uv` cli to manage your credentials
-An alternative to environment variables is using the cli to manage your credentials. 
+
+An alternative to environment variables is using the cli to manage your credentials.
 
 To set credentials for the index from above use the following command:
 
@@ -175,7 +177,8 @@ uv index credentials set --index-name="internal-proxy" --keyring-provider="subpr
 ```
 
 The username is linked to the index and stored locally. The password is saved securely with keyring.
-This works [analogously to poetry](https://python-poetry.org/docs/repositories/#installing-from-private-package-sources).
+This works
+[analogously to poetry](https://python-poetry.org/docs/repositories/#installing-from-private-package-sources).
 
 !!! tip
 
@@ -185,8 +188,8 @@ This works [analogously to poetry](https://python-poetry.org/docs/repositories/#
 
     The syntax varies compared to poetry. The syntax we chose opens up the possibility to add further commands for index management.
 
-
 ### Embed credentials in the url
+
 Alternatively, credentials can be embedded directly in the index definition:
 
 ```toml
