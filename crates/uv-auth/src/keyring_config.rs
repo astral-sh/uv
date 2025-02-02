@@ -123,12 +123,13 @@ impl AuthConfig {
         let host = if let Some(port) = url.port() {
             format!(
                 "{}:{}",
-                url.host_str().expect(&format!("Url {url:?} has no host")),
+                url.host_str()
+                    .unwrap_or_else(|| panic!("Url {url:?} has no host")),
                 port
             )
         } else {
             url.host_str()
-                .expect(&format!("Url {url:?} has no host"))
+                .unwrap_or_else(|| panic!("Url {url:?} has no host"))
                 .to_string()
         };
         host

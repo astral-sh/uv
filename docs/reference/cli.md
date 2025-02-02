@@ -48,7 +48,9 @@ uv [OPTIONS] <COMMAND>
 </dd>
 <dt><a href="#uv-help"><code>uv help</code></a></dt><dd><p>Display documentation for a command</p>
 </dd>
-<dt><a href="#uv-index"><code>uv index</code></a></dt></dl>
+<dt><a href="#uv-index"><code>uv index</code></a></dt><dd><p>Manage uv&#8217;s indexes</p>
+</dd>
+</dl>
 
 ## uv run
 
@@ -9480,6 +9482,8 @@ uv help [OPTIONS] [COMMAND]...
 </dd></dl>
 
 ## uv index
+
+Manage uv's indexes
 
 <h3 class="cli-reference">Usage</h3>
 
