@@ -2,6 +2,7 @@ INHERIT: mkdocs.template.yml
 # Omit the `typeset` plugin which is only available in the Insiders version.
 plugins:
   - search
+  - git-revision-date-localized
 validation:
   anchors: warn
 watch:
