@@ -9,11 +9,11 @@ use fs_err::{DirEntry, File};
 use mailparse::parse_headers;
 use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
-use tracing::{instrument, warn};
+use tracing::{debug, instrument, trace, warn};
 use walkdir::WalkDir;
 
 use uv_cache_info::CacheInfo;
-use uv_fs::{persist_with_retry_sync, relative_to, rename_with_retry_sync, Simplified};
+use uv_fs::{persist_with_retry_sync, relative_to, Simplified};
 use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
 use uv_shell::escape_posix_for_single_quotes;
@@ -312,6 +312,7 @@ pub(crate) fn move_folder_recorded(
     site_packages: &Path,
     record: &mut [RecordEntry],
 ) -> Result<(), Error> {
+    let mut rename_or_copy = RenameOrCopy::default();
     fs::create_dir_all(dest_dir)?;
     for entry in WalkDir::new(src_dir) {
         let entry = entry?;
@@ -330,7 +331,7 @@ pub(crate) fn move_folder_recorded(
         if entry.file_type().is_dir() {
             fs::create_dir_all(&target)?;
         } else {
-            fs::rename(src, &target)?;
+            rename_or_copy.rename_or_copy(src, &target)?;
             let entry = record
                 .iter_mut()
                 .find(|entry| Path::new(&entry.path) == relative_to_site_packages)
@@ -349,13 +350,14 @@ pub(crate) fn move_folder_recorded(
 
 /// Installs a single script (not an entrypoint).
 ///
-/// Has to deal with both binaries files (just move) and scripts (rewrite the shebang if applicable).
+/// Binary files are moved with a copy fallback, while we rewrite scripts' shebangs if applicable.
 fn install_script(
     layout: &Layout,
     relocatable: bool,
     site_packages: &Path,
     record: &mut [RecordEntry],
     file: &DirEntry,
+    #[allow(unused)] rename_or_copy: &mut RenameOrCopy,
 ) -> Result<(), Error> {
     let file_type = file.file_type()?;
 
@@ -459,24 +461,20 @@ fn install_script(
             use std::fs::Permissions;
             use std::os::unix::fs::PermissionsExt;
 
-            let permissions = fs::metadata(&path)?.permissions();
+            // We fall back to copy when the file is on another drive and if we don't own the file.
+            rename_or_copy.rename_or_copy(&path, &script_absolute)?;
 
-            if permissions.mode() & 0o111 == 0o111 {
-                // If the permissions are already executable, we don't need to change them.
-                rename_with_retry_sync(&path, &script_absolute)?;
-            } else {
-                // If we have to modify the permissions, copy the file, since we might not own it.
-                warn!(
-                    "Copying script from {} to {} (permissions: {:o})",
-                    path.simplified_display(),
-                    script_absolute.simplified_display(),
-                    permissions.mode()
+            let permissions = fs::metadata(&script_absolute)?.permissions();
+
+            if permissions.mode() & 0o111 != 0o111 {
+                trace!(
+                    "Adjusting permissions for {} from {} to {}",
+                    script_absolute.display(),
+                    permissions.mode(),
+                    permissions.mode() | 0o111
                 );
-
-                uv_fs::copy_atomic_sync(&path, &script_absolute)?;
-
                 fs::set_permissions(
-                    script_absolute,
+                    &script_absolute,
                     Permissions::from_mode(permissions.mode() | 0o111),
                 )?;
             }
@@ -484,7 +482,16 @@ fn install_script(
 
         #[cfg(not(unix))]
         {
-            rename_with_retry_sync(&path, &script_absolute)?;
+            // Here, two wrappers over rename are clashing: We want to retry for security software
+            // blocking the file, but we also need the copy fallback is the problem was trying to
+            // move a file cross-drive.
+            match uv_fs::rename_with_retry_sync(&path, &script_absolute) {
+                Ok(()) => (),
+                Err(err) => {
+                    debug!("Failed to rename, falling back to copy: {err}");
+                    fs_err::copy(&path, &script_absolute)?;
+                }
+            }
         }
 
         None
@@ -533,10 +540,13 @@ pub(crate) fn install_data(
 
         match path.file_name().and_then(|name| name.to_str()) {
             Some("data") => {
+                trace!(?dist_name, "Installing data/data");
                 // Move the content of the folder to the root of the venv
                 move_folder_recorded(&path, &layout.scheme.data, site_packages, record)?;
             }
             Some("scripts") => {
+                trace!(?dist_name, "Installing data/scripts");
+                let mut rename_or_copy = RenameOrCopy::default();
                 let mut initialized = false;
                 for file in fs::read_dir(path)? {
                     let file = file?;
@@ -563,17 +573,27 @@ pub(crate) fn install_data(
                         initialized = true;
                     }
 
-                    install_script(layout, relocatable, site_packages, record, &file)?;
+                    install_script(
+                        layout,
+                        relocatable,
+                        site_packages,
+                        record,
+                        &file,
+                        &mut rename_or_copy,
+                    )?;
                 }
             }
             Some("headers") => {
+                trace!(?dist_name, "Installing data/headers");
                 let target_path = layout.scheme.include.join(dist_name.as_str());
                 move_folder_recorded(&path, &target_path, site_packages, record)?;
             }
             Some("purelib") => {
+                trace!(?dist_name, "Installing data/purelib");
                 move_folder_recorded(&path, &layout.scheme.purelib, site_packages, record)?;
             }
             Some("platlib") => {
+                trace!(?dist_name, "Installing data/platlib");
                 move_folder_recorded(&path, &layout.scheme.platlib, site_packages, record)?;
             }
             _ => {
@@ -799,6 +819,40 @@ pub(crate) fn parse_scripts(
     };
 
     scripts_from_ini(extras, python_minor, ini)
+}
+
+/// Rename a file with a fallback to copy that switches over on the first failure.
+#[derive(Default)]
+enum RenameOrCopy {
+    #[default]
+    Rename,
+    Copy,
+}
+
+impl RenameOrCopy {
+    /// Try to rename, and on failure, copy.
+    ///
+    /// Usually, source and target are on the same device, so we can rename, but if that fails, we
+    /// have to copy. If renaming failed once, we switch to copy permanently.
+    fn rename_or_copy(&mut self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<()> {
+        match self {
+            Self::Rename => {
+                match fs_err::rename(from.as_ref(), to.as_ref()) {
+                    Ok(()) => return Ok(()),
+                    Err(err) => {
+                        *self = RenameOrCopy::Copy;
+                        debug!("Failed to rename, falling back to copy: {err}");
+                    }
+                }
+                fs_err::copy(from.as_ref(), to.as_ref())?;
+                Ok(())
+            }
+            Self::Copy => {
+                fs_err::copy(from.as_ref(), to.as_ref())?;
+                Ok(())
+            }
+        }
+    }
 }
 
 #[cfg(test)]
