@@ -3,10 +3,11 @@ INHERIT: mkdocs.template.yml
 plugins:
   - search
   - git-revision-date-localized:
+      timezone: UTC # It can only be in UTC unless the ISO time can include timezone.
       exclude:
-          - "reference/cli.md"
-          - "reference/settings.md"
-          - "configuration/environment.md"
+        - "reference/cli.md"
+        - "reference/settings.md"
+        - "configuration/environment.md"
 validation:
   anchors: warn
 watch:
