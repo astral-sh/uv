@@ -102,6 +102,10 @@ impl Arch {
             variant: None,
         }
     }
+
+    pub fn family(&self) -> target_lexicon::Architecture {
+        self.family
+    }
 }
 
 impl Display for Libc {
@@ -254,6 +258,10 @@ impl From<&uv_platform_tags::Arch> for Arch {
             },
             uv_platform_tags::Arch::S390X => Self {
                 family: target_lexicon::Architecture::S390x,
+                variant: None,
+            },
+            uv_platform_tags::Arch::Powerpc => Self {
+                family: target_lexicon::Architecture::Powerpc,
                 variant: None,
             },
             uv_platform_tags::Arch::Powerpc64 => Self {

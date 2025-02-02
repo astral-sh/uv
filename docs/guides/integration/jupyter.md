@@ -51,7 +51,7 @@ $ uv add --dev ipykernel
 Then, you can create the kernel for `project` with:
 
 ```console
-$ uv run ipython kernel install --user --name=project
+$ uv run ipython kernel install --user --env VIRTUAL_ENV $(pwd)/.venv --name=project
 ```
 
 From there, start the server with:

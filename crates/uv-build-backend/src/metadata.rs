@@ -1,12 +1,15 @@
-use crate::Error;
-use itertools::Itertools;
-use serde::Deserialize;
-use std::collections::{BTreeMap, BTreeSet, Bound};
+use std::collections::{BTreeMap, Bound};
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+
+use itertools::Itertools;
+use serde::Deserialize;
 use tracing::{debug, trace};
+use version_ranges::Ranges;
+use walkdir::WalkDir;
+
 use uv_fs::Simplified;
 use uv_globfilter::{parse_portable_glob, GlobDirFilter};
 use uv_normalize::{ExtraName, PackageName};
@@ -15,8 +18,8 @@ use uv_pep508::{
     ExtraOperator, MarkerExpression, MarkerTree, MarkerValueExtra, Requirement, VersionOrUrl,
 };
 use uv_pypi_types::{Metadata23, VerbatimParsedUrl};
-use version_ranges::Ranges;
-use walkdir::WalkDir;
+
+use crate::Error;
 
 /// By default, we ignore generated python files.
 pub(crate) const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo"];
@@ -475,19 +478,30 @@ impl PyProjectToml {
             .flat_map(|optional_dependencies| optional_dependencies.keys())
             .collect::<Vec<_>>();
 
-        let requires_dist = self
-            .project
-            .dependencies
-            .iter()
-            .flatten()
-            .cloned()
-            .chain(
-                extras
-                    .iter()
-                    .copied()
-                    .flat_map(|extra| self.flatten_optional_dependencies(extra)),
-            )
-            .collect::<Vec<_>>();
+        let requires_dist =
+            self.project
+                .dependencies
+                .iter()
+                .flatten()
+                .cloned()
+                .chain(self.project.optional_dependencies.iter().flat_map(
+                    |optional_dependencies| {
+                        optional_dependencies
+                            .iter()
+                            .flat_map(|(extra, requirements)| {
+                                requirements.iter().cloned().map(|mut requirement| {
+                                    requirement.marker.and(MarkerTree::expression(
+                                        MarkerExpression::Extra {
+                                            operator: ExtraOperator::Equal,
+                                            name: MarkerValueExtra::Extra(extra.clone()),
+                                        },
+                                    ));
+                                    requirement
+                                })
+                            })
+                    },
+                ))
+                .collect::<Vec<_>>();
 
         Ok(Metadata23 {
             metadata_version: metadata_version.to_string(),
@@ -531,76 +545,6 @@ impl PyProjectToml {
             project_urls,
             dynamic: vec![],
         })
-    }
-
-    /// Return the flattened [`Requirement`] entries for the given [`ExtraName`].
-    fn flatten_optional_dependencies(&self, extra: &ExtraName) -> Vec<Requirement> {
-        fn collect<'project>(
-            extra: &'project ExtraName,
-            marker: MarkerTree,
-            optional_dependencies: &'project BTreeMap<ExtraName, Vec<Requirement>>,
-            project_name: &'project PackageName,
-            dependencies: &mut Vec<Requirement>,
-            seen: &mut BTreeSet<(&'project ExtraName, MarkerTree)>,
-        ) {
-            if !seen.insert((extra, marker)) {
-                return;
-            }
-
-            for requirement in optional_dependencies.get(extra).into_iter().flatten() {
-                if requirement.name == *project_name {
-                    for extra in &requirement.extras {
-                        collect(
-                            extra,
-                            marker,
-                            optional_dependencies,
-                            project_name,
-                            dependencies,
-                            seen,
-                        );
-                    }
-                } else {
-                    let mut marker = marker;
-                    marker.and(requirement.marker);
-                    dependencies.push(Requirement {
-                        name: requirement.name.clone(),
-                        extras: requirement.extras.clone(),
-                        version_or_url: requirement.version_or_url.clone(),
-                        origin: requirement.origin.clone(),
-                        marker,
-                    });
-                }
-            }
-        }
-
-        // Resolve all dependencies for the given extra.
-        let mut dependencies = {
-            let mut dependencies = Vec::new();
-            collect(
-                extra,
-                MarkerTree::default(),
-                self.project
-                    .optional_dependencies
-                    .as_ref()
-                    .unwrap_or(&BTreeMap::new()),
-                &self.project.name,
-                &mut dependencies,
-                &mut BTreeSet::default(),
-            );
-            dependencies
-        };
-
-        // Add the extra to the marker to each dependency.
-        for requirement in &mut dependencies {
-            requirement
-                .marker
-                .and(MarkerTree::expression(MarkerExpression::Extra {
-                    operator: ExtraOperator::Equal,
-                    name: MarkerValueExtra::Extra(extra.clone()),
-                }));
-        }
-
-        dependencies
     }
 
     /// Validate and convert the entrypoints in `pyproject.toml`, including console and GUI scripts,
@@ -1234,10 +1178,11 @@ mod tests {
         Classifier: Programming Language :: Python
         Requires-Dist: flask>=3,<4
         Requires-Dist: sqlalchemy[asyncio]>=2.0.35,<3
-        Requires-Dist: pymysql>=1.1.1,<2 ; extra == 'all'
-        Requires-Dist: psycopg>=3.2.2,<4 ; sys_platform == 'linux' and extra == 'all'
-        Requires-Dist: pymysql>=1.1.1,<2 ; extra == 'databases'
-        Requires-Dist: psycopg>=3.2.2,<4 ; sys_platform == 'linux' and extra == 'databases'
+        Requires-Dist: hello-world[databases] ; extra == 'all'
+        Requires-Dist: hello-world[postgres] ; extra == 'all'
+        Requires-Dist: hello-world[mysql] ; extra == 'all'
+        Requires-Dist: hello-world[mysql] ; extra == 'databases'
+        Requires-Dist: hello-world[postgres] ; extra == 'databases'
         Requires-Dist: pymysql>=1.1.1,<2 ; extra == 'mysql'
         Requires-Dist: psycopg>=3.2.2,<4 ; sys_platform == 'linux' and extra == 'postgres'
         Maintainer: Konsti

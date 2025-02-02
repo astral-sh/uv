@@ -97,7 +97,7 @@ impl CredentialsCache {
         // Insert an entry for requests including the username
         let username = credentials.to_username();
         if username.is_some() {
-            let realm = (Realm::from(url), username.clone());
+            let realm = (Realm::from(url), username);
             self.insert_realm(realm, &credentials);
         }
 

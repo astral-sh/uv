@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.44/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/HEAD/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 #![allow(clippy::needless_raw_string_hashes)]
@@ -2940,7 +2940,7 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-b==1.0.0 depends on package-c>=2.0.0 and package-a==1.0.0 depends on package-c<2.0.0, we can conclude that package-a==1.0.0 and package-b==1.0.0 are incompatible.
+      ╰─▶ Because package-a==1.0.0 depends on package-c<2.0.0 and package-b==1.0.0 depends on package-c>=2.0.0, we can conclude that package-a{sys_platform == 'linux'}==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0 are incompatible.
           And because your project depends on package-a{sys_platform == 'linux'}==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0, we can conclude that your project's requirements are unsatisfiable.
     "###
     );
@@ -3015,10 +3015,8 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
       ╰─▶ Because package-a==1.0.0 depends on package-c{sys_platform == 'linux'}<2.0.0 and only the following versions of package-c{sys_platform == 'linux'} are available:
               package-c{sys_platform == 'linux'}==1.0.0
               package-c{sys_platform == 'linux'}>2.0.0
-          we can conclude that package-a==1.0.0 depends on package-c{sys_platform == 'linux'}==1.0.0. (1)
-
-          Because only package-c{sys_platform == 'darwin'}<=2.0.0 is available and package-b==1.0.0 depends on package-c{sys_platform == 'darwin'}>=2.0.0, we can conclude that package-b==1.0.0 depends on package-c==2.0.0.
-          And because we know from (1) that package-a==1.0.0 depends on package-c{sys_platform == 'linux'}==1.0.0, we can conclude that package-a==1.0.0 and package-b==1.0.0 are incompatible.
+          we can conclude that package-a==1.0.0 depends on package-c{sys_platform == 'linux'}==1.0.0.
+          And because only package-c{sys_platform == 'darwin'}<=2.0.0 is available and package-b==1.0.0 depends on package-c{sys_platform == 'darwin'}>=2.0.0, we can conclude that package-a==1.0.0 and package-b==1.0.0 are incompatible.
           And because your project depends on package-a==1.0.0 and package-b==1.0.0, we can conclude that your project's requirements are unsatisfiable.
     "###
     );
@@ -4858,6 +4856,146 @@ fn unreachable_wheels() -> Result<()> {
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/unreachable_wheels_c-1.0.0.tar.gz", hash = "sha256:5c4783e85f0fa57b720fd02b5c7e0ff8bc98121546fe2cce435710efe4a34b28" }
         wheels = [
             { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/unreachable_wheels_c-1.0.0-cp312-cp312-macosx_14_0_x86_64.whl", hash = "sha256:4b846c5b1646b04828a2bef6c9d180ff7cfd725866013dcec8933de7fb5f9e8d" },
+        ]
+        "###
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    context
+        .lock()
+        .arg("--locked")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index-url")
+        .arg(packse_index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// When a dependency is only required on a specific platform (like x86_64), omit wheels that target other platforms (like aarch64).
+///
+/// ```text
+/// specific-architecture
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a
+/// │       └── satisfied by a-1.0.0
+/// ├── a
+/// │   └── a-1.0.0
+/// │       ├── requires b; platform_machine == "x86_64"
+/// │       │   └── satisfied by b-1.0.0
+/// │       ├── requires c; platform_machine == "aarch64"
+/// │       │   └── satisfied by c-1.0.0
+/// │       └── requires d; platform_machine == "i686"
+/// │           └── satisfied by d-1.0.0
+/// ├── b
+/// │   └── b-1.0.0
+/// ├── c
+/// │   └── c-1.0.0
+/// └── d
+///     └── d-1.0.0
+/// ```
+#[test]
+fn specific_architecture() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = context.filters();
+    filters.push((r"specific-architecture-", "package-"));
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''specific-architecture-a''',
+        ]
+        requires-python = ">=3.8"
+        "###,
+    )?;
+
+    let mut cmd = context.lock();
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+    cmd.arg("--index-url").arg(packse_index_url());
+    uv_snapshot!(filters, cmd, @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "###
+    );
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.8"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "package-a" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "package-a" }]
+
+        [[package]]
+        name = "package-a"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        dependencies = [
+            { name = "package-b", marker = "platform_machine == 'x86_64'" },
+            { name = "package-c", marker = "platform_machine == 'aarch64'" },
+            { name = "package-d", marker = "platform_machine == 'i686'" },
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_a-1.0.0.tar.gz", hash = "sha256:3543f7e4bc8aaf16a9705e07df1521f40a77407c7a33a82424b35ef63df8224a" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_a-1.0.0-py3-none-any.whl", hash = "sha256:cd2f9894093805af0749592e8239d62e7a724476a74c4cb65da30bc6a3900046" },
+        ]
+
+        [[package]]
+        name = "package-b"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_b-1.0.0-cp313-cp313-freebsd_13_aarch64.whl", hash = "sha256:4ce70a68440d4aaa31cc1c6174b83b741e9b8f3074ad0f3ef41c572795378999" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_b-1.0.0-cp313-cp313-freebsd_13_x86_64.whl", hash = "sha256:4ce70a68440d4aaa31cc1c6174b83b741e9b8f3074ad0f3ef41c572795378999" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_b-1.0.0-cp313-cp313-macosx_10_9_x86_64.whl", hash = "sha256:4ce70a68440d4aaa31cc1c6174b83b741e9b8f3074ad0f3ef41c572795378999" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_b-1.0.0-cp313-cp313-manylinux2010_x86_64.whl", hash = "sha256:4ce70a68440d4aaa31cc1c6174b83b741e9b8f3074ad0f3ef41c572795378999" },
+        ]
+
+        [[package]]
+        name = "package-c"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_c-1.0.0-cp313-cp313-freebsd_13_aarch64.whl", hash = "sha256:b028c88fe496724cea4a7d95eb789a000b7f000067f95c922b09461be2746a3d" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_c-1.0.0-cp313-cp313-freebsd_13_x86_64.whl", hash = "sha256:b028c88fe496724cea4a7d95eb789a000b7f000067f95c922b09461be2746a3d" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_c-1.0.0-cp313-cp313-macosx_10_9_arm64.whl", hash = "sha256:b028c88fe496724cea4a7d95eb789a000b7f000067f95c922b09461be2746a3d" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_c-1.0.0-cp313-cp313-manylinux2010_aarch64.whl", hash = "sha256:b028c88fe496724cea4a7d95eb789a000b7f000067f95c922b09461be2746a3d" },
+        ]
+
+        [[package]]
+        name = "package-d"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_d-1.0.0-cp313-cp313-freebsd_13_aarch64.whl", hash = "sha256:842864c1348694fab33199eb05921602c2abfc77844a81085a55db02edd30da4" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_d-1.0.0-cp313-cp313-freebsd_13_x86_64.whl", hash = "sha256:842864c1348694fab33199eb05921602c2abfc77844a81085a55db02edd30da4" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_d-1.0.0-cp313-cp313-manylinux2010_i686.whl", hash = "sha256:842864c1348694fab33199eb05921602c2abfc77844a81085a55db02edd30da4" },
         ]
         "###
         );

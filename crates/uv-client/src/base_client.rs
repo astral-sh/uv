@@ -456,7 +456,7 @@ impl RetryableStrategy for UvRetryableStrategy {
 ///
 /// These cases should be safe to retry with [`Retryable::Transient`].
 pub fn is_extended_transient_error(err: &dyn Error) -> bool {
-    trace!("Attempting to retry error: {err:?}");
+    trace!("Considering retry of error: {err:?}");
 
     if let Some(io) = find_source::<std::io::Error>(&err) {
         if io.kind() == std::io::ErrorKind::ConnectionReset

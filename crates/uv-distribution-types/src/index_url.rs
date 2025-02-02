@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock, RwLock};
 
@@ -25,6 +26,42 @@ pub enum IndexUrl {
     Pypi(VerbatimUrl),
     Url(VerbatimUrl),
     Path(VerbatimUrl),
+}
+
+impl IndexUrl {
+    /// Parse an [`IndexUrl`] from a string, relative to an optional root directory.
+    ///
+    /// If no root directory is provided, relative paths are resolved against the current working
+    /// directory.
+    pub fn parse(path: &str, root_dir: Option<&Path>) -> Result<Self, IndexUrlError> {
+        let url = match split_scheme(path) {
+            Some((scheme, ..)) => {
+                match Scheme::parse(scheme) {
+                    Some(_) => {
+                        // Ex) `https://pypi.org/simple`
+                        VerbatimUrl::parse_url(path)?
+                    }
+                    None => {
+                        // Ex) `C:\Users\user\index`
+                        if let Some(root_dir) = root_dir {
+                            VerbatimUrl::from_path(path, root_dir)?
+                        } else {
+                            VerbatimUrl::from_absolute_path(std::path::absolute(path)?)?
+                        }
+                    }
+                }
+            }
+            None => {
+                // Ex) `/Users/user/index`
+                if let Some(root_dir) = root_dir {
+                    VerbatimUrl::from_path(path, root_dir)?
+                } else {
+                    VerbatimUrl::from_absolute_path(std::path::absolute(path)?)?
+                }
+            }
+        };
+        Ok(Self::from(url.with_given(path)))
+    }
 }
 
 #[cfg(feature = "schemars")]
@@ -114,25 +151,7 @@ impl FromStr for IndexUrl {
     type Err = IndexUrlError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let url = match split_scheme(s) {
-            Some((scheme, ..)) => {
-                match Scheme::parse(scheme) {
-                    Some(_) => {
-                        // Ex) `https://pypi.org/simple`
-                        VerbatimUrl::parse_url(s)?
-                    }
-                    None => {
-                        // Ex) `C:\Users\user\index`
-                        VerbatimUrl::from_absolute_path(std::path::absolute(s)?)?
-                    }
-                }
-            }
-            None => {
-                // Ex) `/Users/user/index`
-                VerbatimUrl::from_absolute_path(std::path::absolute(s)?)?
-            }
-        };
-        Ok(Self::from(url.with_given(s)))
+        Self::parse(s, None)
     }
 }
 

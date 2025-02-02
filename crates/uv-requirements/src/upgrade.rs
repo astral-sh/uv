@@ -83,7 +83,9 @@ pub fn read_lock_requirements(
         }
 
         // Map each entry in the lockfile to a preference.
-        preferences.push(Preference::from_lock(package, install_path)?);
+        if let Some(preference) = Preference::from_lock(package, install_path)? {
+            preferences.push(preference);
+        }
 
         // Map each entry in the lockfile to a Git SHA.
         if let Some(git_ref) = package.as_git_ref()? {

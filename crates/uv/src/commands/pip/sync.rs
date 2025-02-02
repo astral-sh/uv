@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 use std::fmt::Write;
+use std::sync::Arc;
 
 use anyhow::Result;
 use owo_colors::OwoColorize;
@@ -8,14 +9,15 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, LowerBound, PreviewMode, Reinstall, SourceStrategy, TrustedHost, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification,
+    ExtrasSpecification, HashCheckingMode, IndexStrategy, LowerBound, PreviewMode, Reinstall,
+    SourceStrategy, TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, Origin, Resolution};
 use uv_fs::Simplified;
-use uv_install_wheel::linker::LinkMode;
+use uv_install_wheel::LinkMode;
 use uv_installer::SitePackages;
 use uv_pep508::PackageName;
 use uv_pypi_types::Conflicts;
@@ -86,6 +88,7 @@ pub(crate) async fn pip_sync(
     // Initialize a few defaults.
     let overrides = &[];
     let extras = ExtrasSpecification::default();
+    let groups = DevGroupsSpecification::default();
     let upgrade = Upgrade::default();
     let resolution_mode = ResolutionMode::default();
     let prerelease_mode = PrereleaseMode::default();
@@ -110,6 +113,7 @@ pub(crate) async fn pip_sync(
         constraints,
         overrides,
         &extras,
+        &groups,
         &client_builder,
     )
     .await?;
@@ -248,7 +252,11 @@ pub(crate) async fn pip_sync(
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
-            uv_auth::store_credentials(index.raw_url(), credentials);
+            let credentials = Arc::new(credentials);
+            uv_auth::store_credentials(index.raw_url(), credentials.clone());
+            if let Some(root_url) = index.root_url() {
+                uv_auth::store_credentials(&root_url, credentials.clone());
+            }
         }
     }
 
@@ -351,6 +359,7 @@ pub(crate) async fn pip_sync(
         project,
         BTreeSet::default(),
         &extras,
+        &groups,
         preferences,
         site_packages.clone(),
         &hasher,
@@ -373,7 +382,7 @@ pub(crate) async fn pip_sync(
     {
         Ok(resolution) => Resolution::from(resolution),
         Err(err) => {
-            return diagnostics::OperationDiagnostic::default()
+            return diagnostics::OperationDiagnostic::native_tls(native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
@@ -407,7 +416,7 @@ pub(crate) async fn pip_sync(
     {
         Ok(_) => {}
         Err(err) => {
-            return diagnostics::OperationDiagnostic::default()
+            return diagnostics::OperationDiagnostic::native_tls(native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }

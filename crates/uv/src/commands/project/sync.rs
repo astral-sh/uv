@@ -1,16 +1,16 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
 
-use uv_auth::store_credentials;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, EditableMode,
     ExtrasSpecification, HashCheckingMode, InstallOptions, LowerBound, PreviewMode, TrustedHost,
 };
-use uv_dispatch::{BuildDispatch, SharedState};
+use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{
     DirectorySourceDist, Dist, Index, Resolution, ResolvedDist, SourceDist,
 };
@@ -32,7 +32,8 @@ use crate::commands::pip::operations::Modifications;
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::{
-    default_dependency_groups, detect_conflicts, DependencyGroupsTarget, ProjectError,
+    default_dependency_groups, detect_conflicts, DependencyGroupsTarget, PlatformState,
+    ProjectError, UniversalState,
 };
 use crate::commands::{diagnostics, project, ExitStatus};
 use crate::printer::Printer;
@@ -130,7 +131,7 @@ pub(crate) async fn sync(
     .await?;
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let state = UniversalState::default();
 
     // Determine the lock mode.
     let mode = if frozen {
@@ -160,7 +161,7 @@ pub(crate) async fn sync(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
+            return diagnostics::OperationDiagnostic::native_tls(native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
@@ -212,6 +213,8 @@ pub(crate) async fn sync(
         }
     };
 
+    let state = state.fork();
+
     // Perform the sync operation.
     match do_sync(
         target,
@@ -222,6 +225,7 @@ pub(crate) async fn sync(
         install_options,
         modifications,
         settings.as_ref().into(),
+        &state,
         Box::new(DefaultInstallLogger),
         installer_metadata,
         connectivity,
@@ -236,7 +240,7 @@ pub(crate) async fn sync(
     {
         Ok(()) => {}
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
+            return diagnostics::OperationDiagnostic::native_tls(native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
@@ -257,6 +261,7 @@ pub(super) async fn do_sync(
     install_options: InstallOptions,
     modifications: Modifications,
     settings: InstallerSettingsRef<'_>,
+    state: &PlatformState,
     logger: Box<dyn InstallLogger>,
     installer_metadata: bool,
     connectivity: Connectivity,
@@ -267,17 +272,6 @@ pub(super) async fn do_sync(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<(), ProjectError> {
-    // Use isolated state for universal resolution. When resolving, we don't enforce that the
-    // prioritized distributions match the current platform. So if we lock here, then try to
-    // install from the same state, and we end up performing a resolution during the sync (i.e.,
-    // for the build dependencies of a source distribution), we may try to use incompatible
-    // distributions.
-    // TODO(charlie): In universal resolution, we should still track version compatibility! We
-    // just need to accept versions that are platform-incompatible. That would also make us more
-    // likely to (e.g.) download a wheel that we'll end up using when installing. This would
-    // make it safe to share the state.
-    let state = SharedState::default();
-
     // Extract the project settings.
     let InstallerSettingsRef {
         index_locations,
@@ -359,12 +353,16 @@ pub(super) async fn do_sync(
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
-            store_credentials(index.raw_url(), credentials);
+            let credentials = Arc::new(credentials);
+            uv_auth::store_credentials(index.raw_url(), credentials.clone());
+            if let Some(root_url) = index.root_url() {
+                uv_auth::store_credentials(&root_url, credentials.clone());
+            }
         }
     }
 
-    // Populate credentials from the workspace.
-    store_credentials_from_workspace(target);
+    // Populate credentials from the target.
+    store_credentials_from_target(target);
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
@@ -415,7 +413,7 @@ pub(super) async fn do_sync(
         index_locations,
         &flat_index,
         dependency_metadata,
-        state.clone(),
+        state.clone().into_inner(),
         index_strategy,
         config_setting,
         build_isolation,
@@ -522,7 +520,18 @@ fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolu
 ///
 /// These credentials can come from any of `tool.uv.sources`, `tool.uv.dev-dependencies`,
 /// `project.dependencies`, and `project.optional-dependencies`.
-fn store_credentials_from_workspace(target: InstallTarget<'_>) {
+fn store_credentials_from_target(target: InstallTarget<'_>) {
+    // Iterate over any idnexes in the target.
+    for index in target.indexes() {
+        if let Some(credentials) = index.credentials() {
+            let credentials = Arc::new(credentials);
+            uv_auth::store_credentials(index.raw_url(), credentials.clone());
+            if let Some(root_url) = index.root_url() {
+                uv_auth::store_credentials(&root_url, credentials.clone());
+            }
+        }
+    }
+
     // Iterate over any sources in the target.
     for source in target.sources() {
         match source {

@@ -192,8 +192,7 @@ impl Hashes {
 
         match name {
             "md5" => {
-                let md5 = std::str::from_utf8(value.as_bytes())?;
-                let md5 = md5.to_owned().into_boxed_str();
+                let md5 = value.to_owned().into_boxed_str();
                 Ok(Hashes {
                     md5: Some(md5),
                     sha256: None,
@@ -202,8 +201,7 @@ impl Hashes {
                 })
             }
             "sha256" => {
-                let sha256 = std::str::from_utf8(value.as_bytes())?;
-                let sha256 = sha256.to_owned().into_boxed_str();
+                let sha256 = value.to_owned().into_boxed_str();
                 Ok(Hashes {
                     md5: None,
                     sha256: Some(sha256),
@@ -212,8 +210,7 @@ impl Hashes {
                 })
             }
             "sha384" => {
-                let sha384 = std::str::from_utf8(value.as_bytes())?;
-                let sha384 = sha384.to_owned().into_boxed_str();
+                let sha384 = value.to_owned().into_boxed_str();
                 Ok(Hashes {
                     md5: None,
                     sha256: None,
@@ -222,8 +219,7 @@ impl Hashes {
                 })
             }
             "sha512" => {
-                let sha512 = std::str::from_utf8(value.as_bytes())?;
-                let sha512 = sha512.to_owned().into_boxed_str();
+                let sha512 = value.to_owned().into_boxed_str();
                 Ok(Hashes {
                     md5: None,
                     sha256: None,
@@ -419,9 +415,6 @@ pub enum HashError {
         "Unsupported hash algorithm (expected one of: `md5`, `sha256`, `sha384`, or `sha512`) on: `{0}`"
     )]
     UnsupportedHashAlgorithm(String),
-
-    #[error("Non-UTF-8 hash digest")]
-    NonUtf8(#[from] std::str::Utf8Error),
 }
 
 #[cfg(test)]

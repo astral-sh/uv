@@ -184,6 +184,8 @@ To exclude downloads and only show installed Python versions:
 $ uv python list --only-installed
 ```
 
+See the [`uv python list`](../reference/cli.md#uv-python-list) reference for more details.
+
 ## Finding a Python executable
 
 To find a Python executable, use the `uv python find` command:

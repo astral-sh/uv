@@ -8,7 +8,7 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     #[error(transparent)]
-    Utf8(#[from] std::string::FromUtf8Error),
+    Utf8(#[from] std::str::Utf8Error),
 
     #[error(transparent)]
     WheelFilename(#[from] uv_distribution_filename::WheelFilenameError),

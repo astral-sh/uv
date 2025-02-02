@@ -177,6 +177,11 @@ impl RequirementsSource {
             Self::PyprojectToml(_) | Self::SetupPy(_) | Self::SetupCfg(_)
         )
     }
+
+    /// Returns `true` if the source allows groups to be specified.
+    pub fn allows_groups(&self) -> bool {
+        matches!(self, Self::PyprojectToml(_))
+    }
 }
 
 impl std::fmt::Display for RequirementsSource {

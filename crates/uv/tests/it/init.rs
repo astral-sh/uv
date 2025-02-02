@@ -2254,6 +2254,39 @@ fn init_failure() -> Result<()> {
 }
 
 #[test]
+fn init_failure_with_invalid_option_named_backend() {
+    let context = TestContext::new("3.12");
+    uv_snapshot!(context.filters(), context.init().arg("foo").arg("--backend"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: unexpected argument '--backend' found
+
+      tip: a similar argument exists: '--build-backend'
+
+    Usage: uv init [OPTIONS] [PATH]
+
+    For more information, try '--help'.
+    "###);
+    uv_snapshot!(context.filters(), context.init().arg("foo").arg("--backend").arg("maturin"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: unexpected argument '--backend' found
+
+      tip: a similar argument exists: '--build-backend'
+
+    Usage: uv init [OPTIONS] [PATH]
+
+    For more information, try '--help'.
+    "###);
+}
+#[test]
+#[cfg(feature = "git")]
 fn init_git() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -2314,6 +2347,7 @@ fn init_vcs_none() {
 
 /// Run `uv init` from within a Git repository. Do not try to reinitialize one.
 #[test]
+#[cfg(feature = "git")]
 fn init_inside_git_repo() {
     let context = TestContext::new("3.12");
 

@@ -92,7 +92,7 @@ the second stage, we'll copy this directory over to the final image, omitting th
 other unnecessary files.
 
 ```dockerfile title="Dockerfile"
-FROM ghcr.io/astral-sh/uv:0.5.18 AS uv
+FROM ghcr.io/astral-sh/uv:0.5.26 AS uv
 
 # First, bundle the dependencies into the task root.
 FROM public.ecr.aws/lambda/python:3.13 AS builder
@@ -210,6 +210,46 @@ $ aws lambda update-function-code \
    --publish
 ```
 
+To test the Lambda, we can invoke it via the AWS Management Console or the AWS CLI, e.g.:
+
+```console
+$ aws lambda invoke \
+   --function-name myFunction \
+   --payload file://event.json \
+   --cli-binary-format raw-in-base64-out \
+   response.json
+{
+  "StatusCode": 200,
+  "ExecutedVersion": "$LATEST"
+}
+```
+
+Where `event.json` contains the event payload to pass to the Lambda function:
+
+```json title="event.json"
+{
+  "httpMethod": "GET",
+  "path": "/",
+  "requestContext": {},
+  "version": "1.0"
+}
+```
+
+And `response.json` contains the response from the Lambda function:
+
+```json title="response.json"
+{
+  "statusCode": 200,
+  "headers": {
+    "content-length": "14",
+    "content-type": "application/json"
+  },
+  "multiValueHeaders": {},
+  "body": "\"Hello, world!\"",
+  "isBase64Encoded": false
+}
+```
+
 For details, see the
 [AWS Lambda documentation](https://docs.aws.amazon.com/lambda/latest/dg/python-image.html).
 
@@ -294,7 +334,7 @@ And confirm that opening http://127.0.0.1:8000/ in a web browser displays, "Hell
 Finally, we'll update the Dockerfile to include the local library in the deployment package:
 
 ```dockerfile title="Dockerfile"
-FROM ghcr.io/astral-sh/uv:0.5.18 AS uv
+FROM ghcr.io/astral-sh/uv:0.5.26 AS uv
 
 # First, bundle the dependencies into the task root.
 FROM public.ecr.aws/lambda/python:3.13 AS builder
@@ -428,6 +468,46 @@ $ aws lambda update-function-code \
     By default, the AWS Management Console assumes a Lambda entrypoint of `lambda_function.lambda_handler`.
     If your application uses a different entrypoint, you'll need to modify it in the AWS Management Console.
     For example, the above FastAPI application uses `app.main.handler`.
+
+To test the Lambda, we can invoke it via the AWS Management Console or the AWS CLI, e.g.:
+
+```console
+$ aws lambda invoke \
+   --function-name myFunction \
+   --payload file://event.json \
+   --cli-binary-format raw-in-base64-out \
+   response.json
+{
+  "StatusCode": 200,
+  "ExecutedVersion": "$LATEST"
+}
+```
+
+Where `event.json` contains the event payload to pass to the Lambda function:
+
+```json title="event.json"
+{
+  "httpMethod": "GET",
+  "path": "/",
+  "requestContext": {},
+  "version": "1.0"
+}
+```
+
+And `response.json` contains the response from the Lambda function:
+
+```json title="response.json"
+{
+  "statusCode": 200,
+  "headers": {
+    "content-length": "14",
+    "content-type": "application/json"
+  },
+  "multiValueHeaders": {},
+  "body": "\"Hello, world!\"",
+  "isBase64Encoded": false
+}
+```
 
 ### Using a Lambda layer
 

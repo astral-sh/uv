@@ -32,9 +32,9 @@ use uv_cli::{
 };
 #[cfg(feature = "self-update")]
 use uv_cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
-use uv_fs::CWD;
+use uv_fs::{Simplified, CWD};
 use uv_requirements::RequirementsSource;
-use uv_scripts::{Pep723Item, Pep723Metadata, Pep723Script};
+use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
 use uv_settings::{Combine, FilesystemOptions, Options};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
@@ -175,45 +175,67 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     // If the target is a PEP 723 script, parse it.
     let script = if let Commands::Project(command) = &*cli.command {
-        if let ProjectCommand::Run(uv_cli::RunArgs { .. }) = &**command {
-            match run_command.as_ref() {
+        match &**command {
+            ProjectCommand::Run(uv_cli::RunArgs { .. }) => match run_command.as_ref() {
                 Some(
                     RunCommand::PythonScript(script, _) | RunCommand::PythonGuiScript(script, _),
-                ) => Pep723Script::read(&script).await?.map(Pep723Item::Script),
+                ) => match Pep723Script::read(&script).await {
+                    Ok(Some(script)) => Some(Pep723Item::Script(script)),
+                    Ok(None) => None,
+                    Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => None,
+                    Err(err) => return Err(err.into()),
+                },
                 Some(RunCommand::PythonRemote(script, _)) => {
-                    Pep723Metadata::read(&script).await?.map(Pep723Item::Remote)
+                    match Pep723Metadata::read(&script).await {
+                        Ok(Some(metadata)) => Some(Pep723Item::Remote(metadata)),
+                        Ok(None) => None,
+                        Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                            None
+                        }
+                        Err(err) => return Err(err.into()),
+                    }
                 }
                 Some(
                     RunCommand::PythonStdin(contents, _) | RunCommand::PythonGuiStdin(contents, _),
                 ) => Pep723Metadata::parse(contents)?.map(Pep723Item::Stdin),
                 _ => None,
-            }
-        } else if let ProjectCommand::Remove(uv_cli::RemoveArgs {
-            script: Some(script),
-            ..
-        }) = &**command
-        {
-            Pep723Script::read(&script).await?.map(Pep723Item::Script)
-        } else if let ProjectCommand::Lock(uv_cli::LockArgs {
-            script: Some(script),
-            ..
-        }) = &**command
-        {
-            Pep723Script::read(&script).await?.map(Pep723Item::Script)
-        } else if let ProjectCommand::Tree(uv_cli::TreeArgs {
-            script: Some(script),
-            ..
-        }) = &**command
-        {
-            Pep723Script::read(&script).await?.map(Pep723Item::Script)
-        } else if let ProjectCommand::Export(uv_cli::ExportArgs {
-            script: Some(script),
-            ..
-        }) = &**command
-        {
-            Pep723Script::read(&script).await?.map(Pep723Item::Script)
-        } else {
-            None
+            },
+            ProjectCommand::Remove(uv_cli::RemoveArgs {
+                script: Some(script),
+                ..
+            })
+            | ProjectCommand::Lock(uv_cli::LockArgs {
+                script: Some(script),
+                ..
+            })
+            | ProjectCommand::Tree(uv_cli::TreeArgs {
+                script: Some(script),
+                ..
+            })
+            | ProjectCommand::Export(uv_cli::ExportArgs {
+                script: Some(script),
+                ..
+            }) => match Pep723Script::read(&script).await {
+                Ok(Some(script)) => Some(Pep723Item::Script(script)),
+                Ok(None) => {
+                    // TODO(charlie): `uv lock --script` should initialize the tag, if it doesn't
+                    // exist.
+                    bail!(
+                        "`{}` does not contain a PEP 723 metadata tag; run `{}` to initialize the script",
+                        script.user_display().cyan(),
+                        format!("uv init --script {}", script.user_display()).green()
+                    )
+                }
+                Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                    bail!(
+                        "Failed to read `{}` (not found); run `{}` to create a PEP 723 script",
+                        script.user_display().cyan(),
+                        format!("uv init --script {}", script.user_display()).green()
+                    )
+                }
+                Err(err) => return Err(err.into()),
+            },
+            _ => None,
         }
     } else {
         None
@@ -240,7 +262,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         let package_version = uv_pep440::Version::from_str(uv_version::version())?;
         if !required_version.contains(&package_version) {
             return Err(anyhow::anyhow!(
-                "Required version `{required_version}` does not match the running version `{package_version}`",
+                "Required uv version `{required_version}` does not match the running version `{package_version}`",
             ));
         }
     }
@@ -372,6 +394,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.overrides_from_workspace,
                 args.environments,
                 args.settings.extras,
+                args.settings.groups,
                 args.settings.output_file.as_deref(),
                 args.settings.resolution,
                 args.settings.prerelease,
@@ -542,6 +565,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.constraints_from_workspace,
                 args.overrides_from_workspace,
                 &args.settings.extras,
+                &args.settings.groups,
                 args.settings.resolution,
                 args.settings.prerelease,
                 args.settings.dependency_mode,
@@ -634,6 +658,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.strict,
                 args.settings.python.as_deref(),
                 args.settings.system,
+                args.paths,
                 &cache,
                 printer,
             )
@@ -825,7 +850,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             // Since we use ".venv" as the default name, we use "." as the default prompt.
             let prompt = args.prompt.or_else(|| {
@@ -1140,6 +1169,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.all_platforms,
                 args.all_arches,
                 args.show_urls,
+                args.output_format,
                 globals.python_preference,
                 globals.python_downloads,
                 &cache,
@@ -1180,7 +1210,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::PythonUninstallSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::python_uninstall(args.install_dir, args.targets, args.all, printer).await
+            commands::python_uninstall(
+                args.install_dir,
+                args.targets,
+                args.all,
+                printer,
+                globals.preview,
+            )
+            .await
         }
         Commands::Python(PythonNamespace {
             command: PythonCommand::Find(args),
@@ -1883,45 +1920,51 @@ where
         }
     };
 
-    // Windows has a default stack size of 1MB, which is lower than the linux and mac default.
+    // Running out of stack has been an issue for us. We box types and futures in various places
+    // to mitigate this, with this being an especially important case.
+    //
+    // Non-main threads should all have 2MB, as Rust forces platform consistency there,
+    // but that can be overridden with the RUST_MIN_STACK environment variable if you need more.
+    //
+    // Main thread stack-size is the real issue. There's BIG variety here across platforms
+    // and it's harder to control (which is why Rust doesn't by default). Notably
+    // on macOS and Linux you will typically get 8MB main thread, while on Windows you will
+    // typically get 1MB, which is *tiny*:
     // https://learn.microsoft.com/en-us/cpp/build/reference/stack-stack-allocations?view=msvc-170
-    // We support increasing the stack size to avoid stack overflows in debug mode on Windows. In
-    // addition, we box types and futures in various places. This includes the `Box::pin(run())`
-    // here, which prevents the large (non-send) main future alone from overflowing the stack.
-    let result = if let Ok(stack_size) = std::env::var(EnvVars::UV_STACK_SIZE) {
-        let stack_size = stack_size.parse().expect("Invalid stack size");
-        let tokio_main = move || {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .thread_stack_size(stack_size)
-                .build()
-                .expect("Failed building the Runtime");
-            // Box the large main future to avoid stack overflows.
-            let result = runtime.block_on(Box::pin(run(cli)));
-            // Avoid waiting for pending tasks to complete.
-            //
-            // The resolver may have kicked off HTTP requests during resolution that
-            // turned out to be unnecessary. Waiting for those to complete can cause
-            // the CLI to hang before exiting.
-            runtime.shutdown_background();
-            result
-        };
-        std::thread::Builder::new()
-            .stack_size(stack_size)
-            .spawn(tokio_main)
-            .expect("Tokio executor failed, was there a panic?")
-            .join()
-            .expect("Tokio executor failed, was there a panic?")
-    } else {
+    //
+    // To normalize this we just spawn a new thread called main2 with a size we can set
+    // ourselves. 2MB is typically too small (especially for our debug builds), while 4MB
+    // seems fine. Also we still try to respect RUST_MIN_STACK if it's set, in case useful,
+    // but don't let it ask for a smaller stack to avoid messy misconfiguration since we
+    // know we use quite a bit of main stack space.
+    let main_stack_size = std::env::var(EnvVars::RUST_MIN_STACK)
+        .ok()
+        .and_then(|var| var.parse::<usize>().ok())
+        .unwrap_or(0)
+        .max(4 * 1024 * 1024);
+
+    let main2 = move || {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .expect("Failed building the Runtime");
         // Box the large main future to avoid stack overflows.
         let result = runtime.block_on(Box::pin(run(cli)));
+        // Avoid waiting for pending tasks to complete.
+        //
+        // The resolver may have kicked off HTTP requests during resolution that
+        // turned out to be unnecessary. Waiting for those to complete can cause
+        // the CLI to hang before exiting.
         runtime.shutdown_background();
         result
     };
+    let result = std::thread::Builder::new()
+        .name("main2".to_owned())
+        .stack_size(main_stack_size)
+        .spawn(main2)
+        .expect("Tokio executor failed, was there a panic?")
+        .join()
+        .expect("Tokio executor failed, was there a panic?");
 
     match result {
         Ok(code) => code.into(),

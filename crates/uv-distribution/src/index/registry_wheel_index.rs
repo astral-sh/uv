@@ -3,6 +3,8 @@ use std::collections::hash_map::Entry;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
+use uv_cache_key::cache_digest;
+use uv_configuration::ConfigSettings;
 use uv_distribution_types::{CachedRegistryDist, Hashed, Index, IndexLocations, IndexUrl};
 use uv_fs::{directories, files, symlinks};
 use uv_normalize::PackageName;
@@ -31,6 +33,7 @@ pub struct RegistryWheelIndex<'a> {
     index_locations: &'a IndexLocations,
     hasher: &'a HashStrategy,
     index: FxHashMap<&'a PackageName, Vec<IndexEntry<'a>>>,
+    build_configuration: &'a ConfigSettings,
 }
 
 impl<'a> RegistryWheelIndex<'a> {
@@ -40,12 +43,14 @@ impl<'a> RegistryWheelIndex<'a> {
         tags: &'a Tags,
         index_locations: &'a IndexLocations,
         hasher: &'a HashStrategy,
+        build_configuration: &'a ConfigSettings,
     ) -> Self {
         Self {
             cache,
             tags,
             index_locations,
             hasher,
+            build_configuration,
             index: FxHashMap::default(),
         }
     }
@@ -67,6 +72,7 @@ impl<'a> RegistryWheelIndex<'a> {
                 self.tags,
                 self.index_locations,
                 self.hasher,
+                self.build_configuration,
             )),
         };
         versions
@@ -79,6 +85,7 @@ impl<'a> RegistryWheelIndex<'a> {
         tags: &Tags,
         index_locations: &'index IndexLocations,
         hasher: &HashStrategy,
+        build_configuration: &ConfigSettings,
     ) -> Vec<IndexEntry<'index>> {
         let mut entries = vec![];
 
@@ -162,9 +169,8 @@ impl<'a> RegistryWheelIndex<'a> {
                 WheelCache::Index(index.url()).wheel_dir(package.to_string()),
             );
 
-            // For registry wheels, the cache structure is: `<index>/<package-name>/<version>/`.
+            // For registry source distributions, the cache structure is: `<index>/<package-name>/<version>/`.
             for shard in directories(&cache_shard) {
-                // Read the existing metadata from the cache, if it exists.
                 let cache_shard = cache_shard.shard(shard);
 
                 // Read the revision from the cache.
@@ -190,7 +196,16 @@ impl<'a> RegistryWheelIndex<'a> {
                 };
 
                 if let Some(revision) = revision {
-                    for wheel_dir in symlinks(cache_shard.join(revision.id())) {
+                    let cache_shard = cache_shard.shard(revision.id());
+
+                    // If there are build settings, we need to scope to a cache shard.
+                    let cache_shard = if build_configuration.is_empty() {
+                        cache_shard
+                    } else {
+                        cache_shard.shard(cache_digest(build_configuration))
+                    };
+
+                    for wheel_dir in symlinks(cache_shard) {
                         if let Some(wheel) = CachedWheel::from_built_source(wheel_dir) {
                             if wheel.filename.compatibility(tags).is_compatible() {
                                 // Enforce hash-checking based on the source distribution.

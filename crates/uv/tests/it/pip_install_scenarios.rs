@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.44/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/HEAD/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi", unix))]
 
@@ -836,8 +836,8 @@ fn extra_incompatible_with_extra() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-a[extra-b]==1.0.0 depends on package-b==1.0.0 and package-a[extra-c]==1.0.0 depends on package-b==2.0.0, we can conclude that package-a[extra-b]==1.0.0 and package-a[extra-c]==1.0.0 are incompatible.
-          And because only package-a[extra-c]==1.0.0 is available and only package-a[extra-b]==1.0.0 is available, we can conclude that all versions of package-a[extra-b] and all versions of package-a[extra-c] are incompatible.
+      ╰─▶ Because only package-a[extra-b]==1.0.0 is available and package-a[extra-b]==1.0.0 depends on package-b==1.0.0, we can conclude that all versions of package-a[extra-b] depend on package-b==1.0.0.
+          And because package-a[extra-c]==1.0.0 depends on package-b==2.0.0 and only package-a[extra-c]==1.0.0 is available, we can conclude that all versions of package-a[extra-b] and all versions of package-a[extra-c] are incompatible.
           And because you require package-a[extra-b] and package-a[extra-c], we can conclude that your requirements are unsatisfiable.
     "###);
 
@@ -4088,8 +4088,10 @@ fn no_sdist_no_wheels_with_matching_abi() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching Python ABI tag, we can conclude that all versions of package-a cannot be used.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching Python ABI tag (e.g., `cp38`), we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
+
+          hint: You require CPython 3.8 (`cp38`), but we only found wheels for `package-a` (v1.0.0) with the following Python ABI tag: `graalpy310_graalpy240_310_native`
     "###);
 
     assert_not_installed(
@@ -4129,8 +4131,10 @@ fn no_sdist_no_wheels_with_matching_platform() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching platform tag, we can conclude that all versions of package-a cannot be used.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`), we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
+
+          hint: Wheels are available for `package-a` (v1.0.0) on the following platform: `macosx_10_0_ppc64`
     "###);
 
     assert_not_installed(
@@ -4170,8 +4174,10 @@ fn no_sdist_no_wheels_with_matching_python() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching Python implementation tag, we can conclude that all versions of package-a cannot be used.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching Python implementation tag (e.g., `cp38`), we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
+
+          hint: You require CPython 3.8 (`cp38`), but we only found wheels for `package-a` (v1.0.0) with the following Python implementation tag: `graalpy310`
     "###);
 
     assert_not_installed(

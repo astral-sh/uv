@@ -9,6 +9,7 @@ use tracing::{debug, trace, warn};
 use uv_distribution_types::Index;
 use uv_fs::{Simplified, CWD};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl};
 use uv_pypi_types::{
     Conflicts, Requirement, RequirementSource, SupportedEnvironments, VerbatimParsedUrl,
@@ -381,6 +382,18 @@ impl Workspace {
             conflicting.append(&mut member.pyproject_toml.conflicts());
         }
         conflicting
+    }
+
+    /// Returns an iterator over the `requires-python` values for each member of the workspace.
+    pub fn requires_python(&self) -> impl Iterator<Item = (&PackageName, &VersionSpecifiers)> {
+        self.packages().iter().filter_map(|(name, member)| {
+            member
+                .pyproject_toml()
+                .project
+                .as_ref()
+                .and_then(|project| project.requires_python.as_ref())
+                .map(|requires_python| (name, requires_python))
+        })
     }
 
     /// Returns any requirements that are exclusive to the workspace root, i.e., not included in

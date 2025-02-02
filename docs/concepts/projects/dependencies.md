@@ -77,6 +77,14 @@ $ uv add "httpx>9999"
       we can conclude that your project's requirements are unsatisfiable.
 ```
 
+### Importing dependencies
+
+Dependencies declared in a `requirements.txt` file can be added to the project with the `-r` option:
+
+```
+uv add -r requirements.txt
+```
+
 ## Removing dependencies
 
 To remove a dependency:
@@ -321,7 +329,19 @@ dependencies = ["httpx"]
 httpx = { git = "https://github.com/encode/httpx", rev = "326b9431c761e1ef1e00b9f760d1f654c8db48c6" }
 ```
 
-A `subdirectory` may be specified if the package isn't in the repository root.
+A `subdirectory` may be specified if the package isn't in the repository root:
+
+```console
+$ uv add git+https://github.com/langchain-ai/langchain#subdirectory=libs/langchain
+```
+
+```toml title="pyproject.toml"
+[project]
+dependencies = ["langchain"]
+
+[tool.uv.sources]
+langchain = { git = "https://github.com/langchain-ai/langchain", subdirectory = "libs/langchain" }
+```
 
 ### URL
 

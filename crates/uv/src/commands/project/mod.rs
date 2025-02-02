@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -154,6 +154,9 @@ pub(crate) enum ProjectError {
 
     #[error("Environment markers `{0}` don't overlap with Python requirement `{1}`")]
     DisjointEnvironment(MarkerTreeContents, VersionSpecifiers),
+
+    #[error("The workspace contains conflicting Python requirements:\n{}", _0.iter().map(|(name, specifiers)| format!("- `{name}`: `{specifiers}`")).join("\n"))]
+    DisjointRequiresPython(BTreeMap<PackageName, VersionSpecifiers>),
 
     #[error("Environment marker is empty")]
     EmptyEnvironment,
@@ -313,18 +316,74 @@ impl std::fmt::Display for ConflictError {
 
 impl std::error::Error for ConflictError {}
 
+/// A [`SharedState`] instance to use for universal resolution.
+#[derive(Default, Clone)]
+pub(crate) struct UniversalState(SharedState);
+
+impl std::ops::Deref for UniversalState {
+    type Target = SharedState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl UniversalState {
+    /// Fork the [`UniversalState`] to create a [`PlatformState`].
+    pub(crate) fn fork(&self) -> PlatformState {
+        PlatformState(self.0.fork())
+    }
+}
+
+/// A [`SharedState`] instance to use for platform-specific resolution.
+#[derive(Default, Clone)]
+pub(crate) struct PlatformState(SharedState);
+
+impl std::ops::Deref for PlatformState {
+    type Target = SharedState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl PlatformState {
+    /// Fork the [`PlatformState`] to create a [`UniversalState`].
+    pub(crate) fn fork(&self) -> UniversalState {
+        UniversalState(self.0.fork())
+    }
+
+    /// Create a [`SharedState`] from the [`PlatformState`].
+    pub(crate) fn into_inner(self) -> SharedState {
+        self.0
+    }
+}
+
 /// Compute the `Requires-Python` bound for the [`Workspace`].
 ///
 /// For a [`Workspace`] with multiple packages, the `Requires-Python` bound is the union of the
 /// `Requires-Python` bounds of all the packages.
-pub(crate) fn find_requires_python(workspace: &Workspace) -> Option<RequiresPython> {
-    RequiresPython::intersection(workspace.packages().values().filter_map(|member| {
-        member
-            .pyproject_toml()
-            .project
-            .as_ref()
-            .and_then(|project| project.requires_python.as_ref())
-    }))
+#[allow(clippy::result_large_err)]
+pub(crate) fn find_requires_python(
+    workspace: &Workspace,
+) -> Result<Option<RequiresPython>, ProjectError> {
+    // If there are no `Requires-Python` specifiers in the workspace, return `None`.
+    if workspace.requires_python().next().is_none() {
+        return Ok(None);
+    }
+    match RequiresPython::intersection(
+        workspace
+            .requires_python()
+            .map(|(.., specifiers)| specifiers),
+    ) {
+        Some(requires_python) => Ok(Some(requires_python)),
+        None => Err(ProjectError::DisjointRequiresPython(
+            workspace
+                .requires_python()
+                .map(|(name, specifiers)| (name.clone(), specifiers.clone()))
+                .collect(),
+        )),
+    }
 }
 
 /// Returns an error if the [`Interpreter`] does not satisfy the [`Workspace`] `requires-python`.
@@ -732,7 +791,7 @@ impl WorkspacePython {
         project_dir: &Path,
         no_config: bool,
     ) -> Result<Self, ProjectError> {
-        let requires_python = workspace.and_then(find_requires_python);
+        let requires_python = workspace.map(find_requires_python).transpose()?.flatten();
 
         let workspace_root = workspace.map(Workspace::install_path);
 
@@ -1019,7 +1078,11 @@ pub(crate) async fn resolve_names(
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
-            uv_auth::store_credentials(index.raw_url(), credentials);
+            let credentials = Arc::new(credentials);
+            uv_auth::store_credentials(index.raw_url(), credentials.clone());
+            if let Some(root_url) = index.root_url() {
+                uv_auth::store_credentials(&root_url, credentials.clone());
+            }
         }
     }
 
@@ -1121,7 +1184,7 @@ pub(crate) async fn resolve_environment(
     spec: EnvironmentSpecification<'_>,
     interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,
-    state: &SharedState,
+    state: &PlatformState,
     logger: Box<dyn ResolveLogger>,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -1169,7 +1232,11 @@ pub(crate) async fn resolve_environment(
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
-            uv_auth::store_credentials(index.raw_url(), credentials);
+            let credentials = Arc::new(credentials);
+            uv_auth::store_credentials(index.raw_url(), credentials.clone());
+            if let Some(root_url) = index.root_url() {
+                uv_auth::store_credentials(&root_url, credentials.clone());
+            }
         }
     }
 
@@ -1209,6 +1276,7 @@ pub(crate) async fn resolve_environment(
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let extras = ExtrasSpecification::default();
+    let groups = DevGroupsSpecification::default();
     let hasher = HashStrategy::default();
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
@@ -1249,7 +1317,7 @@ pub(crate) async fn resolve_environment(
         index_locations,
         &flat_index,
         dependency_metadata,
-        state.clone(),
+        state.clone().into_inner(),
         index_strategy,
         config_setting,
         build_isolation,
@@ -1272,6 +1340,7 @@ pub(crate) async fn resolve_environment(
         project,
         BTreeSet::default(),
         &extras,
+        &groups,
         preferences,
         EmptyInstalledPackages,
         &hasher,
@@ -1298,7 +1367,7 @@ pub(crate) async fn sync_environment(
     venv: PythonEnvironment,
     resolution: &Resolution,
     settings: InstallerSettingsRef<'_>,
-    state: &SharedState,
+    state: &PlatformState,
     logger: Box<dyn InstallLogger>,
     installer_metadata: bool,
     connectivity: Connectivity,
@@ -1334,7 +1403,11 @@ pub(crate) async fn sync_environment(
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
-            uv_auth::store_credentials(index.raw_url(), credentials);
+            let credentials = Arc::new(credentials);
+            uv_auth::store_credentials(index.raw_url(), credentials.clone());
+            if let Some(root_url) = index.root_url() {
+                uv_auth::store_credentials(&root_url, credentials.clone());
+            }
         }
     }
 
@@ -1384,7 +1457,7 @@ pub(crate) async fn sync_environment(
         index_locations,
         &flat_index,
         dependency_metadata,
-        state.clone(),
+        state.clone().into_inner(),
         index_strategy,
         config_setting,
         build_isolation,
@@ -1529,7 +1602,11 @@ pub(crate) async fn update_environment(
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
-            uv_auth::store_credentials(index.raw_url(), credentials);
+            let credentials = Arc::new(credentials);
+            uv_auth::store_credentials(index.raw_url(), credentials.clone());
+            if let Some(root_url) = index.root_url() {
+                uv_auth::store_credentials(&root_url, credentials.clone());
+            }
         }
     }
 
@@ -1569,6 +1646,7 @@ pub(crate) async fn update_environment(
     let build_hasher = HashStrategy::default();
     let dry_run = false;
     let extras = ExtrasSpecification::default();
+    let groups = DevGroupsSpecification::default();
     let hasher = HashStrategy::default();
     let preferences = Vec::default();
 
@@ -1617,6 +1695,7 @@ pub(crate) async fn update_environment(
         project,
         BTreeSet::default(),
         &extras,
+        &groups,
         preferences,
         site_packages.clone(),
         &hasher,

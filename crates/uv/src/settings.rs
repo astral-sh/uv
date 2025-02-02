@@ -18,8 +18,8 @@ use uv_cli::{
     IndexSetCredentialsArgs, IndexUnsetCredentialsArgs, InitArgs, ListFormat, LockArgs, Maybe,
     PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
-    PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs, ToolDirArgs,
-    ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs,
+    PythonListFormat, PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs,
+    ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs,
 };
 use uv_client::Connectivity;
 use uv_configuration::{
@@ -29,7 +29,7 @@ use uv_configuration::{
     SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl};
-use uv_install_wheel::linker::LinkMode;
+use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep508::{ExtraName, RequirementOrigin};
 use uv_pypi_types::{Requirement, SupportedEnvironments};
@@ -157,7 +157,9 @@ impl GlobalSettings {
                 .combine(env(env::UV_PYTHON_DOWNLOADS))
                 .combine(workspace.and_then(|workspace| workspace.globals.python_downloads))
                 .unwrap_or_default(),
-            no_progress: args.no_progress,
+            // Disable the progress bar with `RUST_LOG` to avoid progress fragments interleaving
+            // with log messages.
+            no_progress: args.no_progress || std::env::var_os(EnvVars::RUST_LOG).is_some(),
             installer_metadata: !args.no_installer_metadata,
         }
     }
@@ -226,6 +228,7 @@ impl InitSettings {
             no_pin_python,
             no_workspace,
             python,
+            ..
         } = args;
 
         let kind = match (app, lib, script) {
@@ -301,6 +304,7 @@ impl RunSettings {
             no_dev,
             group,
             no_group,
+            no_default_groups,
             only_group,
             all_groups,
             module: _,
@@ -344,7 +348,14 @@ impl RunSettings {
                 extra.unwrap_or_default(),
             ),
             dev: DevGroupsSpecification::from_args(
-                dev, no_dev, only_dev, group, no_group, only_group, all_groups,
+                dev,
+                no_dev,
+                only_dev,
+                group,
+                no_group,
+                no_default_groups,
+                only_group,
+                all_groups,
             ),
             editable: EditableMode::from_args(no_editable),
             modifications: if flag(exact, inexact).unwrap_or(false) {
@@ -739,6 +750,7 @@ pub(crate) struct PythonListSettings {
     pub(crate) all_arches: bool,
     pub(crate) all_versions: bool,
     pub(crate) show_urls: bool,
+    pub(crate) output_format: PythonListFormat,
 }
 
 impl PythonListSettings {
@@ -752,6 +764,7 @@ impl PythonListSettings {
             only_installed,
             only_downloads,
             show_urls,
+            output_format,
         } = args;
 
         let kinds = if only_installed {
@@ -768,6 +781,7 @@ impl PythonListSettings {
             all_arches,
             all_versions,
             show_urls,
+            output_format,
         }
     }
 }
@@ -958,6 +972,7 @@ impl SyncSettings {
             only_dev,
             group,
             no_group,
+            no_default_groups,
             only_group,
             all_groups,
             no_editable,
@@ -994,7 +1009,14 @@ impl SyncSettings {
                 extra.unwrap_or_default(),
             ),
             dev: DevGroupsSpecification::from_args(
-                dev, no_dev, only_dev, group, no_group, only_group, all_groups,
+                dev,
+                no_dev,
+                only_dev,
+                group,
+                no_group,
+                no_default_groups,
+                only_group,
+                all_groups,
             ),
             editable: EditableMode::from_args(no_editable),
             install_options: InstallOptions::new(
@@ -1314,6 +1336,7 @@ impl TreeSettings {
             no_dev,
             group,
             no_group,
+            no_default_groups,
             only_group,
             all_groups,
             locked,
@@ -1332,7 +1355,14 @@ impl TreeSettings {
 
         Self {
             dev: DevGroupsSpecification::from_args(
-                dev, no_dev, only_dev, group, no_group, only_group, all_groups,
+                dev,
+                no_dev,
+                only_dev,
+                group,
+                no_group,
+                no_default_groups,
+                only_group,
+                all_groups,
             ),
             locked,
             frozen,
@@ -1395,6 +1425,7 @@ impl ExportSettings {
             only_dev,
             group,
             no_group,
+            no_default_groups,
             only_group,
             all_groups,
             header,
@@ -1430,7 +1461,14 @@ impl ExportSettings {
                 extra.unwrap_or_default(),
             ),
             dev: DevGroupsSpecification::from_args(
-                dev, no_dev, only_dev, group, no_group, only_group, all_groups,
+                dev,
+                no_dev,
+                only_dev,
+                group,
+                no_group,
+                no_default_groups,
+                only_group,
+                all_groups,
             ),
             editable: EditableMode::from_args(no_editable),
             hashes: flag(hashes, no_hashes).unwrap_or(true),
@@ -1884,6 +1922,7 @@ impl PipUninstallSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PipFreezeSettings {
     pub(crate) exclude_editable: bool,
+    pub(crate) paths: Option<Vec<PathBuf>>,
     pub(crate) settings: PipSettings,
 }
 
@@ -1895,6 +1934,7 @@ impl PipFreezeSettings {
             strict,
             no_strict,
             python,
+            paths,
             system,
             no_system,
             compat_args: _,
@@ -1902,6 +1942,7 @@ impl PipFreezeSettings {
 
         Self {
             exclude_editable,
+            paths,
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
@@ -2169,6 +2210,7 @@ pub(crate) struct VenvSettings {
     pub(crate) system_site_packages: bool,
     pub(crate) relocatable: bool,
     pub(crate) no_project: bool,
+    pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
 }
 
@@ -2191,6 +2233,7 @@ impl VenvSettings {
             exclude_newer,
             no_project,
             link_mode,
+            refresh,
             compat_args: _,
         } = args;
 
@@ -2202,6 +2245,7 @@ impl VenvSettings {
             system_site_packages,
             no_project,
             relocatable,
+            refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
@@ -2520,6 +2564,7 @@ pub(crate) struct PipSettings {
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) system: bool,
     pub(crate) extras: ExtrasSpecification,
+    pub(crate) groups: DevGroupsSpecification,
     pub(crate) break_system_packages: bool,
     pub(crate) target: Option<Target>,
     pub(crate) prefix: Option<Prefix>,
@@ -2712,6 +2757,16 @@ impl PipSettings {
                 args.all_extras.combine(all_extras).unwrap_or_default(),
                 args.no_extra.combine(no_extra).unwrap_or_default(),
                 args.extra.combine(extra).unwrap_or_default(),
+            ),
+            groups: DevGroupsSpecification::from_args(
+                false,
+                false,
+                false,
+                Vec::new(),
+                Vec::new(),
+                false,
+                Vec::new(),
+                false,
             ),
             dependency_mode: if args.no_deps.combine(no_deps).unwrap_or_default() {
                 DependencyMode::Direct

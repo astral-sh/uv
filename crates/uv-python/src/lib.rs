@@ -30,19 +30,25 @@ mod implementation;
 mod installation;
 mod interpreter;
 mod libc;
+pub mod macos_dylib;
 pub mod managed;
 #[cfg(windows)]
 mod microsoft_store;
 pub mod platform;
 mod pointer_size;
 mod prefix;
-#[cfg(windows)]
-mod py_launcher;
 mod python_version;
 mod sysconfig;
 mod target;
 mod version_files;
 mod virtualenv;
+#[cfg(windows)]
+pub mod windows_registry;
+
+#[cfg(windows)]
+pub(crate) const COMPANY_KEY: &str = "Astral";
+#[cfg(windows)]
+pub(crate) const COMPANY_DISPLAY_NAME: &str = "Astral Software Inc.";
 
 #[cfg(not(test))]
 pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
@@ -110,7 +116,7 @@ mod tests {
 
     use crate::{
         discovery::{
-            find_best_python_installation, find_python_installation, EnvironmentPreference,
+            self, find_best_python_installation, find_python_installation, EnvironmentPreference,
         },
         PythonPreference,
     };
@@ -588,11 +594,10 @@ mod tests {
                 PythonPreference::default(),
                 &context.cache,
             )
-        })?;
+        });
         assert!(
-            matches!(result, Err(PythonNotFound { .. })),
-            // TODO(zanieb): We could improve the error handling to hint this to the user
-            "If only Python 2 is available, we should not find a python; got {result:?}"
+            matches!(result, Err(discovery::Error::Query(..))),
+            "If only Python 2 is available, we should report the interpreter query error; got {result:?}"
         );
 
         Ok(())

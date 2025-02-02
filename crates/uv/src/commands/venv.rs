@@ -1,6 +1,7 @@
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::Arc;
 use std::vec;
 
 use anstream::eprint;
@@ -18,7 +19,7 @@ use uv_configuration::{
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
 use uv_fs::Simplified;
-use uv_install_wheel::linker::LinkMode;
+use uv_install_wheel::LinkMode;
 use uv_pypi_types::Requirement;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
@@ -27,7 +28,7 @@ use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_shell::{shlex_posix, shlex_windows, Shell};
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
@@ -162,8 +163,16 @@ async fn venv_impl(
             Err(WorkspaceError::MissingProject(_)) => None,
             Err(WorkspaceError::MissingPyprojectToml) => None,
             Err(WorkspaceError::NonWorkspace(_)) => None,
+            Err(WorkspaceError::Toml(path, err)) => {
+                warn_user!(
+                    "Failed to parse `{}` during environment creation:\n{}",
+                    path.user_display().cyan(),
+                    textwrap::indent(&err.to_string(), "  ")
+                );
+                None
+            }
             Err(err) => {
-                warn_user_once!("{err}");
+                warn_user!("{err}");
                 None
             }
         }
@@ -225,7 +234,11 @@ async fn venv_impl(
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
-            uv_auth::store_credentials(index.raw_url(), credentials);
+            let credentials = Arc::new(credentials);
+            uv_auth::store_credentials(index.raw_url(), credentials.clone());
+            if let Some(root_url) = index.root_url() {
+                uv_auth::store_credentials(&root_url, credentials.clone());
+            }
         }
     }
 
@@ -272,7 +285,11 @@ async fn venv_impl(
         // Add all authenticated sources to the cache.
         for index in index_locations.allowed_indexes() {
             if let Some(credentials) = index.credentials() {
-                uv_auth::store_credentials(index.raw_url(), credentials);
+                let credentials = Arc::new(credentials);
+                uv_auth::store_credentials(index.raw_url(), credentials.clone());
+                if let Some(root_url) = index.root_url() {
+                    uv_auth::store_credentials(&root_url, credentials.clone());
+                }
             }
         }
 
@@ -340,17 +357,17 @@ async fn venv_impl(
         );
 
         // Resolve the seed packages.
-        let requirements = if interpreter.python_tuple() < (3, 12) {
-            // Only include `setuptools` and `wheel` on Python <3.12
+        let requirements = if interpreter.python_tuple() >= (3, 12) {
+            vec![Requirement::from(
+                uv_pep508::Requirement::from_str("pip").unwrap(),
+            )]
+        } else {
+            // Include `setuptools` and `wheel` on Python <3.12.
             vec![
                 Requirement::from(uv_pep508::Requirement::from_str("pip").unwrap()),
                 Requirement::from(uv_pep508::Requirement::from_str("setuptools").unwrap()),
                 Requirement::from(uv_pep508::Requirement::from_str("wheel").unwrap()),
             ]
-        } else {
-            vec![Requirement::from(
-                uv_pep508::Requirement::from_str("pip").unwrap(),
-            )]
         };
 
         let build_stack = BuildStack::default();

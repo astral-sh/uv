@@ -536,7 +536,19 @@ fn parse_entry(
             end,
         }
     } else if s.eat_if("-e") || s.eat_if("--editable") {
-        s.eat_whitespace();
+        if s.eat_if('=') {
+            // Explicit equals sign.
+        } else if s.eat_if(char::is_whitespace) {
+            // Key and value are separated by whitespace instead.
+            s.eat_whitespace();
+        } else {
+            let (line, column) = calculate_row_column(content, s.cursor());
+            return Err(RequirementsTxtParserError::Parser {
+                message: format!("Expected '=' or whitespace, found {:?}", s.peek()),
+                line,
+                column,
+            });
+        }
 
         let source = if requirements_txt == Path::new("-") {
             None
@@ -851,10 +863,10 @@ fn parse_value<'a, T>(
     while_pattern: impl Pattern<T>,
 ) -> Result<&'a str, RequirementsTxtParserError> {
     if s.eat_if('=') {
-        // Explicit equals sign
+        // Explicit equals sign.
         Ok(s.eat_while(while_pattern).trim_end())
     } else if s.eat_if(char::is_whitespace) {
-        // Key and value are separated by whitespace instead
+        // Key and value are separated by whitespace instead.
         s.eat_whitespace();
         Ok(s.eat_while(while_pattern).trim_end())
     } else {

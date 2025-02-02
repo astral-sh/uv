@@ -5,7 +5,7 @@ use itertools::Either;
 
 use uv_configuration::{LowerBound, SourceStrategy};
 use uv_distribution::LoweredRequirement;
-use uv_distribution_types::IndexLocations;
+use uv_distribution_types::{Index, IndexLocations};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{Conflicts, Requirement, SupportedEnvironments, VerbatimParsedUrl};
@@ -159,15 +159,44 @@ impl<'lock> LockTarget<'lock> {
         }
     }
 
+    /// Return an iterator over the [`Index`] definitions in the [`LockTarget`].
+    pub(crate) fn indexes(self) -> impl Iterator<Item = &'lock Index> {
+        match self {
+            Self::Workspace(workspace) => Either::Left(workspace.indexes().iter().chain(
+                workspace.packages().values().flat_map(|member| {
+                    member
+                        .pyproject_toml()
+                        .tool
+                        .as_ref()
+                        .and_then(|tool| tool.uv.as_ref())
+                        .and_then(|uv| uv.index.as_ref())
+                        .into_iter()
+                        .flatten()
+                }),
+            )),
+            Self::Script(script) => Either::Right(
+                script
+                    .metadata
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.top_level.index.as_deref())
+                    .into_iter()
+                    .flatten(),
+            ),
+        }
+    }
+
     /// Return the `Requires-Python` bound for the [`LockTarget`].
-    pub(crate) fn requires_python(self) -> Option<RequiresPython> {
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn requires_python(self) -> Result<Option<RequiresPython>, ProjectError> {
         match self {
             Self::Workspace(workspace) => find_requires_python(workspace),
-            Self::Script(script) => script
+            Self::Script(script) => Ok(script
                 .metadata
                 .requires_python
                 .as_ref()
-                .map(RequiresPython::from_specifiers),
+                .map(RequiresPython::from_specifiers)),
         }
     }
 

@@ -7,6 +7,7 @@ use pubgrub::Range;
 use uv_distribution_filename::WheelFilename;
 use uv_pep440::{release_specifiers_to_ranges, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerExpression, MarkerTree, MarkerValueVersion};
+use uv_platform_tags::{AbiTag, LanguageTag};
 
 /// The `Requires-Python` requirement specifier.
 ///
@@ -74,6 +75,11 @@ impl RequiresPython {
                 }
             })?;
 
+        // If the intersection is empty, return `None`.
+        if range.is_empty() {
+            return None;
+        }
+
         // Convert back to PEP 440 specifiers.
         let specifiers = VersionSpecifiers::from_release_only_bounds(range.iter());
 
@@ -114,7 +120,12 @@ impl RequiresPython {
     }
 
     /// Narrow the [`RequiresPython`] by computing the intersection with the given range.
+    ///
+    /// Returns `None` if the given range is not narrower than the current range.
     pub fn narrow(&self, range: &RequiresPythonRange) -> Option<Self> {
+        if *range == self.range {
+            return None;
+        }
         let lower = if range.0 >= self.range.0 {
             Some(&range.0)
         } else {
@@ -303,6 +314,23 @@ impl RequiresPython {
         &self.range
     }
 
+    /// Returns a wheel tag that's compatible with the `Requires-Python` specifier.
+    pub fn abi_tag(&self) -> Option<AbiTag> {
+        match self.range.lower().as_ref() {
+            Bound::Included(version) | Bound::Excluded(version) => {
+                let major = version.release().first().copied()?;
+                let major = u8::try_from(major).ok()?;
+                let minor = version.release().get(1).copied()?;
+                let minor = u8::try_from(minor).ok()?;
+                Some(AbiTag::CPython {
+                    gil_disabled: false,
+                    python_version: (major, minor),
+                })
+            }
+            Bound::Unbounded => None,
+        }
+    }
+
     /// Simplifies the given markers in such a way as to assume that
     /// the Python version is constrained by this Python version bound.
     ///
@@ -362,54 +390,74 @@ impl RequiresPython {
     /// It is meant to filter out clearly unusable wheels with perfect specificity and acceptable
     /// sensitivity, we return `true` if the tags are unknown.
     pub fn matches_wheel_tag(&self, wheel: &WheelFilename) -> bool {
-        wheel.abi_tag.iter().any(|abi_tag| {
-            if abi_tag == "abi3" {
+        wheel.abi_tags().iter().any(|abi_tag| {
+            if *abi_tag == AbiTag::Abi3 {
                 // Universal tags are allowed.
                 true
-            } else if abi_tag == "none" {
-                wheel.python_tag.iter().any(|python_tag| {
+            } else if *abi_tag == AbiTag::None {
+                wheel.python_tags().iter().any(|python_tag| {
                     // Remove `py2-none-any` and `py27-none-any` and analogous `cp` and `pp` tags.
-                    if python_tag.starts_with("py2")
-                        || python_tag.starts_with("cp2")
-                        || python_tag.starts_with("pp2")
-                    {
+                    if matches!(
+                        python_tag,
+                        LanguageTag::Python { major: 2, .. }
+                            | LanguageTag::CPython {
+                                python_version: (2, ..)
+                            }
+                            | LanguageTag::PyPy {
+                                python_version: (2, ..)
+                            }
+                            | LanguageTag::GraalPy {
+                                python_version: (2, ..)
+                            }
+                            | LanguageTag::Pyston {
+                                python_version: (2, ..)
+                            }
+                    ) {
                         return false;
                     }
 
                     // Remove (e.g.) `py312-none-any` if the specifier is `==3.10.*`. However,
                     // `py37-none-any` would be fine, since the `3.7` represents a lower bound.
-                    if let Some(minor) = python_tag.strip_prefix("py3") {
-                        let Ok(minor) = minor.parse::<u64>() else {
-                            return true;
-                        };
-
+                    if let LanguageTag::Python {
+                        major: 3,
+                        minor: Some(minor),
+                    } = python_tag
+                    {
                         // Ex) If the wheel bound is `3.12`, then it doesn't match `<=3.10.`.
-                        let wheel_bound = UpperBound(Bound::Included(Version::new([3, minor])));
+                        let wheel_bound =
+                            UpperBound(Bound::Included(Version::new([3, u64::from(*minor)])));
                         if wheel_bound > self.range.upper().major_minor() {
                             return false;
                         }
 
                         return true;
-                    };
+                    }
 
                     // Remove (e.g.) `cp36-none-any` or `cp312-none-any` if the specifier is
                     // `==3.10.*`, since these tags require an exact match.
-                    if let Some(minor) = python_tag
-                        .strip_prefix("cp3")
-                        .or_else(|| python_tag.strip_prefix("pp3"))
+                    if let LanguageTag::CPython {
+                        python_version: (3, minor),
+                    }
+                    | LanguageTag::PyPy {
+                        python_version: (3, minor),
+                    }
+                    | LanguageTag::GraalPy {
+                        python_version: (3, minor),
+                    }
+                    | LanguageTag::Pyston {
+                        python_version: (3, minor),
+                    } = python_tag
                     {
-                        let Ok(minor) = minor.parse::<u64>() else {
-                            return true;
-                        };
-
                         // Ex) If the wheel bound is `3.6`, then it doesn't match `>=3.10`.
-                        let wheel_bound = LowerBound(Bound::Included(Version::new([3, minor])));
+                        let wheel_bound =
+                            LowerBound(Bound::Included(Version::new([3, u64::from(*minor)])));
                         if wheel_bound < self.range.lower().major_minor() {
                             return false;
                         }
 
                         // Ex) If the wheel bound is `3.12`, then it doesn't match `<=3.10.`.
-                        let wheel_bound = UpperBound(Bound::Included(Version::new([3, minor])));
+                        let wheel_bound =
+                            UpperBound(Bound::Included(Version::new([3, u64::from(*minor)])));
                         if wheel_bound > self.range.upper().major_minor() {
                             return false;
                         }
@@ -420,50 +468,42 @@ impl RequiresPython {
                     // Unknown tags are allowed.
                     true
                 })
-            } else if abi_tag.starts_with("cp2") || abi_tag.starts_with("pypy2") {
+            } else if matches!(
+                abi_tag,
+                AbiTag::CPython {
+                    python_version: (2, ..),
+                    ..
+                } | AbiTag::PyPy {
+                    python_version: None | Some((2, ..)),
+                    ..
+                } | AbiTag::GraalPy {
+                    python_version: (2, ..),
+                    ..
+                }
+            ) {
                 // Python 2 is never allowed.
                 false
-            } else if let Some(minor_no_dot_abi) = abi_tag.strip_prefix("cp3") {
-                // Remove ABI tags, both old (dmu) and future (t, and all other letters).
-                let minor_not_dot = minor_no_dot_abi.trim_matches(char::is_alphabetic);
-                let Ok(minor) = minor_not_dot.parse::<u64>() else {
-                    // Unknown version pattern are allowed.
-                    return true;
-                };
-
+            } else if let AbiTag::CPython {
+                python_version: (3, minor),
+                ..
+            }
+            | AbiTag::PyPy {
+                python_version: Some((3, minor)),
+                ..
+            }
+            | AbiTag::GraalPy {
+                python_version: (3, minor),
+                ..
+            } = abi_tag
+            {
                 // Ex) If the wheel bound is `3.6`, then it doesn't match `>=3.10`.
-                let wheel_bound = LowerBound(Bound::Included(Version::new([3, minor])));
+                let wheel_bound = LowerBound(Bound::Included(Version::new([3, u64::from(*minor)])));
                 if wheel_bound < self.range.lower().major_minor() {
                     return false;
                 }
 
                 // Ex) If the wheel bound is `3.12`, then it doesn't match `<=3.10.`.
-                let wheel_bound = UpperBound(Bound::Included(Version::new([3, minor])));
-                if wheel_bound > self.range.upper().major_minor() {
-                    return false;
-                }
-
-                true
-            } else if let Some(minor_no_dot_abi) = abi_tag.strip_prefix("pypy3") {
-                // Given  `pypy39_pp73`, we just removed `pypy3`, now we remove `_pp73` ...
-                let Some((minor_not_dot, _)) = minor_no_dot_abi.split_once('_') else {
-                    // Unknown version pattern are allowed.
-                    return true;
-                };
-                // ... and get `9`.
-                let Ok(minor) = minor_not_dot.parse::<u64>() else {
-                    // Unknown version pattern are allowed.
-                    return true;
-                };
-
-                // Ex) If the wheel bound is `3.6`, then it doesn't match `>=3.10`.
-                let wheel_bound = LowerBound(Bound::Included(Version::new([3, minor])));
-                if wheel_bound < self.range.lower().major_minor() {
-                    return false;
-                }
-
-                // Ex) If the wheel bound is `3.12`, then it doesn't match `<=3.10.`.
-                let wheel_bound = UpperBound(Bound::Included(Version::new([3, minor])));
+                let wheel_bound = UpperBound(Bound::Included(Version::new([3, u64::from(*minor)])));
                 if wheel_bound > self.range.upper().major_minor() {
                     return false;
                 }

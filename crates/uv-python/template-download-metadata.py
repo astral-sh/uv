@@ -73,6 +73,11 @@ def prepare_arch(arch: dict) -> tuple[str, str]:
             family = "Arm(target_lexicon::ArmArchitecture::Armv5te)"
         case "armv7":
             family = "Arm(target_lexicon::ArmArchitecture::Armv7)"
+        case "riscv64":
+            # The `gc` variant of riscv64 is the common base instruction set and
+            # is the target in `python-build-standalone`
+            # See https://github.com/astral-sh/python-build-standalone/issues/504
+            family = "Riscv64(target_lexicon::Riscv64Architecture::Riscv64gc)"
         case value:
             family = value.capitalize()
     variant = (

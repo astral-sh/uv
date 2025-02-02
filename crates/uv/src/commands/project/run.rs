@@ -20,7 +20,6 @@ use uv_configuration::{
     Concurrency, DevGroupsManifest, DevGroupsSpecification, EditableMode, ExtrasSpecification,
     GroupsSpecification, InstallOptions, LowerBound, PreviewMode, SourceStrategy, TrustedHost,
 };
-use uv_dispatch::SharedState;
 use uv_distribution::LoweredRequirement;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified};
@@ -48,9 +47,10 @@ use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     default_dependency_groups, validate_project_requires_python, DependencyGroupsTarget,
-    EnvironmentSpecification, ProjectError, ScriptInterpreter, WorkspacePython,
+    EnvironmentSpecification, ProjectError, ScriptInterpreter, UniversalState, WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
+use crate::commands::run::run_to_completion;
 use crate::commands::{diagnostics, project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -124,7 +124,8 @@ pub(crate) async fn run(
     }
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let lock_state = UniversalState::default();
+    let sync_state = lock_state.fork();
 
     // Read from the `.env` file, if necessary.
     if !no_env_file {
@@ -172,28 +173,19 @@ pub(crate) async fn run(
     let script_interpreter = if let Some(script) = script {
         match &script {
             Pep723Item::Script(script) => {
-                writeln!(
-                    printer.stderr(),
+                debug!(
                     "Reading inline script metadata from `{}`",
-                    script.path.user_display().cyan()
-                )?;
+                    script.path.user_display()
+                );
             }
             Pep723Item::Stdin(_) => {
                 if requirements_from_stdin {
                     bail!("Cannot read both requirements file and script from stdin");
                 }
-                writeln!(
-                    printer.stderr(),
-                    "Reading inline script metadata from `{}`",
-                    "stdin".cyan()
-                )?;
+                debug!("Reading inline script metadata from `{}`", "stdin");
             }
             Pep723Item::Remote(_) => {
-                writeln!(
-                    printer.stderr(),
-                    "Reading inline script metadata from {}",
-                    "remote URL".cyan()
-                )?;
+                debug!("Reading inline script metadata from `{}`", "remote URL");
             }
         }
 
@@ -237,7 +229,7 @@ pub(crate) async fn run(
                 target,
                 settings.as_ref().into(),
                 LowerBound::Allow,
-                &state,
+                &lock_state,
                 if show_resolution {
                     Box::new(DefaultResolveLogger)
                 } else {
@@ -264,7 +256,7 @@ pub(crate) async fn run(
                 InstallOptions::default(),
                 &settings,
                 &interpreter,
-                &state,
+                &sync_state,
                 if show_resolution {
                     Box::new(DefaultInstallLogger)
                 } else {
@@ -284,7 +276,8 @@ pub(crate) async fn run(
             let environment = match result {
                 Ok(resolution) => resolution,
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::with_context("script")
+                    return diagnostics::OperationDiagnostic::native_tls(native_tls)
+                        .with_context("script")
                         .report(err)
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                 }
@@ -293,6 +286,20 @@ pub(crate) async fn run(
 
             Some(environment.into_interpreter())
         } else {
+            // If no lockfile is found, warn against `--locked` and `--frozen`.
+            if locked {
+                warn_user!(
+                    "No lockfile found for Python script (ignoring `--locked`); run `{}` to generate a lockfile",
+                    "uv lock --script".green(),
+                );
+            }
+            if frozen {
+                warn_user!(
+                    "No lockfile found for Python script (ignoring `--frozen`); run `{}` to generate a lockfile",
+                    "uv lock --script".green(),
+                );
+            }
+
             // Determine the working directory for the script.
             let script_dir = match &script {
                 Pep723Item::Script(script) => std::path::absolute(&script.path)?
@@ -390,7 +397,7 @@ pub(crate) async fn run(
                     EnvironmentSpecification::from(spec),
                     &interpreter,
                     &settings,
-                    &state,
+                    &sync_state,
                     if show_resolution {
                         Box::new(DefaultResolveLogger)
                     } else {
@@ -415,7 +422,8 @@ pub(crate) async fn run(
                 let environment = match result {
                     Ok(resolution) => resolution,
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::with_context("script")
+                        return diagnostics::OperationDiagnostic::native_tls(native_tls)
+                            .with_context("script")
                             .report(err)
                             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                     }
@@ -475,16 +483,6 @@ pub(crate) async fn run(
         if package.is_some() {
             warn_user!(
                 "`--package` is a no-op for Python scripts with inline metadata, which always run in isolation"
-            );
-        }
-        if locked {
-            warn_user!(
-                "`--locked` is a no-op for Python scripts with inline metadata, which always run in isolation"
-            );
-        }
-        if frozen {
-            warn_user!(
-                "`--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
         if no_sync {
@@ -720,7 +718,7 @@ pub(crate) async fn run(
                     project.workspace().into(),
                     settings.as_ref().into(),
                     LowerBound::Allow,
-                    &state,
+                    &lock_state,
                     if show_resolution {
                         Box::new(DefaultResolveLogger)
                     } else {
@@ -738,7 +736,7 @@ pub(crate) async fn run(
                 {
                     Ok(result) => result,
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::default()
+                        return diagnostics::OperationDiagnostic::native_tls(native_tls)
                             .report(err)
                             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                     }
@@ -801,6 +799,7 @@ pub(crate) async fn run(
                     install_options,
                     modifications,
                     settings.as_ref().into(),
+                    &sync_state,
                     if show_resolution {
                         Box::new(DefaultInstallLogger)
                     } else {
@@ -819,7 +818,7 @@ pub(crate) async fn run(
                 {
                     Ok(()) => {}
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::default()
+                        return diagnostics::OperationDiagnostic::native_tls(native_tls)
                             .report(err)
                             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                     }
@@ -947,7 +946,7 @@ pub(crate) async fn run(
                     ),
                     &base_interpreter,
                     &settings,
-                    &state,
+                    &sync_state,
                     if show_resolution {
                         Box::new(DefaultResolveLogger)
                     } else {
@@ -972,7 +971,8 @@ pub(crate) async fn run(
                 let environment = match result {
                     Ok(resolution) => resolution,
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::with_context("`--with`")
+                        return diagnostics::OperationDiagnostic::native_tls(native_tls)
+                            .with_context("`--with`")
                             .report(err)
                             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                     }
@@ -1121,64 +1121,11 @@ pub(crate) async fn run(
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
     // TODO(zanieb): Throw a nicer error message if the command is not found
-    let mut handle = process
+    let handle = process
         .spawn()
         .with_context(|| format!("Failed to spawn: `{}`", command.display_executable()))?;
 
-    // Ignore signals in the parent process, deferring them to the child. This is safe as long as
-    // the command is the last thing that runs in this process; otherwise, we'd need to restore the
-    // signal handlers after the command completes.
-    let _handler = tokio::spawn(async { while tokio::signal::ctrl_c().await.is_ok() {} });
-
-    // Exit based on the result of the command.
-    #[cfg(unix)]
-    let status = {
-        use tokio::select;
-        use tokio::signal::unix::{signal, SignalKind};
-
-        let mut term_signal = signal(SignalKind::terminate())?;
-        loop {
-            select! {
-                result = handle.wait() => {
-                    break result;
-                },
-
-                // `SIGTERM`
-                _ = term_signal.recv() => {
-                    let _ = terminate_process(&mut handle);
-                }
-            };
-        }
-    }?;
-
-    #[cfg(not(unix))]
-    let status = handle.wait().await?;
-
-    if let Some(code) = status.code() {
-        debug!("Command exited with code: {code}");
-        if let Ok(code) = u8::try_from(code) {
-            Ok(ExitStatus::External(code))
-        } else {
-            #[allow(clippy::exit)]
-            std::process::exit(code);
-        }
-    } else {
-        #[cfg(unix)]
-        {
-            use std::os::unix::process::ExitStatusExt;
-            debug!("Command exited with signal: {:?}", status.signal());
-        }
-        Ok(ExitStatus::Failure)
-    }
-}
-
-#[cfg(unix)]
-fn terminate_process(child: &mut tokio::process::Child) -> anyhow::Result<()> {
-    use nix::sys::signal::{self, Signal};
-    use nix::unistd::Pid;
-
-    let pid = child.id().context("Failed to get child process ID")?;
-    signal::kill(Pid::from_raw(pid.try_into()?), Signal::SIGTERM).context("Failed to send SIGTERM")
+    run_to_completion(handle).await
 }
 
 /// Returns `true` if we can skip creating an additional ephemeral environment in `uv run`.

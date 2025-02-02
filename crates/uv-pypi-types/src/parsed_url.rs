@@ -5,7 +5,7 @@ use thiserror::Error;
 use url::{ParseError, Url};
 
 use uv_distribution_filename::{DistExtension, ExtensionError};
-use uv_git::{GitReference, GitSha, GitUrl, OidParseError};
+use uv_git::{GitOid, GitReference, GitUrl, OidParseError};
 use uv_pep508::{
     looks_like_git_repository, Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError,
 };
@@ -23,7 +23,7 @@ pub enum ParsedUrlError {
     #[error("Invalid path in file URL: `{0}`")]
     InvalidFileUrl(String),
     #[error("Failed to parse Git reference from URL: `{0}`")]
-    GitShaParse(String, #[source] OidParseError),
+    GitOidParse(String, #[source] OidParseError),
     #[error("Not a valid URL: `{0}`")]
     UrlParse(String, #[source] ParseError),
     #[error(transparent)]
@@ -133,7 +133,7 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
         })
     }
 
-    fn with_given(self, given: impl Into<String>) -> Self {
+    fn with_given(self, given: impl AsRef<str>) -> Self {
         Self {
             verbatim: self.verbatim.with_given(given),
             ..self
@@ -247,7 +247,7 @@ impl ParsedGitUrl {
     pub fn from_source(
         repository: Url,
         reference: GitReference,
-        precise: Option<GitSha>,
+        precise: Option<GitOid>,
         subdirectory: Option<PathBuf>,
     ) -> Self {
         let url = if let Some(precise) = precise {
@@ -275,7 +275,7 @@ impl TryFrom<Url> for ParsedGitUrl {
             .unwrap_or(url_in.as_str());
         let url = Url::parse(url).map_err(|err| ParsedUrlError::UrlParse(url.to_string(), err))?;
         let url = GitUrl::try_from(url)
-            .map_err(|err| ParsedUrlError::GitShaParse(url_in.to_string(), err))?;
+            .map_err(|err| ParsedUrlError::GitOidParse(url_in.to_string(), err))?;
         Ok(Self { url, subdirectory })
     }
 }
@@ -406,67 +406,57 @@ impl TryFrom<Url> for ParsedUrl {
     }
 }
 
-impl TryFrom<&ParsedUrl> for DirectUrl {
-    type Error = ParsedUrlError;
-
-    fn try_from(value: &ParsedUrl) -> Result<Self, Self::Error> {
+impl From<&ParsedUrl> for DirectUrl {
+    fn from(value: &ParsedUrl) -> Self {
         match value {
-            ParsedUrl::Path(value) => Self::try_from(value),
-            ParsedUrl::Directory(value) => Self::try_from(value),
-            ParsedUrl::Git(value) => Self::try_from(value),
-            ParsedUrl::Archive(value) => Self::try_from(value),
+            ParsedUrl::Path(value) => Self::from(value),
+            ParsedUrl::Directory(value) => Self::from(value),
+            ParsedUrl::Git(value) => Self::from(value),
+            ParsedUrl::Archive(value) => Self::from(value),
         }
     }
 }
 
-impl TryFrom<&ParsedPathUrl> for DirectUrl {
-    type Error = ParsedUrlError;
-
-    fn try_from(value: &ParsedPathUrl) -> Result<Self, Self::Error> {
-        Ok(Self::ArchiveUrl {
+impl From<&ParsedPathUrl> for DirectUrl {
+    fn from(value: &ParsedPathUrl) -> Self {
+        Self::ArchiveUrl {
             url: value.url.to_string(),
             archive_info: ArchiveInfo {
                 hash: None,
                 hashes: None,
             },
             subdirectory: None,
-        })
+        }
     }
 }
 
-impl TryFrom<&ParsedDirectoryUrl> for DirectUrl {
-    type Error = ParsedUrlError;
-
-    fn try_from(value: &ParsedDirectoryUrl) -> Result<Self, Self::Error> {
-        Ok(Self::LocalDirectory {
+impl From<&ParsedDirectoryUrl> for DirectUrl {
+    fn from(value: &ParsedDirectoryUrl) -> Self {
+        Self::LocalDirectory {
             url: value.url.to_string(),
             dir_info: DirInfo {
                 editable: value.editable.then_some(true),
             },
-        })
+        }
     }
 }
 
-impl TryFrom<&ParsedArchiveUrl> for DirectUrl {
-    type Error = ParsedUrlError;
-
-    fn try_from(value: &ParsedArchiveUrl) -> Result<Self, Self::Error> {
-        Ok(Self::ArchiveUrl {
+impl From<&ParsedArchiveUrl> for DirectUrl {
+    fn from(value: &ParsedArchiveUrl) -> Self {
+        Self::ArchiveUrl {
             url: value.url.to_string(),
             archive_info: ArchiveInfo {
                 hash: None,
                 hashes: None,
             },
             subdirectory: value.subdirectory.clone(),
-        })
+        }
     }
 }
 
-impl TryFrom<&ParsedGitUrl> for DirectUrl {
-    type Error = ParsedUrlError;
-
-    fn try_from(value: &ParsedGitUrl) -> Result<Self, Self::Error> {
-        Ok(Self::VcsUrl {
+impl From<&ParsedGitUrl> for DirectUrl {
+    fn from(value: &ParsedGitUrl) -> Self {
+        Self::VcsUrl {
             url: value.url.repository().to_string(),
             vcs_info: VcsInfo {
                 vcs: VcsKind::Git,
@@ -474,7 +464,7 @@ impl TryFrom<&ParsedGitUrl> for DirectUrl {
                 requested_revision: value.url.reference().as_str().map(ToString::to_string),
             },
             subdirectory: value.subdirectory.clone(),
-        })
+        }
     }
 }
 

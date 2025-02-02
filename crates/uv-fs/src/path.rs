@@ -139,7 +139,9 @@ impl<T: AsRef<Path>> PythonExt for T {
 /// On other platforms, this is a no-op.
 pub fn normalize_url_path(path: &str) -> Cow<'_, str> {
     // Apply percent-decoding to the URL.
-    let path = urlencoding::decode(path).unwrap_or(Cow::Borrowed(path));
+    let path = percent_encoding::percent_decode_str(path)
+        .decode_utf8()
+        .unwrap_or(Cow::Borrowed(path));
 
     // Return the path.
     if cfg!(windows) {

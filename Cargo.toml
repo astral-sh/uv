@@ -128,6 +128,7 @@ nix = { version = "0.29.0" }
 owo-colors = { version = "4.1.0" }
 path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
+percent-encoding = { version = "2.3.1" }
 petgraph = { version = "0.7.1" }
 platform-info = { version = "2.0.3" }
 proc-macro2 = { version = "1.0.86" }
@@ -176,12 +177,11 @@ tracing-tree = { version = "0.4.0" }
 unicode-width = { version = "0.1.13" }
 unscanny = { version = "0.1.0" }
 url = { version = "2.5.2", features = ["serde"] }
-urlencoding = { version = "2.1.3" }
 version-ranges = { git = "https://github.com/astral-sh/pubgrub", rev = "648aa343486e5529953153781fc86025c73c4a61" }
 walkdir = { version = "2.5.0" }
 which = { version = "7.0.0", features = ["regex"] }
-windows-registry = { version = "0.3.0" }
-windows-result = { version = "0.2.0" }
+windows-registry = { version = "0.4.0" }
+windows-result = { version = "0.3.0" }
 windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Ioctl", "Win32_System_IO"] }
 winreg = { version = "0.53.0" }
 winsafe = { version = "0.0.22", features = ["kernel"] }
@@ -287,7 +287,7 @@ inherits = "release"
 # Config for 'dist'
 [workspace.metadata.dist]
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.27.0"
+cargo-dist-version = "0.28.0"
 # CI backends to support
 ci = "github"
 # The installers to generate for each app
@@ -299,6 +299,7 @@ unix-archive = ".tar.gz"
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = [
   "aarch64-apple-darwin",
+  "aarch64-pc-windows-msvc",
   "aarch64-unknown-linux-gnu",
   "aarch64-unknown-linux-musl",
   "arm-unknown-linux-musleabihf",
@@ -334,7 +335,7 @@ publish-jobs = ["./publish-pypi"]
 # Post-announce jobs to run in CI
 post-announce-jobs = ["./publish-docs"]
 # Custom permissions for GitHub Jobs
-github-custom-job-permissions = { "build-docker" = { packages = "write", contents = "read" } }
+github-custom-job-permissions = { "build-docker" = { packages = "write", contents = "read", id-token = "write", attestations = "write" } }
 # Whether to install an updater program
 install-updater = false
 # Path that installers should place binaries in

@@ -336,6 +336,13 @@ impl RegistryClient {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
+        // Acquire an advisory lock, to guard against concurrent writes.
+        #[cfg(windows)]
+        let _lock = {
+            let lock_entry = cache_entry.with_file(format!("{package_name}.lock"));
+            lock_entry.lock().await.map_err(ErrorKind::CacheWrite)?
+        };
+
         let result = if matches!(index, IndexUrl::Path(_)) {
             self.fetch_local_index(package_name, &url).await
         } else {
@@ -614,6 +621,13 @@ impl RegistryClient {
                 Connectivity::Offline => CacheControl::AllowStale,
             };
 
+            // Acquire an advisory lock, to guard against concurrent writes.
+            #[cfg(windows)]
+            let _lock = {
+                let lock_entry = cache_entry.with_file(format!("{}.lock", filename.stem()));
+                lock_entry.lock().await.map_err(ErrorKind::CacheWrite)?
+            };
+
             let response_callback = |response: Response| async {
                 let bytes = response
                     .bytes()
@@ -675,6 +689,13 @@ impl RegistryClient {
                     .map_err(ErrorKind::Io)?,
             ),
             Connectivity::Offline => CacheControl::AllowStale,
+        };
+
+        // Acquire an advisory lock, to guard against concurrent writes.
+        #[cfg(windows)]
+        let _lock = {
+            let lock_entry = cache_entry.with_file(format!("{}.lock", filename.stem()));
+            lock_entry.lock().await.map_err(ErrorKind::CacheWrite)?
         };
 
         // Attempt to fetch via a range request.

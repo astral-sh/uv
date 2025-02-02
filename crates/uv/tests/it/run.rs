@@ -306,7 +306,6 @@ fn run_pep723_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -320,7 +319,6 @@ fn run_pep723_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     Resolved 1 package in [TIME]
     "###);
 
@@ -393,7 +391,6 @@ fn run_pep723_script() -> Result<()> {
     Hello, world!
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     "###);
 
     // Running a script with `--locked` should warn.
@@ -404,8 +401,7 @@ fn run_pep723_script() -> Result<()> {
     Hello, world!
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
-    warning: `--locked` is a no-op for Python scripts with inline metadata, which always run in isolation
+    warning: No lockfile found for Python script (ignoring `--locked`); run `uv lock --script` to generate a lockfile
     "###);
 
     // If the script can't be resolved, we should reference the script.
@@ -427,7 +423,6 @@ fn run_pep723_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
       × No solution found when resolving script dependencies:
       ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     "###);
@@ -450,7 +445,6 @@ fn run_pep723_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
       × No solution found when resolving script dependencies:
       ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     "###);
@@ -513,7 +507,6 @@ fn run_pep723_script_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     warning: The Python request from `.python-version` resolved to Python 3.8.[X], which is incompatible with the script's Python requirement: `>=3.11`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -535,7 +528,6 @@ fn run_pep723_script_requires_python() -> Result<()> {
     hello
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
@@ -589,6 +581,7 @@ fn run_pythonw_script() -> Result<()> {
 
 /// Run a PEP 723-compatible script with `tool.uv` metadata.
 #[test]
+#[cfg(feature = "git")]
 fn run_pep723_script_metadata() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -616,7 +609,6 @@ fn run_pep723_script_metadata() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -647,7 +639,6 @@ fn run_pep723_script_metadata() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -689,7 +680,6 @@ fn run_pep723_script_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -726,7 +716,6 @@ fn run_pep723_script_constraints() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -765,7 +754,6 @@ fn run_pep723_script_overrides() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -796,6 +784,21 @@ fn run_pep723_script_lock() -> Result<()> {
         print("Hello, world!")
        "#
     })?;
+
+    // Without a lockfile, running with `--locked` should warn.
+    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    warning: No lockfile found for Python script (ignoring `--locked`); run `uv lock --script` to generate a lockfile
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
 
     // Explicitly lock the script.
     uv_snapshot!(context.filters(), context.lock().arg("--script").arg("main.py"), @r###"
@@ -835,6 +838,7 @@ fn run_pep723_script_lock() -> Result<()> {
         );
     });
 
+    // Run the script.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
     success: true
     exit_code: 0
@@ -842,11 +846,20 @@ fn run_pep723_script_lock() -> Result<()> {
     Hello, world!
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
+    "###);
+
+    // With a lockfile, running with `--locked` should not warn.
+    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
     "###);
 
     // Modify the metadata.
@@ -871,7 +884,6 @@ fn run_pep723_script_lock() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     "###);
@@ -883,8 +895,6 @@ fn run_pep723_script_lock() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
-    warning: `--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation
     Traceback (most recent call last):
       File "[TEMP_DIR]/main.py", line 8, in <module>
         import anyio
@@ -899,7 +909,6 @@ fn run_pep723_script_lock() -> Result<()> {
     Hello, world!
 
     ----- stderr -----
-    Reading inline script metadata from `main.py`
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -3006,7 +3015,6 @@ fn run_compiled_python_file() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `script.py`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3167,7 +3175,6 @@ fn run_script_explicit() -> Result<()> {
     Hello, world!
 
     ----- stderr -----
-    Reading inline script metadata from `script`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3201,7 +3208,6 @@ fn run_script_explicit_stdin() -> Result<()> {
     Hello, world!
 
     ----- stderr -----
-    Reading inline script metadata from `stdin`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3260,7 +3266,7 @@ fn run_gui_script_explicit_windows() -> Result<()> {
         if not executable.startswith("pythonw"):
             print(f"Error: Expected pythonw.exe but got: {executable}", file=sys.stderr)
             sys.exit(1)
-        
+
         print(f"Using executable: {executable}", file=sys.stderr)
     "#})?;
 
@@ -3270,7 +3276,6 @@ fn run_gui_script_explicit_windows() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `script`
     Resolved in [TIME]
     Audited in [TIME]
     Using executable: pythonw.exe
@@ -3304,7 +3309,6 @@ fn run_gui_script_explicit_stdin_windows() -> Result<()> {
     Hello, world!
 
     ----- stderr -----
-    Reading inline script metadata from `stdin`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3337,11 +3341,92 @@ fn run_gui_script_explicit_unix() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `script`
     Resolved in [TIME]
     Audited in [TIME]
     Using executable: python3
     "###);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn run_linked_environment_path() -> Result<()> {
+    use anyhow::Ok;
+
+    let context = TestContext::new("3.12")
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["black"]
+        "#,
+    )?;
+
+    // Create a link from `target` -> virtual environment
+    fs_err::os::unix::fs::symlink(&context.venv, context.temp_dir.child("target"))?;
+
+    // Running `uv sync` should use the environment at `target``
+    uv_snapshot!(context.filters(), context.sync()
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "target"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    "###);
+
+    // `sys.prefix` and `sys.executable` should be from the `target` directory
+    uv_snapshot!(context.filters(), context.run()
+        .env_remove("VIRTUAL_ENV")  // Ignore the test context's active virtual environment
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "target")
+        .arg("python").arg("-c").arg("import sys; print(sys.prefix); print(sys.executable)"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/target
+    [TEMP_DIR]/target/[BIN]/python
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Audited 6 packages in [TIME]
+    "###);
+
+    // And, similarly, the entrypoint should use `target`
+    let black_entrypoint = context.read("target/bin/black");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            black_entrypoint, @r###"
+        #![TEMP_DIR]/target/[BIN]/python
+        # -*- coding: utf-8 -*-
+        import sys
+        from black import patched_main
+        if __name__ == "__main__":
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
+            sys.exit(patched_main())
+        "###
+        );
+    });
 
     Ok(())
 }
@@ -3371,7 +3456,6 @@ fn run_gui_script_explicit_stdin_unix() -> Result<()> {
     Hello, world!
 
     ----- stderr -----
-    Reading inline script metadata from `stdin`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3386,10 +3470,6 @@ fn run_remote_pep723_script() {
     let context = TestContext::new("3.12").with_filtered_python_names();
     let mut filters = context.filters();
     filters.push((
-        r"(?m)^Reading inline script metadata from:.*\.py$",
-        "Reading inline script metadata from: [TEMP_PATH].py",
-    ));
-    filters.push((
         r"(?m)^Downloaded remote script to:.*\.py$",
         "Downloaded remote script to: [TEMP_PATH].py",
     ));
@@ -3400,7 +3480,6 @@ fn run_remote_pep723_script() {
     Hello CI, from uv!
 
     ----- stderr -----
-    Reading inline script metadata from remote URL
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3464,7 +3543,6 @@ fn run_stdin_with_pep723() -> Result<()> {
     Hello, world!
 
     ----- stderr -----
-    Reading inline script metadata from `stdin`
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3778,5 +3856,21 @@ fn run_with_group_conflict() -> Result<()> {
      + iniconfig==2.0.0
     "###);
 
+    Ok(())
+}
+
+/// Test that a signal n makes the process exit with code 128+n.
+#[cfg(unix)]
+#[test]
+fn exit_status_signal() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let script = context.temp_dir.child("segfault.py");
+    script.write_str(indoc! {r"
+        import os
+        os.kill(os.getpid(), 11)
+    "})?;
+    let status = context.run().arg(script.path()).status()?;
+    assert_eq!(status.code().expect("a status code"), 139);
     Ok(())
 }

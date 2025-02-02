@@ -151,14 +151,16 @@ impl Credentials {
                 None
             } else {
                 Some(
-                    urlencoding::decode(url.username())
+                    percent_encoding::percent_decode_str(url.username())
+                        .decode_utf8()
                         .expect("An encoded username should always decode")
                         .into_owned(),
                 )
             }
             .into(),
             password: url.password().map(|password| {
-                urlencoding::decode(password)
+                percent_encoding::percent_decode_str(password)
+                    .decode_utf8()
                     .expect("An encoded password should always decode")
                     .into_owned()
             }),

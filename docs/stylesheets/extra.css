@@ -158,6 +158,18 @@ because the nav is in a hamburger menu anyway
     margin-bottom: 0.75em;
     margin-top: 1em;
   }
+  /* Decrease the font size of items in a collapsible section */
+  .md-nav__item--section> .md-nav > .md-nav__list > .md-nav__item > .md-nav > .md-nav__list {
+    font-size: 0.725rem;
+  }
+  /* Increase top margin on the first item of a collapsible section */
+  .md-nav__item--section> .md-nav > .md-nav__list > .md-nav__item > .md-nav > .md-nav__list > .md-nav__item:first-of-type {
+    margin-top: 0.5em;
+  }
+  /* Increase bottom margin on the last item of a collapsible section */
+  .md-nav__item--section> .md-nav > .md-nav__list > .md-nav__item > .md-nav > .md-nav__list > .md-nav__item:last-of-type {
+    margin-bottom: 0.575em;
+  }
   /* Increase the size of the first nav item to match the sections 
   It has no children, so it is not considered a section */
   .md-nav--primary > .md-nav__list > .md-nav__item:first-of-type {
