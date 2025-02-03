@@ -2518,6 +2518,13 @@ pub struct InitArgs {
     #[arg(long, conflicts_with = "script")]
     pub name: Option<PackageName>,
 
+    /// Only create a `pyproject.toml`.
+    ///
+    /// Disables creating extra files like `README.md`, the `src/` tree, `.python-version` files,
+    /// etc.
+    #[arg(long, conflicts_with = "script")]
+    pub bare: bool,
+
     /// Create a virtual project, rather than a package.
     ///
     /// This option is deprecated and will be removed in a future release.
@@ -2574,8 +2581,12 @@ pub struct InitArgs {
     pub r#script: bool,
 
     /// Set the project description.
-    #[arg(long, conflicts_with = "script")]
+    #[arg(long, conflicts_with = "script", overrides_with = "no_description")]
     pub description: Option<String>,
+
+    /// Disable the description for the project.
+    #[arg(long, conflicts_with = "script", overrides_with = "description")]
+    pub no_description: bool,
 
     /// Initialize a version control system for the project.
     ///

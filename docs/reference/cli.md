@@ -551,6 +551,10 @@ uv init [OPTIONS] [PATH]
 
 <li><code>none</code>:  Do not infer the author information</li>
 </ul>
+</dd><dt><code>--bare</code></dt><dd><p>Only create a <code>pyproject.toml</code>.</p>
+
+<p>Disables creating extra files like <code>README.md</code>, the <code>src/</code> tree, <code>.python-version</code> files, etc.</p>
+
 </dd><dt><code>--build-backend</code> <i>build-backend</i></dt><dd><p>Initialize a build-backend of choice for the project.</p>
 
 <p>Implicitly sets <code>--package</code>.</p>
@@ -628,6 +632,8 @@ uv init [OPTIONS] [PATH]
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
+</dd><dt><code>--no-description</code></dt><dd><p>Disable the description for the project</p>
+
 </dd><dt><code>--no-package</code></dt><dd><p>Do not set up the project to be built as a Python package.</p>
 
 <p>Does not include a <code>[build-system]</code> for the project.</p>
