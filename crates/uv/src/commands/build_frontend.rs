@@ -22,8 +22,7 @@ use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildKind, BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints,
-    HashCheckingMode, IndexStrategy, KeyringProviderType, LowerBound, PreviewMode, SourceStrategy,
-    TrustedHost,
+    HashCheckingMode, IndexStrategy, KeyringProviderType, PreviewMode, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_filename::{
@@ -580,7 +579,6 @@ async fn build_package(
         build_options,
         &hasher,
         exclude_newer,
-        LowerBound::Allow,
         sources,
         concurrency,
         preview,

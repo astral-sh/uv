@@ -17,8 +17,8 @@ use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, DevMode, EditableMode,
-    ExtrasSpecification, GroupsSpecification, InstallOptions, LowerBound, PreviewMode,
-    SourceStrategy, TrustedHost,
+    ExtrasSpecification, GroupsSpecification, InstallOptions, PreviewMode, SourceStrategy,
+    TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -340,7 +340,6 @@ pub(crate) async fn add(
                 &settings.build_options,
                 &build_hasher,
                 settings.exclude_newer,
-                LowerBound::default(),
                 sources,
                 concurrency,
                 preview,
@@ -680,7 +679,6 @@ async fn lock_and_sync(
         },
         (&target).into(),
         settings.into(),
-        LowerBound::default(),
         &lock_state,
         Box::new(DefaultResolveLogger),
         connectivity,
@@ -801,7 +799,6 @@ async fn lock_and_sync(
                 },
                 (&target).into(),
                 settings.into(),
-                LowerBound::default(),
                 &lock_state,
                 Box::new(SummaryResolveLogger),
                 connectivity,

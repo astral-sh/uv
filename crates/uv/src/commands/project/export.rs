@@ -10,7 +10,7 @@ use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{
     Concurrency, DevGroupsSpecification, EditableMode, ExportFormat, ExtrasSpecification,
-    InstallOptions, LowerBound, PreviewMode, TrustedHost,
+    InstallOptions, PreviewMode, TrustedHost,
 };
 use uv_normalize::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
@@ -193,7 +193,6 @@ pub(crate) async fn export(
         mode,
         (&target).into(),
         settings.as_ref(),
-        LowerBound::Warn,
         &state,
         Box::new(DefaultResolveLogger),
         connectivity,

@@ -18,7 +18,7 @@ use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{
     Concurrency, DevGroupsManifest, DevGroupsSpecification, EditableMode, ExtrasSpecification,
-    GroupsSpecification, InstallOptions, LowerBound, PreviewMode, SourceStrategy, TrustedHost,
+    GroupsSpecification, InstallOptions, PreviewMode, SourceStrategy, TrustedHost,
 };
 use uv_distribution::LoweredRequirement;
 use uv_fs::which::is_executable;
@@ -228,7 +228,6 @@ pub(crate) async fn run(
                 mode,
                 target,
                 settings.as_ref().into(),
-                LowerBound::Allow,
                 &lock_state,
                 if show_resolution {
                     Box::new(DefaultResolveLogger)
@@ -345,7 +344,6 @@ pub(crate) async fn run(
                             script_sources,
                             script_indexes,
                             &settings.index_locations,
-                            LowerBound::Allow,
                         )
                         .map_ok(LoweredRequirement::into_inner)
                     })
@@ -365,7 +363,6 @@ pub(crate) async fn run(
                             script_sources,
                             script_indexes,
                             &settings.index_locations,
-                            LowerBound::Allow,
                         )
                         .map_ok(LoweredRequirement::into_inner)
                     })
@@ -385,7 +382,6 @@ pub(crate) async fn run(
                             script_sources,
                             script_indexes,
                             &settings.index_locations,
-                            LowerBound::Allow,
                         )
                         .map_ok(LoweredRequirement::into_inner)
                     })
@@ -717,7 +713,6 @@ pub(crate) async fn run(
                     mode,
                     project.workspace().into(),
                     settings.as_ref().into(),
-                    LowerBound::Allow,
                     &lock_state,
                     if show_resolution {
                         Box::new(DefaultResolveLogger)

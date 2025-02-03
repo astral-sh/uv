@@ -8,7 +8,7 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{Connectivity, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, DevGroupsSpecification, LowerBound, PreviewMode, TargetTriple, TrustedHost,
+    Concurrency, DevGroupsSpecification, PreviewMode, TargetTriple, TrustedHost,
 };
 use uv_distribution_types::IndexCapabilities;
 use uv_pep508::PackageName;
@@ -146,7 +146,6 @@ pub(crate) async fn tree(
         mode,
         target,
         settings.as_ref(),
-        LowerBound::Allow,
         &state,
         Box::new(DefaultResolveLogger),
         connectivity,
