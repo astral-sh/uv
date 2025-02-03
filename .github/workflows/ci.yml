@@ -339,7 +339,7 @@ jobs:
 
   # Separate jobs for the nightly crate
   windows-trampoline-test:
-    timeout-minutes: 20
+    timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: windows-latest
@@ -351,28 +351,34 @@ jobs:
         target-arch: ["x86_64", "i686"]
     steps:
       - uses: actions/checkout@v4
+      - name: Setup Dev Drive
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: ${{ github.workspace }}/crates/uv-trampoline
+          workspaces: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
       - name: "Install Rust toolchain"
-        working-directory: ${{ github.workspace }}/crates/uv-trampoline
+        working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
         run: |
           rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
           rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
       - name: "Test committed binaries"
-        working-directory: ${{ github.workspace }}
+        working-directory: ${{ env.UV_WORKSPACE }}
         run: |
           rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
           cargo test -p uv-trampoline-builder --target ${{ matrix.target-arch }}-pc-windows-msvc
       # Build and copy the new binaries
       - name: "Build"
-        working-directory: ${{ github.workspace }}/crates/uv-trampoline
+        working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
         run: |
           cargo build --target ${{ matrix.target-arch }}-pc-windows-msvc
           cp target/${{ matrix.target-arch }}-pc-windows-msvc/debug/uv-trampoline-console.exe trampolines/uv-trampoline-${{ matrix.target-arch }}-console.exe
           cp target/${{ matrix.target-arch }}-pc-windows-msvc/debug/uv-trampoline-gui.exe trampolines/uv-trampoline-${{ matrix.target-arch }}-gui.exe
       - name: "Test new binaries"
-        working-directory: ${{ github.workspace }}
+        working-directory: ${{ env.UV_WORKSPACE }}
         run: |
           # We turn off the default "production" test feature since these are debug binaries
           cargo test -p uv-trampoline-builder --target ${{ matrix.target-arch }}-pc-windows-msvc --no-default-features
