@@ -158,39 +158,77 @@ $ pip install --upgrade uv
 
 ## Shell autocompletion
 
+!!! tip
+
+    You can run `echo $SHELL` to help you determine your shell.
+
 To enable shell autocompletion for uv commands, run one of the following:
 
-=== "Linux and macOS"
+=== "Bash"
 
     ```bash
-    # Determine your shell (e.g., with `echo $SHELL`), then run one of:
     echo 'eval "$(uv generate-shell-completion bash)"' >> ~/.bashrc
+    ```
+
+=== "Zsh"
+
+    ```bash
     echo 'eval "$(uv generate-shell-completion zsh)"' >> ~/.zshrc
+    ```
+
+=== "fish"
+
+    ```bash
     echo 'uv generate-shell-completion fish | source' >> ~/.config/fish/config.fish
+    ```
+
+=== "Elvish"
+
+    ```bash
     echo 'eval (uv generate-shell-completion elvish | slurp)' >> ~/.elvish/rc.elv
     ```
 
-=== "Windows"
+=== "PowerShell / pwsh"
 
     ```powershell
+    if (!(Test-Path -Path $PROFILE)) {
+      New-Item -ItemType File -Path $PROFILE -Force
+    }
     Add-Content -Path $PROFILE -Value '(& uv generate-shell-completion powershell) | Out-String | Invoke-Expression'
     ```
 
 To enable shell autocompletion for uvx, run one of the following:
 
-=== "Linux and macOS"
+=== "Bash"
 
     ```bash
-    # Determine your shell (e.g., with `echo $SHELL`), then run one of:
     echo 'eval "$(uvx --generate-shell-completion bash)"' >> ~/.bashrc
+    ```
+
+=== "Zsh"
+
+    ```bash
     echo 'eval "$(uvx --generate-shell-completion zsh)"' >> ~/.zshrc
+    ```
+
+=== "fish"
+
+    ```bash
     echo 'uvx --generate-shell-completion fish | source' >> ~/.config/fish/config.fish
+    ```
+
+=== "Elvish"
+
+    ```bash
     echo 'eval (uvx --generate-shell-completion elvish | slurp)' >> ~/.elvish/rc.elv
     ```
 
-=== "Windows"
+=== "PowerShell / pwsh"
 
     ```powershell
+    if (!(Test-Path -Path $PROFILE)) {
+      New-Item -ItemType File -Path $PROFILE -Force
+    }
     Add-Content -Path $PROFILE -Value '(& uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression'
     ```
 
