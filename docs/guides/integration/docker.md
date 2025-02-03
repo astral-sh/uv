@@ -144,6 +144,15 @@ WORKDIR /app
 RUN uv sync --frozen
 ```
 
+!!! tip
+
+    Since `uv` may need to use temporary files and lockfiles in the course of synchronization,
+    you can avoid having those temporary files end up in your image by mounting an ephemeral
+    temporary filesystem in the installation step,
+    e.g. `RUN --mount=type=tmpfs,target=/tmp uv sync --frozen`. This may not be supported by
+    all Docker-like environments, which is why it is not the default above.
+    You can read more about this syntax [here in the Docker docs](https://docs.docker.com/reference/dockerfile/#run---mounttypetmpfs).
+
 !!! important
 
     It is best practice to add `.venv` to a [`.dockerignore` file](https://docs.docker.com/build/concepts/context/#dockerignore-files)
