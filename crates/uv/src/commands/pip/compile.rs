@@ -13,8 +13,8 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification,
-    ExtrasSpecification, IndexStrategy, LowerBound, NoBinary, NoBuild, PreviewMode, Reinstall,
-    SourceStrategy, TrustedHost, Upgrade,
+    ExtrasSpecification, IndexStrategy, NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy,
+    TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -361,7 +361,6 @@ pub(crate) async fn pip_compile(
         &build_options,
         &build_hashes,
         exclude_newer,
-        LowerBound::Warn,
         sources,
         concurrency,
         preview,

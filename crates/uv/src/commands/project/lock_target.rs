@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use itertools::Either;
 
-use uv_configuration::{LowerBound, SourceStrategy};
+use uv_configuration::SourceStrategy;
 use uv_distribution::LoweredRequirement;
 use uv_distribution_types::{Index, IndexLocations};
 use uv_normalize::{GroupName, PackageName};
@@ -304,7 +304,6 @@ impl<'lock> LockTarget<'lock> {
                     workspace,
                     locations,
                     sources,
-                    LowerBound::Warn,
                 )?;
 
                 Ok(metadata
@@ -350,7 +349,6 @@ impl<'lock> LockTarget<'lock> {
                             sources,
                             indexes,
                             locations,
-                            LowerBound::Allow,
                         )
                         .map(move |requirement| match requirement {
                             Ok(requirement) => Ok(requirement.into_inner()),

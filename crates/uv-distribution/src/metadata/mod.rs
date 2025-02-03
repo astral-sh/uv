@@ -3,7 +3,7 @@ use std::path::Path;
 
 use thiserror::Error;
 
-use uv_configuration::{LowerBound, SourceStrategy};
+use uv_configuration::SourceStrategy;
 use uv_distribution_types::{GitSourceUrl, IndexLocations};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
@@ -80,7 +80,6 @@ impl Metadata {
         git_source: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         sources: SourceStrategy,
-        bounds: LowerBound,
     ) -> Result<Self, MetadataError> {
         // Lower the requirements.
         let requires_dist = uv_pypi_types::RequiresDist {
@@ -101,7 +100,6 @@ impl Metadata {
             git_source,
             locations,
             sources,
-            bounds,
         )
         .await?;
 

@@ -8352,8 +8352,6 @@ fn lock_multiple_indexes_same_realm_different_credentials() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Missing version constraint (e.g., a lower bound) for `iniconfig`
-    warning: Missing version constraint (e.g., a lower bound) for `anyio`
     Resolved 5 packages in [TIME]
     "###);
 

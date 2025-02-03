@@ -10,8 +10,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{
-    Concurrency, DevGroupsManifest, EditableMode, ExtrasSpecification, InstallOptions, LowerBound,
-    PreviewMode, TrustedHost,
+    Concurrency, DevGroupsManifest, EditableMode, ExtrasSpecification, InstallOptions, PreviewMode,
+    TrustedHost,
 };
 use uv_fs::Simplified;
 use uv_normalize::DEV_DEPENDENCIES;
@@ -272,7 +272,6 @@ pub(crate) async fn remove(
         mode,
         (&target).into(),
         settings.as_ref().into(),
-        LowerBound::Allow,
         &state,
         Box::new(DefaultResolveLogger),
         connectivity,

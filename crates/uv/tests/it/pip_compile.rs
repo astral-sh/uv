@@ -12712,7 +12712,6 @@ fn warn_missing_constraint() -> Result<()> {
         # via foo (pyproject.toml)
 
     ----- stderr -----
-    warning: Missing version constraint (e.g., a lower bound) for `tqdm`
     Resolved 4 packages in [TIME]
     "###);
 

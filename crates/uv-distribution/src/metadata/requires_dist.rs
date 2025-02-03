@@ -4,7 +4,7 @@ use std::slice;
 
 use rustc_hash::FxHashSet;
 
-use uv_configuration::{LowerBound, SourceStrategy};
+use uv_configuration::SourceStrategy;
 use uv_distribution_types::IndexLocations;
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep508::MarkerTree;
@@ -49,7 +49,6 @@ impl RequiresDist {
         git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         sources: SourceStrategy,
-        lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
         // TODO(konsti): Cache workspace discovery.
         let discovery_options = DiscoveryOptions {
@@ -70,14 +69,7 @@ impl RequiresDist {
             return Ok(Self::from_metadata23(metadata));
         };
 
-        Self::from_project_workspace(
-            metadata,
-            &project_workspace,
-            git_member,
-            locations,
-            sources,
-            lower_bound,
-        )
+        Self::from_project_workspace(metadata, &project_workspace, git_member, locations, sources)
     }
 
     fn from_project_workspace(
@@ -86,7 +78,6 @@ impl RequiresDist {
         git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
-        lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
@@ -178,7 +169,6 @@ impl RequiresDist {
                                 Some(&group),
                                 locations,
                                 project_workspace.workspace(),
-                                lower_bound,
                                 git_member,
                             )
                             .map(
@@ -223,7 +213,6 @@ impl RequiresDist {
                         group,
                         locations,
                         project_workspace.workspace(),
-                        lower_bound,
                         git_member,
                     )
                     .map(move |requirement| match requirement {
@@ -474,7 +463,7 @@ mod test {
     use indoc::indoc;
     use insta::assert_snapshot;
 
-    use uv_configuration::{LowerBound, SourceStrategy};
+    use uv_configuration::SourceStrategy;
     use uv_distribution_types::IndexLocations;
     use uv_normalize::PackageName;
     use uv_pep508::Requirement;
@@ -507,7 +496,6 @@ mod test {
             None,
             &IndexLocations::default(),
             SourceStrategy::default(),
-            LowerBound::default(),
         )?)
     }
 
