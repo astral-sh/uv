@@ -391,8 +391,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 .map(|(p, v)| format!("{}=={}", state.pubgrub.package_store[p], v))
                                 .join(", ")
                         );
-                        // Choose a package .
-                        let Some(highest_priority_pkg) =
+                        // Choose a package.
+                        // We aren't allowed to use the term intersection as it would extend the
+                        // mutable borrow of `state`.
+                        let Some((highest_priority_pkg, _)) =
                             state.pubgrub.partial_solution.pick_highest_priority_pkg(
                                 |id, _range| state.priorities.get(&state.pubgrub.package_store[id]),
                             )
