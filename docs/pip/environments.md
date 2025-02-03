@@ -81,6 +81,14 @@ The virtual environment can be "activated" to make its packages available:
         $ use .venv\Scripts\activate.nu
         ```
 
+## Deactivating an environment
+
+To exit a virtual environment, use the `deactivate` command:
+
+```console
+$ deactivate
+```
+
 ## Using arbitrary Python environments
 
 Since uv has no dependency on Python, it can install into virtual environments other than its own.
