@@ -1032,6 +1032,83 @@ fn allow_incompatibilities() -> Result<()> {
 }
 
 #[test]
+fn install_extras() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Request extras for an editable path
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--all-extras")
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file. Use `<dir>[extra]` syntax or `-r <file>` instead.
+    "###
+    );
+
+    // Request extras for a source tree
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--all-extras")
+        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file. Use `package[extra]` syntax instead.
+    "###
+    );
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==3.7.0")?;
+
+    // Request extras for a requirements file
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--all-extras")
+        .arg("-r").arg("requirements.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file. Use `package[extra]` syntax instead.
+    "###
+    );
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "project"
+version = "0.1.0"
+dependencies = ["anyio==3.7.0"]
+"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--all-extras")
+        .arg("-r").arg("pyproject.toml"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
 fn install_editable() {
     let context = TestContext::new("3.12");
 

@@ -14,7 +14,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, KeyringProviderType,
-    LowerBound, NoBinary, NoBuild, PreviewMode, SourceStrategy, TrustedHost,
+    NoBinary, NoBuild, PreviewMode, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
@@ -350,7 +350,6 @@ async fn venv_impl(
             &build_options,
             &build_hasher,
             exclude_newer,
-            LowerBound::Allow,
             sources,
             concurrency,
             preview,

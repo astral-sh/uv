@@ -11,7 +11,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, ExtrasSpecification,
-    GroupsSpecification, LowerBound, PreviewMode, Reinstall, TrustedHost, Upgrade,
+    GroupsSpecification, PreviewMode, Reinstall, TrustedHost, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::DistributionDatabase;
@@ -1134,7 +1134,6 @@ pub(crate) async fn resolve_names(
         build_options,
         &build_hasher,
         *exclude_newer,
-        LowerBound::Allow,
         *sources,
         concurrency,
         preview,
@@ -1325,7 +1324,6 @@ pub(crate) async fn resolve_environment(
         build_options,
         &build_hasher,
         exclude_newer,
-        LowerBound::Allow,
         sources,
         concurrency,
         preview,
@@ -1465,7 +1463,6 @@ pub(crate) async fn sync_environment(
         build_options,
         &build_hasher,
         exclude_newer,
-        LowerBound::Allow,
         sources,
         concurrency,
         preview,
@@ -1680,7 +1677,6 @@ pub(crate) async fn update_environment(
         build_options,
         &build_hasher,
         *exclude_newer,
-        LowerBound::Allow,
         *sources,
         concurrency,
         preview,

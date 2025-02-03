@@ -1163,7 +1163,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         None,
                         self.build_context.locations(),
                         self.build_context.sources(),
-                        self.build_context.bounds(),
                     )
                     .await?,
                 ));
@@ -1216,7 +1215,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             None,
                             self.build_context.locations(),
                             self.build_context.sources(),
-                            self.build_context.bounds(),
                         )
                         .await?,
                     ));
@@ -1265,7 +1263,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     None,
                     self.build_context.locations(),
                     self.build_context.sources(),
-                    self.build_context.bounds(),
                 )
                 .await?,
             ));
@@ -1323,7 +1320,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 None,
                 self.build_context.locations(),
                 self.build_context.sources(),
-                self.build_context.bounds(),
             )
             .await?,
         ))
@@ -1391,7 +1387,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     None,
                     self.build_context.locations(),
                     self.build_context.sources(),
-                    self.build_context.bounds(),
                 )
                 .await?;
                 Ok(Some(requires_dist))
@@ -1637,7 +1632,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             Some(&git_member),
                             self.build_context.locations(),
                             self.build_context.sources(),
-                            self.build_context.bounds(),
                         )
                         .await?,
                     ));
@@ -1670,7 +1664,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                 Some(&git_member),
                                 self.build_context.locations(),
                                 self.build_context.sources(),
-                                self.build_context.bounds(),
                             )
                             .await?,
                         ));
@@ -1722,7 +1715,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     Some(&git_member),
                     self.build_context.locations(),
                     self.build_context.sources(),
-                    self.build_context.bounds(),
                 )
                 .await?,
             ));
@@ -1780,7 +1772,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Some(&git_member),
                 self.build_context.locations(),
                 self.build_context.sources(),
-                self.build_context.bounds(),
             )
             .await?,
         ))

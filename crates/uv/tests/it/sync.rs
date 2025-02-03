@@ -5496,7 +5496,6 @@ fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Missing version constraint (e.g., a lower bound) for `typing-extensions`
     Resolved 5 packages in [TIME]
     "###);
 
