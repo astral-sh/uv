@@ -2617,6 +2617,14 @@ impl Package {
     fn is_dynamic(&self) -> bool {
         self.id.version.is_none()
     }
+
+    /// Returns `true` if the package contains the [`ExtraName`].
+    pub fn contains_extra(&self, name: &ExtraName) -> bool {
+        self.metadata
+            .provides_extras
+            .as_ref()
+            .is_some_and(|provides_extras| provides_extras.contains(name))
+    }
 }
 
 /// Attempts to construct a `VerbatimUrl` from the given normalized `Path`.
