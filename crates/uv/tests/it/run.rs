@@ -3351,7 +3351,7 @@ fn run_gui_script_explicit_unix() -> Result<()> {
 
 #[test]
 #[cfg(unix)]
-fn run_linked_environment_path() -> Result<()> {
+fn run_replace_linked_environment_path() -> Result<()> {
     use anyhow::Ok;
 
     let context = TestContext::new("3.12")
@@ -3372,14 +3372,18 @@ fn run_linked_environment_path() -> Result<()> {
     // Create a link from `target` -> virtual environment
     fs_err::os::unix::fs::symlink(&context.venv, context.temp_dir.child("target"))?;
 
-    // Running `uv sync` should use the environment at `target``
+    // Running `uv sync` recreates the target because the existing venv is not relocatable
+    // and is bound to a different location.
     uv_snapshot!(context.filters(), context.sync()
-        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "target"), @r###"
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "target"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: target
+    Creating virtual environment at: target
     Resolved 8 packages in [TIME]
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
@@ -3389,7 +3393,7 @@ fn run_linked_environment_path() -> Result<()> {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    "###);
+    ");
 
     // `sys.prefix` and `sys.executable` should be from the `target` directory
     uv_snapshot!(context.filters(), context.run()
