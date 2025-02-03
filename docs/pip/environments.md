@@ -83,7 +83,7 @@ The virtual environment can be "activated" to make its packages available:
 
 ## Deactivating an environment
 
-If you need to exit a virtual environment use the `deactivate` command.
+To exit a virtual environment, use the `deactivate` command:
 
 ```console
 $ deactivate
