@@ -154,6 +154,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "astral-tokio-tar"
+version = "0.4.2"
+source = "git+https://github.com/astral-sh/tokio-tar?rev=c06006a2cf6a6ca42e11775ddf1502dee8a8c688#c06006a2cf6a6ca42e11775ddf1502dee8a8c688"
+dependencies = [
+ "filetime",
+ "futures-core",
+ "libc",
+ "portable-atomic",
+ "redox_syscall 0.3.5",
+ "rustc-hash",
+ "tokio",
+ "tokio-stream",
+ "xattr",
+]
+
+[[package]]
 name = "async-channel"
 version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1977,22 +1993,6 @@ checksum = "72bbdfd737a243da3dfc1f99ee8d6e166480f17ab4ac84d7c34aacd73fc7bd16"
 dependencies = [
  "scopeguard",
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "krata-tokio-tar"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8bd5fee9b96acb5fc36b401896d601e6fdcce52b0e651ce24a3b21fb524e79f"
-dependencies = [
- "filetime",
- "futures-core",
- "libc",
- "portable-atomic",
- "redox_syscall 0.3.5",
- "tokio",
- "tokio-stream",
- "xattr",
 ]
 
 [[package]]
@@ -5060,11 +5060,11 @@ dependencies = [
 name = "uv-extract"
 version = "0.0.1"
 dependencies = [
+ "astral-tokio-tar",
  "async-compression",
  "async_zip",
  "fs-err 3.1.0",
  "futures",
- "krata-tokio-tar",
  "md-5",
  "rayon",
  "reqwest",
@@ -5344,6 +5344,7 @@ dependencies = [
 name = "uv-publish"
 version = "0.1.0"
 dependencies = [
+ "astral-tokio-tar",
  "async-compression",
  "base64 0.22.1",
  "fs-err 3.1.0",
@@ -5351,7 +5352,6 @@ dependencies = [
  "glob",
  "insta",
  "itertools 0.14.0",
- "krata-tokio-tar",
  "reqwest",
  "reqwest-middleware",
  "reqwest-retry",
