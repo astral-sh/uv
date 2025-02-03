@@ -8,6 +8,7 @@ use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::prelude::EdgeRef;
 use petgraph::Direction;
 use rustc_hash::{FxHashMap, FxHashSet};
+use tokio::sync::Semaphore;
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
@@ -95,6 +96,7 @@ pub(crate) async fn pip_tree(
                 .markers(environment.interpreter().markers())
                 .platform(environment.interpreter().platform())
                 .build();
+        let download_concurrency = Semaphore::new(concurrency.downloads);
 
         // Determine the platform tags.
         let interpreter = environment.interpreter();
@@ -117,7 +119,10 @@ pub(crate) async fn pip_tree(
         // Fetch the latest version for each package.
         let mut fetches = futures::stream::iter(&packages)
             .map(|(name, ..)| async {
-                let Some(filename) = client.find_latest(name, None).await? else {
+                let Some(filename) = client
+                    .find_latest(name, None, &download_concurrency)
+                    .await?
+                else {
                     return Ok(None);
                 };
                 Ok::<Option<_>, uv_client::Error>(Some((*name, filename.into_version())))

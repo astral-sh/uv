@@ -992,6 +992,20 @@ impl<'a> ManagedClient<'a> {
         let _permit = self.control.acquire().await.unwrap();
         f(self.unmanaged).await
     }
+
+    /// Perform a request using a client that internally manages the concurrency limit.
+    ///
+    /// The callback is passed the client and a semaphore. It must acquire the semaphore before
+    /// any request through the client and drop it after.
+    ///
+    /// This method serves as an escape hatch for functions that may want to send multiple requests
+    /// in parallel.
+    pub async fn manual<F, T>(&'a self, f: impl FnOnce(&'a RegistryClient, &'a Semaphore) -> F) -> T
+    where
+        F: Future<Output = T>,
+    {
+        f(self.unmanaged, &self.control).await
+    }
 }
 
 /// Returns the value of the `Content-Length` header from the [`reqwest::Response`], if present.

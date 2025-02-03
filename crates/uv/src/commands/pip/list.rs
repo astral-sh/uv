@@ -8,6 +8,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use serde::Serialize;
+use tokio::sync::Semaphore;
 use unicode_width::UnicodeWidthStr;
 
 use uv_cache::{Cache, Refresh};
@@ -94,6 +95,7 @@ pub(crate) async fn pip_list(
                 .markers(environment.interpreter().markers())
                 .platform(environment.interpreter().platform())
                 .build();
+        let download_concurrency = Semaphore::new(concurrency.downloads);
 
         // Determine the platform tags.
         let interpreter = environment.interpreter();
@@ -116,7 +118,9 @@ pub(crate) async fn pip_list(
         // Fetch the latest version for each package.
         let mut fetches = futures::stream::iter(&results)
             .map(|dist| async {
-                let latest = client.find_latest(dist.name(), None).await?;
+                let latest = client
+                    .find_latest(dist.name(), None, &download_concurrency)
+                    .await?;
                 Ok::<(&PackageName, Option<DistFilename>), uv_client::Error>((dist.name(), latest))
             })
             .buffer_unordered(concurrency.downloads);

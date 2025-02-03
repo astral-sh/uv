@@ -20,6 +20,7 @@ use std::time::{Duration, SystemTime};
 use std::{env, fmt, io};
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, BufReader};
+use tokio::sync::Semaphore;
 use tokio_util::io::ReaderStream;
 use tracing::{debug, enabled, trace, warn, Level};
 use url::Url;
@@ -369,6 +370,7 @@ pub async fn upload(
     username: Option<&str>,
     password: Option<&str>,
     check_url_client: Option<&CheckUrlClient<'_>>,
+    download_concurrency: &Semaphore,
     reporter: Arc<impl Reporter>,
 ) -> Result<bool, PublishError> {
     let form_metadata = form_metadata(file, filename)
@@ -428,7 +430,8 @@ pub async fn upload(
                     PublishSendError::Status(..) | PublishSendError::StatusNoBody(..)
                 ) {
                     if let Some(check_url_client) = &check_url_client {
-                        if check_url(check_url_client, file, filename).await? {
+                        if check_url(check_url_client, file, filename, download_concurrency).await?
+                        {
                             // There was a raced upload of the same file, so even though our upload failed,
                             // the right file now exists in the registry.
                             return Ok(false);
@@ -450,6 +453,7 @@ pub async fn check_url(
     check_url_client: &CheckUrlClient<'_>,
     file: &Path,
     filename: &DistFilename,
+    download_concurrency: &Semaphore,
 ) -> Result<bool, PublishError> {
     let CheckUrlClient {
         index_url,
@@ -470,7 +474,12 @@ pub async fn check_url(
 
     debug!("Checking for {filename} in the registry");
     let response = match registry_client
-        .simple(filename.name(), Some(index_url), index_capabilities)
+        .simple(
+            filename.name(),
+            Some(index_url),
+            index_capabilities,
+            download_concurrency,
+        )
         .await
     {
         Ok(response) => response,
