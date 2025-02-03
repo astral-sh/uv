@@ -3,6 +3,7 @@ use std::pin::Pin;
 
 use futures::StreamExt;
 use rustc_hash::FxHashSet;
+use tokio_tar::EntryType;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::warn;
 
@@ -143,6 +144,16 @@ async fn untar_in(
     mut archive: tokio_tar::Archive<&'_ mut (dyn tokio::io::AsyncRead + Unpin)>,
     dst: &Path,
 ) -> std::io::Result<()> {
+    // Like `tokio-tar`, canonicalize the destination prior to unpacking.
+    let dst = fs_err::tokio::canonicalize(dst).await?;
+
+    // Memoize filesystem calls to canonicalize paths.
+    let mut memo = FxHashSet::default();
+
+    // Delay any directory entries until the end, to ensure that directory permissions do not
+    // interfere with descendant extraction.
+    let mut directories = Vec::new();
+
     let mut entries = archive.entries()?;
     let mut pinned = Pin::new(&mut entries);
     while let Some(entry) = pinned.next().await {
@@ -159,7 +170,15 @@ async fn untar_in(
             continue;
         }
 
-        file.unpack_in(dst).await?;
+        // Defer the creation of any directory entries.
+        if file.header().entry_type() == EntryType::Directory {
+            directories.push(file);
+            continue;
+        }
+
+        // Unpack the file into the destination directory.
+        #[cfg_attr(not(unix), allow(unused_variables))]
+        let unpacked_at = file.unpack_in_memo(&dst, &mut memo).await?;
 
         // Preserve the executable bit.
         #[cfg(unix)]
@@ -172,7 +191,7 @@ async fn untar_in(
                 let mode = file.header().mode()?;
                 let has_any_executable_bit = mode & 0o111;
                 if has_any_executable_bit != 0 {
-                    if let Some(path) = crate::tar::unpacked_at(dst, &file.path()?) {
+                    if let Some(path) = unpacked_at.as_deref() {
                         let permissions = fs_err::tokio::metadata(&path).await?.permissions();
                         if permissions.mode() & 0o111 != 0o111 {
                             fs_err::tokio::set_permissions(
@@ -186,6 +205,13 @@ async fn untar_in(
             }
         }
     }
+
+    // Create any deferred directories in topological order.
+    directories.sort_by(|a, b| b.path_bytes().cmp(&a.path_bytes()));
+    for mut dir in directories {
+        dir.unpack_in_memo(&dst, &mut memo).await?;
+    }
+
     Ok(())
 }
 
