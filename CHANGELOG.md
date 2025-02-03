@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.5.27
+
+### Enhancements
+
+- Avoid setting permissions during tar extraction ([#11191](https://github.com/astral-sh/uv/pull/11191))
+- Remove warnings for missing lower bounds ([#11195](https://github.com/astral-sh/uv/pull/11195))
+- Update PubGrub to set-based outdated priority tracking ([#11169](https://github.com/astral-sh/uv/pull/11169))
+- Improve error messages for `uv pip install` with `--extra` or `--all-extras` and invalid sources ([#11193](https://github.com/astral-sh/uv/pull/11193))
+- Sign Docker images using GitHub attestations ([#8685](https://github.com/astral-sh/uv/pull/8685))
+
+### Preview features
+
+- Don't expand self-referential extras in the build backend ([#11142](https://github.com/astral-sh/uv/pull/11142))
+
+### Performance
+
+- Filter discovered Python executables by source before querying ([#11143](https://github.com/astral-sh/uv/pull/11143))
+- Optimize exclusion computation for markers ([#11158](https://github.com/astral-sh/uv/pull/11158))
+- Use Astral-maintained `tokio-tar` fork ([#11174](https://github.com/astral-sh/uv/pull/11174))
+- Remove unneeded `.clone()` ([#11127](https://github.com/astral-sh/uv/pull/11127))
+
+### Bug fixes
+
+- Fix relative paths in bytecode compilation ([#11177](https://github.com/astral-sh/uv/pull/11177))
+- Percent-decode URLs in canonical comparisons ([#11088](https://github.com/astral-sh/uv/pull/11088))
+- Respect concurrency limits in parallel index fetch ([#11182](https://github.com/astral-sh/uv/pull/11182))
+- Use wire JSON schema for conflict items ([#11196](https://github.com/astral-sh/uv/pull/11196))
+- Use explicit `_GLibCVersion` tuple in uv-python crate ([#11122](https://github.com/astral-sh/uv/pull/11122))
+
+### Documentation
+
+- Add Git SHA locking behavior to docs ([#11125](https://github.com/astral-sh/uv/pull/11125))
+- Add best-practice flags to `pip install` example in troubleshooting guide ([#11194](https://github.com/astral-sh/uv/pull/11194))
+- Set `VIRTUAL_ENV` in Jupyter kernels ([#11155](https://github.com/astral-sh/uv/pull/11155))
+- Add instructions for deactivating an environment ([#11200](https://github.com/astral-sh/uv/pull/11200))
+
 ## 0.5.26
 
 ### Enhancements
