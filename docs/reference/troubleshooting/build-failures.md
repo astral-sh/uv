@@ -45,7 +45,7 @@ to reproduce it with pip:
 ```console
 $ uv venv -p 3.13 --seed
 $ source .venv/bin/activate
-$ pip install --use-pep517 'numpy==1.19.5'
+$ pip install --use-pep517 --no-cache --force-reinstall 'numpy==1.19.5'
 Collecting numpy==1.19.5
   Using cached numpy-1.19.5.zip (7.3 MB)
   Installing build dependencies ... done
