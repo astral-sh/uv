@@ -14645,6 +14645,7 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG Found workspace root: `[TEMP_DIR]/`
     DEBUG Adding current workspace member: `[TEMP_DIR]/`
     DEBUG Using Python request `>=3.12` from `requires-python` metadata
+    DEBUG Use of the active virtual environment was requested, but `VIRTUAL_ENV` is not set
     DEBUG Checking for Python environment at `.venv`
     DEBUG The virtual environment's Python version satisfies `>=3.12`
     DEBUG Using request timeout of [TIME]

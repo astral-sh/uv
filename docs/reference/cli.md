@@ -72,7 +72,11 @@ uv run [OPTIONS] [COMMAND]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--all-extras</code></dt><dd><p>Include all optional dependencies.</p>
+<dl class="cli-reference"><dt><code>--active</code></dt><dd><p>Prefer the active virtual environment over the project&#8217;s virtual environment.</p>
+
+<p>If the project virtual environment is active or no virtual environment is active, this has no effect.</p>
+
+</dd><dt><code>--all-extras</code></dt><dd><p>Include all optional dependencies.</p>
 
 <p>Optional dependencies are defined via <code>project.optional-dependencies</code> in a <code>pyproject.toml</code>.</p>
 
@@ -754,7 +758,11 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+<dl class="cli-reference"><dt><code>--active</code></dt><dd><p>Prefer the active virtual environment over the project&#8217;s virtual environment.</p>
+
+<p>If the project virtual environment is active or no virtual environment is active, this has no effect.</p>
+
+</dd><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 
 <p>Can be provided multiple times.</p>
 
@@ -1123,7 +1131,11 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+<dl class="cli-reference"><dt><code>--active</code></dt><dd><p>Prefer the active virtual environment over the project&#8217;s virtual environment.</p>
+
+<p>If the project virtual environment is active or no virtual environment is active, this has no effect.</p>
+
+</dd><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 
 <p>Can be provided multiple times.</p>
 
@@ -1460,7 +1472,11 @@ uv sync [OPTIONS]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--all-extras</code></dt><dd><p>Include all optional dependencies.</p>
+<dl class="cli-reference"><dt><code>--active</code></dt><dd><p>Prefer the active virtual environment over the project&#8217;s virtual environment.</p>
+
+<p>If the project virtual environment is active or no virtual environment is active, this has no effect.</p>
+
+</dd><dt><code>--all-extras</code></dt><dd><p>Include all optional dependencies.</p>
 
 <p>When two or more extras are declared as conflicting in <code>tool.uv.conflicts</code>, using this flag will always result in an error.</p>
 

@@ -61,6 +61,7 @@ pub(crate) async fn add(
     project_dir: &Path,
     locked: bool,
     frozen: bool,
+    active: bool,
     no_sync: bool,
     requirements: Vec<RequirementsSource>,
     editable: Option<bool>,
@@ -213,6 +214,7 @@ pub(crate) async fn add(
                 allow_insecure_host,
                 &install_mirrors,
                 no_config,
+                active,
                 cache,
                 printer,
             )
@@ -231,6 +233,7 @@ pub(crate) async fn add(
                 connectivity,
                 native_tls,
                 allow_insecure_host,
+                active,
                 no_config,
                 cache,
                 printer,

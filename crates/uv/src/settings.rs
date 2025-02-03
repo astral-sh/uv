@@ -281,6 +281,7 @@ pub(crate) struct RunSettings {
     pub(crate) all_packages: bool,
     pub(crate) package: Option<PackageName>,
     pub(crate) no_project: bool,
+    pub(crate) active: bool,
     pub(crate) no_sync: bool,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -318,6 +319,8 @@ impl RunSettings {
             with_editable,
             with_requirements,
             isolated,
+            active,
+            no_active,
             no_sync,
             locked,
             frozen,
@@ -380,6 +383,7 @@ impl RunSettings {
             package,
             no_project,
             no_sync,
+            active: flag(active, no_active).unwrap_or_default(),
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
@@ -944,6 +948,7 @@ impl PythonPinSettings {
 pub(crate) struct SyncSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
+    pub(crate) active: bool,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: DevGroupsSpecification,
     pub(crate) editable: EditableMode,
@@ -982,6 +987,8 @@ impl SyncSettings {
             no_install_package,
             locked,
             frozen,
+            active,
+            no_active,
             installer,
             build,
             refresh,
@@ -1002,6 +1009,7 @@ impl SyncSettings {
         Self {
             locked,
             frozen,
+            active: flag(active, no_active).unwrap_or_default(),
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 no_extra,
@@ -1091,6 +1099,7 @@ impl LockSettings {
 pub(crate) struct AddSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
+    pub(crate) active: bool,
     pub(crate) no_sync: bool,
     pub(crate) packages: Vec<String>,
     pub(crate) requirements: Vec<PathBuf>,
@@ -1130,6 +1139,8 @@ impl AddSettings {
             no_sync,
             locked,
             frozen,
+            active,
+            no_active,
             installer,
             build,
             refresh,
@@ -1201,6 +1212,7 @@ impl AddSettings {
         Self {
             locked,
             frozen,
+            active: flag(active, no_active).unwrap_or_default(),
             no_sync,
             packages,
             requirements,
@@ -1231,6 +1243,7 @@ impl AddSettings {
 pub(crate) struct RemoveSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
+    pub(crate) active: bool,
     pub(crate) no_sync: bool,
     pub(crate) packages: Vec<PackageName>,
     pub(crate) dependency_type: DependencyType,
@@ -1254,6 +1267,8 @@ impl RemoveSettings {
             no_sync,
             locked,
             frozen,
+            active,
+            no_active,
             installer,
             build,
             refresh,
@@ -1285,6 +1300,7 @@ impl RemoveSettings {
         Self {
             locked,
             frozen,
+            active: flag(active, no_active).unwrap_or_default(),
             no_sync,
             packages,
             dependency_type,

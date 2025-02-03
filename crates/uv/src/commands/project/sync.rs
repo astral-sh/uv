@@ -45,6 +45,7 @@ pub(crate) async fn sync(
     project_dir: &Path,
     locked: bool,
     frozen: bool,
+    active: bool,
     all_packages: bool,
     package: Option<PackageName>,
     extras: ExtrasSpecification,
@@ -125,6 +126,7 @@ pub(crate) async fn sync(
         native_tls,
         allow_insecure_host,
         no_config,
+        active,
         cache,
         printer,
     )
