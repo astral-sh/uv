@@ -156,7 +156,7 @@ dependencies = [
 [[package]]
 name = "astral-tokio-tar"
 version = "0.5.0"
-source = "git+https://github.com/astral-sh/tokio-tar?rev=ba2b140f27d081c463335f0d68b5f8df8e6c845e#ba2b140f27d081c463335f0d68b5f8df8e6c845e"
+source = "git+https://github.com/astral-sh/tokio-tar?rev=efeaea927c7a40ee66121de2e1bebfd5d7a4a602#efeaea927c7a40ee66121de2e1bebfd5d7a4a602"
 dependencies = [
  "filetime",
  "futures-core",
