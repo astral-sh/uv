@@ -193,6 +193,8 @@ pub enum PythonSource {
     DiscoveredEnvironment,
     /// An executable was found in the search path i.e. `PATH`
     SearchPath,
+    /// The first executable found in the search path i.e. `PATH`
+    SearchPathFirst,
     /// An executable was found in the Windows registry via PEP 514
     Registry,
     /// An executable was found in the known Microsoft Store locations
@@ -331,7 +333,14 @@ fn python_executables_from_installed<'a>(
 
     let from_search_path = iter::once_with(move || {
         python_executables_from_search_path(version, implementation)
-            .map(|path| Ok((PythonSource::SearchPath, path)))
+            .enumerate()
+            .map(|(i, path)| {
+                if i == 0 {
+                    Ok((PythonSource::SearchPathFirst, path))
+                } else {
+                    Ok((PythonSource::SearchPath, path))
+                }
+            })
     })
     .flatten();
 
@@ -1049,7 +1058,10 @@ pub(crate) fn find_python_installation(
         // If the interpreter has a default executable name, e.g. `python`, and was found on the
         // search path, we consider this opt-in to use it.
         let has_default_executable_name = installation.interpreter.has_default_executable_name()
-            && installation.source == PythonSource::SearchPath;
+            && matches!(
+                installation.source,
+                PythonSource::SearchPath | PythonSource::SearchPathFirst
+            );
 
         // If it's a pre-release and pre-releases aren't allowed, skip it — but store it for later
         // since we'll use a pre-release if no other versions are available.
@@ -1601,6 +1613,7 @@ impl PythonSource {
         match self {
             Self::Managed | Self::Registry | Self::MicrosoftStore => false,
             Self::SearchPath
+            | Self::SearchPathFirst
             | Self::CondaPrefix
             | Self::BaseCondaPrefix
             | Self::ProvidedPath
@@ -1613,7 +1626,13 @@ impl PythonSource {
     /// Whether an alternative Python implementation from this source can be used without opt-in.
     pub(crate) fn allows_alternative_implementations(self) -> bool {
         match self {
-            Self::Managed | Self::Registry | Self::SearchPath | Self::MicrosoftStore => false,
+            Self::Managed
+            | Self::Registry
+            | Self::SearchPath
+            // TODO(zanieb): We may want to allow this at some point, but when adding this variant
+            // we want compatibility with existing behavior
+            | Self::SearchPathFirst
+            | Self::MicrosoftStore => false,
             Self::CondaPrefix
             | Self::BaseCondaPrefix
             | Self::ProvidedPath
@@ -1629,7 +1648,11 @@ impl PythonSource {
     /// environment; pragmatically, that's not common and saves us from querying a bunch of system
     /// interpreters for no reason. It seems dubious to consider an interpreter in the `PATH` as a
     /// target virtual environment if it's not discovered through our virtual environment-specific
-    /// patterns.
+    /// patterns. Instead, we special case the first Python executable found on the `PATH` with
+    /// [`PythonSource::SearchPathFirst`], allowing us to check if that's a virtual environment.
+    /// This enables targeting the virtual environment with uv by putting its `bin/` on the `PATH`
+    /// without setting `VIRTUAL_ENV` — but if there's another interpreter before it we will ignore
+    /// it.
     pub(crate) fn is_maybe_virtualenv(self) -> bool {
         match self {
             Self::ProvidedPath
@@ -1637,7 +1660,8 @@ impl PythonSource {
             | Self::DiscoveredEnvironment
             | Self::CondaPrefix
             | Self::BaseCondaPrefix
-            | Self::ParentInterpreter => true,
+            | Self::ParentInterpreter
+            | Self::SearchPathFirst => true,
             Self::Managed | Self::SearchPath | Self::Registry | Self::MicrosoftStore => false,
         }
     }
@@ -1651,6 +1675,7 @@ impl PythonSource {
             | Self::ProvidedPath
             | Self::Managed
             | Self::SearchPath
+            | Self::SearchPathFirst
             | Self::Registry
             | Self::MicrosoftStore => true,
             Self::ActiveEnvironment | Self::DiscoveredEnvironment => false,
@@ -2062,6 +2087,7 @@ impl VersionRequest {
                 | PythonSource::DiscoveredEnvironment
                 | PythonSource::ActiveEnvironment => Self::Any,
                 PythonSource::SearchPath
+                | PythonSource::SearchPathFirst
                 | PythonSource::Registry
                 | PythonSource::MicrosoftStore
                 | PythonSource::Managed => Self::Default,
@@ -2473,6 +2499,7 @@ impl fmt::Display for PythonSource {
             Self::CondaPrefix | Self::BaseCondaPrefix => f.write_str("conda prefix"),
             Self::DiscoveredEnvironment => f.write_str("virtual environment"),
             Self::SearchPath => f.write_str("search path"),
+            Self::SearchPathFirst => f.write_str("first executable in the search path"),
             Self::Registry => f.write_str("registry"),
             Self::MicrosoftStore => f.write_str("Microsoft Store"),
             Self::Managed => f.write_str("managed installations"),

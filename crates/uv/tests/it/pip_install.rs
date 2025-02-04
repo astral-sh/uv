@@ -7608,12 +7608,48 @@ fn install_incompatible_python_version_interpreter_broken_in_path() -> Result<()
     perms.set_mode(0o755);
     fs_err::set_permissions(&python, perms)?;
 
-    // Request Python 3.12; which should fail
+    // Put the broken interpreter _before_ the other interpreters in the PATH
+    let path = std::env::join_paths(
+        std::iter::once(context.bin_dir.to_path_buf())
+            .chain(std::env::split_paths(&context.python_path())),
+    )
+    .unwrap();
+
+    // Request Python 3.12, which should fail since the virtual environment does not have a matching
+    // version.
+    // Since the broken interpreter is at the front of the PATH, this query error should be raised
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-p").arg("3.12")
         .arg("anyio")
         // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
-        .env("UV_TEST_PYTHON_PATH", context.bin_dir.as_os_str()), @r###"
+        .env("UV_TEST_PYTHON_PATH", path.as_os_str()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to inspect Python interpreter from first executable in the search path at `[BIN]/python3`
+      Caused by: Querying Python at `[BIN]/python3` failed with exit status exit status: 1
+
+    [stderr]
+    error: intentionally broken python executable
+    "###
+    );
+
+    // Put the broken interpreter _after_ the other interpreters in the PATH
+    let path = std::env::join_paths(
+        std::env::split_paths(&context.python_path())
+            .chain(std::iter::once(context.bin_dir.to_path_buf())),
+    )
+    .unwrap();
+
+    // Since the broken interpreter is not at the front of the PATH, the query error should not be
+    // raised
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-p").arg("3.12")
+        .arg("anyio")
+        // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
+        .env("UV_TEST_PYTHON_PATH", path.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
