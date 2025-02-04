@@ -2,6 +2,8 @@ INHERIT: mkdocs.template.yml
 # Omit the `typeset` plugin which is only available in the Insiders version.
 plugins:
   - search
+  - git-revision-date-localized:
+      timezone: UTC # It can only be in UTC unless the ISO time can include timezone.
 validation:
   anchors: warn
 watch:
