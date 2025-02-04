@@ -25,8 +25,8 @@ there are no general, fast algorithms. In practice, this is misleading for a num
 - When resolution fails, more information is needed than a message that there is no solution (as is
   seen in SAT solvers). Instead, the resolver should produce an understandable error trace that
   states which packages are involved in away to allows a user to remove the conflict.
-- For performance and whether users consider a solution good, the most important heuristic is
-  determining the order in which decisions are made through prioritization.
+- The most important heuristic for performance and user experience is determining the order in which
+  decisions are made through prioritization.
 
 uv uses [pubgrub-rs](https://github.com/pubgrub-rs/pubgrub), the Rust implementation of
 [PubGrub](https://nex3.medium.com/pubgrub-2fb6470504f), an incremental version solver. PubGrub in uv
