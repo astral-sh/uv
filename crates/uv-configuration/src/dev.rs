@@ -46,7 +46,7 @@ impl DevMode {
 
 #[derive(Default, Debug, Clone)]
 pub struct DevGroupsSpecification {
-    /// Legacy option for `dependency-group.dev` and `tool.uv.dev-dependencies`.
+    /// Legacy option for `dependency-groups.dev` and `tool.uv.dev-dependencies`.
     ///
     /// Requested via the `--dev`, `--no-dev`, and `--only-dev` flags.
     dev: Option<DevMode>,

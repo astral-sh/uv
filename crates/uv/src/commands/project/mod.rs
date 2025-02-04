@@ -137,16 +137,16 @@ pub(crate) enum ProjectError {
         PathBuf,
     ),
 
-    #[error("Group `{0}` is not defined in the project's `dependency-group` table")]
+    #[error("Group `{0}` is not defined in the project's `dependency-groups` table")]
     MissingGroupProject(GroupName),
 
-    #[error("Group `{0}` is not defined in any project's `dependency-group` table")]
+    #[error("Group `{0}` is not defined in any project's `dependency-groups` table")]
     MissingGroupWorkspace(GroupName),
 
     #[error("PEP 723 scripts do not support dependency groups, but group `{0}` was specified")]
     MissingGroupScript(GroupName),
 
-    #[error("Default group `{0}` (from `tool.uv.default-groups`) is not defined in the project's `dependency-group` table")]
+    #[error("Default group `{0}` (from `tool.uv.default-groups`) is not defined in the project's `dependency-groups` table")]
     MissingDefaultGroup(GroupName),
 
     #[error("Supported environments must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
