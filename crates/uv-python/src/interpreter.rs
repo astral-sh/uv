@@ -94,6 +94,7 @@ impl Interpreter {
     pub fn with_virtualenv(self, virtualenv: VirtualEnvironment) -> Self {
         Self {
             scheme: virtualenv.scheme,
+            sys_base_executable: Some(virtualenv.base_executable),
             sys_executable: virtualenv.executable,
             sys_prefix: virtualenv.root,
             target: None,
