@@ -1746,3 +1746,80 @@ fn build_version_mismatch() -> Result<()> {
     "###);
     Ok(())
 }
+
+#[cfg(unix)] // Symlinks aren't universally available on windows.
+#[test]
+fn build_with_symlink() -> Result<()> {
+    let context = TestContext::new("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml.real")
+        .write_str(indoc! {r#"
+            [project]
+            name = "softlinked"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+    "#})?;
+    std::os::unix::fs::symlink(
+        context.temp_dir.child("pyproject.toml.real"),
+        context.temp_dir.child("pyproject.toml"),
+    )?;
+    context
+        .temp_dir
+        .child("src/softlinked/__init__.py")
+        .touch()?;
+    uv_snapshot!(context.filters(), context.build(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built dist/softlinked-0.1.0.tar.gz
+    Successfully built dist/softlinked-0.1.0-py3-none-any.whl
+    "###);
+    Ok(())
+}
+
+#[test]
+fn build_with_hardlink() -> Result<()> {
+    let context = TestContext::new("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml.real")
+        .write_str(indoc! {r#"
+            [project]
+            name = "hardlinked"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+    "#})?;
+    fs_err::hard_link(
+        context.temp_dir.child("pyproject.toml.real"),
+        context.temp_dir.child("pyproject.toml"),
+    )?;
+    context
+        .temp_dir
+        .child("src/hardlinked/__init__.py")
+        .touch()?;
+    uv_snapshot!(context.filters(), context.build(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built dist/hardlinked-0.1.0.tar.gz
+    Successfully built dist/hardlinked-0.1.0-py3-none-any.whl
+    "###);
+    Ok(())
+}
