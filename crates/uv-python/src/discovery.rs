@@ -713,7 +713,8 @@ fn interpreter_satisfies_environment_preference(
 /// This is useful as a pre-filtering step. Use of [`interpreter_satisfies_environment_preference`]
 /// is required to determine if an [`Interpreter`] satisfies the preference.
 ///
-/// The interpreter path is only used for debug messages.
+/// For [`PythonSource::SearchPath`], this uses the interpreter path to sniff if the executable is
+/// present in a virtual environment by searching for a `pyvenv.cfg` file.
 fn source_satisfies_environment_preference(
     source: PythonSource,
     interpreter_path: &Path,
@@ -723,7 +724,16 @@ fn source_satisfies_environment_preference(
         EnvironmentPreference::Any => true,
         EnvironmentPreference::OnlyVirtual => {
             if source.is_maybe_virtualenv() {
-                true
+                if matches!(source, PythonSource::SearchPath) {
+                    interpreter_path
+                        .parent()
+                        .and_then(Path::parent)
+                        .is_some_and(|path| {
+                            path.join("pyvenv.cfg").try_exists().unwrap_or_default()
+                        })
+                } else {
+                    true
+                }
             } else {
                 debug!(
                     "Ignoring Python interpreter at `{}`: only virtual environments allowed",
@@ -1624,12 +1634,6 @@ impl PythonSource {
     }
 
     /// Whether this source **could** be a virtual environment.
-    ///
-    /// This excludes the [`PythonSource::SearchPath`] although it could be in a virtual
-    /// environment; pragmatically, that's not common and saves us from querying a bunch of system
-    /// interpreters for no reason. It seems dubious to consider an interpreter in the `PATH` as a
-    /// target virtual environment if it's not discovered through our virtual environment-specific
-    /// patterns.
     pub(crate) fn is_maybe_virtualenv(self) -> bool {
         match self {
             Self::ProvidedPath
@@ -1637,8 +1641,9 @@ impl PythonSource {
             | Self::DiscoveredEnvironment
             | Self::CondaPrefix
             | Self::BaseCondaPrefix
-            | Self::ParentInterpreter => true,
-            Self::Managed | Self::SearchPath | Self::Registry | Self::MicrosoftStore => false,
+            | Self::ParentInterpreter
+            | Self::SearchPath => true,
+            Self::Managed | Self::Registry | Self::MicrosoftStore => false,
         }
     }
 
