@@ -295,30 +295,12 @@ pub enum DevMode {
 }
 
 impl DevMode {
-    /// Returns `true` if the specification allows for production dependencies.
-    pub fn prod(&self) -> bool {
-        matches!(self, Self::Exclude | Self::Include)
-    }
-
-    /// Returns `true` if the specification only includes development dependencies.
-    pub fn only(&self) -> bool {
-        matches!(self, Self::Only)
-    }
-
     /// Returns the flag that was used to request development dependencies.
     pub fn as_flag(&self) -> &'static str {
         match self {
             Self::Exclude => "--no-dev",
             Self::Include => "--dev",
             Self::Only => "--only-dev",
-        }
-    }
-
-    /// Returns `true` if the group is `dev`, and development dependencies should be included.
-    pub fn contains(&self, group: &GroupName) -> bool {
-        match self {
-            DevMode::Exclude => false,
-            DevMode::Include | DevMode::Only => group == &*DEV_DEPENDENCIES,
         }
     }
 }
