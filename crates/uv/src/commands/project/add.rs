@@ -16,9 +16,8 @@ use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, DevMode, EditableMode,
-    ExtrasSpecification, GroupsSpecification, InstallOptions, PreviewMode, SourceStrategy,
-    TrustedHost,
+    Concurrency, Constraints, DevGroupsSpecification, DevMode, EditableMode, ExtrasSpecification,
+    InstallOptions, PreviewMode, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -828,23 +827,22 @@ async fn lock_and_sync(
     let (extras, dev) = match dependency_type {
         DependencyType::Production => {
             let extras = ExtrasSpecification::None;
-            let dev = DevGroupsSpecification::from(DevMode::Exclude);
+            let dev = DevGroupsSpecification::from_dev_mode(DevMode::Exclude);
             (extras, dev)
         }
         DependencyType::Dev => {
             let extras = ExtrasSpecification::None;
-            let dev = DevGroupsSpecification::from(DevMode::Include);
+            let dev = DevGroupsSpecification::from_dev_mode(DevMode::Include);
             (extras, dev)
         }
         DependencyType::Optional(ref extra_name) => {
             let extras = ExtrasSpecification::Some(vec![extra_name.clone()]);
-            let dev = DevGroupsSpecification::from(DevMode::Exclude);
+            let dev = DevGroupsSpecification::from_dev_mode(DevMode::Exclude);
             (extras, dev)
         }
         DependencyType::Group(ref group_name) => {
             let extras = ExtrasSpecification::None;
-            let dev =
-                DevGroupsSpecification::from(GroupsSpecification::from_group(group_name.clone()));
+            let dev = DevGroupsSpecification::from_group(group_name.clone());
             (extras, dev)
         }
     };
@@ -866,7 +864,7 @@ async fn lock_and_sync(
         target,
         venv,
         &extras,
-        &DevGroupsManifest::from_spec(dev),
+        &dev.with_defaults(Vec::new()),
         EditableMode::Editable,
         InstallOptions::default(),
         Modifications::Sufficient,

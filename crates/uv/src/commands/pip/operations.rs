@@ -76,7 +76,11 @@ pub(crate) async fn read_requirements(
         .into());
     }
     if !groups.is_empty() && !requirements.iter().any(RequirementsSource::allows_groups) {
-        return Err(anyhow!("Requesting groups requires a `pyproject.toml`.").into());
+        let flags = groups.history().as_flags_pretty().join(" ");
+        return Err(anyhow!(
+            "Requesting groups requires a `pyproject.toml`. Requested via: {flags}"
+        )
+        .into());
     }
 
     // Read all requirements from the provided sources.
