@@ -1430,7 +1430,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 resource.git,
-                client.unmanaged.uncached_client(resource.url).clone(),
+                client
+                    .unmanaged
+                    .uncached_client(resource.git.repository())
+                    .clone(),
+                client.unmanaged.disable_ssl(resource.git.repository()),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter
                     .clone()
@@ -1530,7 +1534,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .github_fast_path(
                 resource.git,
-                client.unmanaged.uncached_client(resource.url).clone(),
+                client
+                    .unmanaged
+                    .uncached_client(resource.git.repository())
+                    .clone(),
             )
             .await
         {
@@ -1582,7 +1589,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 resource.git,
-                client.unmanaged.uncached_client(resource.url).clone(),
+                client
+                    .unmanaged
+                    .uncached_client(resource.git.repository())
+                    .clone(),
+                client.unmanaged.disable_ssl(resource.git.repository()),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter
                     .clone()
@@ -1812,6 +1823,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .fetch(
                 git,
                 client.unmanaged.uncached_client(git.repository()).clone(),
+                client.unmanaged.disable_ssl(git.repository()),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter
                     .clone()
