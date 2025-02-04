@@ -283,6 +283,9 @@ pub(crate) async fn run(
                 Err(err) => return Err(err.into()),
             };
 
+            // Clear any existing overlay.
+            environment.clear_overlay()?;
+
             Some(environment.into_interpreter())
         } else {
             // If no lockfile is found, warn against `--locked` and `--frozen`.
@@ -425,6 +428,9 @@ pub(crate) async fn run(
                     }
                     Err(err) => return Err(err.into()),
                 };
+
+                // Clear any existing overlay.
+                environment.clear_overlay()?;
 
                 Some(environment.into_interpreter())
             } else {
@@ -911,97 +917,75 @@ pub(crate) async fn run(
     };
 
     // If necessary, create an environment for the ephemeral requirements or command.
-    let temp_dir;
-    let ephemeral_env = if can_skip_ephemeral(spec.as_ref(), &base_interpreter, &settings) {
-        None
-    } else {
-        debug!("Creating ephemeral environment");
+    let ephemeral_env = match spec {
+        None => None,
+        Some(spec) if can_skip_ephemeral(&spec, &base_interpreter, &settings) => None,
+        Some(spec) => {
+            debug!("Syncing ephemeral requirements");
 
-        Some(match spec.filter(|spec| !spec.is_empty()) {
-            None => {
-                // Create a virtual environment
-                temp_dir = cache.venv_dir()?;
-                uv_virtualenv::create_venv(
-                    temp_dir.path(),
-                    base_interpreter.clone(),
-                    uv_virtualenv::Prompt::None,
-                    false,
-                    false,
-                    false,
-                    false,
-                )?
-            }
-            Some(spec) => {
-                debug!("Syncing ephemeral requirements");
+            let result = CachedEnvironment::from_spec(
+                EnvironmentSpecification::from(spec).with_lock(
+                    lock.as_ref()
+                        .map(|(lock, install_path)| (lock, install_path.as_ref())),
+                ),
+                &base_interpreter,
+                &settings,
+                &sync_state,
+                if show_resolution {
+                    Box::new(DefaultResolveLogger)
+                } else {
+                    Box::new(SummaryResolveLogger)
+                },
+                if show_resolution {
+                    Box::new(DefaultInstallLogger)
+                } else {
+                    Box::new(SummaryInstallLogger)
+                },
+                installer_metadata,
+                connectivity,
+                concurrency,
+                native_tls,
+                allow_insecure_host,
+                cache,
+                printer,
+                preview,
+            )
+            .await;
 
-                let result = CachedEnvironment::from_spec(
-                    EnvironmentSpecification::from(spec).with_lock(
-                        lock.as_ref()
-                            .map(|(lock, install_path)| (lock, install_path.as_ref())),
-                    ),
-                    &base_interpreter,
-                    &settings,
-                    &sync_state,
-                    if show_resolution {
-                        Box::new(DefaultResolveLogger)
-                    } else {
-                        Box::new(SummaryResolveLogger)
-                    },
-                    if show_resolution {
-                        Box::new(DefaultInstallLogger)
-                    } else {
-                        Box::new(SummaryInstallLogger)
-                    },
-                    installer_metadata,
-                    connectivity,
-                    concurrency,
-                    native_tls,
-                    allow_insecure_host,
-                    cache,
-                    printer,
-                    preview,
-                )
-                .await;
+            let environment = match result {
+                Ok(resolution) => resolution,
+                Err(ProjectError::Operation(err)) => {
+                    return diagnostics::OperationDiagnostic::native_tls(native_tls)
+                        .with_context("`--with`")
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                }
+                Err(err) => return Err(err.into()),
+            };
 
-                let environment = match result {
-                    Ok(resolution) => resolution,
-                    Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::native_tls(native_tls)
-                            .with_context("`--with`")
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
-                    }
-                    Err(err) => return Err(err.into()),
-                };
-
-                environment.into()
-            }
-        })
+            Some(environment)
+        }
     };
 
     // If we're running in an ephemeral environment, add a path file to enable loading of
     // the base environment's site packages. Setting `PYTHONPATH` is insufficient, as it doesn't
     // resolve `.pth` files in the base environment.
-    // And `sitecustomize.py` would be an alternative but it can be shadowed by an existing such
+    //
+    // `sitecustomize.py` would be an alternative, but it can be shadowed by an existing such
     // module in the python installation.
     if let Some(ephemeral_env) = ephemeral_env.as_ref() {
-        let ephemeral_site_packages = ephemeral_env
+        let site_packages = base_interpreter
             .site_packages()
             .next()
-            .ok_or_else(|| anyhow!("Ephemeral environment has no site packages directory"))?;
-        let base_site_packages = base_interpreter
-            .site_packages()
-            .next()
-            .ok_or_else(|| anyhow!("Base environment has no site packages directory"))?;
-
-        fs_err::write(
-            ephemeral_site_packages.join("_uv_ephemeral_overlay.pth"),
-            format!(
-                "import site; site.addsitedir(\"{}\")",
-                base_site_packages.escape_for_python()
-            ),
-        )?;
+            .ok_or_else(|| ProjectError::NoSitePackages)?;
+        ephemeral_env.set_overlay(format!(
+            "import site; site.addsitedir(\"{}\")",
+            site_packages.escape_for_python()
+        ))?;
     }
+
+    // Cast from `CachedEnvironment` to `PythonEnvironment`.
+    let ephemeral_env = ephemeral_env.map(PythonEnvironment::from);
 
     // Determine the Python interpreter to use for the command, if necessary.
     let interpreter = ephemeral_env
@@ -1125,15 +1109,10 @@ pub(crate) async fn run(
 
 /// Returns `true` if we can skip creating an additional ephemeral environment in `uv run`.
 fn can_skip_ephemeral(
-    spec: Option<&RequirementsSpecification>,
+    spec: &RequirementsSpecification,
     base_interpreter: &Interpreter,
     settings: &ResolverInstallerSettings,
 ) -> bool {
-    // No additional requirements.
-    let Some(spec) = spec.as_ref() else {
-        return true;
-    };
-
     let Ok(site_packages) = SitePackages::from_interpreter(base_interpreter) else {
         return false;
     };

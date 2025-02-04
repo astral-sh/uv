@@ -1,12 +1,5 @@
 use tracing::debug;
 
-use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
-use crate::commands::project::install_target::InstallTarget;
-use crate::commands::project::{
-    resolve_environment, sync_environment, EnvironmentSpecification, PlatformState, ProjectError,
-};
-use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, hash_digest};
 use uv_client::Connectivity;
@@ -16,6 +9,14 @@ use uv_configuration::{
 use uv_distribution_types::{Name, Resolution};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::Installable;
+
+use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
+use crate::commands::project::install_target::InstallTarget;
+use crate::commands::project::{
+    resolve_environment, sync_environment, EnvironmentSpecification, PlatformState, ProjectError,
+};
+use crate::printer::Printer;
+use crate::settings::ResolverInstallerSettings;
 
 /// A [`PythonEnvironment`] stored in the cache.
 #[derive(Debug)]
@@ -213,6 +214,36 @@ impl CachedEnvironment {
         let root = cache.archive(&id);
 
         Ok(Self(PythonEnvironment::from_root(root, cache)?))
+    }
+
+    /// Set the ephemeral overlay for a Python environment.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn set_overlay(&self, contents: impl AsRef<[u8]>) -> Result<(), ProjectError> {
+        let site_packages = self
+            .0
+            .site_packages()
+            .next()
+            .ok_or(ProjectError::NoSitePackages)?;
+        let overlay_path = site_packages.join("_uv_ephemeral_overlay.pth");
+        fs_err::write(overlay_path, contents)?;
+        Ok(())
+    }
+
+    /// Clear the ephemeral overlay for a Python environment, if it exists.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn clear_overlay(&self) -> Result<(), ProjectError> {
+        let site_packages = self
+            .0
+            .site_packages()
+            .next()
+            .ok_or(ProjectError::NoSitePackages)?;
+        let overlay_path = site_packages.join("_uv_ephemeral_overlay.pth");
+        match fs_err::remove_file(overlay_path) {
+            Ok(()) => (),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => (),
+            Err(err) => return Err(ProjectError::OverlayRemoval(err)),
+        }
+        Ok(())
     }
 
     /// Convert the [`CachedEnvironment`] into an [`Interpreter`].
