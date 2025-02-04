@@ -1,10 +1,16 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::Arc};
 
 use uv_normalize::{GroupName, DEV_DEPENDENCIES};
 
 /// Manager of all dependency-group decisions and settings history.
+///
+/// This is an Arc mostly just to avoid size bloat on things that contain these.
 #[derive(Debug, Default, Clone)]
-pub struct DevGroupsSpecification {
+pub struct DevGroupsSpecification(Arc<DevGroupsSpecificationInner>);
+
+/// Manager of all dependency-group decisions and settings history.
+#[derive(Debug, Default, Clone)]
+pub struct DevGroupsSpecificationInner {
     /// Groups to include.
     include: IncludeGroups,
     /// Groups to exclude (always wins over include).
@@ -61,13 +67,13 @@ impl DevGroupsSpecification {
         // --only flags imply --no-default-groups
         let no_default_groups = no_default_groups || only_groups;
 
-        Self {
+        Self(Arc::new(DevGroupsSpecificationInner {
             include,
             exclude: no_group,
             only_groups,
             no_default_groups,
             history,
-        }
+        }))
     }
 
     /// Create from raw CLI args
@@ -125,7 +131,8 @@ impl DevGroupsSpecification {
     ///
     /// This is appropriate in projects, where the `dev` group is synced by default.
     pub fn with_defaults(&self, defaults: Vec<GroupName>) -> DevGroupsManifest {
-        let mut result = self.clone();
+        // Explicitly clone the inner to value to make it different
+        let mut result = DevGroupsSpecificationInner::clone(&self.0);
 
         // Seems correct to record the defaults even if they get noop'd
         result.history.defaults.extend(defaults.clone());
@@ -141,11 +148,20 @@ impl DevGroupsSpecification {
         }
 
         DevGroupsManifest {
-            cur: result,
+            cur: Self(Arc::new(result)),
             prev: self.clone(),
         }
     }
+}
 
+impl std::ops::Deref for DevGroupsSpecification {
+    type Target = DevGroupsSpecificationInner;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DevGroupsSpecificationInner {
     /// Returns `true` if the specification allows for production dependencies.
     ///
     /// (This is really just asking if an --only flag was passed.)  
@@ -258,10 +274,9 @@ impl DevGroupsSpecificationHistory {
 
 /// A trivial newtype wrapped around [`DevGroupsSpecification`][] that signifies "defaults applied"
 ///
-/// It includes a comically excessive copy of the previous semantics to provide info on if
+/// It includes a copy of the previous semantics to provide info on if
 /// the group being a default actually affected it being enabled, because it's obviously "correct".
-/// (This would be completely fine and free if we wrapped these in Arcs everywhere but there's
-/// so few of these floating around that the cost surely doesn't matter.)
+/// (These are Arcs so it's ~free to hold onto the previous semantics)
 #[derive(Debug, Clone)]
 pub struct DevGroupsManifest {
     /// The active semantics
