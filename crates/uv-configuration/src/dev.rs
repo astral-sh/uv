@@ -19,8 +19,6 @@ pub struct DevGroupsSpecificationInner {
     ///
     /// If true, users of this API should refrain from doing "non-group things".
     only_groups: bool,
-    /// Whether default groups should be included.
-    no_default_groups: bool,
     /// The "raw" flags/settings we were passed for diagnostics.
     history: DevGroupsSpecificationHistory,
 }
@@ -53,25 +51,26 @@ impl DevGroupsSpecification {
         // then users of this API should refuse to do non-group things. So we just record whether
         // it was and then treat them as equivalent.
         let only_groups = !only_group.is_empty();
+        // --only flags imply --no-default-groups
+        let no_default_groups = no_default_groups || only_groups;
 
         let include = if all_groups {
-            // If this is set we can ignore group/only_group as irrelevant
+            // If this is set we can ignore group/only_group/defaults as irrelevant
             IncludeGroups::All
         } else {
             // Merge all these lists, they're equivalent now
             group.append(&mut only_group);
-            group.append(&mut defaults);
+            // Throw out the defaults if those are disabled
+            if !no_default_groups {
+                group.append(&mut defaults);
+            }
             IncludeGroups::Some(group)
         };
-
-        // --only flags imply --no-default-groups
-        let no_default_groups = no_default_groups || only_groups;
 
         Self(Arc::new(DevGroupsSpecificationInner {
             include,
             exclude: no_group,
             only_groups,
-            no_default_groups,
             history,
         }))
     }
@@ -127,28 +126,16 @@ impl DevGroupsSpecification {
         })
     }
 
-    /// Return a new [`DevGroupsSpecification`] with development dependencies included by default.
+    /// Apply defaults to a base [`DevGroupsSpecification`].
     ///
     /// This is appropriate in projects, where the `dev` group is synced by default.
     pub fn with_defaults(&self, defaults: Vec<GroupName>) -> DevGroupsManifest {
-        // Explicitly clone the inner to value to make it different
-        let mut result = DevGroupsSpecificationInner::clone(&self.0);
-
-        // Seems correct to record the defaults even if they get noop'd
-        result.history.defaults.extend(defaults.clone());
-
-        if !self.no_default_groups {
-            // Defaults are just --group flags we implicitly append
-            match &mut result.include {
-                IncludeGroups::Some(list) => {
-                    list.extend(defaults);
-                }
-                IncludeGroups::All => { /* do nothing */ }
-            }
-        }
+        // Explicitly clone the inner history and set the defaults, then remake the result.
+        let mut history = self.0.history.clone();
+        history.defaults = defaults;
 
         DevGroupsManifest {
-            cur: Self(Arc::new(result)),
+            cur: Self::from_history(history),
             prev: self.clone(),
         }
     }

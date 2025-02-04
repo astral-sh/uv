@@ -151,7 +151,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -323,7 +322,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -496,7 +494,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -701,7 +698,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -845,7 +841,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -1028,7 +1023,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -1254,7 +1248,6 @@ fn resolve_index_url() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -1488,7 +1481,6 @@ fn resolve_index_url() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -1685,7 +1677,6 @@ fn resolve_find_links() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -1851,7 +1842,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -2069,7 +2059,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -2270,7 +2259,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -2436,7 +2424,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -2585,7 +2572,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -2734,7 +2720,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -2885,7 +2870,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -3214,7 +3198,6 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -3421,7 +3404,6 @@ fn resolve_both() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -3716,7 +3698,6 @@ fn resolve_config_file() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -3959,7 +3940,6 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -4111,7 +4091,6 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -4282,7 +4261,6 @@ fn allow_insecure_host() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -4506,7 +4484,6 @@ fn index_priority() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -4709,7 +4686,6 @@ fn index_priority() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -4918,7 +4894,6 @@ fn index_priority() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -5122,7 +5097,6 @@ fn index_priority() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -5333,7 +5307,6 @@ fn index_priority() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -5537,7 +5510,6 @@ fn index_priority() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -5694,7 +5666,6 @@ fn verify_hashes() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -5837,7 +5808,6 @@ fn verify_hashes() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -5978,7 +5948,6 @@ fn verify_hashes() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -6121,7 +6090,6 @@ fn verify_hashes() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -6262,7 +6230,6 @@ fn verify_hashes() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
@@ -6404,7 +6371,6 @@ fn verify_hashes() -> anyhow::Result<()> {
                     ),
                     exclude: [],
                     only_groups: false,
-                    no_default_groups: false,
                     history: DevGroupsSpecificationHistory {
                         dev_mode: None,
                         group: [],
