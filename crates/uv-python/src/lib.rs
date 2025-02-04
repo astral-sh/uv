@@ -507,7 +507,7 @@ mod tests {
             matches!(
                 interpreter,
                 PythonInstallation {
-                    source: PythonSource::SearchPath,
+                    source: PythonSource::SearchPathFirst,
                     interpreter: _
                 }
             ),
@@ -936,7 +936,7 @@ mod tests {
             matches!(
             python,
             PythonInstallation {
-                source: PythonSource::SearchPath,
+                source: PythonSource::SearchPathFirst,
                 interpreter: _
             }
         ),
@@ -2427,7 +2427,7 @@ mod tests {
             matches!(
                 python,
                 PythonInstallation {
-                    source: PythonSource::SearchPath,
+                    source: PythonSource::SearchPathFirst,
                     interpreter: _
                 }
             ),
@@ -2479,7 +2479,7 @@ mod tests {
             matches!(
                 python,
                 PythonInstallation {
-                    source: PythonSource::SearchPath,
+                    source: PythonSource::SearchPathFirst,
                     interpreter: _
                 }
             ),
