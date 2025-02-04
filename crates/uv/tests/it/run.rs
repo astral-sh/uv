@@ -3874,3 +3874,67 @@ fn exit_status_signal() -> Result<()> {
     assert_eq!(status.code().expect("a status code"), 139);
     Ok(())
 }
+
+#[test]
+fn run_repeated() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.13"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = ["iniconfig"]
+        "#
+    })?;
+
+    // Import `iniconfig` in the context of the project.
+    uv_snapshot!(
+        context.filters(),
+        context.run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    "###);
+
+    // Re-running shouldn't require reinstalling `typing-extensions`, since the environment is cached.
+    uv_snapshot!(
+        context.filters(),
+        context.run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    Resolved 1 package in [TIME]
+    "###);
+
+    // Re-running as a tool shouldn't require reinstalling `typing-extensions`, since the environment is cached.
+    uv_snapshot!(
+        context.filters(),
+        context.tool_run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "###);
+
+    Ok(())
+}

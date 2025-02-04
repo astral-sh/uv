@@ -66,6 +66,9 @@ pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
 #[derive(Debug, Error)]
 pub enum Error {
     #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
     VirtualEnv(#[from] virtualenv::Error),
 
     #[error(transparent)]

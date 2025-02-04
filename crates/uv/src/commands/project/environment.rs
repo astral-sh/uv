@@ -229,18 +229,20 @@ impl CachedEnvironment {
         interpreter: &Interpreter,
         cache: &Cache,
     ) -> Result<Interpreter, uv_python::Error> {
-        if let Some(interpreter) = interpreter.to_base_interpreter(cache)? {
+        let base_python = interpreter.to_base_python()?;
+        if base_python == interpreter.sys_executable() {
             debug!(
                 "Caching via base interpreter: `{}`",
                 interpreter.sys_executable().display()
             );
-            Ok(interpreter)
-        } else {
-            debug!(
-                "Caching via interpreter: `{}`",
-                interpreter.sys_executable().display()
-            );
             Ok(interpreter.clone())
+        } else {
+            let base_interpreter = Interpreter::query(base_python, cache)?;
+            debug!(
+                "Caching via base interpreter: `{}`",
+                base_interpreter.sys_executable().display()
+            );
+            Ok(base_interpreter)
         }
     }
 }
