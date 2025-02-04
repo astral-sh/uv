@@ -461,20 +461,25 @@ fn install_script(
             use std::fs::Permissions;
             use std::os::unix::fs::PermissionsExt;
 
-            // We fall back to copy when the file is on another drive and if we don't own the file.
-            rename_or_copy.rename_or_copy(&path, &script_absolute)?;
-
-            let permissions = fs::metadata(&script_absolute)?.permissions();
-
-            if permissions.mode() & 0o111 != 0o111 {
-                trace!(
-                    "Adjusting permissions for {} from {} to {}",
-                    script_absolute.display(),
-                    permissions.mode(),
-                    permissions.mode() | 0o111
+            let permissions = fs::metadata(&path)?.permissions();
+            if permissions.mode() & 0o111 == 0o111 {
+                // If the permissions are already executable, we don't need to change them.
+                // We fall back to copy when the file is on another drive.
+                rename_or_copy.rename_or_copy(&path, &script_absolute)?;
+            } else {
+                // If we have to modify the permissions, copy the file, since we might not own it,
+                // and we may not be allowed to change permissions on an unowned moved file.
+                warn!(
+                    "Copying script from {} to {} (permissions: {:o})",
+                    path.simplified_display(),
+                    script_absolute.simplified_display(),
+                    permissions.mode()
                 );
+
+                uv_fs::copy_atomic_sync(&path, &script_absolute)?;
+
                 fs::set_permissions(
-                    &script_absolute,
+                    script_absolute,
                     Permissions::from_mode(permissions.mode() | 0o111),
                 )?;
             }
@@ -822,7 +827,7 @@ pub(crate) fn parse_scripts(
 }
 
 /// Rename a file with a fallback to copy that switches over on the first failure.
-#[derive(Default)]
+#[derive(Default, Copy, Clone)]
 enum RenameOrCopy {
     #[default]
     Rename,
@@ -836,22 +841,19 @@ impl RenameOrCopy {
     /// have to copy. If renaming failed once, we switch to copy permanently.
     fn rename_or_copy(&mut self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<()> {
         match self {
-            Self::Rename => {
-                match fs_err::rename(from.as_ref(), to.as_ref()) {
-                    Ok(()) => return Ok(()),
-                    Err(err) => {
-                        *self = RenameOrCopy::Copy;
-                        debug!("Failed to rename, falling back to copy: {err}");
-                    }
+            Self::Rename => match fs_err::rename(from.as_ref(), to.as_ref()) {
+                Ok(()) => {}
+                Err(err) => {
+                    *self = RenameOrCopy::Copy;
+                    debug!("Failed to rename, falling back to copy: {err}");
+                    fs_err::copy(from.as_ref(), to.as_ref())?;
                 }
-                fs_err::copy(from.as_ref(), to.as_ref())?;
-                Ok(())
-            }
+            },
             Self::Copy => {
                 fs_err::copy(from.as_ref(), to.as_ref())?;
-                Ok(())
             }
         }
+        Ok(())
     }
 }
 
