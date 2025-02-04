@@ -449,6 +449,10 @@ impl EnvVars {
     #[attr_hidden]
     pub const GIT_ALTERNATE_OBJECT_DIRECTORIES: &'static str = "GIT_ALTERNATE_OBJECT_DIRECTORIES";
 
+    /// Disables SSL verification for git operations.
+    #[attr_hidden]
+    pub const GIT_SSL_NO_VERIFY: &'static str = "GIT_SSL_NO_VERIFY";
+
     /// Used in tests for better git isolation.
     ///
     /// For example, we run some tests in ~/.local/share/uv/tests.

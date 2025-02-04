@@ -303,6 +303,7 @@ impl GitRemote {
         reference: &GitReference,
         locked_rev: Option<GitOid>,
         client: &ClientWithMiddleware,
+        disable_ssl: bool,
     ) -> Result<(GitDatabase, GitOid)> {
         let reference = locked_rev
             .map(ReferenceOrOid::Oid)
@@ -310,7 +311,7 @@ impl GitRemote {
         let enable_lfs_fetch = env::var(EnvVars::UV_GIT_LFS).is_ok();
 
         if let Some(mut db) = db {
-            fetch(&mut db.repo, &self.url, reference, client)
+            fetch(&mut db.repo, &self.url, reference, client, disable_ssl)
                 .with_context(|| format!("failed to fetch into: {}", into.user_display()))?;
 
             let resolved_commit_hash = match locked_rev {
@@ -320,7 +321,7 @@ impl GitRemote {
 
             if let Some(rev) = resolved_commit_hash {
                 if enable_lfs_fetch {
-                    fetch_lfs(&mut db.repo, &self.url, &rev)
+                    fetch_lfs(&mut db.repo, &self.url, &rev, disable_ssl)
                         .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
                 }
                 return Ok((db, rev));
@@ -338,14 +339,14 @@ impl GitRemote {
 
         fs_err::create_dir_all(into)?;
         let mut repo = GitRepository::init(into)?;
-        fetch(&mut repo, &self.url, reference, client)
+        fetch(&mut repo, &self.url, reference, client, disable_ssl)
             .with_context(|| format!("failed to clone into: {}", into.user_display()))?;
         let rev = match locked_rev {
             Some(rev) => rev,
             None => reference.resolve(&repo)?,
         };
         if enable_lfs_fetch {
-            fetch_lfs(&mut repo, &self.url, &rev)
+            fetch_lfs(&mut repo, &self.url, &rev, disable_ssl)
                 .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
         }
 
@@ -502,6 +503,7 @@ fn fetch(
     remote_url: &Url,
     reference: ReferenceOrOid<'_>,
     client: &ClientWithMiddleware,
+    disable_ssl: bool,
 ) -> Result<()> {
     let oid_to_fetch = match github_fast_path(repo, remote_url, reference, client) {
         Ok(FastPathRev::UpToDate) => return Ok(()),
@@ -577,14 +579,21 @@ fn fetch(
 
     debug!("Performing a Git fetch for: {remote_url}");
     let result = match refspec_strategy {
-        RefspecStrategy::All => fetch_with_cli(repo, remote_url, refspecs.as_slice(), tags),
+        RefspecStrategy::All => {
+            fetch_with_cli(repo, remote_url, refspecs.as_slice(), tags, disable_ssl)
+        }
         RefspecStrategy::First => {
             // Try each refspec
             let mut errors = refspecs
                 .iter()
                 .map_while(|refspec| {
-                    let fetch_result =
-                        fetch_with_cli(repo, remote_url, std::slice::from_ref(refspec), tags);
+                    let fetch_result = fetch_with_cli(
+                        repo,
+                        remote_url,
+                        std::slice::from_ref(refspec),
+                        tags,
+                        disable_ssl,
+                    );
 
                     // Stop after the first success and log failures
                     match fetch_result {
@@ -629,11 +638,16 @@ fn fetch_with_cli(
     url: &Url,
     refspecs: &[String],
     tags: bool,
+    disable_ssl: bool,
 ) -> Result<()> {
     let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
     cmd.arg("fetch");
     if tags {
         cmd.arg("--tags");
+    }
+    if disable_ssl {
+        debug!("Disabling SSL verification for Git fetch");
+        cmd.env(EnvVars::GIT_SSL_NO_VERIFY, "true");
     }
     cmd.arg("--force") // handle force pushes
         .arg("--update-head-ok") // see discussion in #2078
@@ -674,7 +688,12 @@ static GIT_LFS: LazyLock<Result<ProcessBuilder>> = LazyLock::new(|| {
 });
 
 /// Attempts to use `git-lfs` CLI to fetch required LFS objects for a given revision.
-fn fetch_lfs(repo: &mut GitRepository, url: &Url, revision: &GitOid) -> Result<()> {
+fn fetch_lfs(
+    repo: &mut GitRepository,
+    url: &Url,
+    revision: &GitOid,
+    disable_ssl: bool,
+) -> Result<()> {
     let mut cmd = if let Ok(lfs) = GIT_LFS.as_ref() {
         debug!("Fetching Git LFS objects");
         lfs.clone()
@@ -683,6 +702,11 @@ fn fetch_lfs(repo: &mut GitRepository, url: &Url, revision: &GitOid) -> Result<(
         warn!("Git LFS is not available, skipping LFS fetch");
         return Ok(());
     };
+
+    if disable_ssl {
+        debug!("Disabling SSL verification for Git LFS");
+        cmd.env(EnvVars::GIT_SSL_NO_VERIFY, "true");
+    }
 
     cmd.arg("fetch")
         .arg(url.as_str())

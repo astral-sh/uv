@@ -215,6 +215,11 @@ impl RegistryClient {
         self.client.uncached().for_host(url)
     }
 
+    /// Returns `true` if SSL verification is disabled for the given URL.
+    pub fn disable_ssl(&self, url: &Url) -> bool {
+        self.client.uncached().disable_ssl(url)
+    }
+
     /// Return the [`Connectivity`] mode used by this client.
     pub fn connectivity(&self) -> Connectivity {
         self.connectivity

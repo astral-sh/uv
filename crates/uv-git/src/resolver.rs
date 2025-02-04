@@ -106,6 +106,7 @@ impl GitResolver {
         &self,
         url: &GitUrl,
         client: ClientWithMiddleware,
+        disable_ssl: bool,
         cache: PathBuf,
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Fetch, GitResolverError> {
@@ -139,6 +140,14 @@ impl GitResolver {
         } else {
             GitSource::new(url.as_ref().clone(), client, cache)
         };
+
+        // If necessary, disable SSL.
+        let source = if disable_ssl {
+            source.dangerous()
+        } else {
+            source
+        };
+
         let fetch = tokio::task::spawn_blocking(move || source.fetch())
             .await?
             .map_err(GitResolverError::Git)?;
