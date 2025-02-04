@@ -902,6 +902,7 @@ pub(crate) struct PythonFindSettings {
     pub(crate) request: Option<String>,
     pub(crate) no_project: bool,
     pub(crate) system: bool,
+    pub(crate) r#virtual: bool,
 }
 
 impl PythonFindSettings {
@@ -913,12 +914,14 @@ impl PythonFindSettings {
             no_project,
             system,
             no_system,
+            r#virtual,
         } = args;
 
         Self {
             request,
             no_project,
             system: flag(system, no_system).unwrap_or_default(),
+            r#virtual,
         }
     }
 }

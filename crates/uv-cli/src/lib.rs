@@ -4533,11 +4533,26 @@ pub struct PythonFindArgs {
         long,
         env = EnvVars::UV_SYSTEM_PYTHON,
         value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_system")
+        overrides_with_all = ["no_system", "virtual"]
     )]
     pub system: bool,
 
-    #[arg(long, overrides_with("system"), hide = true)]
+    /// Only find virtual Python interpreters.
+    ///
+    /// By default, uv will report the first Python interpreter it would use, including those found
+    /// on the system.
+    ///
+    /// The `--system` option instructs uv to only select Python interpreters in an active virtual
+    /// environment or a virtual environment in the current working directory or any parent
+    /// directory.
+    #[arg(
+        long,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with = "system"
+    )]
+    pub r#virtual: bool,
+
+    #[arg(long, overrides_with = "system", hide = true)]
     pub no_system: bool,
 }
 

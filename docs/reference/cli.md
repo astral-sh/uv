@@ -5040,6 +5040,12 @@ uv python find [OPTIONS] [REQUEST]
 
 </dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
+</dd><dt><code>--virtual</code></dt><dd><p>Only find virtual Python interpreters.</p>
+
+<p>By default, uv will report the first Python interpreter it would use, including those found on the system.</p>
+
+<p>The <code>--system</code> option instructs uv to only select Python interpreters in an active virtual environment or a virtual environment in the current working directory or any parent directory.</p>
+
 </dd></dl>
 
 ### uv python pin

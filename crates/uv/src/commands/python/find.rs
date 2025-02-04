@@ -14,16 +14,21 @@ use crate::commands::{
 };
 
 /// Find a Python interpreter.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn find(
     project_dir: &Path,
     request: Option<String>,
     no_project: bool,
     no_config: bool,
     system: bool,
+    r#virtual: bool,
     python_preference: PythonPreference,
     cache: &Cache,
 ) -> Result<ExitStatus> {
-    let environment_preference = if system {
+    // N.B., `system` and `virtual` are mutually exclusive at the CLI level
+    let environment_preference = if r#virtual {
+        EnvironmentPreference::OnlyVirtual
+    } else if system {
         EnvironmentPreference::OnlySystem
     } else {
         EnvironmentPreference::Any
