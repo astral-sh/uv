@@ -1775,7 +1775,7 @@ fn add_remove_workspace() -> Result<()> {
     Ok(())
 }
 
-/// `uv add --dev` should update `dev-dependencies` (rather than `dependency-group.dev`) if a
+/// `uv add --dev` should update `dev-dependencies` (rather than `dependency-groups.dev`) if a
 /// dependency already exists in `dev-dependencies`.
 #[test]
 fn update_existing_dev() -> Result<()> {
@@ -1846,7 +1846,7 @@ fn update_existing_dev() -> Result<()> {
     Ok(())
 }
 
-/// `uv add --dev` should add to `dev-dependencies` (rather than `dependency-group.dev`) if it
+/// `uv add --dev` should add to `dev-dependencies` (rather than `dependency-groups.dev`) if it
 /// exists.
 #[test]
 fn add_existing_dev() -> Result<()> {
@@ -1911,7 +1911,7 @@ fn add_existing_dev() -> Result<()> {
     Ok(())
 }
 
-/// `uv add --group dev` should update `dev-dependencies` (rather than `dependency-group.dev`) if a
+/// `uv add --group dev` should update `dev-dependencies` (rather than `dependency-groups.dev`) if a
 /// dependency already exists.
 #[test]
 fn update_existing_dev_group() -> Result<()> {
@@ -1976,7 +1976,7 @@ fn update_existing_dev_group() -> Result<()> {
     Ok(())
 }
 
-/// `uv add --group dev` should add to `dependency-group` even if `dev-dependencies` exists.
+/// `uv add --group dev` should add to `dependency-groups` even if `dev-dependencies` exists.
 #[test]
 fn add_existing_dev_group() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2043,7 +2043,7 @@ fn add_existing_dev_group() -> Result<()> {
     Ok(())
 }
 
-/// `uv remove --dev` should remove from both `dev-dependencies` and `dependency-group.dev`.
+/// `uv remove --dev` should remove from both `dev-dependencies` and `dependency-groups.dev`.
 #[test]
 fn remove_both_dev() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2108,7 +2108,7 @@ fn remove_both_dev() -> Result<()> {
     Ok(())
 }
 
-/// `uv remove --group dev` should remove from both `dev-dependencies` and `dependency-group.dev`.
+/// `uv remove --group dev` should remove from both `dev-dependencies` and `dependency-groups.dev`.
 #[test]
 fn remove_both_dev_group() -> Result<()> {
     let context = TestContext::new("3.12");

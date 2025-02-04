@@ -13728,7 +13728,7 @@ fn lock_non_project_conditional() -> Result<()> {
     Ok(())
 }
 
-/// Lock a (legacy) non-project workspace root with `dependency-group`.
+/// Lock a (legacy) non-project workspace root with `dependency-groups`.
 #[test]
 fn lock_non_project_group() -> Result<()> {
     let context = TestContext::new("3.10");

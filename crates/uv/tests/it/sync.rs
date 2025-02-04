@@ -617,7 +617,7 @@ fn sync_legacy_non_project_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Group `bop` is not defined in any project's `dependency-group` table
+    error: Group `bop` is not defined in any project's `dependency-groups` table
     "###);
 
     Ok(())
@@ -1754,7 +1754,7 @@ fn sync_non_existent_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Group `baz` is not defined in the project's `dependency-group` table
+    error: Group `baz` is not defined in the project's `dependency-groups` table
     "###);
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-group").arg("baz"), @r###"
@@ -1763,7 +1763,7 @@ fn sync_non_existent_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Group `baz` is not defined in the project's `dependency-group` table
+    error: Group `baz` is not defined in the project's `dependency-groups` table
     "###);
 
     // Requesting an empty group should succeed.
@@ -1811,7 +1811,7 @@ fn sync_non_existent_default_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Default group `bar` (from `tool.uv.default-groups`) is not defined in the project's `dependency-group` table
+    error: Default group `bar` (from `tool.uv.default-groups`) is not defined in the project's `dependency-groups` table
     "###);
 
     Ok(())
@@ -5003,7 +5003,7 @@ fn sync_all_groups() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Group `foo` is not defined in any project's `dependency-group` table
+    error: Group `foo` is not defined in any project's `dependency-groups` table
     "###);
 
     Ok(())
