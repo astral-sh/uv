@@ -615,7 +615,7 @@ impl Workspace {
                     return from_virtual_env;
                 }
                 warn_user_once!(
-                    "`VIRTUAL_ENV={}` does not match the project environment path `{}` and will be ignored; use `--active` to target the active environment instead",
+                    "`VIRTUAL_ENV={}` does not match the project environment path `{}` and will be ignored; use `--active` to target the active environment instead or deactivate the environment to silence this warning",
                     from_virtual_env.user_display(),
                     project_env.user_display()
                 );
