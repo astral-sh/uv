@@ -3206,7 +3206,7 @@ fn sync_active_environment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead or deactivate the environment to silence this warning
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
@@ -3542,7 +3542,7 @@ fn sync_legacy_non_project_warning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead or deactivate the environment to silence this warning
     Resolved 2 packages in [TIME]
     Audited 1 package in [TIME]
     "###);
@@ -3554,7 +3554,7 @@ fn sync_legacy_non_project_warning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead or deactivate the environment to silence this warning
     Resolved 2 packages in [TIME]
     Audited 1 package in [TIME]
     "###);
@@ -3580,7 +3580,7 @@ fn sync_legacy_non_project_warning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=foo` does not match the project environment path `bar` and will be ignored; use `--active` to target the active environment instead
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `bar` and will be ignored; use `--active` to target the active environment instead or deactivate the environment to silence this warning
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: bar
     Resolved 2 packages in [TIME]
@@ -3599,7 +3599,7 @@ fn sync_legacy_non_project_warning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=foo` does not match the project environment path `[TEMP_DIR]/foo` and will be ignored; use `--active` to target the active environment instead
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `[TEMP_DIR]/foo` and will be ignored; use `--active` to target the active environment instead or deactivate the environment to silence this warning
     Resolved 2 packages in [TIME]
     Audited 1 package in [TIME]
     "###);

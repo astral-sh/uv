@@ -414,7 +414,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead or deactivate the environment to silence this warning
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 8 packages in [TIME]
@@ -440,7 +440,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead or deactivate the environment to silence this warning
     Resolved 8 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -474,7 +474,7 @@ fn test_uv_run_virtual_workspace_root() -> Result<()> {
     Success
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead or deactivate the environment to silence this warning
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 8 packages in [TIME]
@@ -519,7 +519,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead or deactivate the environment to silence this warning
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 8 packages in [TIME]
@@ -545,7 +545,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead or deactivate the environment to silence this warning
     Resolved 8 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -584,7 +584,7 @@ fn test_uv_run_isolate() -> Result<()> {
     Success
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead or deactivate the environment to silence this warning
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 8 packages in [TIME]
@@ -615,7 +615,7 @@ fn test_uv_run_isolate() -> Result<()> {
     Success
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead or deactivate the environment to silence this warning
     Resolved 8 packages in [TIME]
     Audited 5 packages in [TIME]
     "###

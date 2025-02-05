@@ -2354,7 +2354,7 @@ fn run_from_directory() -> Result<()> {
     3.12.[X]
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=.venv` does not match the project environment path `[PROJECT_VENV]/` and will be ignored; use `--active` to target the active environment instead
+    warning: `VIRTUAL_ENV=.venv` does not match the project environment path `[PROJECT_VENV]/` and will be ignored; use `--active` to target the active environment instead or deactivate the environment to silence this warning
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: [PROJECT_VENV]/
     Resolved 1 package in [TIME]
@@ -2370,7 +2370,7 @@ fn run_from_directory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=.venv` does not match the project environment path `[PROJECT_VENV]/` and will be ignored; use `--active` to target the active environment instead
+    warning: `VIRTUAL_ENV=.venv` does not match the project environment path `[PROJECT_VENV]/` and will be ignored; use `--active` to target the active environment instead or deactivate the environment to silence this warning
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: [PROJECT_VENV]/
     Resolved 1 package in [TIME]
@@ -2387,7 +2387,7 @@ fn run_from_directory() -> Result<()> {
     3.12.[X]
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead or deactivate the environment to silence this warning
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
@@ -2402,7 +2402,7 @@ fn run_from_directory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead or deactivate the environment to silence this warning
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
@@ -2417,7 +2417,7 @@ fn run_from_directory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead or deactivate the environment to silence this warning
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
@@ -2446,7 +2446,7 @@ fn run_from_directory() -> Result<()> {
     3.10.[X]
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=.venv` does not match the project environment path `[PROJECT_VENV]/` and will be ignored; use `--active` to target the active environment instead
+    warning: `VIRTUAL_ENV=.venv` does not match the project environment path `[PROJECT_VENV]/` and will be ignored; use `--active` to target the active environment instead or deactivate the environment to silence this warning
     Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
     Creating virtual environment at: [PROJECT_VENV]/
     Resolved 1 package in [TIME]
@@ -2462,7 +2462,7 @@ fn run_from_directory() -> Result<()> {
     3.10.[X]
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead or deactivate the environment to silence this warning
     Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
@@ -3458,7 +3458,7 @@ fn run_active_environment() -> Result<()> {
     Python 3.11.[X]
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead or deactivate the environment to silence this warning
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
