@@ -1817,6 +1817,224 @@ fn sync_non_existent_default_group() -> Result<()> {
     Ok(())
 }
 
+
+#[test]
+fn sync_corner_groups() -> Result<()> {
+    // Testing a bunch of random corner cases of flags so their behaviour is tracked.
+    // It's fine if we decide we want to support these later!
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        dev = ["iniconfig"]
+        foo = ["sniffio"]
+        bar = ["requests"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // --no-dev and --only-dev should error
+    // (This one could be made to work with overloading)
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-dev")
+        .arg("--only-dev"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--no-dev' cannot be used with '--only-dev'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --no-dev --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --dev and --only-group should error if they don't match
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--dev")
+        .arg("--only-group").arg("bar"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--dev' cannot be used with '--only-group <ONLY_GROUP>'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --dev and --only-group should error even if it's dev still
+    // (This one could be made to work the same as --dev --only-dev)
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--dev")
+        .arg("--only-group").arg("dev"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--dev' cannot be used with '--only-group <ONLY_GROUP>'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --group and --only-dev should error if they don't match
+    // (This one could be made to work the same as --dev --only-dev)
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--only-dev")
+        .arg("--group").arg("bar"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--only-dev' cannot be used with '--group <GROUP>'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --only-dev --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --group and --only-dev should error even if it's dev still
+    // (This one could be made to work the same as --dev --only-dev)
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--only-dev")
+        .arg("--group").arg("dev"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--only-dev' cannot be used with '--group <GROUP>'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --only-dev --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --all-groups and --only-dev should error
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--all-groups")
+        .arg("--only-dev"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--all-groups' cannot be used with '--only-dev'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --all-groups --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --all-groups and --only-group should error
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--all-groups")
+        .arg("--only-group").arg("bar"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--all-groups' cannot be used with '--only-group <ONLY_GROUP>'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --all-groups --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --group and --only-group should error if they name disjoint things
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--group").arg("foo")
+        .arg("--only-group").arg("bar"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--group <GROUP>' cannot be used with '--only-group <ONLY_GROUP>'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --group <GROUP> --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --group and --only-group should error if they name same things
+    // (This one would be fair to allow, but... is it worth it?)
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--group").arg("foo")
+        .arg("--only-group").arg("foo"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--group <GROUP>' cannot be used with '--only-group <ONLY_GROUP>'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --group <GROUP> --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --all-groups and --no-default-groups is redundant but should be --all-groups
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--all-groups")
+        .arg("--no-default-groups"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    Prepared 8 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + iniconfig==2.0.0
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+     + urllib3==2.2.1
+    ");
+
+    // --dev --only-dev should saturate as --only-dev
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--dev")
+        .arg("--only-dev"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    Uninstalled 7 packages in [TIME]
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - idna==3.6
+     - requests==2.31.0
+     - sniffio==1.3.1
+     - typing-extensions==4.10.0
+     - urllib3==2.2.1
+    ");
+    Ok(())
+}
+
 #[test]
 fn sync_default_groups() -> Result<()> {
     let context = TestContext::new("3.12");
