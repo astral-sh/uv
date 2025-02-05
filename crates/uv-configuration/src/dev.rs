@@ -169,7 +169,10 @@ impl DevGroupsSpecificationInner {
     /// Iterate over all groups the user explicitly asked for on the CLI
     pub fn explicit_names(&self) -> impl Iterator<Item = &GroupName> {
         let DevGroupsSpecificationHistory {
-            // FIXME: should this being Some add "dev" to the list?
+            // Strictly speaking this is an explicit reference to "dev"
+            // but we're currently tolerant of dev not existing when referenced with
+            // these flags, since it kinda implicitly always exists even if
+            // it's not properly defined in a config file.
             dev_mode: _,
             group,
             only_group,
