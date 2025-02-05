@@ -538,7 +538,11 @@ impl Workspace {
     ///
     /// If `UV_PROJECT_ENVIRONMENT` is set, it will take precedence. If a relative path is provided,
     /// it is resolved relative to the install path.
-    pub fn venv(&self, active: bool) -> PathBuf {
+    ///
+    /// If `active` is `true`, the `VIRTUAL_ENV` variable will be preferred. If it is `false`, any
+    /// warnings about mismatch between the active environment and the project environment will be
+    /// silenced.
+    pub fn venv(&self, active: Option<bool>) -> PathBuf {
         /// Resolve the `UV_PROJECT_ENVIRONMENT` value, if any.
         fn from_project_environment_variable(workspace: &Workspace) -> Option<PathBuf> {
             let value = std::env::var_os(EnvVars::UV_PROJECT_ENVIRONMENT)?;
@@ -606,24 +610,31 @@ impl Workspace {
         // Warn if it conflicts with `VIRTUAL_ENV`
         if let Some(from_virtual_env) = from_virtual_env_variable() {
             if !is_same_dir(&from_virtual_env, &project_env).unwrap_or(false) {
-                if active {
-                    debug!(
-                        "Using active virtual environment `{}` instead of project environment `{}`",
-                        from_virtual_env.user_display(),
-                        project_env.user_display()
-                    );
-                    return from_virtual_env;
+                match active {
+                    Some(true) => {
+                        debug!(
+                            "Using active virtual environment `{}` instead of project environment `{}`",
+                            from_virtual_env.user_display(),
+                            project_env.user_display()
+                        );
+                        return from_virtual_env;
+                    }
+                    Some(false) => {}
+                    None => {
+                        warn_user_once!(
+                            "`VIRTUAL_ENV={}` does not match the project environment path `{}` and will be ignored; use `--active` to target the active environment instead",
+                            from_virtual_env.user_display(),
+                            project_env.user_display()
+                        );
+                    }
                 }
-                warn_user_once!(
-                    "`VIRTUAL_ENV={}` does not match the project environment path `{}` and will be ignored; use `--active` to target the active environment instead",
-                    from_virtual_env.user_display(),
-                    project_env.user_display()
-                );
             }
         } else {
-            debug!(
-                "Use of the active virtual environment was requested, but `VIRTUAL_ENV` is not set"
-            );
+            if active.unwrap_or_default() {
+                debug!(
+                    "Use of the active virtual environment was requested, but `VIRTUAL_ENV` is not set"
+                );
+            }
         }
 
         project_env

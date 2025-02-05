@@ -45,7 +45,7 @@ pub(crate) async fn sync(
     project_dir: &Path,
     locked: bool,
     frozen: bool,
-    active: bool,
+    active: Option<bool>,
     all_packages: bool,
     package: Option<PackageName>,
     extras: ExtrasSpecification,

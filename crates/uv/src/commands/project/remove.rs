@@ -43,7 +43,7 @@ pub(crate) async fn remove(
     project_dir: &Path,
     locked: bool,
     frozen: bool,
-    active: bool,
+    active: Option<bool>,
     no_sync: bool,
     packages: Vec<PackageName>,
     dependency_type: DependencyType,
