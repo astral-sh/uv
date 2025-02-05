@@ -167,7 +167,7 @@ async fn untar_in(
 
         // Unpack the file into the destination directory.
         #[cfg_attr(not(unix), allow(unused_variables))]
-        let unpacked_at = file.unpack_in_memo(&dst, &mut memo).await?;
+        let unpacked_at = file.unpack_in_raw(&dst, &mut memo).await?;
 
         // Preserve the executable bit.
         #[cfg(unix)]
