@@ -64,6 +64,53 @@ fn init() {
     });
 }
 
+#[test]
+fn init_bare() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.init().arg("foo").arg("--bare"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    // No extra files should be created
+    context
+        .temp_dir
+        .child("foo/README.md")
+        .assert(predicate::path::missing());
+    context
+        .temp_dir
+        .child("foo/hello.py")
+        .assert(predicate::path::missing());
+    context
+        .temp_dir
+        .child("foo/.python-version")
+        .assert(predicate::path::missing());
+    context
+        .temp_dir
+        .child("foo/.git")
+        .assert(predicate::path::missing());
+
+    let pyproject = context.read("foo/pyproject.toml");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "###
+        );
+    });
+}
+
 /// Run `uv init --app` to create an application project
 #[test]
 fn init_application() -> Result<()> {
@@ -397,6 +444,161 @@ fn init_library() -> Result<()> {
     "###);
 
     Ok(())
+}
+
+#[test]
+fn init_bare_lib() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.init().arg("foo").arg("--bare").arg("--lib"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    // No extra files should be created
+    context
+        .temp_dir
+        .child("foo/README.md")
+        .assert(predicate::path::missing());
+    context
+        .temp_dir
+        .child("foo/src")
+        .assert(predicate::path::missing());
+
+    context
+        .temp_dir
+        .child("foo/.git")
+        .assert(predicate::path::missing());
+    context
+        .temp_dir
+        .child("foo/.python-version")
+        .assert(predicate::path::missing());
+
+    let pyproject = context.read("foo/pyproject.toml");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "###
+        );
+    });
+}
+
+#[test]
+fn init_bare_package() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.init().arg("foo").arg("--bare").arg("--package"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    // No extra files should be created
+    context
+        .temp_dir
+        .child("foo/README.md")
+        .assert(predicate::path::missing());
+    context
+        .temp_dir
+        .child("foo/src")
+        .assert(predicate::path::missing());
+
+    context
+        .temp_dir
+        .child("foo/.git")
+        .assert(predicate::path::missing());
+    context
+        .temp_dir
+        .child("foo/.python-version")
+        .assert(predicate::path::missing());
+
+    let pyproject = context.read("foo/pyproject.toml");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "###
+        );
+    });
+}
+
+#[test]
+fn init_bare_opt_in() {
+    let context = TestContext::new("3.12");
+
+    // With `--bare`, you can still opt-in to extras
+    // TODO(zanieb): Add options for `--pin-python` and `--readme`
+    uv_snapshot!(context.filters(), context.init().arg("foo").arg("--bare")
+        .arg("--description").arg("foo")
+        .arg("--vcs").arg("git"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    context
+        .temp_dir
+        .child("foo/README.md")
+        .assert(predicate::path::missing());
+    context
+        .temp_dir
+        .child("foo/src")
+        .assert(predicate::path::missing());
+    context
+        .temp_dir
+        .child("foo/.git")
+        .assert(predicate::path::is_dir());
+    context
+        .temp_dir
+        .child("foo/.python-version")
+        .assert(predicate::path::missing());
+
+    let pyproject = context.read("foo/pyproject.toml");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "foo"
+        requires-python = ">=3.12"
+        dependencies = []
+        "###
+        );
+    });
 }
 
 // General init --script correctness test
