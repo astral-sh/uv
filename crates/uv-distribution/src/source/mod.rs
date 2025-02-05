@@ -687,7 +687,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.build_context
                     .cache()
                     .freshness(&cache_entry, source.name())
-                    .inspect_err(|e| warn!("Failed to read cache entry: {e}"))
+                    .inspect_err(|e| warn!("XXX: Failed to read cache entry: {e}"))
                     .map_err(Error::CacheRead)?,
             ),
             Connectivity::Offline => CacheControl::AllowStale,
@@ -2100,7 +2100,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         .map_err(Error::CacheWrite)?;
         let reader = fs_err::tokio::File::open(&path)
             .await
-            .inspect_err(|err| debug!("Failed to open archive: {err}"))
+            .inspect_err(|err| debug!("XXX: Failed to open archive: {err}"))
             .map_err(Error::CacheRead)?;
 
         // Create a hasher for each hash algorithm.
@@ -2308,6 +2308,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         debug!("Prepared metadata for: {source}");
         let content = fs::read(dist_info.join("METADATA"))
             .await
+            .inspect_err(|err| debug!("XXX: Failed to read METADATA: {err}"))
             .map_err(Error::CacheRead)?;
         let metadata = ResolutionMetadata::parse_metadata(&content)?;
 
@@ -2455,7 +2456,9 @@ impl StaticMetadata {
             ) => {
                 debug!("No static `pyproject.toml` available for: {source} ({err:?})");
             }
-            Err(err) => return Err(err),
+            Err(err) => {
+                debug!("XXX: Failed to read static `pyproject.toml` for: {source} ({err:?})");
+                return Err(err) },
         }
 
         // If the source distribution is a source tree, avoid reading `PKG-INFO` or `egg-info`,
@@ -2490,7 +2493,9 @@ impl StaticMetadata {
             ) => {
                 debug!("No static `PKG-INFO` available for: {source} ({err:?})");
             }
-            Err(err) => return Err(err),
+            Err(err) => {
+                debug!("XXX: Failed to read static `PKG-INFO` for: {source} ({err:?})");
+                return Err(err) },
         }
 
         // Attempt to read static metadata from the `egg-info` directory.
@@ -2525,7 +2530,9 @@ impl StaticMetadata {
             ) => {
                 debug!("No static `egg-info` available for: {source} ({err:?})");
             }
-            Err(err) => return Err(err),
+            Err(err) => {
+                debug!("XXX: Failed to read static `egg-info` for: {source} ({err:?})");
+                return Err(err) },
         }
 
         Ok(Self::None)
@@ -2627,7 +2634,7 @@ impl HttpRevisionPointer {
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(err) => {
-                debug!("Failed to read HTTP revision pointer: {}", err);
+                debug!("XXX: Failed to read HTTP revision pointer: {}", err);
                 Err(Error::CacheRead(err))
             },
         }

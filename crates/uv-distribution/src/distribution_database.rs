@@ -11,7 +11,7 @@ use tempfile::TempDir;
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{info_span, instrument, warn, Instrument};
+use tracing::{debug, info_span, instrument, warn, Instrument};
 use url::Url;
 
 use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
@@ -25,7 +25,7 @@ use uv_distribution_types::{
     SourceDist,
 };
 use uv_extract::hash::Hasher;
-use uv_fs::write_atomic;
+use uv_fs::{write_atomic, CWD};
 use uv_platform_tags::Tags;
 use uv_pypi_types::HashDigest;
 use uv_types::{BuildContext, BuildStack};
@@ -382,7 +382,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 });
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-            Err(err) => return Err(Error::CacheRead(err)),
+            Err(err) => {
+                debug!("XXX: Failed to canonicalize target: {:?} (from: {:?}): {:?}", built_wheel.target, CWD, err);
+                return Err(Error::CacheRead(err)) },
         }
 
         // Otherwise, unzip the wheel.
