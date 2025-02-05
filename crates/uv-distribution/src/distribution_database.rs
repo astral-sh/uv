@@ -384,6 +384,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             Err(err) if err.kind() == io::ErrorKind::NotFound => {}
             Err(err) => {
                 debug!("XXX: Failed to canonicalize target: {:?} (from: {:?}): {:?}", built_wheel.target, CWD, err);
+
+                debug!("try_exists: {:?}", built_wheel.target.try_exists());
+
+                // Attempt to read the junction:
+                debug!("readlink: {:?}", built_wheel.target.read_link());
+
                 return Err(Error::CacheRead(err)) },
         }
 
