@@ -62,6 +62,8 @@ markdown_extensions:
       alternate_style: true
 plugins:
   - search
+  - git-revision-date-localized:
+      timezone: UTC # It can only be in UTC unless the ISO time can include timezone.
   - redirects:
       # Note that redirecting an anchor, e.g., `concepts/projects/#managing-dependencies` must be done
       # client-side and is implemented in `extra.js` instead.
@@ -164,3 +166,4 @@ validation:
   omitted_files: warn
   absolute_links: warn
   unrecognized_links: warn
+  anchors: warn
