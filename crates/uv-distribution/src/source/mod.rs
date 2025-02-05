@@ -687,6 +687,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.build_context
                     .cache()
                     .freshness(&cache_entry, source.name())
+                    .inspect_err(|e| warn!("Failed to read cache entry: {e}"))
                     .map_err(Error::CacheRead)?,
             ),
             Connectivity::Offline => CacheControl::AllowStale,
@@ -2099,6 +2100,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         .map_err(Error::CacheWrite)?;
         let reader = fs_err::tokio::File::open(&path)
             .await
+            .inspect_err(|err| debug!("Failed to open archive: {err}"))
             .map_err(Error::CacheRead)?;
 
         // Create a hasher for each hash algorithm.
@@ -2624,7 +2626,10 @@ impl HttpRevisionPointer {
                 Ok(Some(Self { revision }))
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(err) => Err(Error::CacheRead(err)),
+            Err(err) => {
+                debug!("Failed to read HTTP revision pointer: {}", err);
+                Err(Error::CacheRead(err))
+            },
         }
     }
 
@@ -2896,7 +2901,9 @@ impl CachedMetadata {
         match fs::read(&cache_entry.path()).await {
             Ok(cached) => Ok(Some(Self(rmp_serde::from_slice(&cached)?))),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(err) => Err(Error::CacheRead(err)),
+            Err(err) => {
+                debug!("Failed to read cached metadata: {}", err);
+                Err(Error::CacheRead(err)) },
         }
     }
 
