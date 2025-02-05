@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.28
+
+### Bug fixes
+
+- Allow discovering virtual environments from the first interpreter found on the `PATH` ([#11218](https://github.com/astral-sh/uv/pull/11218))
+- Clear ephemeral overlays when running tools ([#11141](https://github.com/astral-sh/uv/pull/11141))
+- Disable SSL in Git commands for `--allow-insecure-host` ([#11210](https://github.com/astral-sh/uv/pull/11210))
+- Fix hardlinks in tar unpacking ([#11221](https://github.com/astral-sh/uv/pull/11221))
+- Set base executable when returning virtual environment ([#11209](https://github.com/astral-sh/uv/pull/11209))
+- Use base Python for cached environments ([#11208](https://github.com/astral-sh/uv/pull/11208))
+
+### Documentation
+
+- Add documentation on verifying Docker image attestations ([#11140](https://github.com/astral-sh/uv/pull/11140))
+- Add `last updated` to documentation ([#11164](https://github.com/astral-sh/uv/pull/11164))
+
 ## 0.5.27
 
 ### Enhancements

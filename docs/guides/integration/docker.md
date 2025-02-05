@@ -31,7 +31,7 @@ $ docker run --rm -it ghcr.io/astral-sh/uv:debian uv --help
 The following distroless images are available:
 
 - `ghcr.io/astral-sh/uv:latest`
-- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.5.27`
+- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.5.28`
 - `ghcr.io/astral-sh/uv:{major}.{minor}`, e.g., `ghcr.io/astral-sh/uv:0.5` (the latest patch
   version)
 
@@ -72,7 +72,7 @@ And the following derived images are available:
 
 As with the distroless image, each derived image is published with uv version tags as
 `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}-{base}` and
-`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.5.27-alpine`.
+`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.5.28-alpine`.
 
 For more details, see the [GitHub Container](https://github.com/astral-sh/uv/pkgs/container/uv)
 page.
@@ -110,7 +110,7 @@ Note this requires `curl` to be available.
 In either case, it is best practice to pin to a specific uv version, e.g., with:
 
 ```dockerfile
-COPY --from=ghcr.io/astral-sh/uv:0.5.27 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.5.28 /uv /uvx /bin/
 ```
 
 !!! tip
@@ -128,7 +128,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.5.27 /uv /uvx /bin/
 Or, with the installer:
 
 ```dockerfile
-ADD https://astral.sh/uv/0.5.27/install.sh /uv-installer.sh
+ADD https://astral.sh/uv/0.5.28/install.sh /uv-installer.sh
 ```
 
 ### Installing a project
@@ -534,7 +534,7 @@ and hasn't been tampered with since.
 
     You probably want to verify the attestation for a specific version tag, rather than `:latest`,
     or even the specific image digest, such as
-    `ghcr.io/astral-sh/uv:0.5.27@sha256:5adf09a5a526f380237408032a9308000d14d5947eafa687ad6c6a2476787b4f`.
+    `ghcr.io/astral-sh/uv:0.5.28@sha256:5adf09a5a526f380237408032a9308000d14d5947eafa687ad6c6a2476787b4f`.
 
 GitHub attestations build on the [sigstore.dev infrastructure](https://www.sigstore.dev/). As such
 you can also use the [`cosign` command](https://github.com/sigstore/cosign) to verify the
