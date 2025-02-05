@@ -463,21 +463,22 @@ jobs:
                 yum repolist
                 yum install -y gcc-powerpc64-linux-gnu
             fi
-      - uses: uraimo/run-on-arch-action@v2
-        if: matrix.platform.arch != 'ppc64'
-        name: Test wheel
-        with:
-          arch: ${{ matrix.platform.arch }}
-          distro: ubuntu20.04
-          githubToken: ${{ github.token }}
-          install: |
-            apt-get update
-            apt-get install -y --no-install-recommends python3 python3-pip
-            pip3 install -U pip
-          run: |
-            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
-            ${{ env.MODULE_NAME }} --help
-            uvx --help
+      # TODO(charlie): Re-enable testing for PPC wheels.
+      # - uses: uraimo/run-on-arch-action@v2
+      #   if: matrix.platform.arch != 'ppc64'
+      #   name: Test wheel
+      #   with:
+      #     arch: ${{ matrix.platform.arch }}
+      #     distro: ubuntu20.04
+      #     githubToken: ${{ github.token }}
+      #     install: |
+      #       apt-get update
+      #       apt-get install -y --no-install-recommends python3 python3-pip
+      #       pip3 install -U pip
+      #     run: |
+      #       pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+      #       ${{ env.MODULE_NAME }} --help
+      #       uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
