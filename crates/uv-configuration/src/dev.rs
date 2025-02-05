@@ -17,7 +17,9 @@ pub struct DevGroupsSpecificationInner {
     exclude: Vec<GroupName>,
     /// Whether an `--only` flag was passed.
     ///
-    /// If true, users of this API should refrain from doing "non-group things".
+    /// If true, users of this API should refrain from looking at packages
+    /// that *aren't* specified by the dependency-groups. This is exposed
+    /// via [`DevGroupsSpecificationInner::prod`][].
     only_groups: bool,
     /// The "raw" flags/settings we were passed for diagnostics.
     history: DevGroupsSpecificationHistory,
@@ -28,7 +30,7 @@ impl DevGroupsSpecification {
     ///
     /// This is the "real" constructor, it's basically taking raw CLI flags but in
     /// a way that's a bit nicer for other constructors to use.
-    pub fn from_history(history: DevGroupsSpecificationHistory) -> Self {
+    fn from_history(history: DevGroupsSpecificationHistory) -> Self {
         let DevGroupsSpecificationHistory {
             dev_mode,
             mut group,
@@ -47,9 +49,9 @@ impl DevGroupsSpecification {
             None => {}
         }
 
-        // The only difference between `group` and `only_group` is that if the latter is non-empty
-        // then users of this API should refuse to do non-group things. So we just record whether
-        // it was and then treat them as equivalent.
+        // `group` and `only_group` actually have the same meanings: packages to include.
+        // But if `only_group` is non-empty then *other* packages should be excluded.
+        // So we just record whether it was and then treat the two lists as equivalent.
         let only_groups = !only_group.is_empty();
         // --only flags imply --no-default-groups
         let default_groups = !no_default_groups && !only_groups;
@@ -148,7 +150,12 @@ impl std::ops::Deref for DevGroupsSpecification {
 }
 
 impl DevGroupsSpecificationInner {
-    /// Returns `true` if the specification allows for production dependencies.
+    /// Returns `true` if packages other than the ones referenced by these
+    /// dependency-groups should be considered.
+    ///
+    /// That is, if I tell you to install a project and this is false,
+    /// you should ignore the project itself and all its dependencies,
+    /// and instead just install the dependency-groups.
     ///
     /// (This is really just asking if an --only flag was passed.)  
     pub fn prod(&self) -> bool {
