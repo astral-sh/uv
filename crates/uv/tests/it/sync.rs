@@ -3183,6 +3183,131 @@ fn sync_custom_environment_path() -> Result<()> {
 }
 
 #[test]
+fn sync_active_environment() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Running `uv sync` with `VIRTUAL_ENV` should warn
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    context
+        .temp_dir
+        .child(".venv")
+        .assert(predicate::path::is_dir());
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::missing());
+
+    // Using `--active` should create the environment
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: foo
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::is_dir());
+
+    // A subsequent sync will re-use the environment
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    // Setting both the `VIRTUAL_ENV` and `UV_PROJECT_ENVIRONMENT` is fine if they agree
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--active")
+        .env(EnvVars::VIRTUAL_ENV, "foo")
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    // If they disagree, we use `VIRTUAL_ENV` because of `--active`
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--active")
+        .env(EnvVars::VIRTUAL_ENV, "foo")
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    context
+        .temp_dir
+        .child("bar")
+        .assert(predicate::path::missing());
+
+    // Requesting another Python version will invalidate the environment
+    uv_snapshot!(context.filters(), context.sync()
+        .env(EnvVars::VIRTUAL_ENV, "foo").arg("--active").arg("-p").arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: foo
+    Creating virtual environment at: foo
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
 #[cfg(feature = "git")]
 fn sync_workspace_custom_environment_path() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -3417,7 +3542,7 @@ fn sync_legacy_non_project_warning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Resolved 2 packages in [TIME]
     Audited 1 package in [TIME]
     "###);
@@ -3429,7 +3554,7 @@ fn sync_legacy_non_project_warning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Resolved 2 packages in [TIME]
     Audited 1 package in [TIME]
     "###);
@@ -3455,7 +3580,7 @@ fn sync_legacy_non_project_warning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=foo` does not match the project environment path `bar` and will be ignored
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `bar` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: bar
     Resolved 2 packages in [TIME]
@@ -3474,7 +3599,7 @@ fn sync_legacy_non_project_warning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=foo` does not match the project environment path `[TEMP_DIR]/foo` and will be ignored
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `[TEMP_DIR]/foo` and will be ignored; use `--active` to target the active environment instead
     Resolved 2 packages in [TIME]
     Audited 1 package in [TIME]
     "###);

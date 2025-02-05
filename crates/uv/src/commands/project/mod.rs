@@ -602,6 +602,7 @@ impl ProjectInterpreter {
         allow_insecure_host: &[TrustedHost],
         install_mirrors: &PythonInstallMirrors,
         no_config: bool,
+        active: bool,
         cache: &Cache,
         printer: Printer,
     ) -> Result<Self, ProjectError> {
@@ -614,7 +615,7 @@ impl ProjectInterpreter {
             .await?;
 
         // Read from the virtual environment first.
-        let venv = workspace.venv();
+        let venv = workspace.venv(active);
         match PythonEnvironment::from_root(&venv, cache) {
             Ok(venv) => {
                 if python_request.as_ref().map_or(true, |request| {
@@ -924,6 +925,7 @@ pub(crate) async fn get_or_init_environment(
     native_tls: bool,
     allow_insecure_host: &[TrustedHost],
     no_config: bool,
+    active: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<PythonEnvironment, ProjectError> {
@@ -938,6 +940,7 @@ pub(crate) async fn get_or_init_environment(
         allow_insecure_host,
         install_mirrors,
         no_config,
+        active,
         cache,
         printer,
     )
@@ -948,7 +951,7 @@ pub(crate) async fn get_or_init_environment(
 
         // Otherwise, create a virtual environment with the discovered interpreter.
         ProjectInterpreter::Interpreter(interpreter) => {
-            let venv = workspace.venv();
+            let venv = workspace.venv(active);
 
             // Avoid removing things that are not virtual environments
             let should_remove = match (venv.try_exists(), venv.join("pyvenv.cfg").try_exists()) {

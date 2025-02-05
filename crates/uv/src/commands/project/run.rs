@@ -65,6 +65,7 @@ pub(crate) async fn run(
     show_resolution: bool,
     locked: bool,
     frozen: bool,
+    active: bool,
     no_sync: bool,
     isolated: bool,
     all_packages: bool,
@@ -666,6 +667,7 @@ pub(crate) async fn run(
                     native_tls,
                     allow_insecure_host,
                     no_config,
+                    active,
                     cache,
                     printer,
                 )

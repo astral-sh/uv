@@ -190,8 +190,9 @@ To target this environment, you'd export `UV_PROJECT_ENVIRONMENT=/usr/local`.
 
 !!! note
 
-    uv does not read the `VIRTUAL_ENV` environment variable during project operations. A warning
-    will be displayed if `VIRTUAL_ENV` is set to a different path than the project's environment.
+    By default, uv does not read the `VIRTUAL_ENV` environment variable during project operations.
+    A warning will be displayed if `VIRTUAL_ENV` is set to a different path than the project's
+    environment. The `--active` flag can be used to opt-in to respecting `VIRTUAL_ENV`.
 
 ## Limited resolution environments
 

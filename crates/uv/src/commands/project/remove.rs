@@ -43,6 +43,7 @@ pub(crate) async fn remove(
     project_dir: &Path,
     locked: bool,
     frozen: bool,
+    active: bool,
     no_sync: bool,
     packages: Vec<PackageName>,
     dependency_type: DependencyType,
@@ -209,6 +210,7 @@ pub(crate) async fn remove(
                     allow_insecure_host,
                     &install_mirrors,
                     no_config,
+                    active,
                     cache,
                     printer,
                 )
@@ -228,6 +230,7 @@ pub(crate) async fn remove(
                     native_tls,
                     allow_insecure_host,
                     no_config,
+                    active,
                     cache,
                     printer,
                 )

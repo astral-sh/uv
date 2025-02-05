@@ -187,7 +187,7 @@ async fn venv_impl(
                 // This isn't strictly necessary and we may want to change it later, but this
                 // avoids a breaking change when adding project environment support to `uv venv`.
                 (project.workspace().install_path() == project_dir)
-                    .then(|| project.workspace().venv())
+                    .then(|| project.workspace().venv(false))
             })
             .unwrap_or(PathBuf::from(".venv")),
     );

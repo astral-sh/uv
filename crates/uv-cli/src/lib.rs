@@ -2805,6 +2805,19 @@ pub struct RunArgs {
     #[arg(long)]
     pub isolated: bool,
 
+    /// Prefer the active virtual environment over the project's virtual environment.
+    ///
+    /// If the project virtual environment is active or no virtual environment is active, this has
+    /// no effect.
+    #[arg(long, overrides_with = "no_active")]
+    pub active: bool,
+
+    /// Prefer project's virtual environment over an active environment.
+    ///
+    /// This is the default behavior.
+    #[arg(long, overrides_with = "active", hide = true)]
+    pub no_active: bool,
+
     /// Avoid syncing the virtual environment.
     ///
     /// Implies `--frozen`, as the project dependencies will be ignored (i.e., the lockfile will not
@@ -3003,6 +3016,19 @@ pub struct SyncArgs {
     /// Perform an exact sync, removing extraneous packages.
     #[arg(long, overrides_with("inexact"), hide = true)]
     pub exact: bool,
+
+    /// Prefer the active virtual environment over the project's virtual environment.
+    ///
+    /// If the project virtual environment is active or no virtual environment is active, this has
+    /// no effect.
+    #[arg(long, overrides_with = "no_active")]
+    pub active: bool,
+
+    /// Prefer project's virtual environment over an active environment.
+    ///
+    /// This is the default behavior.
+    #[arg(long, overrides_with = "active", hide = true)]
+    pub no_active: bool,
 
     /// Do not install the current project.
     ///
@@ -3247,6 +3273,19 @@ pub struct AddArgs {
     #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "locked")]
     pub frozen: bool,
 
+    /// Prefer the active virtual environment over the project's virtual environment.
+    ///
+    /// If the project virtual environment is active or no virtual environment is active, this has
+    /// no effect.
+    #[arg(long, overrides_with = "no_active")]
+    pub active: bool,
+
+    /// Prefer project's virtual environment over an active environment.
+    ///
+    /// This is the default behavior.
+    #[arg(long, overrides_with = "active", hide = true)]
+    pub no_active: bool,
+
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
 
@@ -3312,6 +3351,19 @@ pub struct RemoveArgs {
     /// Avoid syncing the virtual environment after re-locking the project.
     #[arg(long, env = EnvVars::UV_NO_SYNC, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
     pub no_sync: bool,
+
+    /// Prefer the active virtual environment over the project's virtual environment.
+    ///
+    /// If the project virtual environment is active or no virtual environment is active, this has
+    /// no effect.
+    #[arg(long, overrides_with = "no_active")]
+    pub active: bool,
+
+    /// Prefer project's virtual environment over an active environment.
+    ///
+    /// This is the default behavior.
+    #[arg(long, overrides_with = "active", hide = true)]
+    pub no_active: bool,
 
     /// Assert that the `uv.lock` will remain unchanged.
     ///

@@ -124,7 +124,7 @@ fn init_application() -> Result<()> {
     Hello from foo!
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
@@ -305,7 +305,7 @@ fn init_application_package() -> Result<()> {
     Hello from foo!
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
@@ -387,7 +387,7 @@ fn init_library() -> Result<()> {
     Hello from foo!
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
