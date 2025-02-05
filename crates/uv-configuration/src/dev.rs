@@ -58,6 +58,7 @@ impl DevGroupsSpecification {
 
         let include = if all_groups {
             // If this is set we can ignore group/only_group/defaults as irrelevant
+            // (`--all-groups --only-*` is rejected at the CLI level, don't worry about it).
             IncludeGroups::All
         } else {
             // Merge all these lists, they're equivalent now
@@ -88,13 +89,17 @@ impl DevGroupsSpecification {
         only_group: Vec<GroupName>,
         all_groups: bool,
     ) -> Self {
-        // Lower the --dev flags into a single dev mode
-        let dev_mode = if dev {
-            Some(DevMode::Include)
-        } else if only_dev {
+        // Lower the --dev flags into a single dev mode.
+        //
+        // In theory only one of these 3 flags should be set (enforced by CLI),
+        // but we explicitly allow `--dev` and `--only-dev` to both be set,
+        // and "saturate" that to `--only-dev`.
+        let dev_mode = if only_dev {
             Some(DevMode::Only)
         } else if no_dev {
             Some(DevMode::Exclude)
+        } else if dev {
+            Some(DevMode::Include)
         } else {
             None
         };

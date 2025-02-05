@@ -2731,7 +2731,7 @@ pub struct RunArgs {
     /// Omit other dependencies. The project itself will also be omitted.
     ///
     /// This option is an alias for `--only-group dev`.
-    #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"])]
+    #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
     pub only_dev: bool,
 
     /// Install any editable dependencies, including the project and any workspace members, as
@@ -2950,7 +2950,7 @@ pub struct SyncArgs {
     /// Omit other dependencies. The project itself will also be omitted.
     ///
     /// This option is an alias for `--only-group dev`.
-    #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"])]
+    #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
     pub only_dev: bool,
 
     /// Include dependencies from the specified dependency group.
@@ -3389,7 +3389,7 @@ pub struct TreeArgs {
     /// Omit other dependencies. The project itself will also be omitted.
     ///
     /// This option is an alias for `--only-group dev`.
-    #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"])]
+    #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
     pub only_dev: bool,
 
     /// Omit the development dependency group.
@@ -3563,7 +3563,7 @@ pub struct ExportArgs {
     /// Omit other dependencies. The project itself will also be omitted.
     ///
     /// This option is an alias for `--only-group dev`.
-    #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"])]
+    #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
     pub only_dev: bool,
 
     /// Include dependencies from the specified dependency group.
