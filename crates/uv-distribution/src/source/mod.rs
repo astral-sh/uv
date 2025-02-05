@@ -2170,10 +2170,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // Build into a temporary directory, to prevent partial builds.
+        let tempdir_id = nanoid::nanoid!();
         let temp_dir = self
             .build_context
-            .cache()
-            .build_dir()
+            .cache().root().join(tempdir_id);
+
+        fs_err::tokio::create_dir(&temp_dir)
+            .await
             .map_err(Error::CacheWrite)?;
 
         // Build the wheel.
@@ -2186,7 +2189,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .direct_build(
                 source_root,
                 subdirectory,
-                temp_dir.path(),
+                &temp_dir,
                 if source.is_editable() {
                     BuildKind::Editable
                 } else {
@@ -2218,14 +2221,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 )
                 .await
                 .map_err(|err| Error::Build(err.into()))?
-                .wheel(temp_dir.path())
+                .wheel(&temp_dir)
                 .await
                 .map_err(Error::Build)?
         };
 
         // Read the metadata from the wheel.
         let filename = WheelFilename::from_str(&disk_filename)?;
-        let metadata = read_wheel_metadata(&filename, &temp_dir.path().join(&disk_filename))?;
+        let metadata = read_wheel_metadata(&filename, &temp_dir.join(&disk_filename))?;
 
         // Validate the metadata.
         validate_metadata(source, &metadata)?;
@@ -2233,7 +2236,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Move the wheel to the cache.
         rename_with_retry(
-            temp_dir.path().join(&disk_filename),
+            temp_dir.join(&disk_filename),
             cache_shard.join(&disk_filename),
         )
         .await
