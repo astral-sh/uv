@@ -474,15 +474,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cachedir"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4703f3937077db8fa35bee3c8789343c1aec2585f0146f09d658d4ccc0e8d873"
-dependencies = [
- "tempfile",
-]
-
-[[package]]
 name = "camino"
 version = "1.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5085,7 +5076,6 @@ name = "uv-fs"
 version = "0.0.1"
 dependencies = [
  "backon",
- "cachedir",
  "dunce",
  "either",
  "encoding_rs_io",
