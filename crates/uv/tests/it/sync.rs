@@ -1864,15 +1864,15 @@ fn sync_corner_groups() -> Result<()> {
         .arg("--dev")
         .arg("--only-group").arg("bar"), @r"
     success: false
-    exit_code: 2
+    exit_code: 101
     ----- stdout -----
 
     ----- stderr -----
-    error: the argument '--dev' cannot be used with '--only-group <ONLY_GROUP>'
-
-    Usage: uv sync --cache-dir [CACHE_DIR] --exclude-newer <EXCLUDE_NEWER>
-
-    For more information, try '--help'.
+    thread 'main2' panicked at crates/uv-configuration/src/dev.rs:247:17:
+    internal error: entered unreachable code: cannot specify both `--dev` and `--only-group`
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+    thread 'main' panicked at [WORKSPACE]/crates/uv/src/lib.rs:1907:10:
+    Tokio executor failed, was there a panic?: Any { .. }
     ");
 
     // --dev and --only-group should error even if it's dev still
@@ -1881,15 +1881,15 @@ fn sync_corner_groups() -> Result<()> {
         .arg("--dev")
         .arg("--only-group").arg("dev"), @r"
     success: false
-    exit_code: 2
+    exit_code: 101
     ----- stdout -----
 
     ----- stderr -----
-    error: the argument '--dev' cannot be used with '--only-group <ONLY_GROUP>'
-
-    Usage: uv sync --cache-dir [CACHE_DIR] --exclude-newer <EXCLUDE_NEWER>
-
-    For more information, try '--help'.
+    thread 'main2' panicked at crates/uv-configuration/src/dev.rs:247:17:
+    internal error: entered unreachable code: cannot specify both `--dev` and `--only-group`
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+    thread 'main' panicked at [WORKSPACE]/crates/uv/src/lib.rs:1907:10:
+    Tokio executor failed, was there a panic?: Any { .. }
     ");
 
     // --group and --only-dev should error if they don't match
@@ -1898,15 +1898,15 @@ fn sync_corner_groups() -> Result<()> {
         .arg("--only-dev")
         .arg("--group").arg("bar"), @r"
     success: false
-    exit_code: 2
+    exit_code: 101
     ----- stdout -----
 
     ----- stderr -----
-    error: the argument '--only-dev' cannot be used with '--group <GROUP>'
-
-    Usage: uv sync --cache-dir [CACHE_DIR] --only-dev --exclude-newer <EXCLUDE_NEWER>
-
-    For more information, try '--help'.
+    thread 'main2' panicked at crates/uv-configuration/src/dev.rs:235:17:
+    internal error: entered unreachable code: cannot specify both `--only-dev` and `--group`
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+    thread 'main' panicked at [WORKSPACE]/crates/uv/src/lib.rs:1907:10:
+    Tokio executor failed, was there a panic?: Any { .. }
     ");
 
     // --group and --only-dev should error even if it's dev still
@@ -1915,31 +1915,36 @@ fn sync_corner_groups() -> Result<()> {
         .arg("--only-dev")
         .arg("--group").arg("dev"), @r"
     success: false
-    exit_code: 2
+    exit_code: 101
     ----- stdout -----
 
     ----- stderr -----
-    error: the argument '--only-dev' cannot be used with '--group <GROUP>'
-
-    Usage: uv sync --cache-dir [CACHE_DIR] --only-dev --exclude-newer <EXCLUDE_NEWER>
-
-    For more information, try '--help'.
+    thread 'main2' panicked at crates/uv-configuration/src/dev.rs:235:17:
+    internal error: entered unreachable code: cannot specify both `--only-dev` and `--group`
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+    thread 'main' panicked at [WORKSPACE]/crates/uv/src/lib.rs:1907:10:
+    Tokio executor failed, was there a panic?: Any { .. }
     ");
 
     // --all-groups and --only-dev should error
     uv_snapshot!(context.filters(), context.sync()
         .arg("--all-groups")
         .arg("--only-dev"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: the argument '--all-groups' cannot be used with '--only-dev'
-
-    Usage: uv sync --cache-dir [CACHE_DIR] --all-groups --exclude-newer <EXCLUDE_NEWER>
-
-    For more information, try '--help'.
+    Resolved 9 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + iniconfig==2.0.0
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + urllib3==2.2.1
     ");
 
     // --all-groups and --only-group should error
@@ -2001,16 +2006,17 @@ fn sync_corner_groups() -> Result<()> {
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    Prepared 8 packages in [TIME]
-    Installed 8 packages in [TIME]
-     + certifi==2024.2.2
-     + charset-normalizer==3.3.2
-     + idna==3.6
-     + iniconfig==2.0.0
-     + requests==2.31.0
-     + sniffio==1.3.1
+    Prepared 1 package in [TIME]
+    Uninstalled 7 packages in [TIME]
+    Installed 1 package in [TIME]
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - idna==3.6
+     - iniconfig==2.0.0
+     - requests==2.31.0
+     - sniffio==1.3.1
      + typing-extensions==4.10.0
-     + urllib3==2.2.1
+     - urllib3==2.2.1
     ");
 
     // --dev --only-dev should saturate as --only-dev
@@ -2023,14 +2029,10 @@ fn sync_corner_groups() -> Result<()> {
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    Uninstalled 7 packages in [TIME]
-     - certifi==2024.2.2
-     - charset-normalizer==3.3.2
-     - idna==3.6
-     - requests==2.31.0
-     - sniffio==1.3.1
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
      - typing-extensions==4.10.0
-     - urllib3==2.2.1
     ");
     Ok(())
 }
