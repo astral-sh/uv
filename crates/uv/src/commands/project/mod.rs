@@ -8,6 +8,7 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
+use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, ExtrasSpecification,
@@ -18,7 +19,7 @@ use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     Index, Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_fs::{Simplified, CWD};
+use uv_fs::{LockedFile, Simplified, CWD};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
@@ -743,6 +744,18 @@ impl ProjectInterpreter {
             ProjectInterpreter::Environment(venv) => venv.into_interpreter(),
         }
     }
+
+    /// Grab a file lock for the environment to prevent concurrent writes across processes.
+    pub(crate) async fn lock(workspace: &Workspace) -> Result<LockedFile, std::io::Error> {
+        LockedFile::acquire(
+            std::env::temp_dir().join(format!(
+                "uv-{}.lock",
+                cache_digest(workspace.install_path())
+            )),
+            workspace.install_path().user_display(),
+        )
+        .await
+    }
 }
 
 /// The source of a `Requires-Python` specifier.
@@ -929,6 +942,9 @@ pub(crate) async fn get_or_init_environment(
     cache: &Cache,
     printer: Printer,
 ) -> Result<PythonEnvironment, ProjectError> {
+    // Lock the project environment to avoid synchronization issues.
+    let _lock = ProjectInterpreter::lock(workspace).await?;
+
     match ProjectInterpreter::discover(
         workspace,
         workspace.install_path().as_ref(),
