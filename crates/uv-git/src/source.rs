@@ -133,7 +133,7 @@ impl GitSource {
         // Report the checkout operation to the reporter.
         if let Some(task) = task {
             if let Some(reporter) = self.reporter.as_ref() {
-                reporter.on_checkout_complete(remote.url(), short_id.as_str(), task);
+                reporter.on_checkout_complete(remote.url(), actual_rev.as_str(), task);
             }
         }
 
