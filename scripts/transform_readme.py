@@ -20,7 +20,7 @@ URL_LIGHT = URL.format("629e59c0-9c6e-4013-9ad4-adb2bcf5080d")
 URL_DARK = URL.format("03aa9163-1c79-4a87-a31d-7a9311ed9310")
 
 # https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax#specifying-the-theme-an-image-is-shown-to
-GITHUB = f"""
+GITHUB_BENCHMARK = f"""
 <p align="center">
   <picture align="center">
     <source media="(prefers-color-scheme: dark)" srcset="{URL_DARK}">
@@ -31,10 +31,16 @@ GITHUB = f"""
 """
 
 # https://github.com/pypi/warehouse/issues/11251
-PYPI = f"""
+PYPI_BENCHMARK = f"""
 <p align="center">
   <img alt="Shows a bar chart with benchmark results." src="{URL_LIGHT}">
 </p>
+"""
+
+GITHUB_BADGES = f"""
+<a href="https://pypi.python.org/pypi/uv"><img src="https://img.shields.io/pypi/v/uv.svg" alt="Latest PyPI version" /></a>
+<a href="https://pypi.python.org/pypi/uv"><img src="https://img.shields.io/pypi/pyversions/uv.svg" alt="Supported Python versions" /></a>
+<a href="https://discord.gg/astral-sh"><img src="https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white" alt="Discord" /></a>
 """
 
 
@@ -44,12 +50,22 @@ def main(target: str) -> None:
     # Replace the benchmark images based on the target.
     with Path("README.md").open(encoding="utf8") as fp:
         content = fp.read()
-        if GITHUB not in content:
-            msg = "README.md is not in the expected format."
+        if GITHUB_BENCHMARK not in content:
+            msg = "README.md is not in the expected format; missing GITHUB_BENCHMARK content."
+            raise ValueError(msg)
+
+        if GITHUB_BADGES not in content:
+            msg = "README.md is not in the expected format; missing GITHUB_BADGES content."
             raise ValueError(msg)
 
     if target == "pypi":
-        content = content.replace(GITHUB, PYPI)
+        content = content.replace(GITHUB_BENCHMARK, PYPI_BENCHMARK)
+    else:
+        msg = f"Unknown target: {target}"
+        raise ValueError(msg)
+
+    if target == "pypi":
+        content = content.replace(GITHUB_BADGES, "")
     else:
         msg = f"Unknown target: {target}"
         raise ValueError(msg)
@@ -64,23 +80,21 @@ def main(target: str) -> None:
             raise ValueError("Version not found in pyproject.toml")
 
     # Replace the badges with versioned URLs.
-    for existing, replacement in [
-        (
-            "https://img.shields.io/pypi/v/uv.svg",
-            f"https://img.shields.io/pypi/v/uv/{version}.svg",
-        ),
-        (
-            "https://img.shields.io/pypi/l/uv.svg",
-            f"https://img.shields.io/pypi/l/uv/{version}.svg",
-        ),
-        (
-            "https://img.shields.io/pypi/pyversions/uv.svg",
-            f"https://img.shields.io/pypi/pyversions/uv/{version}.svg",
-        ),
-    ]:
-        if existing not in content:
-            raise ValueError(f"Badge not found in README.md: {existing}")
-        content = content.replace(existing, replacement)
+    # (but we drop the badges on PyPI)
+    if target != "pypi":
+        for existing, replacement in [
+            (
+                "https://img.shields.io/pypi/v/uv.svg",
+                f"https://img.shields.io/pypi/v/uv/{version}.svg",
+            ),
+            (
+                "https://img.shields.io/pypi/pyversions/uv.svg",
+                f"https://img.shields.io/pypi/pyversions/uv/{version}.svg",
+            ),
+        ]:
+            if existing not in content:
+                raise ValueError(f"Badge not found in README.md: {existing}")
+            content = content.replace(existing, replacement)
 
     # Replace any relative URLs (e.g., `[PIP_COMPATIBILITY.md`) with absolute URLs.
     def replace(match: re.Match) -> str:
