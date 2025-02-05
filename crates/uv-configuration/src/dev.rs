@@ -52,7 +52,7 @@ impl DevGroupsSpecification {
         // it was and then treat them as equivalent.
         let only_groups = !only_group.is_empty();
         // --only flags imply --no-default-groups
-        let no_default_groups = no_default_groups || only_groups;
+        let default_groups = !no_default_groups && !only_groups;
 
         let include = if all_groups {
             // If this is set we can ignore group/only_group/defaults as irrelevant
@@ -60,8 +60,7 @@ impl DevGroupsSpecification {
         } else {
             // Merge all these lists, they're equivalent now
             group.append(&mut only_group);
-            // Throw out the defaults if those are disabled
-            if !no_default_groups {
+            if default_groups {
                 group.append(&mut defaults);
             }
             IncludeGroups::Some(group)
