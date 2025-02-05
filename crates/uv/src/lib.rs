@@ -1434,7 +1434,7 @@ async fn run_project(
                 args.build_backend,
                 args.no_readme,
                 args.author_from,
-                args.no_pin_python,
+                args.pin_python,
                 args.python,
                 args.install_mirrors,
                 args.no_workspace,

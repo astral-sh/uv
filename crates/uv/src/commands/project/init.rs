@@ -48,7 +48,7 @@ pub(crate) async fn init(
     build_backend: Option<ProjectBuildBackend>,
     no_readme: bool,
     author_from: Option<AuthorFrom>,
-    no_pin_python: bool,
+    pin_python: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     no_workspace: bool,
@@ -83,7 +83,7 @@ pub(crate) async fn init(
                 no_workspace,
                 no_readme,
                 author_from,
-                no_pin_python,
+                pin_python,
                 package,
                 native_tls,
                 allow_insecure_host,
@@ -142,7 +142,7 @@ pub(crate) async fn init(
                 build_backend,
                 no_readme,
                 author_from,
-                no_pin_python,
+                pin_python,
                 python,
                 install_mirrors,
                 no_workspace,
@@ -201,7 +201,7 @@ async fn init_script(
     no_workspace: bool,
     no_readme: bool,
     author_from: Option<AuthorFrom>,
-    no_pin_python: bool,
+    pin_python: bool,
     package: bool,
     native_tls: bool,
     allow_insecure_host: &[TrustedHost],
@@ -253,7 +253,7 @@ async fn init_script(
         python.as_deref(),
         &install_mirrors,
         &CWD,
-        no_pin_python,
+        pin_python,
         python_preference,
         python_downloads,
         no_config,
@@ -286,7 +286,7 @@ async fn init_project(
     build_backend: Option<ProjectBuildBackend>,
     no_readme: bool,
     author_from: Option<AuthorFrom>,
-    no_pin_python: bool,
+    pin_python: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     no_workspace: bool,
@@ -387,14 +387,14 @@ async fn init_project(
                     u64::from(minor),
                 ]));
 
-                let python_request = if no_pin_python {
-                    None
-                } else {
+                let python_request = if pin_python {
                     Some(PythonRequest::Version(VersionRequest::MajorMinor(
                         major,
                         minor,
                         PythonVariant::Default,
                     )))
+                } else {
+                    None
                 };
 
                 (requires_python, python_request)
@@ -411,15 +411,15 @@ async fn init_project(
                     u64::from(patch),
                 ]));
 
-                let python_request = if no_pin_python {
-                    None
-                } else {
+                let python_request = if pin_python {
                     Some(PythonRequest::Version(VersionRequest::MajorMinorPatch(
                         major,
                         minor,
                         patch,
                         PythonVariant::Default,
                     )))
+                } else {
+                    None
                 };
 
                 (requires_python, python_request)
@@ -428,9 +428,7 @@ async fn init_project(
             python_request @ PythonRequest::Version(VersionRequest::Range(ref specifiers, _)) => {
                 let requires_python = RequiresPython::from_specifiers(specifiers);
 
-                let python_request = if no_pin_python {
-                    None
-                } else {
+                let python_request = if pin_python {
                     let interpreter = PythonInstallation::find_or_download(
                         Some(python_request),
                         EnvironmentPreference::OnlySystem,
@@ -450,6 +448,8 @@ async fn init_project(
                         interpreter.python_minor(),
                         PythonVariant::Default,
                     )))
+                } else {
+                    None
                 };
 
                 (requires_python, python_request)
@@ -472,14 +472,14 @@ async fn init_project(
                 let requires_python =
                     RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
 
-                let python_request = if no_pin_python {
-                    None
-                } else {
+                let python_request = if pin_python {
                     Some(PythonRequest::Version(VersionRequest::MajorMinor(
                         interpreter.python_major(),
                         interpreter.python_minor(),
                         PythonVariant::Default,
                     )))
+                } else {
+                    None
                 };
 
                 (requires_python, python_request)
@@ -494,14 +494,14 @@ async fn init_project(
             RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
 
         // Pin to the minor version.
-        let python_request = if no_pin_python {
-            None
-        } else {
+        let python_request = if pin_python {
             Some(PythonRequest::Version(VersionRequest::MajorMinor(
                 interpreter.python_major(),
                 interpreter.python_minor(),
                 PythonVariant::Default,
             )))
+        } else {
+            None
         };
 
         (requires_python, python_request)
@@ -519,9 +519,7 @@ async fn init_project(
         ));
 
         // Pin to the minor version.
-        let python_request = if no_pin_python {
-            None
-        } else {
+        let python_request = if pin_python {
             let interpreter = PythonInstallation::find_or_download(
                 Some(&python_request),
                 EnvironmentPreference::OnlySystem,
@@ -541,6 +539,8 @@ async fn init_project(
                 interpreter.python_minor(),
                 PythonVariant::Default,
             )))
+        } else {
+            None
         };
 
         (requires_python, python_request)
@@ -564,14 +564,14 @@ async fn init_project(
             RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
 
         // Pin to the minor version.
-        let python_request = if no_pin_python {
-            None
-        } else {
+        let python_request = if pin_python {
             Some(PythonRequest::Version(VersionRequest::MajorMinor(
                 interpreter.python_major(),
                 interpreter.python_minor(),
                 PythonVariant::Default,
             )))
+        } else {
+            None
         };
 
         (requires_python, python_request)

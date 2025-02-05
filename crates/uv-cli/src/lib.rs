@@ -2630,6 +2630,12 @@ pub struct InitArgs {
     #[arg(long)]
     pub no_pin_python: bool,
 
+    /// Create a `.python-version` file for the project.
+    ///
+    /// This is the default.
+    #[arg(long, hide = true)]
+    pub pin_python: bool,
+
     /// Avoid discovering a workspace and create a standalone project.
     ///
     /// By default, uv searches for workspaces in the current directory or any parent directory.

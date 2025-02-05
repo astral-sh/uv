@@ -329,5 +329,5 @@ cases uv will still configure a build system but will not create the expected fi
 When `--bare` is used, additional features can still be used opt-in:
 
 ```console
-$ uv init example --description "Hello world" --author-from git --vcs git
+$ uv init example --bare --description "Hello world" --author-from git --vcs git --python-pin
 ```

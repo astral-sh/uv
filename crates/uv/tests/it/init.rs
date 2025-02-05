@@ -555,9 +555,10 @@ fn init_bare_opt_in() {
     let context = TestContext::new("3.12");
 
     // With `--bare`, you can still opt-in to extras
-    // TODO(zanieb): Add options for `--pin-python` and `--readme`
+    // TODO(zanieb): Add option for `--readme`
     uv_snapshot!(context.filters(), context.init().arg("foo").arg("--bare")
         .arg("--description").arg("foo")
+        .arg("--pin-python")
         .arg("--vcs").arg("git"), @r###"
     success: true
     exit_code: 0
@@ -582,7 +583,7 @@ fn init_bare_opt_in() {
     context
         .temp_dir
         .child("foo/.python-version")
-        .assert(predicate::path::missing());
+        .assert(predicate::path::is_file());
 
     let pyproject = context.read("foo/pyproject.toml");
     insta::with_settings!({
