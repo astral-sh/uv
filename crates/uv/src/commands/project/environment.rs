@@ -260,7 +260,11 @@ impl CachedEnvironment {
         interpreter: &Interpreter,
         cache: &Cache,
     ) -> Result<Interpreter, uv_python::Error> {
-        let base_python = interpreter.to_base_python()?;
+        let base_python = if cfg!(unix) {
+            interpreter.find_base_python()?
+        } else {
+            interpreter.to_base_python()?
+        };
         if base_python == interpreter.sys_executable() {
             debug!(
                 "Caching via base interpreter: `{}`",

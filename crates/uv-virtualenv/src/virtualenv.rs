@@ -56,7 +56,14 @@ pub(crate) fn create(
 ) -> Result<VirtualEnvironment, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
     // considered the "base" for the virtual environment.
-    let base_python = interpreter.to_base_python()?;
+    //
+    // For consistency with the standard library, rely on `sys._base_executable`, _unless_ we're
+    // using a uv-managed Python (in which case, we can do better for symlinked executables).
+    let base_python = if cfg!(unix) && interpreter.is_standalone() {
+        interpreter.find_base_python()?
+    } else {
+        interpreter.to_base_python()?
+    };
 
     debug!(
         "Using base executable for virtual environment: {}",

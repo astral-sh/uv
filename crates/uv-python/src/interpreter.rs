@@ -121,38 +121,54 @@ impl Interpreter {
         })
     }
 
+    /// Return the base Python executable; that is, the Python executable that should be
+    /// considered the "base" for the virtual environment. This is typically the Python executable
+    /// from the [`Interpreter`]; however, if the interpreter is a virtual environment itself, then
+    /// the base Python executable is the Python executable of the interpreter's base interpreter.
+    ///
+    /// This routine relies on `sys._base_executable`, falling back to `sys.executable` if unset.
+    /// Broadly, this routine should be used when attempting to determine the "base Python
+    /// executable" in a way that is consistent with the CPython standard library, such as when
+    /// determining the `home` key for a virtual environment.
+    pub fn to_base_python(&self) -> Result<PathBuf, io::Error> {
+        let base_executable = self.sys_base_executable().unwrap_or(self.sys_executable());
+        let base_python = std::path::absolute(base_executable)?;
+        Ok(base_python)
+    }
+
     /// Determine the base Python executable; that is, the Python executable that should be
     /// considered the "base" for the virtual environment. This is typically the Python executable
     /// from the [`Interpreter`]; however, if the interpreter is a virtual environment itself, then
     /// the base Python executable is the Python executable of the interpreter's base interpreter.
-    pub fn to_base_python(&self) -> Result<PathBuf, io::Error> {
+    ///
+    /// This routine mimics the CPython `getpath.py` logic in order to make a more robust assessment
+    /// of the appropriate base Python executable. Broadly, this routine should be used when
+    /// attempting to determine the "true" base executable for a Python interpreter by resolving
+    /// symlinks until a valid Python installation is found. In particular, we tend to use this
+    /// routine for our own managed (or standalone) Python installations.
+    pub fn find_base_python(&self) -> Result<PathBuf, io::Error> {
         let base_executable = self.sys_base_executable().unwrap_or(self.sys_executable());
-        let base_python = if cfg!(unix) && self.is_standalone() {
-            // In `python-build-standalone`, a symlinked interpreter will return its own executable path
-            // as `sys._base_executable`. Using the symlinked path as the base Python executable can be
-            // incorrect, since it could cause `home` to point to something that is _not_ a Python
-            // installation. Specifically, if the interpreter _itself_ is symlinked to an arbitrary
-            // location, we need to fully resolve it to the actual Python executable; however, if the
-            // entire standalone interpreter is symlinked, then we can use the symlinked path.
-            //
-            // We emulate CPython's `getpath.py` to ensure that the base executable results in a valid
-            // Python prefix when converted into the `home` key for `pyvenv.cfg`.
-            match find_base_python(
-                base_executable,
-                self.python_major(),
-                self.python_minor(),
-                self.variant().suffix(),
-            ) {
-                Ok(path) => path,
-                Err(err) => {
-                    warn!("Failed to find base Python executable: {err}");
-                    uv_fs::canonicalize_executable(base_executable)?
-                }
+        // In `python-build-standalone`, a symlinked interpreter will return its own executable path
+        // as `sys._base_executable`. Using the symlinked path as the base Python executable can be
+        // incorrect, since it could cause `home` to point to something that is _not_ a Python
+        // installation. Specifically, if the interpreter _itself_ is symlinked to an arbitrary
+        // location, we need to fully resolve it to the actual Python executable; however, if the
+        // entire standalone interpreter is symlinked, then we can use the symlinked path.
+        //
+        // We emulate CPython's `getpath.py` to ensure that the base executable results in a valid
+        // Python prefix when converted into the `home` key for `pyvenv.cfg`.
+        let base_python = match find_base_python(
+            base_executable,
+            self.python_major(),
+            self.python_minor(),
+            self.variant().suffix(),
+        ) {
+            Ok(path) => path,
+            Err(err) => {
+                warn!("Failed to find base Python executable: {err}");
+                uv_fs::canonicalize_executable(base_executable)?
             }
-        } else {
-            std::path::absolute(base_executable)?
         };
-
         Ok(base_python)
     }
 
