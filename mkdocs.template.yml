@@ -68,6 +68,7 @@ plugins:
       # Note that redirecting an anchor, e.g., `concepts/projects/#managing-dependencies` must be done
       # client-side and is implemented in `extra.js` instead.
       redirect_maps:
+        "guides/publish.md": "guides/package.md"
         "concepts/workspaces.md": "concepts/projects/workspaces.md"
         "concepts/dependencies.md": "concepts/projects/dependencies.md"
         "reference/versioning.md": "reference/policies/versioning.md"
@@ -103,7 +104,7 @@ nav:
       - Running scripts: guides/scripts.md
       - Using tools: guides/tools.md
       - Working on projects: guides/projects.md
-      - Publishing packages: guides/publish.md
+      - Publishing packages: guides/package.md
       - Integrations:
           - guides/integration/index.md
           - Docker: guides/integration/docker.md
@@ -166,4 +167,3 @@ validation:
   omitted_files: warn
   absolute_links: warn
   unrecognized_links: warn
-  anchors: warn
