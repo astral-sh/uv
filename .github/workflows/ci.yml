@@ -16,11 +16,87 @@ env:
   CARGO_TERM_COLOR: always
   RUSTUP_MAX_RETRIES: 10
   PYTHON_VERSION: "3.12"
+  ARTIFACT_NAME_VSIX: vsix
+  VSIX_NAME: vscode-pyright.vsix
+  VSIX_DIR: packages/vscode-pyright
+  NPM_PACKAGE_DIR: packages/pyright
+  BROWSER_NPM_PACKAGE_DIR: packages/browser-pyright
+  # prevent uv from constantly reinstalling the project and overwriting docstubs
+  UV_NO_SYNC: true
 
 jobs:
+  generate-docstubs-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: "Clone basedpyright"
+        run: git clone https://github.com/DetachHead/basedpyright.git
+      - name: "Checkout a7cf09cfb"
+        working-directory: basedpyright
+        run: git checkout a7cf09cfb
+      - name: generate docstubs for each python version
+        working-directory: basedpyright
+        run: ./build/generateAllDocstubs.sh
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docstubs-linux
+          path: basedpyright/docstubs
+  generate-docstubs-macos:
+    needs: generate-docstubs-linux
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: "Clone basedpyright"
+        run: git clone https://github.com/DetachHead/basedpyright.git
+      - name: "Checkout a7cf09cfb"
+        working-directory: basedpyright
+        run: git checkout a7cf09cfb
+      - uses: actions/download-artifact@v4
+        with:
+          name: docstubs-linux
+          path: basedpyright/docstubs
+      - name: generate docstubs for each python version
+        working-directory: basedpyright
+        run: ./build/generateAllDocstubs.sh
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docstubs-linux-and-macos
+          path: basedpyright/docstubs
+  generate-docstubs-windows:
+    needs: generate-docstubs-macos
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: "Clone basedpyright"
+        run: git clone https://github.com/DetachHead/basedpyright.git
+      - name: "Checkout a7cf09cfb"
+        working-directory: basedpyright
+        run: git checkout a7cf09cfb
+      - uses: actions/download-artifact@v4
+        with:
+          name: docstubs-linux-and-macos
+          path: basedpyright/docstubs
+      - name: generate docstubs for each python version
+        working-directory: basedpyright
+        run: ./build/generateAllDocstubs.sh
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docstubs
+          path: basedpyright/docstubs
+
   cargo-test-linux:
     name: "cargo test | ubuntu"
     runs-on: ubuntu-latest
+    needs: generate-docstubs-windows
     steps:
       - uses: actions/checkout@v4
 
@@ -36,26 +112,42 @@ jobs:
         run: uv python install
 
       - name: "Cargo build"
-        run: cargo build
+        run: cargo build --release
 
-      - name: "Clone BlueCelluLab"
-        run: git clone https://github.com/BlueBrain/BlueCelluLab.git
+      - name: "Clone basedpyright"
+        run: git clone https://github.com/DetachHead/basedpyright.git
 
-      - name: "Checkout BlueCelluLab commit"
-        working-directory: BlueCelluLab
+      - uses: actions/download-artifact@v4
+        name: download docstubs
+        with:
+          name: docstubs
+          path: basedpyright/docstubs
+
+      - name: "Checkout a7cf09cfb"
+        working-directory: basedpyright
+        run: git checkout a7cf09cfb
+
+#      - run: ../target/debug/uv sync --cache-dir ../foo --config-setting regenerate_docstubs=false
+#        working-directory: basedpyright
+#
+#      # using relative path for npm scripts because it needs to work in the package directories too
+#      - name: add pyprojectx and npm scripts to PATH
+#        working-directory: basedpyright
+#        run: |
+#          realpath ./.pyprojectx/main >> $GITHUB_PATH
+#          echo ./node_modules/.bin >> $GITHUB_PATH
+#
+#      - name: validate docstubs
+#        working-directory: basedpyright
+#        run: ../target/debug/uv run  --cache-dir ../foo npm run test-python -- -m needs_all_docstubs
+
+      - name: "Test basedpyright installation"
+        working-directory: basedpyright
+        continue-on-error: true
         run: |
-          git checkout f12e6fe
-
-      - name: "Test BlueCelluLab installation"
-        working-directory: BlueCelluLab
-        run: |
-          while true; do
-            rm -rf foo && \
-            ../target/debug/uv venv --python 3.9 && \
-            ../target/debug/uv pip install . --reinstall --cache-dir foo || break
-          done
+          ../target/release/uv build --config-setting regenerate_docstubs=false --cache-dir foo
 
       - uses: actions/upload-artifact@v4
         with:
           name: foo-cache-dir
-          path: foo
+          path: basedpyright/foo
