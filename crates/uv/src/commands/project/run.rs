@@ -17,8 +17,8 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{
-    Concurrency, DevGroupsManifest, DevGroupsSpecification, EditableMode, ExtrasSpecification,
-    GroupsSpecification, InstallOptions, PreviewMode, SourceStrategy, TrustedHost,
+    Concurrency, DevGroupsSpecification, EditableMode, ExtrasSpecification, InstallOptions,
+    PreviewMode, SourceStrategy, TrustedHost,
 };
 use uv_distribution::LoweredRequirement;
 use uv_fs::which::is_executable;
@@ -252,7 +252,7 @@ pub(crate) async fn run(
                     lock: &lock,
                 },
                 &ExtrasSpecification::default(),
-                &DevGroupsManifest::default(),
+                &DevGroupsSpecification::default().with_defaults(Vec::new()),
                 InstallOptions::default(),
                 &settings,
                 &interpreter,
@@ -469,14 +469,8 @@ pub(crate) async fn run(
         if !extras.is_empty() {
             warn_user!("Extras are not supported for Python scripts with inline metadata");
         }
-        if let Some(dev_mode) = dev.dev_mode() {
-            warn_user!(
-                "`{}` is not supported for Python scripts with inline metadata",
-                dev_mode.as_flag()
-            );
-        }
-        if let Some(flag) = dev.groups().and_then(GroupsSpecification::as_flag) {
-            warn_user!("`{flag}` is not supported for Python scripts with inline metadata");
+        for flag in dev.history().as_flags_pretty() {
+            warn_user!("`{flag}` is not supported for Python scripts with inline metadata",);
         }
         if all_packages {
             warn_user!(
@@ -544,13 +538,7 @@ pub(crate) async fn run(
             if !extras.is_empty() {
                 warn_user!("Extras have no effect when used alongside `--no-project`");
             }
-            if let Some(dev_mode) = dev.dev_mode() {
-                warn_user!(
-                    "`{}` has no effect when used alongside `--no-project`",
-                    dev_mode.as_flag()
-                );
-            }
-            if let Some(flag) = dev.groups().and_then(GroupsSpecification::as_flag) {
+            for flag in dev.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
             if locked {
@@ -567,13 +555,7 @@ pub(crate) async fn run(
             if !extras.is_empty() {
                 warn_user!("Extras have no effect when used outside of a project");
             }
-            if let Some(dev_mode) = dev.dev_mode() {
-                warn_user!(
-                    "`{}` has no effect when used outside of a project",
-                    dev_mode.as_flag()
-                );
-            }
-            if let Some(flag) = dev.groups().and_then(GroupsSpecification::as_flag) {
+            for flag in dev.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used outside of a project");
             }
             if locked {

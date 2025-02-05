@@ -364,7 +364,7 @@ impl TestContext {
 
         // Exclude `link-mode` on Windows since we set it in the remote test suite
         if cfg!(windows) {
-            filters.push(("--link-mode <LINK_MODE> ".to_string(), String::new()));
+            filters.push((" --link-mode <LINK_MODE>".to_string(), String::new()));
             filters.push((r#"link-mode = "copy"\n"#.to_string(), String::new()));
         }
 

@@ -144,10 +144,24 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -301,10 +315,24 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -459,10 +487,24 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -649,10 +691,24 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -778,10 +834,24 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -946,10 +1016,24 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -1157,10 +1241,24 @@ fn resolve_index_url() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -1376,10 +1474,24 @@ fn resolve_index_url() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -1558,10 +1670,24 @@ fn resolve_find_links() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -1709,10 +1835,24 @@ fn resolve_top_level() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -1912,10 +2052,24 @@ fn resolve_top_level() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -2098,10 +2252,24 @@ fn resolve_top_level() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -2249,10 +2417,24 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -2383,10 +2565,24 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -2517,10 +2713,24 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -2653,10 +2863,24 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -2967,10 +3191,24 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -3159,10 +3397,24 @@ fn resolve_both() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -3439,10 +3691,24 @@ fn resolve_config_file() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -3667,10 +3933,24 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -3804,10 +4084,24 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -3960,10 +4254,24 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -4169,10 +4477,24 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -4357,10 +4679,24 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -4551,10 +4887,24 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -4740,10 +5090,24 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -4936,10 +5300,24 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -5125,10 +5503,24 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -5267,10 +5659,24 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -5395,10 +5801,24 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -5521,10 +5941,24 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -5649,10 +6083,24 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -5775,10 +6223,24 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -5902,10 +6364,24 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,

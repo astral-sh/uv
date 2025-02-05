@@ -1639,7 +1639,7 @@ fn run_group() -> Result<()> {
     warning: `--group foo` has no effect when used alongside `--no-project`
     "###);
 
-    uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("--group").arg("bar").arg("--no-project").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("--group").arg("bar").arg("--no-project").arg("main.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1649,7 +1649,7 @@ fn run_group() -> Result<()> {
 
     ----- stderr -----
     warning: `--group` has no effect when used alongside `--no-project`
-    "###);
+    ");
 
     uv_snapshot!(context.filters(), context.run().arg("--group").arg("dev").arg("--no-project").arg("main.py"), @r###"
     success: true

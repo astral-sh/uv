@@ -124,14 +124,12 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         // This is only a warning because *technically* we support passing in
         // multiple pyproject.tomls, but at this level of abstraction we can't see them all,
         // so hard erroring on "no pyproject.toml mentions this" is a bit difficult.
-        if let Some(groups) = self.groups.groups() {
-            for name in groups.names() {
-                if !metadata.dependency_groups.contains_key(name) {
-                    warn_user_once!(
-                        "The dependency-group '{name}' is not defined in {}",
-                        path.display()
-                    );
-                }
+        for name in self.groups.explicit_names() {
+            if !metadata.dependency_groups.contains_key(name) {
+                warn_user_once!(
+                    "The dependency-group '{name}' is not defined in {}",
+                    path.display()
+                );
             }
         }
 

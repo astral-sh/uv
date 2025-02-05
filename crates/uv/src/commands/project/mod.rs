@@ -12,7 +12,7 @@ use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, ExtrasSpecification,
-    GroupsSpecification, PreviewMode, Reinstall, TrustedHost, Upgrade,
+    PreviewMode, Reinstall, TrustedHost, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::DistributionDatabase;
@@ -288,7 +288,8 @@ impl std::fmt::Display for ConflictError {
                     self.conflicts
                         .iter()
                         .map(|conflict| match conflict {
-                            ConflictPackage::Group(ref group) if self.dev.is_default(group) =>
+                            ConflictPackage::Group(ref group)
+                                if self.dev.contains_because_default(group) =>
                                 format!("`{group}` (enabled by default)"),
                             ConflictPackage::Group(ref group) => format!("`{group}`"),
                             ConflictPackage::Extra(..) => unreachable!(),
@@ -307,7 +308,9 @@ impl std::fmt::Display for ConflictError {
                         .map(|(i, conflict)| {
                             let conflict = match conflict {
                                 ConflictPackage::Extra(ref extra) => format!("extra `{extra}`"),
-                                ConflictPackage::Group(ref group) if self.dev.is_default(group) => {
+                                ConflictPackage::Group(ref group)
+                                    if self.dev.contains_because_default(group) =>
+                                {
                                     format!("group `{group}` (enabled by default)")
                                 }
                                 ConflictPackage::Group(ref group) => format!("group `{group}`"),
@@ -1841,11 +1844,7 @@ impl DependencyGroupsTarget<'_> {
     /// Validate the dependency groups requested by the [`DevGroupsSpecification`].
     #[allow(clippy::result_large_err)]
     pub(crate) fn validate(self, dev: &DevGroupsSpecification) -> Result<(), ProjectError> {
-        for group in dev
-            .groups()
-            .into_iter()
-            .flat_map(GroupsSpecification::names)
-        {
+        for group in dev.explicit_names() {
             match self {
                 Self::Workspace(workspace) => {
                     // The group must be defined in the workspace.
