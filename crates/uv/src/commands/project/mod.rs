@@ -755,7 +755,7 @@ impl ProjectInterpreter {
                 "uv-{}.lock",
                 cache_digest(workspace.install_path())
             )),
-            workspace.install_path().user_display(),
+            workspace.install_path().simplified_display(),
         )
         .await
     }
