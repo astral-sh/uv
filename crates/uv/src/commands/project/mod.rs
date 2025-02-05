@@ -602,7 +602,7 @@ impl ProjectInterpreter {
         allow_insecure_host: &[TrustedHost],
         install_mirrors: &PythonInstallMirrors,
         no_config: bool,
-        active: bool,
+        active: Option<bool>,
         cache: &Cache,
         printer: Printer,
     ) -> Result<Self, ProjectError> {
@@ -925,7 +925,7 @@ pub(crate) async fn get_or_init_environment(
     native_tls: bool,
     allow_insecure_host: &[TrustedHost],
     no_config: bool,
-    active: bool,
+    active: Option<bool>,
     cache: &Cache,
     printer: Printer,
 ) -> Result<PythonEnvironment, ProjectError> {

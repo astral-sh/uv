@@ -121,7 +121,7 @@ pub(crate) async fn lock(
                 allow_insecure_host,
                 &install_mirrors,
                 no_config,
-                false,
+                Some(false),
                 cache,
                 printer,
             )

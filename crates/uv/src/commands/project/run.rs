@@ -65,7 +65,7 @@ pub(crate) async fn run(
     show_resolution: bool,
     locked: bool,
     frozen: bool,
-    active: bool,
+    active: Option<bool>,
     no_sync: bool,
     isolated: bool,
     all_packages: bool,

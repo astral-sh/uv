@@ -3467,6 +3467,21 @@ fn run_active_environment() -> Result<()> {
      + iniconfig==2.0.0
     "###);
 
+    // Using `--no-active` should silence the warning
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--no-active")
+        .arg("python").arg("--version")
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
     context
         .temp_dir
         .child(".venv")

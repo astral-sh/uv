@@ -61,7 +61,7 @@ pub(crate) async fn add(
     project_dir: &Path,
     locked: bool,
     frozen: bool,
-    active: bool,
+    active: Option<bool>,
     no_sync: bool,
     requirements: Vec<RequirementsSource>,
     editable: Option<bool>,
@@ -233,8 +233,8 @@ pub(crate) async fn add(
                 connectivity,
                 native_tls,
                 allow_insecure_host,
-                active,
                 no_config,
+                active,
                 cache,
                 printer,
             )
