@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.5.29
+
+### Enhancements
+
+- Add `--bare` option to `uv init` ([#11192](https://github.com/astral-sh/uv/pull/11192))
+- Add support for respecting `VIRTUAL_ENV` in project commands via `--active` ([#11189](https://github.com/astral-sh/uv/pull/11189))
+- Allow the project `VIRTUAL_ENV` warning to be silenced with `--no-active` ([#11251](https://github.com/astral-sh/uv/pull/11251))
+
+### Python
+
+The managed Python distributions have been updated, including:
+
+- CPython 3.12.9
+- CPython 3.13.2
+- pkg-config files are now relocatable
+
+See the [`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250205) for more details.
+
+### Bug fixes
+
+- Always use base Python discovery logic for cached environments ([#11254](https://github.com/astral-sh/uv/pull/11254))
+- Use a flock to avoid concurrent initialization of project environments ([#11259](https://github.com/astral-sh/uv/pull/11259))
+- Fix handling of `--all-groups` and `--no-default-groups` flags ([#11224](https://github.com/astral-sh/uv/pull/11224))
+
+### Documentation
+
+- Minor touchups to the Docker provenance docs ([#11252](https://github.com/astral-sh/uv/pull/11252))
+- Move content from the `mkdocs.public.yml` into the template ([#11246](https://github.com/astral-sh/uv/pull/11246))
+
 ## 0.5.28
 
 ### Bug fixes
