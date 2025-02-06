@@ -86,13 +86,13 @@ mod resolver {
     use uv_cache::Cache;
     use uv_client::RegistryClient;
     use uv_configuration::{
-        BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, LowerBound,
-        PreviewMode, SourceStrategy,
+        BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, PreviewMode,
+        SourceStrategy,
     };
     use uv_dispatch::{BuildDispatch, SharedState};
     use uv_distribution::DistributionDatabase;
     use uv_distribution_types::{DependencyMetadata, IndexLocations};
-    use uv_install_wheel::linker::LinkMode;
+    use uv_install_wheel::LinkMode;
     use uv_pep440::Version;
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
     use uv_platform_tags::{Arch, Os, Platform, Tags};
@@ -187,7 +187,6 @@ mod resolver {
             &build_options,
             &hashes,
             exclude_newer,
-            LowerBound::default(),
             sources,
             concurrency,
             PreviewMode::Enabled,

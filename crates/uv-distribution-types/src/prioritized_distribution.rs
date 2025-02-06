@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
 
 use arcstr::ArcStr;
@@ -522,38 +521,41 @@ impl PrioritizedDist {
         self.0.best_wheel_index.map(|i| &self.0.wheels[i])
     }
 
-    /// Returns the set of all Python tags for the distribution.
-    pub fn python_tags(&self) -> BTreeSet<&LanguageTag> {
+    /// Returns an iterator over all Python tags for the distribution.
+    pub fn python_tags(&self) -> impl Iterator<Item = LanguageTag> + '_ {
         self.0
             .wheels
             .iter()
-            .flat_map(|(wheel, _)| wheel.filename.python_tags().iter())
-            .collect()
+            .flat_map(|(wheel, _)| wheel.filename.python_tags().iter().copied())
     }
 
-    /// Returns the set of all ABI tags for the distribution.
-    pub fn abi_tags(&self) -> BTreeSet<&AbiTag> {
+    /// Returns an iterator over all ABI tags for the distribution.
+    pub fn abi_tags(&self) -> impl Iterator<Item = AbiTag> + '_ {
         self.0
             .wheels
             .iter()
-            .flat_map(|(wheel, _)| wheel.filename.abi_tags().iter())
-            .collect()
+            .flat_map(|(wheel, _)| wheel.filename.abi_tags().iter().copied())
     }
 
     /// Returns the set of platform tags for the distribution that are ABI-compatible with the given
     /// tags.
-    pub fn platform_tags<'a>(&'a self, tags: &'a Tags) -> BTreeSet<&'a PlatformTag> {
-        let mut candidates = BTreeSet::new();
-        for (wheel, _) in &self.0.wheels {
-            for wheel_py in wheel.filename.python_tags() {
-                for wheel_abi in wheel.filename.abi_tags() {
-                    if tags.is_compatible_abi(wheel_py, wheel_abi) {
-                        candidates.extend(wheel.filename.platform_tags().iter());
-                    }
-                }
+    pub fn platform_tags<'a>(
+        &'a self,
+        tags: &'a Tags,
+    ) -> impl Iterator<Item = &'a PlatformTag> + 'a {
+        self.0.wheels.iter().flat_map(move |(wheel, _)| {
+            if wheel.filename.python_tags().iter().any(|wheel_py| {
+                wheel
+                    .filename
+                    .abi_tags()
+                    .iter()
+                    .any(|wheel_abi| tags.is_compatible_abi(*wheel_py, *wheel_abi))
+            }) {
+                wheel.filename.platform_tags().iter()
+            } else {
+                [].iter()
             }
-        }
-        candidates
+        })
     }
 }
 

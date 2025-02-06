@@ -695,7 +695,7 @@ mod tests {
             vec![CacheControlDirective {
                 name: "max-age".to_string(),
                 value: b"60".to_vec(),
-            },]
+            }]
         );
     }
 

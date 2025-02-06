@@ -110,7 +110,6 @@ fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
         name,
         Some(common::WindowsFilters::Platform),
     );
-    assert_snapshot!(format!("{name}-uv-lock-output"), snapshot);
 
     let lock = context.read("uv.lock");
     insta::with_settings!({
@@ -118,6 +117,8 @@ fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
     }, {
         assert_snapshot!(format!("{name}-lock-file"), lock);
     });
+
+    assert_snapshot!(format!("{name}-uv-lock-output"), snapshot);
 
     Ok(())
 }

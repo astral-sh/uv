@@ -256,7 +256,7 @@ fn assert_pin_compatible_with_project(pin: &Pin, virtual_project: &VirtualProjec
                 project_workspace.project_name(),
                 project_workspace.workspace().install_path().display()
             );
-            let requires_python = find_requires_python(project_workspace.workspace());
+            let requires_python = find_requires_python(project_workspace.workspace())?;
             (requires_python, "project")
         }
         VirtualProject::NonProject(workspace) => {
@@ -264,7 +264,7 @@ fn assert_pin_compatible_with_project(pin: &Pin, virtual_project: &VirtualProjec
                 "Discovered virtual workspace at: {}",
                 workspace.install_path().display()
             );
-            let requires_python = find_requires_python(workspace);
+            let requires_python = find_requires_python(workspace)?;
             (requires_python, "workspace")
         }
     };

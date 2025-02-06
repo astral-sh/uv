@@ -298,13 +298,13 @@ impl Tags {
     }
 
     /// Return the highest-priority Python tag for the [`Tags`].
-    pub fn python_tag(&self) -> Option<&LanguageTag> {
-        self.best.as_ref().map(|(python, _, _)| python)
+    pub fn python_tag(&self) -> Option<LanguageTag> {
+        self.best.as_ref().map(|(python, _, _)| *python)
     }
 
     /// Return the highest-priority ABI tag for the [`Tags`].
-    pub fn abi_tag(&self) -> Option<&AbiTag> {
-        self.best.as_ref().map(|(_, abi, _)| abi)
+    pub fn abi_tag(&self) -> Option<AbiTag> {
+        self.best.as_ref().map(|(_, abi, _)| *abi)
     }
 
     /// Return the highest-priority platform tag for the [`Tags`].
@@ -314,10 +314,10 @@ impl Tags {
 
     /// Returns `true` if the given language and ABI tags are compatible with the current
     /// environment.
-    pub fn is_compatible_abi(&self, python_tag: &LanguageTag, abi_tag: &AbiTag) -> bool {
+    pub fn is_compatible_abi(&self, python_tag: LanguageTag, abi_tag: AbiTag) -> bool {
         self.map
-            .get(python_tag)
-            .map(|abis| abis.contains_key(abi_tag))
+            .get(&python_tag)
+            .map(|abis| abis.contains_key(&abi_tag))
             .unwrap_or(false)
     }
 }

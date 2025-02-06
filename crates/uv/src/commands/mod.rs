@@ -48,7 +48,7 @@ pub(crate) use tool::update_shell::update_shell as tool_update_shell;
 pub(crate) use tool::upgrade::upgrade as tool_upgrade;
 use uv_cache::Cache;
 use uv_distribution_types::InstalledMetadata;
-use uv_fs::Simplified;
+use uv_fs::{Simplified, CWD};
 use uv_installer::compile_tree;
 use uv_normalize::PackageName;
 use uv_python::PythonEnvironment;
@@ -69,6 +69,7 @@ mod project;
 mod publish;
 mod python;
 pub(crate) mod reporters;
+mod run;
 #[cfg(feature = "self-update")]
 mod self_update;
 mod tool;
@@ -152,6 +153,7 @@ pub(super) async fn compile_bytecode(
     let start = std::time::Instant::now();
     let mut files = 0;
     for site_packages in venv.site_packages() {
+        let site_packages = CWD.join(site_packages);
         files += compile_tree(&site_packages, venv.python_executable(), cache.root())
             .await
             .with_context(|| {

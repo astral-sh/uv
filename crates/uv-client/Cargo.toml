@@ -38,6 +38,7 @@ html-escape = { workspace = true }
 http = { workspace = true }
 itertools = { workspace = true }
 jiff = { workspace = true }
+percent-encoding = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
@@ -52,7 +53,6 @@ tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
-urlencoding = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

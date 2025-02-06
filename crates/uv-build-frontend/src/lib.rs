@@ -26,7 +26,7 @@ use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{debug, info_span, instrument, Instrument};
 
-use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, LowerBound, SourceStrategy};
+use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
 use uv_distribution::BuildRequires;
 use uv_distribution_types::{IndexLocations, Resolution};
 use uv_fs::{PythonExt, Simplified};
@@ -480,7 +480,6 @@ impl SourceBuild {
                                     install_path,
                                     locations,
                                     source_strategy,
-                                    LowerBound::Allow,
                                 )
                                 .await
                                 .map_err(Error::Lowering)?;
@@ -910,7 +909,6 @@ async fn create_pep517_build_environment(
                 install_path,
                 locations,
                 source_strategy,
-                LowerBound::Allow,
             )
             .await
             .map_err(Error::Lowering)?;

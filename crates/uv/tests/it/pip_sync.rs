@@ -51,12 +51,28 @@ fn missing_requirements_txt() {
 
 #[test]
 fn missing_venv() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12")
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+
     let requirements = context.temp_dir.child("requirements.txt");
     requirements.write_str("anyio")?;
     fs::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/python`
+      Caused by: Python interpreter not found at `[VENV]/[BIN]/python`
+    "###);
+
+    assert!(predicates::path::missing().eval(&context.venv));
+
+    // If not "active", we hint to create one
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt").env_remove("VIRTUAL_ENV"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -700,13 +716,12 @@ fn install_git_subdirectories() -> Result<()> {
 /// Install a source distribution into a virtual environment.
 #[test]
 fn install_sdist() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("source-distribution==0.0.1")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1402,14 +1417,18 @@ fn install_url_source_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(context.clean()
-        .arg("source_distribution"), @r###"
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(
+        filters,
+        context.clean().arg("source_distribution"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Removed 19 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###
     );
 
@@ -1533,13 +1552,12 @@ fn install_git_source_dist_cached() -> Result<()> {
 /// Check that we show the right messages on cached, registry source distribution installs.
 #[test]
 fn install_registry_source_dist_cached() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("source_distribution==0.0.1")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1562,7 +1580,6 @@ fn install_registry_source_dist_cached() -> Result<()> {
     context.reset_venv();
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1584,19 +1601,9 @@ fn install_registry_source_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    let filters: Vec<(&str, &str)> = if cfg!(windows) {
-        // On Windows, the number of files removed is different.
-        [("Removed 13 files", "Removed 14 files")]
-            .into_iter()
-            .chain(context.filters())
-            .collect()
-    } else {
-        // For some Linux distributions, like Gentoo, the number of files removed is different.
-        [("Removed 12 files", "Removed 14 files")]
-            .into_iter()
-            .chain(context.filters())
-            .collect()
-    };
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
     uv_snapshot!(filters, context.clean()
         .arg("source_distribution"), @r###"
     success: true
@@ -1604,12 +1611,11 @@ fn install_registry_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 20 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###
     );
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1694,14 +1700,18 @@ fn install_path_source_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(context.clean()
-        .arg("source-distribution"), @r###"
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(
+        filters,
+        context.clean().arg("source-distribution"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Removed 19 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###
     );
 
@@ -1784,23 +1794,18 @@ fn install_path_built_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    let filters = if cfg!(windows) {
-        // We do not display sizes on Windows
-        [("Removed 1 file", "Removed 1 file ([SIZE])")]
-            .into_iter()
-            .chain(context.filters())
-            .collect()
-    } else {
-        context.filters()
-    };
-    uv_snapshot!(filters, context.clean()
-        .arg("tomli"), @r###"
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(
+        filters,
+        context.clean().arg("tomli"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Removed 11 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###
     );
 
@@ -1833,7 +1838,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("tqdm @ https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl")?;
 
-    let filters = if cfg!(windows) {
+    let context_filters = if cfg!(windows) {
         [("warning: The package `tqdm` requires `colorama ; sys_platform == 'win32'`, but it's not installed\n", "")]
             .into_iter()
             .chain(context.filters())
@@ -1841,7 +1846,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     } else {
         context.filters()
     };
-    uv_snapshot!(filters, context.pip_sync()
+    uv_snapshot!(context_filters, context.pip_sync()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1861,7 +1866,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     // Re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(filters, context.pip_sync()
+    uv_snapshot!(context_filters, context.pip_sync()
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1881,18 +1886,22 @@ fn install_url_built_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(context.clean()
-        .arg("tqdm"), @r###"
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context_filters.clone())
+        .collect::<Vec<_>>();
+    uv_snapshot!(
+        filters,
+        context.clean().arg("tqdm"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Removed 43 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###
     );
 
-    uv_snapshot!(filters, context.pip_sync()
+    uv_snapshot!(context_filters, context.pip_sync()
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -3630,14 +3639,13 @@ fn require_hashes_wheel_only_binary() -> Result<()> {
 /// Include the hash for _just_ the source distribution with `--no-binary`.
 #[test]
 fn require_hashes_source_no_binary() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("source-distribution==0.0.1 --hash=sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--no-binary")
         .arg(":all:")
@@ -5025,14 +5033,13 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
 /// Include the hash in the URL directly.
 #[test]
 fn require_hashes_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: true
@@ -5053,14 +5060,13 @@ fn require_hashes_url() -> Result<()> {
 /// Include an irrelevant fragment in the URL.
 #[test]
 fn require_hashes_url_other_fragment() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#foo=bar")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -5078,14 +5084,13 @@ fn require_hashes_url_other_fragment() -> Result<()> {
 /// Include an invalid hash in the URL directly.
 #[test]
 fn require_hashes_url_invalid() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -5111,14 +5116,13 @@ fn require_hashes_url_invalid() -> Result<()> {
 /// Ignore the (valid) hash on the fragment if (invalid) hashes are provided directly.
 #[test]
 fn require_hashes_url_ignore() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374 --hash sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -5144,14 +5148,13 @@ fn require_hashes_url_ignore() -> Result<()> {
 /// Include the hash in the URL directly.
 #[test]
 fn require_hashes_url_unnamed() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: true

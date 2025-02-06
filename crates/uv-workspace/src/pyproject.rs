@@ -504,48 +504,44 @@ pub struct ToolUv {
     )]
     pub environments: Option<SupportedEnvironments>,
 
-    /// Conflicting extras or groups may be declared here.
+    /// Declare collections of extras or dependency groups that are conflicting
+    /// (i.e., mutually exclusive).
     ///
-    /// It's useful to declare conflicts when, for example, two or more extras
-    /// have mutually incompatible dependencies. Extra `foo` might depend
-    /// on `numpy==2.0.0` while extra `bar` might depend on `numpy==2.1.0`.
-    /// These extras cannot be activated at the same time. This usually isn't
-    /// a problem for pip-style workflows, but when using projects in uv that
-    /// support with universal resolution, it will try to produce a resolution
-    /// that satisfies both extras simultaneously.
+    /// It's useful to declare conflicts when two or more extras have mutually
+    /// incompatible dependencies. For example, extra `foo` might depend
+    /// on `numpy==2.0.0` while extra `bar` depends on `numpy==2.1.0`. While these
+    /// dependencies conflict, it may be the case that users are not expected to
+    /// activate both `foo` and `bar` at the same time, making it possible to
+    /// generate a universal resolution for the project despite the incompatibility.
     ///
-    /// When this happens, resolution will fail, because one cannot install
-    /// both `numpy 2.0.0` and `numpy 2.1.0` into the same environment.
-    ///
-    /// To work around this, you may specify `foo` and `bar` as conflicting
-    /// extras (you can do the same with groups). When doing universal
-    /// resolution in project mode, these extras will get their own "forks"
-    /// distinct from one another in order to permit conflicting dependencies.
-    /// In exchange, if one tries to install from the lock file with both
-    /// conflicting extras activated, installation will fail.
+    /// By making such conflicts explicit, uv can generate a universal resolution
+    /// for a project, taking into account that certain combinations of extras and
+    /// groups are mutually exclusive. In exchange, installation will fail if a
+    /// user attempts to activate both conflicting extras.
     #[cfg_attr(
         feature = "schemars",
-        schemars(description = "A list sets of conflicting groups or extras.")
+        schemars(description = "A list of sets of conflicting groups or extras.")
     )]
     #[option(
         default = r#"[]"#,
         value_type = "list[list[dict]]",
         example = r#"
-            # Require that `package[test1]` and `package[test2]`
-            # requirements are resolved in different forks so that they
-            # cannot conflict with one another.
+            # Require that `package[extra1]` and `package[extra2]` are resolved
+            # in different forks so that they cannot conflict with one another.
             conflicts = [
                 [
-                    { extra = "test1" },
-                    { extra = "test2" },
+                    { extra = "extra1" },
+                    { extra = "extra2" },
                 ]
             ]
 
-            # Or, to declare conflicting groups:
+            # Require that the dependency groups `group1` and `group2`
+            # are resolved in different forks so that they cannot conflict
+            # with one another.
             conflicts = [
                 [
-                    { group = "test1" },
-                    { group = "test2" },
+                    { group = "group1" },
+                    { group = "group2" },
                 ]
             ]
         "#
@@ -1246,42 +1242,42 @@ impl<'de> Deserialize<'de> for Source {
         if let Some(workspace) = workspace {
             if index.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `index`",
+                    "cannot specify both `workspace` and `index`",
                 ));
             }
             if git.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `git`",
+                    "cannot specify both `workspace` and `git`",
                 ));
             }
             if url.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `url`",
+                    "cannot specify both `workspace` and `url`",
                 ));
             }
             if path.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `path`",
+                    "cannot specify both `workspace` and `path`",
                 ));
             }
             if rev.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `rev`",
+                    "cannot specify both `workspace` and `rev`",
                 ));
             }
             if tag.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `tag`",
+                    "cannot specify both `workspace` and `tag`",
                 ));
             }
             if branch.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `branch`",
+                    "cannot specify both `workspace` and `branch`",
                 ));
             }
             if editable.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `editable`",
+                    "cannot specify both `workspace` and `editable`",
                 ));
             }
 
@@ -1316,6 +1312,10 @@ pub enum SourceError {
     UnusedTag(String, String),
     #[error("`{0}` did not resolve to a Git repository, but a Git reference (`--branch {1}`) was provided.")]
     UnusedBranch(String, String),
+    #[error("`{0}` did not resolve to a local directory, but the `--editable` flag was provided. Editable installs are only supported for local directories.")]
+    UnusedEditable(String),
+    #[error("Workspace dependency `{0}` was marked as `--no-editable`, but workspace dependencies are always added in editable mode. Pass `--no-editable` to `uv sync` or `uv run` to install workspace dependencies in non-editable mode.")]
+    UnusedNoEditable(String),
     #[error("Failed to resolve absolute path")]
     Absolute(#[from] std::io::Error),
     #[error("Path contains invalid characters: `{}`", _0.display())]
@@ -1350,6 +1350,20 @@ impl Source {
             }
             if let Some(branch) = branch {
                 return Err(SourceError::UnusedBranch(name.to_string(), branch));
+            }
+        }
+
+        if workspace {
+            // If a workspace source is added with `--no-editable`, error.
+            if editable == Some(false) {
+                return Err(SourceError::UnusedNoEditable(name.to_string()));
+            }
+        } else {
+            // If we resolved a non-path source, and user specified an `--editable` flag, error.
+            if !matches!(source, RequirementSource::Directory { .. }) {
+                if editable == Some(true) {
+                    return Err(SourceError::UnusedEditable(name.to_string()));
+                }
             }
         }
 
@@ -1423,10 +1437,8 @@ impl Source {
             } => {
                 if rev.is_none() && tag.is_none() && branch.is_none() {
                     let rev = match reference {
-                        GitReference::FullCommit(ref mut rev) => Some(mem::take(rev)),
                         GitReference::Branch(ref mut rev) => Some(mem::take(rev)),
                         GitReference::Tag(ref mut rev) => Some(mem::take(rev)),
-                        GitReference::ShortCommit(ref mut rev) => Some(mem::take(rev)),
                         GitReference::BranchOrTag(ref mut rev) => Some(mem::take(rev)),
                         GitReference::BranchOrTagOrCommit(ref mut rev) => Some(mem::take(rev)),
                         GitReference::NamedRef(ref mut rev) => Some(mem::take(rev)),

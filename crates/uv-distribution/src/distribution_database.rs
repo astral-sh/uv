@@ -347,7 +347,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         tags: &Tags,
         hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
-        let lock = self.locks.acquire(&Dist::Source(dist.clone())).await;
+        let lock = self.locks.acquire(dist).await;
         let _guard = lock.lock().await;
 
         let built_wheel = self
@@ -355,6 +355,19 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .download_and_build(&BuildableSource::Dist(dist), tags, hashes, &self.client)
             .boxed_local()
             .await?;
+
+        // Acquire the advisory lock.
+        #[cfg(windows)]
+        let _lock = {
+            let lock_entry = CacheEntry::new(
+                built_wheel.target.parent().unwrap(),
+                format!(
+                    "{}.lock",
+                    built_wheel.target.file_name().unwrap().to_str().unwrap()
+                ),
+            );
+            lock_entry.lock().await.map_err(Error::CacheWrite)?
+        };
 
         // If the wheel was unzipped previously, respect it. Source distributions are
         // cached under a unique revision ID, so unzipped directories are never stale.
@@ -496,8 +509,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 
     /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
-    pub async fn requires_dist(&self, project_root: &Path) -> Result<Option<RequiresDist>, Error> {
-        self.builder.source_tree_requires_dist(project_root).await
+    pub async fn requires_dist(
+        &self,
+        source_tree: impl AsRef<Path>,
+    ) -> Result<Option<RequiresDist>, Error> {
+        self.builder
+            .source_tree_requires_dist(source_tree.as_ref())
+            .await
     }
 
     /// Stream a wheel from a URL, unzipping it into the cache as it's downloaded.
@@ -510,6 +528,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
     ) -> Result<Archive, Error> {
+        // Acquire an advisory lock, to guard against concurrent writes.
+        #[cfg(windows)]
+        let _lock = {
+            let lock_entry = wheel_entry.with_file(format!("{}.lock", filename.stem()));
+            lock_entry.lock().await.map_err(Error::CacheWrite)?
+        };
+
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.stem()));
 
@@ -635,6 +660,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
     ) -> Result<Archive, Error> {
+        // Acquire an advisory lock, to guard against concurrent writes.
+        #[cfg(windows)]
+        let _lock = {
+            let lock_entry = wheel_entry.with_file(format!("{}.lock", filename.stem()));
+            lock_entry.lock().await.map_err(Error::CacheWrite)?
+        };
+
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.stem()));
 
@@ -791,6 +823,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
+        #[cfg(windows)]
+        let _lock = {
+            let lock_entry = wheel_entry.with_file(format!("{}.lock", filename.stem()));
+            lock_entry.lock().await.map_err(Error::CacheWrite)?
+        };
+
         // Determine the last-modified time of the wheel.
         let modified = Timestamp::from_path(path).map_err(Error::CacheRead)?;
 
@@ -885,10 +923,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let temp_dir = tokio::task::spawn_blocking({
             let path = path.to_owned();
             let root = self.build_context.cache().root().to_path_buf();
-            move || -> Result<TempDir, uv_extract::Error> {
+            move || -> Result<TempDir, Error> {
                 // Unzip the wheel into a temporary directory.
-                let temp_dir = tempfile::tempdir_in(root)?;
-                uv_extract::unzip(fs_err::File::open(path)?, temp_dir.path())?;
+                let temp_dir = tempfile::tempdir_in(root).map_err(Error::CacheWrite)?;
+                let reader = fs_err::File::open(path).map_err(Error::CacheWrite)?;
+                uv_extract::unzip(reader, temp_dir.path())?;
                 Ok(temp_dir)
             }
         })
@@ -952,6 +991,20 @@ impl<'a> ManagedClient<'a> {
     {
         let _permit = self.control.acquire().await.unwrap();
         f(self.unmanaged).await
+    }
+
+    /// Perform a request using a client that internally manages the concurrency limit.
+    ///
+    /// The callback is passed the client and a semaphore. It must acquire the semaphore before
+    /// any request through the client and drop it after.
+    ///
+    /// This method serves as an escape hatch for functions that may want to send multiple requests
+    /// in parallel.
+    pub async fn manual<F, T>(&'a self, f: impl FnOnce(&'a RegistryClient, &'a Semaphore) -> F) -> T
+    where
+        F: Future<Output = T>,
+    {
+        f(self.unmanaged, &self.control).await
     }
 }
 

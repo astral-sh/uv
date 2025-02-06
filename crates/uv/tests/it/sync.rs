@@ -22,26 +22,21 @@ fn sync() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
     // Running `uv sync` should generate a lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
-    ");
+    "###);
 
     assert!(context.temp_dir.child("uv.lock").exists());
 
@@ -60,10 +55,6 @@ fn locked() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -90,10 +81,6 @@ fn locked() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -128,10 +115,6 @@ fn frozen() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -155,10 +138,6 @@ fn frozen() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -169,11 +148,10 @@ fn frozen() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     "###);
 
@@ -234,10 +212,6 @@ fn package() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["child", "anyio>3"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
         child = { workspace = true }
@@ -313,10 +287,6 @@ fn mixed_requires_python() -> Result<()> {
 
         [tool.uv.workspace]
         members = ["packages/*"]
-
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
         "#,
     )?;
 
@@ -360,9 +330,8 @@ fn mixed_requires_python() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 5 packages in [TIME]
-    Prepared 5 packages in [TIME]
-    Installed 5 packages in [TIME]
-     + albatross==0.1.0 (from file://[TEMP_DIR]/)
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.3.0
      + bird-feeder==0.1.0 (from file://[TEMP_DIR]/packages/bird-feeder)
      + idna==3.6
@@ -648,7 +617,7 @@ fn sync_legacy_non_project_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Group `bop` is not defined in any project's `dependency-group` table
+    error: Group `bop` is not defined in any project's `dependency-groups` table
     "###);
 
     Ok(())
@@ -724,10 +693,6 @@ fn sync_build_isolation() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -766,14 +731,13 @@ fn sync_build_isolation() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 7 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Installed 1 package in [TIME]
      - hatchling==1.22.4
      - packaging==24.0
      - pathspec==0.12.1
      - pluggy==1.4.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      - setuptools==69.2.0
      + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
      - trove-classifiers==2024.3.3
@@ -1167,10 +1131,6 @@ fn sync_environment() -> Result<()> {
         requires-python = ">=3.10"
         dependencies = ["iniconfig"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv]
         environments = ["python_version < '3.11'"]
         "#,
@@ -1206,10 +1166,6 @@ fn sync_dev() -> Result<()> {
 
         [tool.uv]
         dev-dependencies = ["anyio"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -1236,12 +1192,11 @@ fn sync_dev() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Prepared 2 packages in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 3 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Installed 1 package in [TIME]
      - anyio==4.3.0
      - idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      - sniffio==1.3.1
      + typing-extensions==4.10.0
     "###);
@@ -1257,6 +1212,20 @@ fn sync_dev() -> Result<()> {
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
+    "###);
+
+    // Using `--no-default-groups` should remove dev dependencies
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+     - anyio==4.3.0
+     - idna==3.6
+     - sniffio==1.3.1
     "###);
 
     Ok(())
@@ -1427,6 +1396,74 @@ fn sync_group() -> Result<()> {
     Audited 1 package in [TIME]
     "###);
 
+    uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + iniconfig==2.0.0
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + urllib3==2.2.1
+    "###);
+
+    // Using `--no-default-groups` should exclude all groups
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 8 packages in [TIME]
+     - anyio==4.3.0
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - idna==3.6
+     - iniconfig==2.0.0
+     - requests==2.31.0
+     - sniffio==1.3.1
+     - urllib3==2.2.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + iniconfig==2.0.0
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + urllib3==2.2.1
+    "###);
+
+    // Using `--no-default-groups` with `--group foo` and `--group bar` should include those groups,
+    // excluding the remaining `dev` group.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups").arg("--group").arg("foo").arg("--group").arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - iniconfig==2.0.0
+    "###);
+
     Ok(())
 }
 
@@ -1526,6 +1563,44 @@ fn sync_include_group() -> Result<()> {
     Resolved 6 packages in [TIME]
     Installed 1 package in [TIME]
      + typing-extensions==4.10.0
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Uninstalled 4 packages in [TIME]
+     - anyio==4.3.0
+     - idna==3.6
+     - iniconfig==2.0.0
+     - sniffio==1.3.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups").arg("--group").arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Audited 5 packages in [TIME]
     "###);
 
     Ok(())
@@ -1679,7 +1754,7 @@ fn sync_non_existent_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Group `baz` is not defined in the project's `dependency-group` table
+    error: Group `baz` is not defined in the project's `dependency-groups` table
     "###);
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-group").arg("baz"), @r###"
@@ -1688,7 +1763,7 @@ fn sync_non_existent_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Group `baz` is not defined in the project's `dependency-group` table
+    error: Group `baz` is not defined in the project's `dependency-groups` table
     "###);
 
     // Requesting an empty group should succeed.
@@ -1704,6 +1779,223 @@ fn sync_non_existent_group() -> Result<()> {
      + typing-extensions==4.10.0
     "###);
 
+    Ok(())
+}
+
+#[test]
+fn sync_corner_groups() -> Result<()> {
+    // Testing a bunch of random corner cases of flags so their behaviour is tracked.
+    // It's fine if we decide we want to support these later!
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        dev = ["iniconfig"]
+        foo = ["sniffio"]
+        bar = ["requests"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // --no-dev and --only-dev should error
+    // (This one could be made to work with overloading)
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-dev")
+        .arg("--only-dev"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--no-dev' cannot be used with '--only-dev'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --no-dev --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --dev and --only-group should error if they don't match
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--dev")
+        .arg("--only-group").arg("bar"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--dev' cannot be used with '--only-group <ONLY_GROUP>'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --dev and --only-group should error even if it's dev still
+    // (This one could be made to work the same as --dev --only-dev)
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--dev")
+        .arg("--only-group").arg("dev"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--dev' cannot be used with '--only-group <ONLY_GROUP>'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --group and --only-dev should error if they don't match
+    // (This one could be made to work the same as --dev --only-dev)
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--only-dev")
+        .arg("--group").arg("bar"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--only-dev' cannot be used with '--group <GROUP>'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --only-dev --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --group and --only-dev should error even if it's dev still
+    // (This one could be made to work the same as --dev --only-dev)
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--only-dev")
+        .arg("--group").arg("dev"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--only-dev' cannot be used with '--group <GROUP>'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --only-dev --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --all-groups and --only-dev should error
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--all-groups")
+        .arg("--only-dev"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--all-groups' cannot be used with '--only-dev'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --all-groups --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --all-groups and --only-group should error
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--all-groups")
+        .arg("--only-group").arg("bar"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--all-groups' cannot be used with '--only-group <ONLY_GROUP>'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --all-groups --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --group and --only-group should error if they name disjoint things
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--group").arg("foo")
+        .arg("--only-group").arg("bar"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--group <GROUP>' cannot be used with '--only-group <ONLY_GROUP>'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --group <GROUP> --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --group and --only-group should error if they name same things
+    // (This one would be fair to allow, but... is it worth it?)
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--group").arg("foo")
+        .arg("--only-group").arg("foo"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--group <GROUP>' cannot be used with '--only-group <ONLY_GROUP>'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --group <GROUP> --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --all-groups and --no-default-groups is redundant but should be --all-groups
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--all-groups")
+        .arg("--no-default-groups"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    Prepared 8 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + iniconfig==2.0.0
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+     + urllib3==2.2.1
+    ");
+
+    // --dev --only-dev should saturate as --only-dev
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--dev")
+        .arg("--only-dev"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    Uninstalled 7 packages in [TIME]
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - idna==3.6
+     - requests==2.31.0
+     - sniffio==1.3.1
+     - typing-extensions==4.10.0
+     - urllib3==2.2.1
+    ");
     Ok(())
 }
 
@@ -1736,7 +2028,7 @@ fn sync_non_existent_default_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Default group `bar` (from `tool.uv.default-groups`) is not defined in the project's `dependency-group` table
+    error: Default group `bar` (from `tool.uv.default-groups`) is not defined in the project's `dependency-groups` table
     "###);
 
     Ok(())
@@ -1923,6 +2215,74 @@ fn sync_default_groups() -> Result<()> {
      - urllib3==2.2.1
     "###);
 
+    uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+     + urllib3==2.2.1
+    "###);
+
+    // Using `--no-default-groups` should exclude all groups
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 8 packages in [TIME]
+     - anyio==4.3.0
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - idna==3.6
+     - iniconfig==2.0.0
+     - requests==2.31.0
+     - sniffio==1.3.1
+     - urllib3==2.2.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + iniconfig==2.0.0
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + urllib3==2.2.1
+    "###);
+
+    // Using `--no-default-groups` with `--group foo` and `--group bar` should include those groups,
+    // excluding the remaining `dev` group.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups").arg("--group").arg("foo").arg("--group").arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - iniconfig==2.0.0
+    "###);
+
     Ok(())
 }
 
@@ -1940,10 +2300,6 @@ fn sync_group_member() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig>=2"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [dependency-groups]
         foo = ["child", "typing-extensions>=4"]
@@ -2266,8 +2622,8 @@ fn sync_group_self() -> Result<()> {
 /// Regression test for <https://github.com/astral-sh/uv/issues/6316>.
 ///
 /// Previously, we would read metadata statically from pyproject.toml and write that to `uv.lock`. In
-/// this sync pass, we had also built the project with hatchling, which sorts specifiers by python
-/// string sort through packaging. On the second run, we read the cache that now has the hatchling
+/// this sync pass, we had also built the project with setuptools, which sorts specifiers by python
+/// string sort through packaging. On the second run, we read the cache that now has the setuptools
 /// sorting, changing the lockfile.
 #[test]
 fn read_metadata_statically_over_the_cache() -> Result<()> {
@@ -3044,6 +3400,132 @@ fn sync_custom_environment_path() -> Result<()> {
 }
 
 #[test]
+fn sync_active_environment() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Running `uv sync` with `VIRTUAL_ENV` should warn
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    context
+        .temp_dir
+        .child(".venv")
+        .assert(predicate::path::is_dir());
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::missing());
+
+    // Using `--active` should create the environment
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: foo
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::is_dir());
+
+    // A subsequent sync will re-use the environment
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    // Setting both the `VIRTUAL_ENV` and `UV_PROJECT_ENVIRONMENT` is fine if they agree
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--active")
+        .env(EnvVars::VIRTUAL_ENV, "foo")
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    // If they disagree, we use `VIRTUAL_ENV` because of `--active`
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--active")
+        .env(EnvVars::VIRTUAL_ENV, "foo")
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    context
+        .temp_dir
+        .child("bar")
+        .assert(predicate::path::missing());
+
+    // Requesting another Python version will invalidate the environment
+    uv_snapshot!(context.filters(), context.sync()
+        .env(EnvVars::VIRTUAL_ENV, "foo").arg("--active").arg("-p").arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: foo
+    Creating virtual environment at: foo
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "git")]
 fn sync_workspace_custom_environment_path() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -3277,7 +3759,7 @@ fn sync_legacy_non_project_warning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Resolved 2 packages in [TIME]
     Audited 1 package in [TIME]
     "###);
@@ -3289,7 +3771,7 @@ fn sync_legacy_non_project_warning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Resolved 2 packages in [TIME]
     Audited 1 package in [TIME]
     "###);
@@ -3315,7 +3797,7 @@ fn sync_legacy_non_project_warning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=foo` does not match the project environment path `bar` and will be ignored
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `bar` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: bar
     Resolved 2 packages in [TIME]
@@ -3334,7 +3816,7 @@ fn sync_legacy_non_project_warning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=foo` does not match the project environment path `[TEMP_DIR]/foo` and will be ignored
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `[TEMP_DIR]/foo` and will be ignored; use `--active` to target the active environment instead
     Resolved 2 packages in [TIME]
     Audited 1 package in [TIME]
     "###);
@@ -3365,10 +3847,6 @@ fn sync_update_project() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -3381,10 +3859,9 @@ fn sync_update_project() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + iniconfig==2.0.0
-     + my-project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     // Bump the project version.
@@ -3410,9 +3887,7 @@ fn sync_update_project() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - my-project==0.1.0 (from file://[TEMP_DIR]/)
      + my-project==0.2.0 (from file://[TEMP_DIR]/)
     "###);
 
@@ -3469,10 +3944,6 @@ fn no_binary() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -3485,10 +3956,9 @@ fn no_binary() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     assert!(context.temp_dir.child("uv.lock").exists());
@@ -3508,10 +3978,6 @@ fn no_binary_error() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["odrive"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -3544,10 +4010,6 @@ fn no_build() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -3560,10 +4022,9 @@ fn no_build() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     assert!(context.temp_dir.child("uv.lock").exists());
@@ -3583,10 +4044,6 @@ fn no_build_error() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["django_allauth==0.51.0"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -3640,7 +4097,9 @@ fn sync_wheel_url_source_error() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    error: distribution `cffi==1.17.1 @ direct+https://files.pythonhosted.org/packages/08/fd/cc2fedbd887223f9f5d170c96e57cbf655df9831a6546c1727ae13fa977a/cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl` can't be installed because the binary distribution is incompatible with the current platform
+    error: Distribution `cffi==1.17.1 @ direct+https://files.pythonhosted.org/packages/08/fd/cc2fedbd887223f9f5d170c96e57cbf655df9831a6546c1727ae13fa977a/cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl` can't be installed because the binary distribution is incompatible with the current platform
+
+    hint: You're using CPython 3.12 (`cp312`), but  `cffi` (v1.17.1) only has wheels with the following Python ABI tag: `cp310`
     "###);
 
     Ok(())
@@ -3689,7 +4148,9 @@ fn sync_wheel_path_source_error() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    error: distribution `cffi==1.17.1 @ path+cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl` can't be installed because the binary distribution is incompatible with the current platform
+    error: Distribution `cffi==1.17.1 @ path+cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl` can't be installed because the binary distribution is incompatible with the current platform
+
+    hint: You're using CPython 3.12 (`cp312`), but  `cffi` (v1.17.1) only has wheels with the following Python ABI tag: `cp310`
     "###);
 
     Ok(())
@@ -3708,10 +4169,6 @@ fn transitive_dev() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["child"]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
 
         [tool.uv]
         dev-dependencies = ["anyio>3"]
@@ -3763,12 +4220,11 @@ fn transitive_dev() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Prepared 5 packages in [TIME]
-    Installed 5 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.3.0
      + child==0.1.0 (from file://[TEMP_DIR]/child)
      + idna==3.6
-     + root==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     "###);
 
@@ -4381,10 +4837,6 @@ fn sync_no_sources_missing_member() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["anyio"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv.sources]
         anyio = { workspace = true }
 
@@ -4406,11 +4858,10 @@ fn sync_no_sources_missing_member() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + root==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     "###);
 
@@ -4690,10 +5141,6 @@ fn sync_all_extras() -> Result<()> {
         types = ["sniffio>1"]
         async = ["anyio>3"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv.workspace]
         members = ["child"]
 
@@ -4744,11 +5191,10 @@ fn sync_all_extras() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Prepared 5 packages in [TIME]
-    Installed 5 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + child==0.1.0 (from file://[TEMP_DIR]/child)
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
      + typing-extensions==4.10.0
     "###);
@@ -4818,10 +5264,6 @@ fn sync_all_groups() -> Result<()> {
         types = ["sniffio>=1"]
         async = ["anyio>=3"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv.workspace]
         members = ["child"]
 
@@ -4872,11 +5314,10 @@ fn sync_all_groups() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Prepared 5 packages in [TIME]
-    Installed 5 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + child==0.1.0 (from file://[TEMP_DIR]/child)
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
      + typing-extensions==4.10.0
     "###);
@@ -4904,7 +5345,7 @@ fn sync_all_groups() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Group `foo` is not defined in any project's `dependency-group` table
+    error: Group `foo` is not defined in any project's `dependency-groups` table
     "###);
 
     Ok(())
@@ -4912,7 +5353,7 @@ fn sync_all_groups() -> Result<()> {
 
 #[test]
 fn sync_multiple_sources_index_disjoint_extras() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4944,39 +5385,30 @@ fn sync_multiple_sources_index_disjoint_extras() -> Result<()> {
 
         [[tool.uv.index]]
         name = "torch-cu118"
-        url = "https://download.pytorch.org/whl/cu118"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu118"
         explicit = true
 
         [[tool.uv.index]]
         name = "torch-cu124"
-        url = "https://download.pytorch.org/whl/cu124"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu124"
         explicit = true
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
     // Generate a lockfile.
-    context
-        .lock()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .assert()
-        .success();
+    context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("cu124").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("cu124"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
      + jinja2==3.1.3
      + markupsafe==2.1.5
-     + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     Ok(())
@@ -5183,6 +5615,7 @@ fn sync_derivation_chain_group() -> Result<()> {
 
 /// See: <https://github.com/astral-sh/uv/issues/9743>
 #[test]
+#[cfg(all(feature = "slow-tests", feature = "git"))]
 fn sync_stale_egg_info() -> Result<()> {
     let context = TestContext::new("3.13");
 
@@ -5287,6 +5720,7 @@ fn sync_stale_egg_info() -> Result<()> {
 
 /// See: <https://github.com/astral-sh/uv/issues/8887>
 #[test]
+#[cfg(feature = "git")]
 fn sync_git_repeated_member_static_metadata() -> Result<()> {
     let context = TestContext::new("3.13");
 
@@ -5379,6 +5813,7 @@ fn sync_git_repeated_member_static_metadata() -> Result<()> {
 
 /// See: <https://github.com/astral-sh/uv/issues/8887>
 #[test]
+#[cfg(feature = "git")]
 fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
     let context = TestContext::new("3.13");
 
@@ -5403,7 +5838,6 @@ fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Missing version constraint (e.g., a lower bound) for `typing-extensions`
     Resolved 5 packages in [TIME]
     "###);
 
@@ -5496,6 +5930,7 @@ fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
 
 /// See: <https://github.com/astral-sh/uv/issues/8887>
 #[test]
+#[cfg(feature = "git")]
 fn sync_git_repeated_member_backwards_path() -> Result<()> {
     let context = TestContext::new("3.13");
 
@@ -5601,10 +6036,6 @@ fn mismatched_name_self_editable() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["foo"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv.sources]
         foo = { path = ".", editable = true }
         "#,
@@ -5681,6 +6112,7 @@ fn mismatched_name_cached_wheel() -> Result<()> {
 ///
 /// See: <https://github.com/astral-sh/uv/issues/9516>
 #[test]
+#[cfg(feature = "git")]
 fn sync_git_path_dependency() -> Result<()> {
     let context = TestContext::new("3.13");
 
@@ -5901,10 +6333,6 @@ fn url_hash_mismatch() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv.sources]
         iniconfig = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz" }
         "#,
@@ -5927,7 +6355,7 @@ fn url_hash_mismatch() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -5978,10 +6406,6 @@ fn path_hash_mismatch() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv.sources]
         iniconfig = { path = "iniconfig-2.0.0.tar.gz" }
         "#,
@@ -6004,7 +6428,7 @@ fn path_hash_mismatch() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -6030,6 +6454,52 @@ fn path_hash_mismatch() -> Result<()> {
           Computed:
             sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
       help: `iniconfig` was included because `project` (v0.1.0) depends on `iniconfig`
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn find_links_relative_in_config_works_from_subdir() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "subdir_test"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok==1.0.0"]
+
+        [tool.uv]
+        find-links = ["packages/"]
+    "#})?;
+
+    // Create packages/ subdirectory and copy our "offline" tqdm wheel there
+    let packages = context.temp_dir.child("packages");
+    packages.create_dir_all()?;
+
+    let wheel_src = context
+        .workspace_root
+        .join("scripts/links/ok-1.0.0-py3-none-any.whl");
+    let wheel_dst = packages.child("ok-1.0.0-py3-none-any.whl");
+    fs_err::copy(&wheel_src, &wheel_dst)?;
+
+    // Create a separate subdir, which will become our working directory
+    let subdir = context.temp_dir.child("subdir");
+    subdir.create_dir_all()?;
+
+    // Run `uv sync --offline` from subdir. We expect it to find the local wheel in ../packages/.
+    uv_snapshot!(context.filters(), context.sync().current_dir(&subdir).arg("--offline"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
     "###);
 
     Ok(())

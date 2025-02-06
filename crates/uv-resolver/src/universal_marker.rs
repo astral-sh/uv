@@ -265,7 +265,7 @@ impl UniversalMarker {
 
     /// Returns the internal marker that combines both the PEP 508
     /// and conflict marker.
-    pub(crate) fn combined(self) -> MarkerTree {
+    pub fn combined(self) -> MarkerTree {
         self.marker
     }
 

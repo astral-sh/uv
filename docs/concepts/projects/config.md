@@ -22,9 +22,9 @@ affects selection of dependency versions (they must support the same Python vers
 [Entry points](https://packaging.python.org/en/latest/specifications/entry-points/#entry-points) are
 the official term for an installed package to advertise interfaces. These include:
 
-- [Command line interfaces]()
-- [Graphical user interfaces]()
-- [Plugin entry points]()
+- [Command line interfaces](#command-line-interfaces)
+- [Graphical user interfaces](#graphical-user-interfaces)
+- [Plugin entry points](#plugin-entry-points)
 
 !!! important
 
@@ -71,7 +71,7 @@ hello = "example:app"
 ### Plugin entry points
 
 Projects may define entry points for plugin discovery in the
-[`\[project.entry-points\]`](https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins/#using-package-metadata)
+[`[project.entry-points]`](https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins/#using-package-metadata)
 table of the `pyproject.toml`.
 
 For example, to register the `example-plugin-a` package as a plugin for `example`:
@@ -172,6 +172,16 @@ This option can be used to write to the system Python environment, though it is 
 `uv sync` will remove extraneous packages from the environment by default and, as such, may leave
 the system in a broken state.
 
+To target the system environment, set `UV_PROJECT_ENVIRONMENT` to the prefix of the Python
+installation. For example, on Debian-based systems, this is usually `/usr/local`:
+
+```console
+$ python -c "import sysconfig; print(sysconfig.get_config_var('prefix'))"
+/usr/local
+```
+
+To target this environment, you'd export `UV_PROJECT_ENVIRONMENT=/usr/local`.
+
 !!! important
 
     If an absolute path is provided and the setting is used across multiple projects, the
@@ -180,8 +190,10 @@ the system in a broken state.
 
 !!! note
 
-    uv does not read the `VIRTUAL_ENV` environment variable during project operations. A warning
-    will be displayed if `VIRTUAL_ENV` is set to a different path than the project's environment.
+    By default, uv does not read the `VIRTUAL_ENV` environment variable during project operations.
+    A warning will be displayed if `VIRTUAL_ENV` is set to a different path than the project's
+    environment. The `--active` flag can be used to opt-in to respecting `VIRTUAL_ENV`. The
+    `--no-active` flag can be used to silence the warning.
 
 ## Limited resolution environments
 
@@ -307,7 +319,7 @@ You could run the following sequence of commands to sync `flash-attn`:
 
 ```console
 $ uv venv
-$ uv pip install torch
+$ uv pip install torch setuptools
 $ uv sync
 ```
 

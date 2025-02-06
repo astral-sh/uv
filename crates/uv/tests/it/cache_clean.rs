@@ -63,11 +63,13 @@ fn clean_package_pypi() -> Result<()> {
         .filters()
         .into_iter()
         .chain([
-            // The cache entry does not have a stable key, so we filter it out
+            // The cache entry does not have a stable key, so we filter it out.
             (
                 r"\[CACHE_DIR\](\\|\/)(.+)(\\|\/).*",
                 "[CACHE_DIR]/$2/[ENTRY]",
             ),
+            // The file count varies by operating system, so we filter it out.
+            ("Removed \\d+ files?", "Removed [N] files"),
         ])
         .collect();
 
@@ -79,7 +81,7 @@ fn clean_package_pypi() -> Result<()> {
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
-    Removed 12 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###);
 
     // Assert that the `.rkyv` file is removed for `iniconfig`.
@@ -136,11 +138,13 @@ fn clean_package_index() -> Result<()> {
         .filters()
         .into_iter()
         .chain([
-            // The cache entry does not have a stable key, so we filter it out
+            // The cache entry does not have a stable key, so we filter it out.
             (
                 r"\[CACHE_DIR\](\\|\/)(.+)(\\|\/).*",
                 "[CACHE_DIR]/$2/[ENTRY]",
             ),
+            // The file count varies by operating system, so we filter it out.
+            ("Removed \\d+ files?", "Removed [N] files"),
         ])
         .collect();
 
@@ -152,7 +156,7 @@ fn clean_package_index() -> Result<()> {
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
-    Removed 12 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###);
 
     // Assert that the `.rkyv` file is removed for `iniconfig`.

@@ -28,7 +28,7 @@ use uv_configuration::{
     SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl};
-use uv_install_wheel::linker::LinkMode;
+use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep508::{ExtraName, RequirementOrigin};
 use uv_pypi_types::{Requirement, SupportedEnvironments};
@@ -156,7 +156,9 @@ impl GlobalSettings {
                 .combine(env(env::UV_PYTHON_DOWNLOADS))
                 .combine(workspace.and_then(|workspace| workspace.globals.python_downloads))
                 .unwrap_or_default(),
-            no_progress: args.no_progress,
+            // Disable the progress bar with `RUST_LOG` to avoid progress fragments interleaving
+            // with log messages.
+            no_progress: args.no_progress || std::env::var_os(EnvVars::RUST_LOG).is_some(),
             installer_metadata: !args.no_installer_metadata,
         }
     }
@@ -193,12 +195,14 @@ pub(crate) struct InitSettings {
     pub(crate) name: Option<PackageName>,
     pub(crate) package: bool,
     pub(crate) kind: InitKind,
+    pub(crate) bare: bool,
     pub(crate) description: Option<String>,
+    pub(crate) no_description: bool,
     pub(crate) vcs: Option<VersionControlSystem>,
     pub(crate) build_backend: Option<ProjectBuildBackend>,
     pub(crate) no_readme: bool,
     pub(crate) author_from: Option<AuthorFrom>,
-    pub(crate) no_pin_python: bool,
+    pub(crate) pin_python: bool,
     pub(crate) no_workspace: bool,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -214,17 +218,21 @@ impl InitSettings {
             r#virtual,
             package,
             no_package,
+            bare,
             app,
             lib,
             script,
             description,
+            no_description,
             vcs,
             build_backend,
             no_readme,
             author_from,
             no_pin_python,
+            pin_python,
             no_workspace,
             python,
+            ..
         } = args;
 
         let kind = match (app, lib, script) {
@@ -242,17 +250,21 @@ impl InitSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
+        let no_description = no_description || (bare && description.is_none());
+
         Self {
             path,
             name,
             package,
             kind,
+            bare,
             description,
-            vcs,
+            no_description,
+            vcs: vcs.or(bare.then_some(VersionControlSystem::None)),
             build_backend,
-            no_readme,
+            no_readme: no_readme || bare,
             author_from,
-            no_pin_python,
+            pin_python: flag(pin_python, no_pin_python).unwrap_or(!bare),
             no_workspace,
             python: python.and_then(Maybe::into_option),
             install_mirrors,
@@ -278,6 +290,7 @@ pub(crate) struct RunSettings {
     pub(crate) all_packages: bool,
     pub(crate) package: Option<PackageName>,
     pub(crate) no_project: bool,
+    pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -300,6 +313,7 @@ impl RunSettings {
             no_dev,
             group,
             no_group,
+            no_default_groups,
             only_group,
             all_groups,
             module: _,
@@ -314,6 +328,8 @@ impl RunSettings {
             with_editable,
             with_requirements,
             isolated,
+            active,
+            no_active,
             no_sync,
             locked,
             frozen,
@@ -343,7 +359,14 @@ impl RunSettings {
                 extra.unwrap_or_default(),
             ),
             dev: DevGroupsSpecification::from_args(
-                dev, no_dev, only_dev, group, no_group, only_group, all_groups,
+                dev,
+                no_dev,
+                only_dev,
+                group,
+                no_group,
+                no_default_groups,
+                only_group,
+                all_groups,
             ),
             editable: EditableMode::from_args(no_editable),
             modifications: if flag(exact, inexact).unwrap_or(false) {
@@ -369,6 +392,7 @@ impl RunSettings {
             package,
             no_project,
             no_sync,
+            active: flag(active, no_active),
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
@@ -933,6 +957,7 @@ impl PythonPinSettings {
 pub(crate) struct SyncSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
+    pub(crate) active: Option<bool>,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: DevGroupsSpecification,
     pub(crate) editable: EditableMode,
@@ -960,6 +985,7 @@ impl SyncSettings {
             only_dev,
             group,
             no_group,
+            no_default_groups,
             only_group,
             all_groups,
             no_editable,
@@ -970,6 +996,8 @@ impl SyncSettings {
             no_install_package,
             locked,
             frozen,
+            active,
+            no_active,
             installer,
             build,
             refresh,
@@ -990,13 +1018,21 @@ impl SyncSettings {
         Self {
             locked,
             frozen,
+            active: flag(active, no_active),
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 no_extra,
                 extra.unwrap_or_default(),
             ),
             dev: DevGroupsSpecification::from_args(
-                dev, no_dev, only_dev, group, no_group, only_group, all_groups,
+                dev,
+                no_dev,
+                only_dev,
+                group,
+                no_group,
+                no_default_groups,
+                only_group,
+                all_groups,
             ),
             editable: EditableMode::from_args(no_editable),
             install_options: InstallOptions::new(
@@ -1072,6 +1108,7 @@ impl LockSettings {
 pub(crate) struct AddSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
+    pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
     pub(crate) packages: Vec<String>,
     pub(crate) requirements: Vec<PathBuf>,
@@ -1111,6 +1148,8 @@ impl AddSettings {
             no_sync,
             locked,
             frozen,
+            active,
+            no_active,
             installer,
             build,
             refresh,
@@ -1182,6 +1221,7 @@ impl AddSettings {
         Self {
             locked,
             frozen,
+            active: flag(active, no_active),
             no_sync,
             packages,
             requirements,
@@ -1212,6 +1252,7 @@ impl AddSettings {
 pub(crate) struct RemoveSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
+    pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
     pub(crate) packages: Vec<PackageName>,
     pub(crate) dependency_type: DependencyType,
@@ -1235,6 +1276,8 @@ impl RemoveSettings {
             no_sync,
             locked,
             frozen,
+            active,
+            no_active,
             installer,
             build,
             refresh,
@@ -1266,6 +1309,7 @@ impl RemoveSettings {
         Self {
             locked,
             frozen,
+            active: flag(active, no_active),
             no_sync,
             packages,
             dependency_type,
@@ -1316,6 +1360,7 @@ impl TreeSettings {
             no_dev,
             group,
             no_group,
+            no_default_groups,
             only_group,
             all_groups,
             locked,
@@ -1334,7 +1379,14 @@ impl TreeSettings {
 
         Self {
             dev: DevGroupsSpecification::from_args(
-                dev, no_dev, only_dev, group, no_group, only_group, all_groups,
+                dev,
+                no_dev,
+                only_dev,
+                group,
+                no_group,
+                no_default_groups,
+                only_group,
+                all_groups,
             ),
             locked,
             frozen,
@@ -1397,6 +1449,7 @@ impl ExportSettings {
             only_dev,
             group,
             no_group,
+            no_default_groups,
             only_group,
             all_groups,
             header,
@@ -1432,7 +1485,14 @@ impl ExportSettings {
                 extra.unwrap_or_default(),
             ),
             dev: DevGroupsSpecification::from_args(
-                dev, no_dev, only_dev, group, no_group, only_group, all_groups,
+                dev,
+                no_dev,
+                only_dev,
+                group,
+                no_group,
+                no_default_groups,
+                only_group,
+                all_groups,
             ),
             editable: EditableMode::from_args(no_editable),
             hashes: flag(hashes, no_hashes).unwrap_or(true),
@@ -2174,6 +2234,7 @@ pub(crate) struct VenvSettings {
     pub(crate) system_site_packages: bool,
     pub(crate) relocatable: bool,
     pub(crate) no_project: bool,
+    pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
 }
 
@@ -2196,6 +2257,7 @@ impl VenvSettings {
             exclude_newer,
             no_project,
             link_mode,
+            refresh,
             compat_args: _,
         } = args;
 
@@ -2207,6 +2269,7 @@ impl VenvSettings {
             system_site_packages,
             no_project,
             relocatable,
+            refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
@@ -2525,6 +2588,7 @@ pub(crate) struct PipSettings {
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) system: bool,
     pub(crate) extras: ExtrasSpecification,
+    pub(crate) groups: DevGroupsSpecification,
     pub(crate) break_system_packages: bool,
     pub(crate) target: Option<Target>,
     pub(crate) prefix: Option<Prefix>,
@@ -2717,6 +2781,16 @@ impl PipSettings {
                 args.all_extras.combine(all_extras).unwrap_or_default(),
                 args.no_extra.combine(no_extra).unwrap_or_default(),
                 args.extra.combine(extra).unwrap_or_default(),
+            ),
+            groups: DevGroupsSpecification::from_args(
+                false,
+                false,
+                false,
+                Vec::new(),
+                Vec::new(),
+                false,
+                Vec::new(),
+                false,
             ),
             dependency_mode: if args.no_deps.combine(no_deps).unwrap_or_default() {
                 DependencyMode::Direct

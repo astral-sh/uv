@@ -9,7 +9,6 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, PreviewMode, Reinstall, TrustedHost, Upgrade};
-use uv_dispatch::SharedState;
 use uv_distribution_types::{NameRequirementSpecification, UnresolvedRequirementSpecification};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
@@ -27,7 +26,7 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 
 use crate::commands::project::{
     resolve_environment, resolve_names, sync_environment, update_environment,
-    EnvironmentSpecification, ProjectError,
+    EnvironmentSpecification, PlatformState, ProjectError,
 };
 use crate::commands::tool::common::{install_executables, refine_interpreter, remove_entrypoints};
 use crate::commands::tool::Target;
@@ -87,7 +86,7 @@ pub(crate) async fn install(
     .into_interpreter();
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let state = PlatformState::default();
 
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
@@ -221,6 +220,14 @@ pub(crate) async fn install(
             from_requirement
         }
     };
+
+    if from.name.as_str().eq_ignore_ascii_case("python") {
+        return Err(anyhow::anyhow!(
+            "Cannot install Python with `{}`. Did you mean to use `{}`?",
+            "uv tool install".cyan(),
+            "uv python install".cyan(),
+        ));
+    }
 
     // If the user passed, e.g., `ruff@latest`, we need to mark it as upgradable.
     let settings = if target.is_latest() {

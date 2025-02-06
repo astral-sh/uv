@@ -120,7 +120,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                     match reason {
                         UnavailableReason::Package(reason) => {
                             let message = reason.singular_message();
-                            format!("{}{}", package, Padded::new(" ", &message, ""),)
+                            format!("{}{}", package, Padded::new(" ", &message, ""))
                         }
                         UnavailableReason::Version(reason) => {
                             let range = self.compatible_range(package, set);
@@ -744,12 +744,8 @@ impl PubGrubReportFormatter<'_> {
         match tag {
             IncompatibleTag::Invalid => None,
             IncompatibleTag::Python => {
-                let best = tags.and_then(Tags::python_tag).cloned();
-                let tags = prioritized
-                    .python_tags()
-                    .into_iter()
-                    .cloned()
-                    .collect::<BTreeSet<_>>();
+                let best = tags.and_then(Tags::python_tag);
+                let tags = prioritized.python_tags().collect::<BTreeSet<_>>();
                 if tags.is_empty() {
                     None
                 } else {
@@ -762,10 +758,9 @@ impl PubGrubReportFormatter<'_> {
                 }
             }
             IncompatibleTag::Abi | IncompatibleTag::AbiPythonVersion => {
-                let best = tags.and_then(Tags::abi_tag).cloned();
+                let best = tags.and_then(Tags::abi_tag);
                 let tags = prioritized
                     .abi_tags()
-                    .into_iter()
                     // Ignore `none`, which is universally compatible.
                     //
                     // As an example, `none` can appear here if we're solving for Python 3.13, and
@@ -774,8 +769,7 @@ impl PubGrubReportFormatter<'_> {
                     // In that case, the wheel isn't compatible, but when solving for Python 3.13,
                     // the `cp312` Python tag _can_ be compatible (e.g., for `cp312-abi3-macosx_11_0_arm64.whl`),
                     // so this is considered an ABI incompatibility rather than Python incompatibility.
-                    .filter(|tag| **tag != AbiTag::None)
-                    .cloned()
+                    .filter(|tag| *tag != AbiTag::None)
                     .collect::<BTreeSet<_>>();
                 if tags.is_empty() {
                     None
@@ -801,9 +795,8 @@ impl PubGrubReportFormatter<'_> {
                 // we only show platforms for ABI-compatible wheels.
                 let tags = prioritized
                     .platform_tags(self.tags?)
-                    .into_iter()
                     .cloned()
-                    .collect::<Vec<_>>();
+                    .collect::<BTreeSet<_>>();
                 if tags.is_empty() {
                     None
                 } else {
@@ -1111,7 +1104,8 @@ pub(crate) enum PubGrubHint {
     UnauthorizedIndex { index: IndexUrl },
     /// An index returned a Forbidden (403) response.
     ForbiddenIndex { index: IndexUrl },
-    /// No wheels are available for a package, and using source distributions was disabled.
+    /// None of the available wheels for a package have a compatible Python language tag (e.g.,
+    /// `cp310` in `cp310-abi3-manylinux_2_17_x86_64.whl`).
     LanguageTags {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
@@ -1121,7 +1115,8 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         best: Option<LanguageTag>,
     },
-    /// No wheels are available for a package, and using source distributions was disabled.
+    /// None of the available wheels for a package have a compatible ABI tag (e.g., `abi3` in
+    /// `cp310-abi3-manylinux_2_17_x86_64.whl`).
     AbiTags {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
@@ -1131,13 +1126,14 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         best: Option<AbiTag>,
     },
-    /// No wheels are available for a package, and using source distributions was disabled.
+    /// None of the available wheels for a package have a compatible platform tag (e.g.,
+    /// `manylinux_2_17_x86_64` in `cp310-abi3-manylinux_2_17_x86_64.whl`).
     PlatformTags {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
         version: Version,
         // excluded from `PartialEq` and `Hash`
-        tags: Vec<PlatformTag>,
+        tags: BTreeSet<PlatformTag>,
     },
 }
 
@@ -1547,7 +1543,7 @@ impl std::fmt::Display for PubGrubHint {
                 let option = match option {
                     NoBuild::All => "for all packages (i.e., with `--no-build`)".to_string(),
                     NoBuild::Packages(_) => {
-                        format!("for `{package}` (i.e., with `--no-build-package {package}`)",)
+                        format!("for `{package}` (i.e., with `--no-build-package {package}`)")
                     }
                     NoBuild::None => unreachable!(),
                 };
@@ -1563,7 +1559,7 @@ impl std::fmt::Display for PubGrubHint {
                 let option = match option {
                     NoBinary::All => "for all packages (i.e., with `--no-binary`)".to_string(),
                     NoBinary::Packages(_) => {
-                        format!("for `{package}` (i.e., with `--no-binary-package {package}`)",)
+                        format!("for `{package}` (i.e., with `--no-binary-package {package}`)")
                     }
                     NoBinary::None => unreachable!(),
                 };
@@ -1581,7 +1577,7 @@ impl std::fmt::Display for PubGrubHint {
                 tags,
                 best,
             } => {
-                if let Some(best) = best.as_ref() {
+                if let Some(best) = best {
                     let s = if tags.len() == 1 { "" } else { "s" };
                     let best = if let Some(pretty) = best.pretty() {
                         format!("{} (`{}`)", pretty.cyan(), best.cyan())
@@ -1621,7 +1617,7 @@ impl std::fmt::Display for PubGrubHint {
                 tags,
                 best,
             } => {
-                if let Some(best) = best.as_ref() {
+                if let Some(best) = best {
                     let s = if tags.len() == 1 { "" } else { "s" };
                     let best = if let Some(pretty) = best.pretty() {
                         format!("{} (`{}`)", pretty.cyan(), best.cyan())

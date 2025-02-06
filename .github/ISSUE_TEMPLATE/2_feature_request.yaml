@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest a new feature or improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Please review [our guide on interacting with the issue tracker](https://github.com/astral-sh/uv/issues/9452) before opening a new issue.**
+
+  - type: textarea
+    attributes:
+      label: Summary
+      description: |
+        A clear and concise description of what new feature or behavior you would like to see. If applicable, please describe the current behavior as well.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Example
+      description: Provide an example of how the user experience would change or how the new feature would be used.
+    validations:
+      required: false

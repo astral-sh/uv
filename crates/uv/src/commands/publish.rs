@@ -8,6 +8,7 @@ use std::fmt::Write;
 use std::iter;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Semaphore;
 use tracing::{debug, info};
 use url::Url;
 use uv_cache::Cache;
@@ -69,6 +70,8 @@ pub(crate) async fn publish(
     let oidc_client = BaseClientBuilder::new()
         .auth_integration(AuthIntegration::NoAuthMiddleware)
         .wrap_existing(&upload_client);
+    // We're only checking a single URL and one at a time, so 1 permit is sufficient
+    let download_concurrency = Arc::new(Semaphore::new(1));
 
     let (publish_url, username, password) = gather_credentials(
         publish_url,
@@ -110,7 +113,9 @@ pub(crate) async fn publish(
 
     for (file, raw_filename, filename) in files {
         if let Some(check_url_client) = &check_url_client {
-            if uv_publish::check_url(check_url_client, &file, &filename).await? {
+            if uv_publish::check_url(check_url_client, &file, &filename, &download_concurrency)
+                .await?
+            {
                 writeln!(printer.stderr(), "File {filename} already exists, skipping")?;
                 continue;
             }
@@ -134,6 +139,7 @@ pub(crate) async fn publish(
             username.as_deref(),
             password.as_deref(),
             check_url_client.as_ref(),
+            &download_concurrency,
             // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
             Arc::new(reporter),
         )
@@ -160,6 +166,34 @@ enum Prompt {
 }
 
 /// Unify the different possible source for username and password information.
+///
+/// Possible credential sources are environment variables, the CLI, the URL, the keyring, trusted
+/// publishing or a prompt.
+///
+/// The username can come from, in order:
+///
+/// - Mutually exclusive:
+///   - `--username` or `UV_PUBLISH_USERNAME`. The CLI option overrides the environment variable
+///   - The username field in the publish URL
+///   - If `--token` or `UV_PUBLISH_TOKEN` are used, it is `__token__`. The CLI option
+///     overrides the environment variable
+/// - If trusted publishing is available, it is `__token__`
+/// - (We currently do not read the username from the keyring)
+/// - If stderr is a tty, prompt the user
+///
+/// The password can come from, in order:
+///
+/// - Mutually exclusive:
+///   - `--password` or `UV_PUBLISH_PASSWORD`. The CLI option overrides the environment variable
+///   - The password field in the publish URL
+///   - If `--token` or `UV_PUBLISH_TOKEN` are used, it is the token value. The CLI option overrides
+///     the environment variable
+/// - If the keyring is enabled, the keyring entry for the URL and username
+/// - If trusted publishing is available, the trusted publishing token
+/// - If stderr is a tty, prompt the user
+///
+/// If no credentials are found, the auth middleware does a final check for cached credentials and
+/// otherwise errors without sending the request.
 ///
 /// Returns the publish URL, the username and the password.
 async fn gather_credentials(

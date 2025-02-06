@@ -25,9 +25,9 @@ use uv_cli::{
 use uv_cli::{PythonCommand, PythonNamespace, ToolCommand, ToolNamespace, TopLevelArgs};
 #[cfg(feature = "self-update")]
 use uv_cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
-use uv_fs::CWD;
+use uv_fs::{Simplified, CWD};
 use uv_requirements::RequirementsSource;
-use uv_scripts::{Pep723Item, Pep723Metadata, Pep723Script};
+use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
 use uv_settings::{Combine, FilesystemOptions, Options};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
@@ -168,45 +168,67 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     // If the target is a PEP 723 script, parse it.
     let script = if let Commands::Project(command) = &*cli.command {
-        if let ProjectCommand::Run(uv_cli::RunArgs { .. }) = &**command {
-            match run_command.as_ref() {
+        match &**command {
+            ProjectCommand::Run(uv_cli::RunArgs { .. }) => match run_command.as_ref() {
                 Some(
                     RunCommand::PythonScript(script, _) | RunCommand::PythonGuiScript(script, _),
-                ) => Pep723Script::read(&script).await?.map(Pep723Item::Script),
+                ) => match Pep723Script::read(&script).await {
+                    Ok(Some(script)) => Some(Pep723Item::Script(script)),
+                    Ok(None) => None,
+                    Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => None,
+                    Err(err) => return Err(err.into()),
+                },
                 Some(RunCommand::PythonRemote(script, _)) => {
-                    Pep723Metadata::read(&script).await?.map(Pep723Item::Remote)
+                    match Pep723Metadata::read(&script).await {
+                        Ok(Some(metadata)) => Some(Pep723Item::Remote(metadata)),
+                        Ok(None) => None,
+                        Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                            None
+                        }
+                        Err(err) => return Err(err.into()),
+                    }
                 }
                 Some(
                     RunCommand::PythonStdin(contents, _) | RunCommand::PythonGuiStdin(contents, _),
                 ) => Pep723Metadata::parse(contents)?.map(Pep723Item::Stdin),
                 _ => None,
-            }
-        } else if let ProjectCommand::Remove(uv_cli::RemoveArgs {
-            script: Some(script),
-            ..
-        }) = &**command
-        {
-            Pep723Script::read(&script).await?.map(Pep723Item::Script)
-        } else if let ProjectCommand::Lock(uv_cli::LockArgs {
-            script: Some(script),
-            ..
-        }) = &**command
-        {
-            Pep723Script::read(&script).await?.map(Pep723Item::Script)
-        } else if let ProjectCommand::Tree(uv_cli::TreeArgs {
-            script: Some(script),
-            ..
-        }) = &**command
-        {
-            Pep723Script::read(&script).await?.map(Pep723Item::Script)
-        } else if let ProjectCommand::Export(uv_cli::ExportArgs {
-            script: Some(script),
-            ..
-        }) = &**command
-        {
-            Pep723Script::read(&script).await?.map(Pep723Item::Script)
-        } else {
-            None
+            },
+            ProjectCommand::Remove(uv_cli::RemoveArgs {
+                script: Some(script),
+                ..
+            })
+            | ProjectCommand::Lock(uv_cli::LockArgs {
+                script: Some(script),
+                ..
+            })
+            | ProjectCommand::Tree(uv_cli::TreeArgs {
+                script: Some(script),
+                ..
+            })
+            | ProjectCommand::Export(uv_cli::ExportArgs {
+                script: Some(script),
+                ..
+            }) => match Pep723Script::read(&script).await {
+                Ok(Some(script)) => Some(Pep723Item::Script(script)),
+                Ok(None) => {
+                    // TODO(charlie): `uv lock --script` should initialize the tag, if it doesn't
+                    // exist.
+                    bail!(
+                        "`{}` does not contain a PEP 723 metadata tag; run `{}` to initialize the script",
+                        script.user_display().cyan(),
+                        format!("uv init --script {}", script.user_display()).green()
+                    )
+                }
+                Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                    bail!(
+                        "Failed to read `{}` (not found); run `{}` to create a PEP 723 script",
+                        script.user_display().cyan(),
+                        format!("uv init --script {}", script.user_display()).green()
+                    )
+                }
+                Err(err) => return Err(err.into()),
+            },
+            _ => None,
         }
     } else {
         None
@@ -365,6 +387,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.overrides_from_workspace,
                 args.environments,
                 args.settings.extras,
+                args.settings.groups,
                 args.settings.output_file.as_deref(),
                 args.settings.resolution,
                 args.settings.prerelease,
@@ -535,6 +558,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.constraints_from_workspace,
                 args.overrides_from_workspace,
                 &args.settings.extras,
+                &args.settings.groups,
                 args.settings.resolution,
                 args.settings.prerelease,
                 args.settings.dependency_mode,
@@ -819,7 +843,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             // Since we use ".venv" as the default name, we use "." as the default prompt.
             let prompt = args.prompt.or_else(|| {
@@ -1175,7 +1203,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::PythonUninstallSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::python_uninstall(args.install_dir, args.targets, args.all, printer).await
+            commands::python_uninstall(
+                args.install_dir,
+                args.targets,
+                args.all,
+                printer,
+                globals.preview,
+            )
+            .await
         }
         Commands::Python(PythonNamespace {
             command: PythonCommand::Find(args),
@@ -1392,12 +1427,14 @@ async fn run_project(
                 args.name,
                 args.package,
                 args.kind,
+                args.bare,
                 args.description,
+                args.no_description,
                 args.vcs,
                 args.build_backend,
                 args.no_readme,
                 args.author_from,
-                args.no_pin_python,
+                args.pin_python,
                 args.python,
                 args.install_mirrors,
                 args.no_workspace,
@@ -1449,6 +1486,7 @@ async fn run_project(
                 args.show_resolution || globals.verbose > 0,
                 args.locked,
                 args.frozen,
+                args.active,
                 args.no_sync,
                 args.isolated,
                 args.all_packages,
@@ -1493,6 +1531,7 @@ async fn run_project(
                 project_dir,
                 args.locked,
                 args.frozen,
+                args.active,
                 args.all_packages,
                 args.package,
                 args.extras,
@@ -1584,6 +1623,7 @@ async fn run_project(
                 project_dir,
                 args.locked,
                 args.frozen,
+                args.active,
                 args.no_sync,
                 requirements,
                 args.editable,
@@ -1636,6 +1676,7 @@ async fn run_project(
                 project_dir,
                 args.locked,
                 args.frozen,
+                args.active,
                 args.no_sync,
                 args.packages,
                 args.dependency_type,

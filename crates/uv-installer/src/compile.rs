@@ -75,7 +75,8 @@ pub async fn compile_tree(
 ) -> Result<usize, CompileError> {
     debug_assert!(
         dir.is_absolute(),
-        "compileall doesn't work with relative paths"
+        "compileall doesn't work with relative paths: `{}`",
+        dir.display()
     );
     let worker_count = std::thread::available_parallelism().unwrap_or_else(|err| {
         warn_user!("Couldn't determine number of cores, compiling with a single thread: {err}");

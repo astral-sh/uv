@@ -16,11 +16,10 @@ use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, DevMode, EditableMode,
-    ExtrasSpecification, GroupsSpecification, InstallOptions, LowerBound, PreviewMode,
-    SourceStrategy, TrustedHost,
+    Concurrency, Constraints, DevGroupsSpecification, DevMode, EditableMode, ExtrasSpecification,
+    InstallOptions, PreviewMode, SourceStrategy, TrustedHost,
 };
-use uv_dispatch::{BuildDispatch, SharedState};
+use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{Index, IndexName, UnresolvedRequirement, VersionId};
 use uv_fs::Simplified;
@@ -47,7 +46,8 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    init_script_python_requirement, ProjectError, ProjectInterpreter, ScriptInterpreter,
+    init_script_python_requirement, PlatformState, ProjectError, ProjectInterpreter,
+    ScriptInterpreter, UniversalState,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{diagnostics, project, ExitStatus};
@@ -60,6 +60,7 @@ pub(crate) async fn add(
     project_dir: &Path,
     locked: bool,
     frozen: bool,
+    active: Option<bool>,
     no_sync: bool,
     requirements: Vec<RequirementsSource>,
     editable: Option<bool>,
@@ -212,6 +213,7 @@ pub(crate) async fn add(
                 allow_insecure_host,
                 &install_mirrors,
                 no_config,
+                active,
                 cache,
                 printer,
             )
@@ -231,6 +233,7 @@ pub(crate) async fn add(
                 native_tls,
                 allow_insecure_host,
                 no_config,
+                active,
                 cache,
                 printer,
             )
@@ -251,7 +254,7 @@ pub(crate) async fn add(
         RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let state = PlatformState::default();
 
     // Resolve any unnamed requirements.
     let requirements = {
@@ -285,7 +288,11 @@ pub(crate) async fn add(
             // Add all authenticated sources to the cache.
             for index in settings.index_locations.allowed_indexes() {
                 if let Some(credentials) = index.credentials() {
-                    uv_auth::store_credentials(index.raw_url(), credentials);
+                    let credentials = Arc::new(credentials);
+                    uv_auth::store_credentials(index.raw_url(), credentials.clone());
+                    if let Some(root_url) = index.root_url() {
+                        uv_auth::store_credentials(&root_url, credentials.clone());
+                    }
                 }
             }
 
@@ -327,7 +334,7 @@ pub(crate) async fn add(
                 &settings.index_locations,
                 &flat_index,
                 &settings.dependency_metadata,
-                state.clone(),
+                state.clone().into_inner(),
                 settings.index_strategy,
                 &settings.config_setting,
                 build_isolation,
@@ -335,7 +342,6 @@ pub(crate) async fn add(
                 &settings.build_options,
                 &build_hasher,
                 settings.exclude_newer,
-                LowerBound::default(),
                 sources,
                 concurrency,
                 preview,
@@ -606,11 +612,16 @@ pub(crate) async fn add(
         }
     });
 
+    // Use separate state for locking and syncing.
+    let lock_state = state.fork();
+    let sync_state = state;
+
     match lock_and_sync(
         target,
         &mut toml,
         &edits,
-        state,
+        lock_state,
+        sync_state,
         locked,
         &dependency_type,
         raw_sources,
@@ -647,7 +658,8 @@ async fn lock_and_sync(
     mut target: AddTarget,
     toml: &mut PyProjectTomlMut,
     edits: &[DependencyEdit],
-    state: SharedState,
+    lock_state: UniversalState,
+    sync_state: PlatformState,
     locked: bool,
     dependency_type: &DependencyType,
     raw_sources: bool,
@@ -669,8 +681,7 @@ async fn lock_and_sync(
         },
         (&target).into(),
         settings.into(),
-        LowerBound::default(),
-        &state,
+        &lock_state,
         Box::new(DefaultResolveLogger),
         connectivity,
         concurrency,
@@ -776,7 +787,7 @@ async fn lock_and_sync(
                 let url = Url::from_file_path(project.project_root())
                     .expect("project root is a valid URL");
                 let version_id = VersionId::from_url(&url);
-                let existing = state.index().distributions().remove(&version_id);
+                let existing = lock_state.index().distributions().remove(&version_id);
                 debug_assert!(existing.is_some(), "distribution should exist");
             }
 
@@ -790,8 +801,7 @@ async fn lock_and_sync(
                 },
                 (&target).into(),
                 settings.into(),
-                LowerBound::default(),
-                &state,
+                &lock_state,
                 Box::new(SummaryResolveLogger),
                 connectivity,
                 concurrency,
@@ -820,23 +830,22 @@ async fn lock_and_sync(
     let (extras, dev) = match dependency_type {
         DependencyType::Production => {
             let extras = ExtrasSpecification::None;
-            let dev = DevGroupsSpecification::from(DevMode::Exclude);
+            let dev = DevGroupsSpecification::from_dev_mode(DevMode::Exclude);
             (extras, dev)
         }
         DependencyType::Dev => {
             let extras = ExtrasSpecification::None;
-            let dev = DevGroupsSpecification::from(DevMode::Include);
+            let dev = DevGroupsSpecification::from_dev_mode(DevMode::Include);
             (extras, dev)
         }
         DependencyType::Optional(ref extra_name) => {
             let extras = ExtrasSpecification::Some(vec![extra_name.clone()]);
-            let dev = DevGroupsSpecification::from(DevMode::Exclude);
+            let dev = DevGroupsSpecification::from_dev_mode(DevMode::Exclude);
             (extras, dev)
         }
         DependencyType::Group(ref group_name) => {
             let extras = ExtrasSpecification::None;
-            let dev =
-                DevGroupsSpecification::from(GroupsSpecification::from_group(group_name.clone()));
+            let dev = DevGroupsSpecification::from_group(group_name.clone());
             (extras, dev)
         }
     };
@@ -858,11 +867,12 @@ async fn lock_and_sync(
         target,
         venv,
         &extras,
-        &DevGroupsManifest::from_spec(dev),
+        &dev.with_defaults(Vec::new()),
         EditableMode::Editable,
         InstallOptions::default(),
         Modifications::Sufficient,
         settings.into(),
+        &sync_state,
         Box::new(DefaultInstallLogger),
         installer_metadata,
         connectivity,

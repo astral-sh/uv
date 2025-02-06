@@ -57,6 +57,38 @@ The virtual environment can be "activated" to make its packages available:
     $ .venv\Scripts\activate
     ```
 
+!!! note
+
+    The default activation script on Unix is for POSIX compliant shells like `sh`, `bash`, or `zsh`.
+    There are additional activation scripts for common alternative shells.
+
+    === "fish"
+
+        ```console
+        $ source .venv/bin/activate.fish
+        ```
+
+    === "csh / tcsh"
+
+
+        ```console
+        $ source .venv/bin/activate.csh
+        ```
+
+    === "Nushell"
+
+        ```console
+        $ use .venv\Scripts\activate.nu
+        ```
+
+## Deactivating an environment
+
+To exit a virtual environment, use the `deactivate` command:
+
+```console
+$ deactivate
+```
+
 ## Using arbitrary Python environments
 
 Since uv has no dependency on Python, it can install into virtual environments other than its own.

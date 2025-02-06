@@ -121,13 +121,11 @@ pub struct Pep723Script {
 impl Pep723Script {
     /// Read the PEP 723 `script` metadata from a Python file, if it exists.
     ///
+    /// Returns `None` if the file is missing a PEP 723 metadata block.
+    ///
     /// See: <https://peps.python.org/pep-0723/>
     pub async fn read(file: impl AsRef<Path>) -> Result<Option<Self>, Pep723Error> {
-        let contents = match fs_err::tokio::read(&file).await {
-            Ok(contents) => contents,
-            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
-            Err(err) => return Err(err.into()),
-        };
+        let contents = fs_err::tokio::read(&file).await?;
 
         // Extract the `script` tag.
         let ScriptTag {
@@ -286,13 +284,11 @@ impl Pep723Metadata {
 
     /// Read the PEP 723 `script` metadata from a Python file, if it exists.
     ///
+    /// Returns `None` if the file is missing a PEP 723 metadata block.
+    ///
     /// See: <https://peps.python.org/pep-0723/>
     pub async fn read(file: impl AsRef<Path>) -> Result<Option<Self>, Pep723Error> {
-        let contents = match fs_err::tokio::read(&file).await {
-            Ok(contents) => contents,
-            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
-            Err(err) => return Err(err.into()),
-        };
+        let contents = fs_err::tokio::read(&file).await?;
 
         // Extract the `script` tag.
         let ScriptTag { metadata, .. } = match ScriptTag::parse(&contents) {
@@ -341,6 +337,8 @@ pub struct ToolUv {
 pub enum Pep723Error {
     #[error("An opening tag (`# /// script`) was found without a closing tag (`# ///`). Ensure that every line between the opening and closing tags (including empty lines) starts with a leading `#`.")]
     UnclosedBlock,
+    #[error("The PEP 723 metadata block is missing from the script.")]
+    MissingTag,
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]

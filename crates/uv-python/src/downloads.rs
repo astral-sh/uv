@@ -28,6 +28,7 @@ use crate::implementation::{
 };
 use crate::installation::PythonInstallationKey;
 use crate::libc::LibcDetectionError;
+use crate::managed::ManagedPythonInstallation;
 use crate::platform::{self, Arch, Libc, Os};
 use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
 
@@ -344,6 +345,23 @@ impl PythonDownloadRequest {
     }
 }
 
+impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
+    fn from(installation: &ManagedPythonInstallation) -> Self {
+        let key = installation.key();
+        Self::new(
+            Some(VersionRequest::from(&key.version())),
+            match &key.implementation {
+                LenientImplementationName::Known(implementation) => Some(*implementation),
+                LenientImplementationName::Unknown(name) => unreachable!("Managed Python installations are expected to always have known implementation names, found {name}"),
+            },
+            Some(key.arch),
+            Some(key.os),
+            Some(key.libc),
+            Some(key.prerelease.is_some()),
+        )
+    }
+}
+
 impl Display for PythonDownloadRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut parts = Vec::new();
@@ -453,7 +471,7 @@ impl ManagedPythonDownload {
             .filter(|download| download.key.libc != Libc::Some(target_lexicon::Environment::Musl))
     }
 
-    pub fn url(&self) -> &str {
+    pub fn url(&self) -> &'static str {
         self.url
     }
 
@@ -465,7 +483,7 @@ impl ManagedPythonDownload {
         self.key.os()
     }
 
-    pub fn sha256(&self) -> Option<&str> {
+    pub fn sha256(&self) -> Option<&'static str> {
         self.sha256
     }
 

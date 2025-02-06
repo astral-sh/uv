@@ -11,12 +11,14 @@ workspace = true
 
 [dependencies]
 uv-once-map = { workspace = true }
+uv-static = { workspace = true }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
+percent-encoding = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 rust-netrc = { workspace = true }
@@ -24,13 +26,10 @@ rustc-hash = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
-urlencoding = { workspace = true }
-
-uv-static = { workspace = true }
 
 [dev-dependencies]
+insta = { version = "1.40.0" }
 tempfile = { workspace = true }
+test-log = { version = "0.2.16", features = ["trace"], default-features = false }
 tokio = { workspace = true }
 wiremock = { workspace = true }
-insta = { version = "1.40.0" }
-test-log = { version = "0.2.16", features = ["trace"], default-features = false }

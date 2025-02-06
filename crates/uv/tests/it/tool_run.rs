@@ -241,9 +241,13 @@ fn tool_run_suggest_valid_commands() {
 
 #[test]
 fn tool_run_warn_executable_not_in_from() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    // FastAPI 0.111 is only available from this date onwards.
+    let context = TestContext::new("3.12")
+        .with_exclude_newer("2024-05-04T00:00:00Z")
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
+
     let mut filters = context.filters();
     filters.push(("\\+ uvloop(.+)\n ", ""));
     // Strip off the `fastapi` command output.
@@ -253,8 +257,6 @@ fn tool_run_warn_executable_not_in_from() {
         .arg("--from")
         .arg("fastapi")
         .arg("fastapi")
-        .env(EnvVars::UV_EXCLUDE_NEWER, "2024-05-04T00:00:00Z") // TODO: Remove this once EXCLUDE_NEWER is bumped past 2024-05-04
-        // (FastAPI 0.111 is only available from this date onwards)
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: false
@@ -866,44 +868,28 @@ fn tool_run_csv_with() -> anyhow::Result<()> {
        "
     })?;
 
-    // performs a tool run with CSV `with` flag
+    // Performs a tool run with a comma-separated `--with` flag.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--with")
-        .arg("numpy,pandas")
-        .arg("ipython")
-        .arg("-c")
-        .arg("import numpy; import pandas;")
+        .arg("iniconfig,typing-extensions")
+        .arg("pytest")
+        .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
+    pytest 8.1.1
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + asttokens==2.4.1
-     + decorator==5.1.1
-     + executing==2.0.1
-     + ipython==8.22.2
-     + jedi==0.19.1
-     + matplotlib-inline==0.1.6
-     + numpy==1.26.4
-     + pandas==2.2.1
-     + parso==0.8.3
-     + pexpect==4.9.0
-     + prompt-toolkit==3.0.43
-     + ptyprocess==0.7.0
-     + pure-eval==0.2.2
-     + pygments==2.17.2
-     + python-dateutil==2.9.0.post0
-     + pytz==2024.1
-     + six==1.16.0
-     + stack-data==0.6.3
-     + traitlets==5.14.2
-     + tzdata==2024.1
-     + wcwidth==0.2.13
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + typing-extensions==4.10.0
     "###);
 
     Ok(())
@@ -946,41 +932,28 @@ fn tool_run_csv_with() -> anyhow::Result<()> {
        "
     })?;
 
-    // performs a tool run with CSV `with` flag
+    // Performs a tool run with a comma-separated `--with` flag.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--with")
-        .arg("numpy,pandas")
-        .arg("ipython")
-        .arg("-c")
-        .arg("import numpy; import pandas;")
+        .arg("iniconfig,typing-extensions")
+        .arg("pytest")
+        .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
+    pytest 8.1.1
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + asttokens==2.4.1
-     + decorator==5.1.1
-     + executing==2.0.1
-     + ipython==8.22.2
-     + jedi==0.19.1
-     + matplotlib-inline==0.1.6
-     + numpy==1.26.4
-     + pandas==2.2.1
-     + parso==0.8.3
-     + prompt-toolkit==3.0.43
-     + pure-eval==0.2.2
-     + pygments==2.17.2
-     + python-dateutil==2.9.0.post0
-     + pytz==2024.1
-     + six==1.16.0
-     + stack-data==0.6.3
-     + traitlets==5.14.2
-     + wcwidth==0.2.13
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + typing-extensions==4.10.0
     "###);
 
     Ok(())
@@ -1023,46 +996,30 @@ fn tool_run_repeated_with() -> anyhow::Result<()> {
        "
     })?;
 
-    // performs a tool run with repeated `with` flag
+    // Performs a tool run with a repeated `--with` flag.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--with")
-        .arg("numpy")
+        .arg("iniconfig")
         .arg("--with")
-        .arg("pandas")
-        .arg("ipython")
-        .arg("-c")
-        .arg("import numpy; import pandas;")
+        .arg("typing-extensions")
+        .arg("pytest")
+        .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
+    pytest 8.1.1
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + asttokens==2.4.1
-     + decorator==5.1.1
-     + executing==2.0.1
-     + ipython==8.22.2
-     + jedi==0.19.1
-     + matplotlib-inline==0.1.6
-     + numpy==1.26.4
-     + pandas==2.2.1
-     + parso==0.8.3
-     + pexpect==4.9.0
-     + prompt-toolkit==3.0.43
-     + ptyprocess==0.7.0
-     + pure-eval==0.2.2
-     + pygments==2.17.2
-     + python-dateutil==2.9.0.post0
-     + pytz==2024.1
-     + six==1.16.0
-     + stack-data==0.6.3
-     + traitlets==5.14.2
-     + tzdata==2024.1
-     + wcwidth==0.2.13
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + typing-extensions==4.10.0
     "###);
 
     Ok(())
@@ -1105,43 +1062,30 @@ fn tool_run_repeated_with() -> anyhow::Result<()> {
        "
     })?;
 
-    // performs a tool run with repeated `with` flag
+    // Performs a tool run with a repeated `--with` flag.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--with")
-        .arg("numpy")
+        .arg("iniconfig")
         .arg("--with")
-        .arg("pandas")
-        .arg("ipython")
-        .arg("-c")
-        .arg("import numpy; import pandas;")
+        .arg("typing-extensions")
+        .arg("pytest")
+        .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
+    pytest 8.1.1
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + asttokens==2.4.1
-     + decorator==5.1.1
-     + executing==2.0.1
-     + ipython==8.22.2
-     + jedi==0.19.1
-     + matplotlib-inline==0.1.6
-     + numpy==1.26.4
-     + pandas==2.2.1
-     + parso==0.8.3
-     + prompt-toolkit==3.0.43
-     + pure-eval==0.2.2
-     + pygments==2.17.2
-     + python-dateutil==2.9.0.post0
-     + pytz==2024.1
-     + six==1.16.0
-     + stack-data==0.6.3
-     + traitlets==5.14.2
-     + wcwidth==0.2.13
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + typing-extensions==4.10.0
     "###);
 
     Ok(())
@@ -1451,5 +1395,193 @@ fn tool_run_latest() {
     pytest 7.0.0
 
     ----- stderr -----
+    "###);
+}
+
+#[test]
+fn tool_run_python() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python")
+        .arg("-c")
+        .arg("print('Hello, world!')"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved in [TIME]
+    "###);
+}
+
+#[test]
+fn tool_run_python_at_version() {
+    let context = TestContext::new_with_versions(&["3.12", "3.11"])
+        .with_filtered_counts()
+        .with_filtered_python_sources();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+            .arg("python@3.12")
+            .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python@3.11")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    "###);
+
+    // Request a version via `-p`
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("-p")
+        .arg("3.11")
+        .arg("python")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    "###);
+
+    // Request a version in the tool and `-p`
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("-p")
+        .arg("3.12")
+        .arg("python@3.11")
+        .arg("--version"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Received multiple Python version requests: `3.12` and `3.11`
+    "###);
+
+    // Request a version that does not exist
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python@3.12.99"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python 3.12.[X] in [PYTHON SOURCES]
+    "###);
+
+    // Request an invalid version
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python@3.300"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+    
+    ----- stderr -----
+    error: Invalid version request: 3.300
+    "###);
+
+    // Request `@latest` (not yet supported)
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python@latest")
+        .arg("--version"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Requesting the 'latest' Python version is not yet supported
+    "###);
+}
+
+#[test]
+fn tool_run_python_from() {
+    let context = TestContext::new_with_versions(&["3.12", "3.11"])
+        .with_filtered_counts()
+        .with_filtered_python_sources();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("python")
+        .arg("python")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("python@3.11")
+        .arg("python")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("python>=3.12")
+        .arg("python")
+        .arg("--version"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Using `--from python<specifier>` is not supported. Use `python@<version>` instead.
     "###);
 }

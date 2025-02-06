@@ -155,7 +155,9 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
         let result = self
             .fetcher
             .client()
-            .managed(|client| client.simple(package_name, index, self.capabilities))
+            .manual(|client, semaphore| {
+                client.simple(package_name, index, self.capabilities, semaphore)
+            })
             .await;
 
         match result {
