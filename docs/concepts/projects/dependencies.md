@@ -608,8 +608,8 @@ dev = [
 ```
 
 The `dev` group is special-cased; there are `--dev`, `--only-dev`, and `--no-dev` flags to toggle
-inclusion or exclusion of its dependencies. Additionally, the `dev` group is
-[synced by default](#default-groups).
+inclusion or exclusion of its dependencies, although you probably want `--no-default-groups` over
+`--no-dev`. Additionally, the `dev` group is [synced by default](#default-groups).
 
 ### Dependency groups
 
@@ -633,8 +633,8 @@ lint = [
 ]
 ```
 
-Once groups are defined, the `--group`, `--only-group`, and `--no-group` options can be used to
-include or exclude their dependencies.
+Once groups are defined, the `--all-groups`, `--no-default-groups`, `--group`, `--only-group`,
+and `--no-group` options can be used to include or exclude their dependencies.
 
 !!! tip
 
@@ -664,7 +664,8 @@ default-groups = ["dev", "foo"]
 
 !!! tip
 
-    To exclude a default group during `uv run` or `uv sync`, use `--no-group <name>`.
+    To disable this behaviour during `uv run` or `uv sync`, use `--no-default-groups`.
+    To exclude a specific default group, use `--no-group <name>`.
 
 ### Legacy `dev-dependencies`
 
