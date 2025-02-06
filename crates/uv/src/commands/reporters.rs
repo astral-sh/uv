@@ -225,9 +225,9 @@ impl ProgressReporter {
             return;
         };
 
-        let progress = state.lock().unwrap().bars.remove(&id).unwrap();
-
-        let size = state.lock().unwrap().download_size[&id];
+        let mut state = state.lock().unwrap();
+        let progress = state.bars.remove(&id).unwrap();
+        let size = state.download_size[&id];
         if multi_progress.is_hidden()
             && !*HAS_UV_TEST_NO_CLI_PROGRESS
             && size.is_none_or(|size| size > 1024 * 1024)
