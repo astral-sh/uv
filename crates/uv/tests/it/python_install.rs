@@ -869,7 +869,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.12.8-[PLATFORM]/python"
+                read_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.12.9-[PLATFORM]/python"
             );
         });
 
@@ -877,7 +877,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.8-[PLATFORM]/python"
+                read_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.9-[PLATFORM]/python"
             );
         });
 
@@ -885,7 +885,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.12.8-[PLATFORM]/python"
+                read_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.12.9-[PLATFORM]/python"
             );
         });
     }
@@ -945,7 +945,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/python"
+                read_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.13.2-[PLATFORM]/python"
             );
         });
 
@@ -953,7 +953,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_minor_13), @"[TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/python"
+                read_link_path(&bin_python_minor_13), @"[TEMP_DIR]/managed/cpython-3.13.2-[PLATFORM]/python"
             );
         });
 
@@ -961,7 +961,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.8-[PLATFORM]/python"
+                read_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.9-[PLATFORM]/python"
             );
         });
 
@@ -969,7 +969,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/python"
+                read_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.13.2-[PLATFORM]/python"
             );
         });
     }
