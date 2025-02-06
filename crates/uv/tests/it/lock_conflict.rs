@@ -11250,18 +11250,8 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
         requires-python = ">=3.12"
         resolution-markers = [
             "extra != 'extra-27-resolution-markers-for-days-cpu' and extra == 'extra-27-resolution-markers-for-days-cu124'",
-            "python_version < '0'",
-            "python_version < '0'",
-            "python_version < '0'",
-            "python_version < '0'",
             "sys_platform != 'darwin' and extra == 'extra-27-resolution-markers-for-days-cpu' and extra != 'extra-27-resolution-markers-for-days-cu124'",
-            "python_version < '0'",
-            "python_version < '0'",
             "sys_platform == 'darwin' and extra == 'extra-27-resolution-markers-for-days-cpu' and extra != 'extra-27-resolution-markers-for-days-cu124'",
-            "python_version < '0'",
-            "python_version < '0'",
-            "python_version < '0'",
-            "python_version < '0'",
             "extra != 'extra-27-resolution-markers-for-days-cpu' and extra != 'extra-27-resolution-markers-for-days-cu124'",
         ]
         conflicts = [[
@@ -11552,8 +11542,8 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
             { name = "fsspec", marker = "sys_platform == 'darwin'" },
             { name = "jinja2", marker = "sys_platform == 'darwin'" },
             { name = "networkx", marker = "sys_platform == 'darwin'" },
-            { name = "setuptools", marker = "python_full_version >= '3.12' and sys_platform == 'darwin'" },
-            { name = "sympy", marker = "python_full_version >= '3.12' and sys_platform == 'darwin'" },
+            { name = "setuptools", marker = "sys_platform == 'darwin'" },
+            { name = "sympy", marker = "sys_platform == 'darwin'" },
             { name = "typing-extensions", marker = "sys_platform == 'darwin'" },
         ]
         wheels = [
@@ -11573,8 +11563,8 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
             { name = "fsspec", marker = "sys_platform != 'darwin'" },
             { name = "jinja2", marker = "sys_platform != 'darwin'" },
             { name = "networkx", marker = "sys_platform != 'darwin'" },
-            { name = "setuptools", marker = "python_full_version >= '3.12' and sys_platform != 'darwin'" },
-            { name = "sympy", marker = "python_full_version >= '3.12' and sys_platform != 'darwin'" },
+            { name = "setuptools", marker = "sys_platform != 'darwin'" },
+            { name = "sympy", marker = "sys_platform != 'darwin'" },
             { name = "typing-extensions", marker = "sys_platform != 'darwin'" },
         ]
         wheels = [
@@ -11610,8 +11600,8 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
             { name = "nvidia-nccl-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
             { name = "nvidia-nvjitlink-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
             { name = "nvidia-nvtx-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
-            { name = "setuptools", marker = "python_full_version >= '3.12'" },
-            { name = "sympy", marker = "python_full_version >= '3.12'" },
+            { name = "setuptools" },
+            { name = "sympy" },
             { name = "triton", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
             { name = "typing-extensions" },
         ]
