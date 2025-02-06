@@ -3,8 +3,10 @@ use std::borrow::Borrow;
 use itertools::Itertools;
 
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder, MarkerTree};
+use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder, MarkerOperator, MarkerTree};
 use uv_pypi_types::{ConflictItem, ConflictPackage, Conflicts};
+
+use crate::ResolveError;
 
 /// A representation of a marker for use in universal resolution.
 ///
@@ -451,6 +453,34 @@ impl ConflictMarker {
         self.marker
             .evaluate(&DUMMY, &extras.chain(groups).collect::<Vec<ExtraName>>())
     }
+
+    /// Returns inclusion and exclusion (respectively) conflict items parsed
+    /// from this conflict marker.
+    ///
+    /// This returns an error if any `extra` could not be parsed as a valid
+    /// encoded conflict extra.
+    pub(crate) fn filter_rules(
+        self,
+    ) -> Result<(Vec<ConflictItem>, Vec<ConflictItem>), ResolveError> {
+        let (mut raw_include, mut raw_exclude) = (vec![], vec![]);
+        self.marker.visit_extras(|op, extra| {
+            match op {
+                MarkerOperator::Equal => raw_include.push(extra.to_owned()),
+                MarkerOperator::NotEqual => raw_exclude.push(extra.to_owned()),
+                // OK by the contract of `MarkerTree::visit_extras`.
+                _ => unreachable!(),
+            }
+        });
+        let include = raw_include
+            .into_iter()
+            .map(|extra| ParsedRawExtra::parse(&extra).and_then(|parsed| parsed.to_conflict_item()))
+            .collect::<Result<Vec<_>, _>>()?;
+        let exclude = raw_exclude
+            .into_iter()
+            .map(|extra| ParsedRawExtra::parse(&extra).and_then(|parsed| parsed.to_conflict_item()))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((include, exclude))
+    }
 }
 
 impl std::fmt::Debug for ConflictMarker {
@@ -483,6 +513,108 @@ fn encode_package_group(package: &PackageName, group: &GroupName) -> ExtraName {
     // See `encode_package_extra`, the same considerations apply here.
     let package_len = package.as_str().len();
     ExtraName::new(format!("group-{package_len}-{package}-{group}")).unwrap()
+}
+
+#[derive(Debug)]
+enum ParsedRawExtra<'a> {
+    Extra { package: &'a str, extra: &'a str },
+    Group { package: &'a str, group: &'a str },
+}
+
+impl<'a> ParsedRawExtra<'a> {
+    fn parse(raw_extra: &'a ExtraName) -> Result<ParsedRawExtra<'a>, ResolveError> {
+        fn mkerr(raw_extra: &ExtraName, reason: impl Into<String>) -> ResolveError {
+            let raw_extra = raw_extra.to_owned();
+            let reason = reason.into();
+            ResolveError::InvalidExtraInConflictMarker { reason, raw_extra }
+        }
+
+        let raw = raw_extra.as_str();
+        let Some((kind, tail)) = raw.split_once('-') else {
+            return Err(mkerr(
+                raw_extra,
+                "expected to find leading `extra-` or `group-`",
+            ));
+        };
+        let Some((len, tail)) = tail.split_once('-') else {
+            return Err(mkerr(
+                raw_extra,
+                "expected to find `{number}-` after leading `extra-` or `group-`",
+            ));
+        };
+        let len = len.parse::<usize>().map_err(|_| {
+            mkerr(
+                raw_extra,
+                format!("found package length number `{len}`, but could not parse into integer"),
+            )
+        })?;
+        let Some((package, tail)) = tail.split_at_checked(len) else {
+            return Err(mkerr(
+                raw_extra,
+                format!(
+                    "expected at least {len} bytes for package name, but found {found}",
+                    found = tail.len()
+                ),
+            ));
+        };
+        if !tail.starts_with('-') {
+            return Err(mkerr(
+                raw_extra,
+                format!("expected `-` after package name `{package}`"),
+            ));
+        }
+        let tail = &tail[1..];
+        match kind {
+            "extra" => Ok(ParsedRawExtra::Extra {
+                package,
+                extra: tail,
+            }),
+            "group" => Ok(ParsedRawExtra::Group {
+                package,
+                group: tail,
+            }),
+            _ => Err(mkerr(
+                raw_extra,
+                format!("unrecognized kind `{kind}` (must be `extra` or `group`)"),
+            )),
+        }
+    }
+
+    fn to_conflict_item(&self) -> Result<ConflictItem, ResolveError> {
+        let package = PackageName::new(self.package().to_string()).map_err(|name_error| {
+            ResolveError::InvalidValueInConflictMarker {
+                kind: "package",
+                name_error,
+            }
+        })?;
+        match *self {
+            ParsedRawExtra::Extra { extra, .. } => {
+                let extra = ExtraName::new(extra.to_string()).map_err(|name_error| {
+                    ResolveError::InvalidValueInConflictMarker {
+                        kind: "extra",
+                        name_error,
+                    }
+                })?;
+                Ok(ConflictItem::from((package, extra)))
+            }
+            ParsedRawExtra::Group { group, .. } => {
+                let group = GroupName::new(group.to_string()).map_err(|name_error| {
+                    ResolveError::InvalidValueInConflictMarker {
+                        kind: "group",
+                        name_error,
+                    }
+                })?;
+                Ok(ConflictItem::from((package, group)))
+            }
+        }
+    }
+
+    fn package(&self) -> &'a str {
+        match *self {
+            ParsedRawExtra::Extra { package, .. } => package,
+            ParsedRawExtra::Group { package, .. } => package,
+        }
+    }
 }
 
 #[cfg(test)]
