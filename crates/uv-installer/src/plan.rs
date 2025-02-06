@@ -131,8 +131,7 @@ impl<'a> Planner<'a> {
                         }
                         Some(&entry.dist)
                     }) {
-                        debug!("Requirement already cached: {distribution}");
-                        // STOPSHIP(charlie): If these are mismatched, skip and warn.
+                        debug!("Registry requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));
                         continue;
                     }
