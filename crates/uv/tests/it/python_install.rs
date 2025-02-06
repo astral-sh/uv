@@ -1088,16 +1088,16 @@ fn python_install_default_from_env() {
     "###);
 
     // Same with uninstall
-    uv_snapshot!(context.filters(), context.python_uninstall().env(EnvVars::UV_PYTHON, "3.12"), @r###"
+    uv_snapshot!(context.filters(), context.python_uninstall().env(EnvVars::UV_PYTHON, "3.12"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Searching for Python versions matching: Python 3.12
-    Uninstalled Python 3.12.8 in [TIME]
-     - cpython-3.12.8-[PLATFORM]
-    "###);
+    Uninstalled Python 3.12.9 in [TIME]
+     - cpython-3.12.9-[PLATFORM]
+    ");
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.11").env(EnvVars::UV_PYTHON, "3.12"), @r###"
     success: true
@@ -1111,15 +1111,15 @@ fn python_install_default_from_env() {
     "###);
 
     // Install again so we can test interaction with `uninstall --all`
-    uv_snapshot!(context.filters(), context.python_install().arg("3.12"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.12.8 in [TIME]
-     + cpython-3.12.8-[PLATFORM]
-    "###);
+    Installed Python 3.12.9 in [TIME]
+     + cpython-3.12.9-[PLATFORM]
+    ");
 
     // We should ignore `UV_PYTHON` here
     uv_snapshot!(context.filters(), context.python_uninstall().arg("--all").env(EnvVars::UV_PYTHON, "3.11"), @r"
@@ -1129,8 +1129,8 @@ fn python_install_default_from_env() {
 
     ----- stderr -----
     Searching for Python installations
-    Uninstalled Python 3.12.8 in [TIME]
-     - cpython-3.12.8-[PLATFORM]
+    Uninstalled Python 3.12.9 in [TIME]
+     - cpython-3.12.9-[PLATFORM]
     ");
 }
 
