@@ -295,3 +295,39 @@ Hello from example-ext!
 
     Changes to the extension code in `lib.rs` or `main.cpp` will require running `--reinstall` to
     rebuild them.
+
+## Creating a minimal project
+
+If you only want to create a `pyproject.toml`, use the `--bare` option:
+
+```console
+$ uv init example --bare
+```
+
+uv will skip creating a Python version pin file, a README, and any source directories or files.
+Additionally, uv will not initialize a version control system (i.e., `git`).
+
+```console
+$ tree example-bare
+example-bare
+└── pyproject.toml
+```
+
+uv will also not add extra metadata to the `pyproject.toml`, such as the `description` or `authors`.
+
+```toml
+[project]
+name = "example"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = []
+```
+
+The `--bare` option can be used with other options like `--lib` or `--build-backend` — in these
+cases uv will still configure a build system but will not create the expected file structure.
+
+When `--bare` is used, additional features can still be used opt-in:
+
+```console
+$ uv init example --bare --description "Hello world" --author-from git --vcs git --python-pin
+```

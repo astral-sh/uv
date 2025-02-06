@@ -112,6 +112,19 @@ impl<'a> Target<'a> {
         }
     }
 
+    /// Returns whether the target package is Python.
+    pub(crate) fn is_python(&self) -> bool {
+        let name = match self {
+            Self::Unspecified(name) => name,
+            Self::Version(name, _) => name,
+            Self::Latest(name) => name,
+            Self::FromVersion(_, name, _) => name,
+            Self::FromLatest(_, name) => name,
+            Self::From(_, name) => name,
+        };
+        name.eq_ignore_ascii_case("python") || cfg!(windows) && name.eq_ignore_ascii_case("pythonw")
+    }
+
     /// Returns `true` if the target is `latest`.
     fn is_latest(&self) -> bool {
         matches!(self, Self::Latest(_) | Self::FromLatest(_, _))

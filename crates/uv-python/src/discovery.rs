@@ -193,6 +193,8 @@ pub enum PythonSource {
     DiscoveredEnvironment,
     /// An executable was found in the search path i.e. `PATH`
     SearchPath,
+    /// The first executable found in the search path i.e. `PATH`
+    SearchPathFirst,
     /// An executable was found in the Windows registry via PEP 514
     Registry,
     /// An executable was found in the known Microsoft Store locations
@@ -331,7 +333,14 @@ fn python_executables_from_installed<'a>(
 
     let from_search_path = iter::once_with(move || {
         python_executables_from_search_path(version, implementation)
-            .map(|path| Ok((PythonSource::SearchPath, path)))
+            .enumerate()
+            .map(|(i, path)| {
+                if i == 0 {
+                    Ok((PythonSource::SearchPathFirst, path))
+                } else {
+                    Ok((PythonSource::SearchPath, path))
+                }
+            })
     })
     .flatten();
 
@@ -397,9 +406,11 @@ fn python_executables_from_installed<'a>(
 
 /// Lazily iterate over all discoverable Python executables.
 ///
-/// Note that Python executables may be excluded by the given [`EnvironmentPreference`] and [`PythonPreference`].
+/// Note that Python executables may be excluded by the given [`EnvironmentPreference`] and
+/// [`PythonPreference`]. However, these filters are only applied for performance. We cannot
+/// guarantee that the [`EnvironmentPreference`] is satisfied until we query the interpreter.
 ///
-/// See [`python_executables_from_installed`] and [`python_executables_from_environments`]
+/// See [`python_executables_from_installed`] and [`python_executables_from_virtual_environments`]
 /// for more information on discovery.
 fn python_executables<'a>(
     version: &'a VersionRequest,
@@ -427,8 +438,9 @@ fn python_executables<'a>(
     let from_virtual_environments = python_executables_from_virtual_environments();
     let from_installed = python_executables_from_installed(version, implementation, preference);
 
-    // Limit the search to the relevant environment preference; we later validate that they match
-    // the preference but queries are expensive and we query less interpreters this way.
+    // Limit the search to the relevant environment preference; this avoids unnecessary work like
+    // traversal of the file system. Subsequent filtering should be done by the caller with
+    // `source_satisfies_environment_preference` and `interpreter_satisfies_environment_preference`.
     match environments {
         EnvironmentPreference::OnlyVirtual => {
             Box::new(from_parent_interpreter.chain(from_virtual_environments))
@@ -602,11 +614,31 @@ fn python_interpreters<'a>(
     cache: &'a Cache,
 ) -> impl Iterator<Item = Result<(PythonSource, Interpreter), Error>> + 'a {
     python_interpreters_from_executables(
-        python_executables(version, implementation, environments, preference),
+        // Perform filtering on the discovered executables based on their source. This avoids
+        // unnecessary interpreter queries, which are generally expensive. We'll filter again
+        // with `interpreter_satisfies_environment_preference` after querying.
+        python_executables(version, implementation, environments, preference).filter_ok(
+            move |(source, path)| {
+                source_satisfies_environment_preference(*source, path, environments)
+            },
+        ),
         cache,
     )
-    .filter(move |result| result_satisfies_environment_preference(result, environments))
-    .filter(move |result| result_satisfies_version_request(result, version))
+    .filter_ok(move |(source, interpreter)| {
+        interpreter_satisfies_environment_preference(*source, interpreter, environments)
+    })
+    .filter_ok(move |(source, interpreter)| {
+        let request = version.clone().into_request_for_source(*source);
+        if request.matches_interpreter(interpreter) {
+            true
+        } else {
+            debug!(
+                "Skipping interpreter at `{}` from {source}: does not satisfy request `{request}`",
+                interpreter.sys_executable().user_display()
+            );
+            false
+        }
+    })
 }
 
 /// Lazily convert Python executables into interpreters.
@@ -630,8 +662,13 @@ fn python_interpreters_from_executables<'a>(
     })
 }
 
-/// Returns true if a Python interpreter matches the [`EnvironmentPreference`].
-fn satisfies_environment_preference(
+/// Whether a [`Interpreter`] matches the [`EnvironmentPreference`].
+///
+/// This is the correct way to determine if an interpreter matches the preference. In contrast,
+/// [`source_satisfies_environment_preference`] only checks if a [`PythonSource`] **could** satisfy
+/// preference as a pre-filtering step. We cannot definitively know if a Python interpreter is in
+/// a virtual environment until we query it.
+fn interpreter_satisfies_environment_preference(
     source: PythonSource,
     interpreter: &Interpreter,
     preference: EnvironmentPreference,
@@ -680,33 +717,53 @@ fn satisfies_environment_preference(
     }
 }
 
-/// Utility for applying [`VersionRequest::matches_interpreter`] to a result type.
-fn result_satisfies_version_request(
-    result: &Result<(PythonSource, Interpreter), Error>,
-    request: &VersionRequest,
-) -> bool {
-    result.as_ref().ok().map_or(true, |(source, interpreter)| {
-        let request = request.clone().into_request_for_source(*source);
-        if request.matches_interpreter(interpreter) {
-            true
-        } else {
-            debug!(
-                "Skipping interpreter at `{}` from {source}: does not satisfy request `{request}`",
-                interpreter.sys_executable().user_display()
-            );
-            false
-        }
-    })
-}
-
-/// Utility for applying [`satisfies_environment_preference`] to a result type.
-fn result_satisfies_environment_preference(
-    result: &Result<(PythonSource, Interpreter), Error>,
+/// Returns true if a [`PythonSource`] could satisfy the [`EnvironmentPreference`].
+///
+/// This is useful as a pre-filtering step. Use of [`interpreter_satisfies_environment_preference`]
+/// is required to determine if an [`Interpreter`] satisfies the preference.
+///
+/// The interpreter path is only used for debug messages.
+fn source_satisfies_environment_preference(
+    source: PythonSource,
+    interpreter_path: &Path,
     preference: EnvironmentPreference,
 ) -> bool {
-    result.as_ref().ok().map_or(true, |(source, interpreter)| {
-        satisfies_environment_preference(*source, interpreter, preference)
-    })
+    match preference {
+        EnvironmentPreference::Any => true,
+        EnvironmentPreference::OnlyVirtual => {
+            if source.is_maybe_virtualenv() {
+                true
+            } else {
+                debug!(
+                    "Ignoring Python interpreter at `{}`: only virtual environments allowed",
+                    interpreter_path.display()
+                );
+                false
+            }
+        }
+        EnvironmentPreference::ExplicitSystem => {
+            if source.is_maybe_virtualenv() {
+                true
+            } else {
+                debug!(
+                    "Ignoring Python interpreter at `{}`: system interpreter not explicitly requested",
+                    interpreter_path.display()
+                );
+                false
+            }
+        }
+        EnvironmentPreference::OnlySystem => {
+            if source.is_maybe_system() {
+                true
+            } else {
+                debug!(
+                    "Ignoring Python interpreter at `{}`: system interpreter required",
+                    interpreter_path.display()
+                );
+                false
+            }
+        }
+    }
 }
 
 /// Check if an encountered error is critical and should stop discovery.
@@ -863,10 +920,14 @@ pub fn find_python_installations<'a>(
                 debug!("Searching for Python interpreter with {request}");
                 Box::new(
                     python_interpreters_with_executable_name(name, cache)
-                        .filter(move |result| {
-                            result_satisfies_environment_preference(result, environments)
+                        .filter_ok(move |(source, interpreter)| {
+                            interpreter_satisfies_environment_preference(
+                                *source,
+                                interpreter,
+                                environments,
+                            )
                         })
-                        .map(|result| result.map(PythonInstallation::from_tuple).map(Ok)),
+                        .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple))),
                 )
             } else {
                 Box::new(iter::once(Err(Error::SourceNotAllowed(
@@ -879,7 +940,7 @@ pub fn find_python_installations<'a>(
         PythonRequest::Any => Box::new({
             debug!("Searching for any Python interpreter in {sources}");
             python_interpreters(&VersionRequest::Any, None, environments, preference, cache)
-                .map(|result| result.map(PythonInstallation::from_tuple).map(Ok))
+                .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
         }),
         PythonRequest::Default => Box::new({
             debug!("Searching for default Python interpreter in {sources}");
@@ -890,7 +951,7 @@ pub fn find_python_installations<'a>(
                 preference,
                 cache,
             )
-            .map(|result| result.map(PythonInstallation::from_tuple).map(Ok))
+            .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
         }),
         PythonRequest::Version(version) => {
             if let Err(err) = version.check_supported() {
@@ -899,7 +960,7 @@ pub fn find_python_installations<'a>(
             Box::new({
                 debug!("Searching for {request} in {sources}");
                 python_interpreters(version, None, environments, preference, cache)
-                    .map(|result| result.map(PythonInstallation::from_tuple).map(Ok))
+                    .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
             })
         }
         PythonRequest::Implementation(implementation) => Box::new({
@@ -911,13 +972,12 @@ pub fn find_python_installations<'a>(
                 preference,
                 cache,
             )
-            .filter(|result| match result {
-                Err(_) => true,
-                Ok((_source, interpreter)) => interpreter
+            .filter_ok(|(_source, interpreter)| {
+                interpreter
                     .implementation_name()
-                    .eq_ignore_ascii_case(implementation.into()),
+                    .eq_ignore_ascii_case(implementation.into())
             })
-            .map(|result| result.map(PythonInstallation::from_tuple).map(Ok))
+            .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
         }),
         PythonRequest::ImplementationVersion(implementation, version) => {
             if let Err(err) = version.check_supported() {
@@ -932,13 +992,12 @@ pub fn find_python_installations<'a>(
                     preference,
                     cache,
                 )
-                .filter(|result| match result {
-                    Err(_) => true,
-                    Ok((_source, interpreter)) => interpreter
+                .filter_ok(|(_source, interpreter)| {
+                    interpreter
                         .implementation_name()
-                        .eq_ignore_ascii_case(implementation.into()),
+                        .eq_ignore_ascii_case(implementation.into())
                 })
-                .map(|result| result.map(PythonInstallation::from_tuple).map(Ok))
+                .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
             })
         }
         PythonRequest::Key(request) => {
@@ -956,11 +1015,8 @@ pub fn find_python_installations<'a>(
                     preference,
                     cache,
                 )
-                .filter(|result| match result {
-                    Err(_) => true,
-                    Ok((_source, interpreter)) => request.satisfied_by_interpreter(interpreter),
-                })
-                .map(|result| result.map(PythonInstallation::from_tuple).map(Ok))
+                .filter_ok(|(_source, interpreter)| request.satisfied_by_interpreter(interpreter))
+                .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
             })
         }
     }
@@ -1002,7 +1058,10 @@ pub(crate) fn find_python_installation(
         // If the interpreter has a default executable name, e.g. `python`, and was found on the
         // search path, we consider this opt-in to use it.
         let has_default_executable_name = installation.interpreter.has_default_executable_name()
-            && installation.source == PythonSource::SearchPath;
+            && matches!(
+                installation.source,
+                PythonSource::SearchPath | PythonSource::SearchPathFirst
+            );
 
         // If it's a pre-release and pre-releases aren't allowed, skip it — but store it for later
         // since we'll use a pre-release if no other versions are available.
@@ -1074,10 +1133,16 @@ pub fn find_best_python_installation(
 
     // First, check for an exact match (or the first available version if no Python version was provided)
     debug!("Looking for exact match for request {request}");
-    let result = find_python_installation(request, environments, preference, cache)?;
-    if let Ok(ref installation) = result {
-        warn_on_unsupported_python(installation.interpreter());
-        return Ok(result);
+    let result = find_python_installation(request, environments, preference, cache);
+    match result {
+        Ok(Ok(installation)) => {
+            warn_on_unsupported_python(installation.interpreter());
+            return Ok(Ok(installation));
+        }
+        // Continue if we can't find a matching Python and ignore non-critical discovery errors
+        Ok(Err(_)) => {}
+        Err(ref err) if !err.is_critical() => {}
+        _ => return result,
     }
 
     // If that fails, and a specific patch version was requested try again allowing a
@@ -1096,10 +1161,16 @@ pub fn find_best_python_installation(
         _ => None,
     } {
         debug!("Looking for relaxed patch version {request}");
-        let result = find_python_installation(&request, environments, preference, cache)?;
-        if let Ok(ref installation) = result {
-            warn_on_unsupported_python(installation.interpreter());
-            return Ok(result);
+        let result = find_python_installation(&request, environments, preference, cache);
+        match result {
+            Ok(Ok(installation)) => {
+                warn_on_unsupported_python(installation.interpreter());
+                return Ok(Ok(installation));
+            }
+            // Continue if we can't find a matching Python and ignore non-critical discovery errors
+            Ok(Err(_)) => {}
+            Err(ref err) if !err.is_critical() => {}
+            _ => return result,
         }
     }
 
@@ -1542,6 +1613,7 @@ impl PythonSource {
         match self {
             Self::Managed | Self::Registry | Self::MicrosoftStore => false,
             Self::SearchPath
+            | Self::SearchPathFirst
             | Self::CondaPrefix
             | Self::BaseCondaPrefix
             | Self::ProvidedPath
@@ -1554,13 +1626,59 @@ impl PythonSource {
     /// Whether an alternative Python implementation from this source can be used without opt-in.
     pub(crate) fn allows_alternative_implementations(self) -> bool {
         match self {
-            Self::Managed | Self::Registry | Self::SearchPath | Self::MicrosoftStore => false,
+            Self::Managed
+            | Self::Registry
+            | Self::SearchPath
+            // TODO(zanieb): We may want to allow this at some point, but when adding this variant
+            // we want compatibility with existing behavior
+            | Self::SearchPathFirst
+            | Self::MicrosoftStore => false,
             Self::CondaPrefix
             | Self::BaseCondaPrefix
             | Self::ProvidedPath
             | Self::ParentInterpreter
             | Self::ActiveEnvironment
             | Self::DiscoveredEnvironment => true,
+        }
+    }
+
+    /// Whether this source **could** be a virtual environment.
+    ///
+    /// This excludes the [`PythonSource::SearchPath`] although it could be in a virtual
+    /// environment; pragmatically, that's not common and saves us from querying a bunch of system
+    /// interpreters for no reason. It seems dubious to consider an interpreter in the `PATH` as a
+    /// target virtual environment if it's not discovered through our virtual environment-specific
+    /// patterns. Instead, we special case the first Python executable found on the `PATH` with
+    /// [`PythonSource::SearchPathFirst`], allowing us to check if that's a virtual environment.
+    /// This enables targeting the virtual environment with uv by putting its `bin/` on the `PATH`
+    /// without setting `VIRTUAL_ENV` — but if there's another interpreter before it we will ignore
+    /// it.
+    pub(crate) fn is_maybe_virtualenv(self) -> bool {
+        match self {
+            Self::ProvidedPath
+            | Self::ActiveEnvironment
+            | Self::DiscoveredEnvironment
+            | Self::CondaPrefix
+            | Self::BaseCondaPrefix
+            | Self::ParentInterpreter
+            | Self::SearchPathFirst => true,
+            Self::Managed | Self::SearchPath | Self::Registry | Self::MicrosoftStore => false,
+        }
+    }
+
+    /// Whether this source **could** be a system interpreter.
+    pub(crate) fn is_maybe_system(self) -> bool {
+        match self {
+            Self::CondaPrefix
+            | Self::BaseCondaPrefix
+            | Self::ParentInterpreter
+            | Self::ProvidedPath
+            | Self::Managed
+            | Self::SearchPath
+            | Self::SearchPathFirst
+            | Self::Registry
+            | Self::MicrosoftStore => true,
+            Self::ActiveEnvironment | Self::DiscoveredEnvironment => false,
         }
     }
 }
@@ -1969,6 +2087,7 @@ impl VersionRequest {
                 | PythonSource::DiscoveredEnvironment
                 | PythonSource::ActiveEnvironment => Self::Any,
                 PythonSource::SearchPath
+                | PythonSource::SearchPathFirst
                 | PythonSource::Registry
                 | PythonSource::MicrosoftStore
                 | PythonSource::Managed => Self::Default,
@@ -2380,6 +2499,7 @@ impl fmt::Display for PythonSource {
             Self::CondaPrefix | Self::BaseCondaPrefix => f.write_str("conda prefix"),
             Self::DiscoveredEnvironment => f.write_str("virtual environment"),
             Self::SearchPath => f.write_str("search path"),
+            Self::SearchPathFirst => f.write_str("first executable in the search path"),
             Self::Registry => f.write_str("registry"),
             Self::MicrosoftStore => f.write_str("Microsoft Store"),
             Self::Managed => f.write_str("managed installations"),

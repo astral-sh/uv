@@ -39,7 +39,7 @@ use uv_distribution_types::{
     PathSourceUrl, SourceDist, SourceUrl,
 };
 use uv_extract::hash::Hasher;
-use uv_fs::{rename_with_retry, write_atomic, LockedFile};
+use uv_fs::{rename_with_retry, write_atomic};
 use uv_git::{GitHubRepository, GitOid};
 use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
@@ -392,7 +392,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
-        let _lock = lock_shard(cache_shard).await?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         // Fetch the revision for the source distribution.
         let revision = self
@@ -505,7 +505,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        let _lock = lock_shard(cache_shard).await?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         // Fetch the revision for the source distribution.
         let revision = self
@@ -551,15 +551,21 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
-        if let Some(metadata) = CachedMetadata::read(&metadata_entry)
-            .await?
-            .filter(|metadata| metadata.matches(source.name(), source.version()))
-        {
-            debug!("Using cached metadata for: {source}");
-            return Ok(ArchiveMetadata {
-                metadata: Metadata::from_metadata23(metadata.into()),
-                hashes: revision.into_hashes(),
-            });
+        match CachedMetadata::read(&metadata_entry).await {
+            Ok(Some(metadata)) => {
+                if metadata.matches(source.name(), source.version()) {
+                    debug!("Using cached metadata for: {source}");
+                    return Ok(ArchiveMetadata {
+                        metadata: Metadata::from_metadata23(metadata.into()),
+                        hashes: revision.into_hashes(),
+                    });
+                }
+                debug!("Cached metadata does not match expected name and version for: {source}");
+            }
+            Ok(None) => {}
+            Err(err) => {
+                debug!("Failed to deserialize cached metadata for: {source} ({err})");
+            }
         }
 
         // Otherwise, we need a wheel.
@@ -753,7 +759,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         tags: &Tags,
         hashes: HashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
-        let _lock = lock_shard(cache_shard).await?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer {
@@ -847,7 +853,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        let _lock = lock_shard(cache_shard).await?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer { revision, .. } = self
@@ -882,15 +888,21 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
-        if let Some(metadata) = CachedMetadata::read(&metadata_entry)
-            .await?
-            .filter(|metadata| metadata.matches(source.name(), source.version()))
-        {
-            debug!("Using cached metadata for: {source}");
-            return Ok(ArchiveMetadata {
-                metadata: Metadata::from_metadata23(metadata.into()),
-                hashes: revision.into_hashes(),
-            });
+        match CachedMetadata::read(&metadata_entry).await {
+            Ok(Some(metadata)) => {
+                if metadata.matches(source.name(), source.version()) {
+                    debug!("Using cached metadata for: {source}");
+                    return Ok(ArchiveMetadata {
+                        metadata: Metadata::from_metadata23(metadata.into()),
+                        hashes: revision.into_hashes(),
+                    });
+                }
+                debug!("Cached metadata does not match expected name and version for: {source}");
+            }
+            Ok(None) => {}
+            Err(err) => {
+                debug!("Failed to deserialize cached metadata for: {source} ({err})");
+            }
         }
 
         // Otherwise, we need a source distribution.
@@ -1058,7 +1070,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             },
         );
 
-        let _lock = lock_shard(&cache_shard).await?;
+        // Acquire the advisory lock.
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer {
@@ -1150,7 +1163,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         None,
                         self.build_context.locations(),
                         self.build_context.sources(),
-                        self.build_context.bounds(),
                     )
                     .await?,
                 ));
@@ -1168,7 +1180,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             },
         );
 
-        let _lock = lock_shard(&cache_shard).await?;
+        // Acquire the advisory lock.
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer { revision, .. } = self
@@ -1181,22 +1194,37 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
-        if let Some(metadata) = CachedMetadata::read(&metadata_entry)
-            .await?
-            .filter(|metadata| metadata.matches(source.name(), source.version()))
-        {
-            debug!("Using cached metadata for: {source}");
-            return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(
-                    metadata.into(),
-                    resource.install_path.as_ref(),
-                    None,
-                    self.build_context.locations(),
-                    self.build_context.sources(),
-                    self.build_context.bounds(),
-                )
-                .await?,
-            ));
+        match CachedMetadata::read(&metadata_entry).await {
+            Ok(Some(metadata)) => {
+                if metadata.matches(source.name(), source.version()) {
+                    debug!("Using cached metadata for: {source}");
+
+                    // If necessary, mark the metadata as dynamic.
+                    let metadata = if dynamic {
+                        ResolutionMetadata {
+                            dynamic: true,
+                            ..metadata.into()
+                        }
+                    } else {
+                        metadata.into()
+                    };
+                    return Ok(ArchiveMetadata::from(
+                        Metadata::from_workspace(
+                            metadata,
+                            resource.install_path.as_ref(),
+                            None,
+                            self.build_context.locations(),
+                            self.build_context.sources(),
+                        )
+                        .await?,
+                    ));
+                }
+                debug!("Cached metadata does not match expected name and version for: {source}");
+            }
+            Ok(None) => {}
+            Err(err) => {
+                debug!("Failed to deserialize cached metadata for: {source} ({err})");
+            }
         }
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
@@ -1210,6 +1238,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .boxed_local()
             .await?
         {
+            // Store the metadata.
+            fs::create_dir_all(metadata_entry.dir())
+                .await
+                .map_err(Error::CacheWrite)?;
+            write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
+                .await
+                .map_err(Error::CacheWrite)?;
+
             // If necessary, mark the metadata as dynamic.
             let metadata = if dynamic {
                 ResolutionMetadata {
@@ -1220,14 +1256,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 metadata
             };
 
-            // Store the metadata.
-            fs::create_dir_all(metadata_entry.dir())
-                .await
-                .map_err(Error::CacheWrite)?;
-            write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
-                .await
-                .map_err(Error::CacheWrite)?;
-
             return Ok(ArchiveMetadata::from(
                 Metadata::from_workspace(
                     metadata,
@@ -1235,7 +1263,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     None,
                     self.build_context.locations(),
                     self.build_context.sources(),
-                    self.build_context.bounds(),
                 )
                 .await?,
             ));
@@ -1271,6 +1298,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         }
 
+        // Store the metadata.
+        write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
+            .await
+            .map_err(Error::CacheWrite)?;
+
         // If necessary, mark the metadata as dynamic.
         let metadata = if dynamic {
             ResolutionMetadata {
@@ -1281,11 +1313,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             metadata
         };
 
-        // Store the metadata.
-        write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
-            .await
-            .map_err(Error::CacheWrite)?;
-
         Ok(ArchiveMetadata::from(
             Metadata::from_workspace(
                 metadata,
@@ -1293,7 +1320,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 None,
                 self.build_context.locations(),
                 self.build_context.sources(),
-                self.build_context.bounds(),
             )
             .await?,
         ))
@@ -1361,7 +1387,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     None,
                     self.build_context.locations(),
                     self.build_context.sources(),
-                    self.build_context.bounds(),
                 )
                 .await?;
                 Ok(Some(requires_dist))
@@ -1405,7 +1430,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 resource.git,
-                client.unmanaged.uncached_client(resource.url).clone(),
+                client
+                    .unmanaged
+                    .uncached_client(resource.git.repository())
+                    .clone(),
+                client.unmanaged.disable_ssl(resource.git.repository()),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter
                     .clone()
@@ -1430,7 +1459,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         );
         let metadata_entry = cache_shard.entry(METADATA);
 
-        let _lock = lock_shard(&cache_shard).await?;
+        // Acquire the advisory lock.
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.build_context.config_settings();
@@ -1504,7 +1534,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .github_fast_path(
                 resource.git,
-                client.unmanaged.uncached_client(resource.url).clone(),
+                client
+                    .unmanaged
+                    .uncached_client(resource.git.repository())
+                    .clone(),
             )
             .await
         {
@@ -1556,7 +1589,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 resource.git,
-                client.unmanaged.uncached_client(resource.url).clone(),
+                client
+                    .unmanaged
+                    .uncached_client(resource.git.repository())
+                    .clone(),
+                client.unmanaged.disable_ssl(resource.git.repository()),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter
                     .clone()
@@ -1581,7 +1618,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         );
         let metadata_entry = cache_shard.entry(METADATA);
 
-        let _lock = lock_shard(&cache_shard).await?;
+        // Acquire the advisory lock.
+        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         let path = if let Some(subdirectory) = resource.subdirectory {
             Cow::Owned(fetch.path().join(subdirectory))
@@ -1605,7 +1643,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             Some(&git_member),
                             self.build_context.locations(),
                             self.build_context.sources(),
-                            self.build_context.bounds(),
                         )
                         .await?,
                     ));
@@ -1622,27 +1659,34 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheRead)?
             .is_fresh()
         {
-            if let Some(metadata) = CachedMetadata::read(&metadata_entry)
-                .await?
-                .filter(|metadata| metadata.matches(source.name(), source.version()))
-            {
-                let git_member = GitWorkspaceMember {
-                    fetch_root: fetch.path(),
-                    git_source: resource,
-                };
+            match CachedMetadata::read(&metadata_entry).await {
+                Ok(Some(metadata)) => {
+                    if metadata.matches(source.name(), source.version()) {
+                        debug!("Using cached metadata for: {source}");
 
-                debug!("Using cached metadata for: {source}");
-                return Ok(ArchiveMetadata::from(
-                    Metadata::from_workspace(
-                        metadata.into(),
-                        &path,
-                        Some(&git_member),
-                        self.build_context.locations(),
-                        self.build_context.sources(),
-                        self.build_context.bounds(),
-                    )
-                    .await?,
-                ));
+                        let git_member = GitWorkspaceMember {
+                            fetch_root: fetch.path(),
+                            git_source: resource,
+                        };
+                        return Ok(ArchiveMetadata::from(
+                            Metadata::from_workspace(
+                                metadata.into(),
+                                &path,
+                                Some(&git_member),
+                                self.build_context.locations(),
+                                self.build_context.sources(),
+                            )
+                            .await?,
+                        ));
+                    }
+                    debug!(
+                        "Cached metadata does not match expected name and version for: {source}"
+                    );
+                }
+                Ok(None) => {}
+                Err(err) => {
+                    debug!("Failed to deserialize cached metadata for: {source} ({err})");
+                }
             }
         }
 
@@ -1682,7 +1726,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     Some(&git_member),
                     self.build_context.locations(),
                     self.build_context.sources(),
-                    self.build_context.bounds(),
                 )
                 .await?,
             ));
@@ -1740,7 +1783,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Some(&git_member),
                 self.build_context.locations(),
                 self.build_context.sources(),
-                self.build_context.bounds(),
             )
             .await?,
         ))
@@ -1781,6 +1823,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .fetch(
                 git,
                 client.unmanaged.uncached_client(git.repository()).clone(),
+                client.unmanaged.disable_ssl(git.repository()),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter
                     .clone()
@@ -2881,17 +2924,4 @@ fn read_wheel_metadata(
     let dist_info = read_archive_metadata(filename, &mut archive)
         .map_err(|err| Error::WheelMetadata(wheel.to_path_buf(), Box::new(err)))?;
     Ok(ResolutionMetadata::parse_metadata(&dist_info)?)
-}
-
-/// Apply an advisory lock to a [`CacheShard`] to prevent concurrent builds.
-async fn lock_shard(cache_shard: &CacheShard) -> Result<LockedFile, Error> {
-    let root = cache_shard.as_ref();
-
-    fs_err::create_dir_all(root).map_err(Error::CacheWrite)?;
-
-    let lock = LockedFile::acquire(root.join(".lock"), root.display())
-        .await
-        .map_err(Error::CacheWrite)?;
-
-    Ok(lock)
 }

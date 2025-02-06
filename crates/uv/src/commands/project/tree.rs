@@ -3,14 +3,13 @@ use std::path::Path;
 use anstream::print;
 use anyhow::{Error, Result};
 use futures::StreamExt;
-
+use tokio::sync::Semaphore;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{Connectivity, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, DevGroupsSpecification, LowerBound, PreviewMode, TargetTriple, TrustedHost,
+    Concurrency, DevGroupsSpecification, PreviewMode, TargetTriple, TrustedHost,
 };
-use uv_dispatch::SharedState;
 use uv_distribution_types::IndexCapabilities;
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
@@ -26,7 +25,7 @@ use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     default_dependency_groups, DependencyGroupsTarget, ProjectError, ProjectInterpreter,
-    ScriptInterpreter,
+    ScriptInterpreter, UniversalState,
 };
 use crate::commands::reporters::LatestVersionReporter;
 use crate::commands::{diagnostics, ExitStatus};
@@ -119,6 +118,7 @@ pub(crate) async fn tree(
                 allow_insecure_host,
                 &install_mirrors,
                 no_config,
+                Some(false),
                 cache,
                 printer,
             )
@@ -140,14 +140,13 @@ pub(crate) async fn tree(
     };
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let state = UniversalState::default();
 
     // Update the lockfile, if necessary.
     let lock = match do_safe_lock(
         mode,
         target,
         settings.as_ref(),
-        LowerBound::Allow,
         &state,
         Box::new(DefaultResolveLogger),
         connectivity,
@@ -226,6 +225,7 @@ pub(crate) async fn tree(
             .keyring(*keyring_provider)
             .allow_insecure_host(allow_insecure_host.to_vec())
             .build();
+            let download_concurrency = Semaphore::new(concurrency.downloads);
 
             // Initialize the client to fetch the latest version of each package.
             let client = LatestClient {
@@ -240,9 +240,12 @@ pub(crate) async fn tree(
             let reporter = LatestVersionReporter::from(printer).with_length(packages.len() as u64);
 
             // Fetch the latest version for each package.
+            let download_concurrency = &download_concurrency;
             let mut fetches = futures::stream::iter(packages)
                 .map(|(package, index)| async move {
-                    let Some(filename) = client.find_latest(package.name(), Some(&index)).await?
+                    let Some(filename) = client
+                        .find_latest(package.name(), Some(&index), download_concurrency)
+                        .await?
                     else {
                         return Ok(None);
                     };

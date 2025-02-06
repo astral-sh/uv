@@ -449,6 +449,10 @@ impl EnvVars {
     #[attr_hidden]
     pub const GIT_ALTERNATE_OBJECT_DIRECTORIES: &'static str = "GIT_ALTERNATE_OBJECT_DIRECTORIES";
 
+    /// Disables SSL verification for git operations.
+    #[attr_hidden]
+    pub const GIT_SSL_NO_VERIFY: &'static str = "GIT_SSL_NO_VERIFY";
+
     /// Used in tests for better git isolation.
     ///
     /// For example, we run some tests in ~/.local/share/uv/tests.
@@ -516,6 +520,7 @@ impl EnvVars {
     /// any filter compatible with the `tracing_subscriber` crate.
     ///
     /// For example:
+    ///
     /// * `RUST_LOG=uv=debug` is the equivalent of adding `--verbose` to the command line
     /// * `RUST_LOG=trace` will enable trace-level logging.
     ///
@@ -573,6 +578,10 @@ impl EnvVars {
     /// Used to set an index url for tests.
     #[attr_hidden]
     pub const UV_TEST_INDEX_URL: &'static str = "UV_TEST_INDEX_URL";
+
+    /// Hide progress messages with non-deterministic order in tests.
+    #[attr_hidden]
+    pub const UV_TEST_NO_CLI_PROGRESS: &'static str = "UV_TEST_NO_CLI_PROGRESS";
 
     /// `.env` files from which to load environment variables when executing `uv run` commands.
     pub const UV_ENV_FILE: &'static str = "UV_ENV_FILE";

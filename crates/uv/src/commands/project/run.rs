@@ -17,10 +17,9 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{
-    Concurrency, DevGroupsManifest, DevGroupsSpecification, EditableMode, ExtrasSpecification,
-    GroupsSpecification, InstallOptions, LowerBound, PreviewMode, SourceStrategy, TrustedHost,
+    Concurrency, DevGroupsSpecification, EditableMode, ExtrasSpecification, InstallOptions,
+    PreviewMode, SourceStrategy, TrustedHost,
 };
-use uv_dispatch::SharedState;
 use uv_distribution::LoweredRequirement;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified};
@@ -48,9 +47,10 @@ use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     default_dependency_groups, validate_project_requires_python, DependencyGroupsTarget,
-    EnvironmentSpecification, ProjectError, ScriptInterpreter, WorkspacePython,
+    EnvironmentSpecification, ProjectError, ScriptInterpreter, UniversalState, WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
+use crate::commands::run::run_to_completion;
 use crate::commands::{diagnostics, project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -65,6 +65,7 @@ pub(crate) async fn run(
     show_resolution: bool,
     locked: bool,
     frozen: bool,
+    active: Option<bool>,
     no_sync: bool,
     isolated: bool,
     all_packages: bool,
@@ -124,7 +125,8 @@ pub(crate) async fn run(
     }
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let lock_state = UniversalState::default();
+    let sync_state = lock_state.fork();
 
     // Read from the `.env` file, if necessary.
     if !no_env_file {
@@ -227,8 +229,7 @@ pub(crate) async fn run(
                 mode,
                 target,
                 settings.as_ref().into(),
-                LowerBound::Allow,
-                &state,
+                &lock_state,
                 if show_resolution {
                     Box::new(DefaultResolveLogger)
                 } else {
@@ -251,11 +252,11 @@ pub(crate) async fn run(
                     lock: &lock,
                 },
                 &ExtrasSpecification::default(),
-                &DevGroupsManifest::default(),
+                &DevGroupsSpecification::default().with_defaults(Vec::new()),
                 InstallOptions::default(),
                 &settings,
                 &interpreter,
-                &state,
+                &sync_state,
                 if show_resolution {
                     Box::new(DefaultInstallLogger)
                 } else {
@@ -282,6 +283,9 @@ pub(crate) async fn run(
                 }
                 Err(err) => return Err(err.into()),
             };
+
+            // Clear any existing overlay.
+            environment.clear_overlay()?;
 
             Some(environment.into_interpreter())
         } else {
@@ -344,7 +348,6 @@ pub(crate) async fn run(
                             script_sources,
                             script_indexes,
                             &settings.index_locations,
-                            LowerBound::Allow,
                         )
                         .map_ok(LoweredRequirement::into_inner)
                     })
@@ -364,7 +367,6 @@ pub(crate) async fn run(
                             script_sources,
                             script_indexes,
                             &settings.index_locations,
-                            LowerBound::Allow,
                         )
                         .map_ok(LoweredRequirement::into_inner)
                     })
@@ -384,7 +386,6 @@ pub(crate) async fn run(
                             script_sources,
                             script_indexes,
                             &settings.index_locations,
-                            LowerBound::Allow,
                         )
                         .map_ok(LoweredRequirement::into_inner)
                     })
@@ -396,7 +397,7 @@ pub(crate) async fn run(
                     EnvironmentSpecification::from(spec),
                     &interpreter,
                     &settings,
-                    &state,
+                    &sync_state,
                     if show_resolution {
                         Box::new(DefaultResolveLogger)
                     } else {
@@ -428,6 +429,9 @@ pub(crate) async fn run(
                     }
                     Err(err) => return Err(err.into()),
                 };
+
+                // Clear any existing overlay.
+                environment.clear_overlay()?;
 
                 Some(environment.into_interpreter())
             } else {
@@ -465,14 +469,8 @@ pub(crate) async fn run(
         if !extras.is_empty() {
             warn_user!("Extras are not supported for Python scripts with inline metadata");
         }
-        if let Some(dev_mode) = dev.dev_mode() {
-            warn_user!(
-                "`{}` is not supported for Python scripts with inline metadata",
-                dev_mode.as_flag()
-            );
-        }
-        if let Some(flag) = dev.groups().and_then(GroupsSpecification::as_flag) {
-            warn_user!("`{flag}` is not supported for Python scripts with inline metadata");
+        for flag in dev.history().as_flags_pretty() {
+            warn_user!("`{flag}` is not supported for Python scripts with inline metadata",);
         }
         if all_packages {
             warn_user!(
@@ -540,13 +538,7 @@ pub(crate) async fn run(
             if !extras.is_empty() {
                 warn_user!("Extras have no effect when used alongside `--no-project`");
             }
-            if let Some(dev_mode) = dev.dev_mode() {
-                warn_user!(
-                    "`{}` has no effect when used alongside `--no-project`",
-                    dev_mode.as_flag()
-                );
-            }
-            if let Some(flag) = dev.groups().and_then(GroupsSpecification::as_flag) {
+            for flag in dev.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
             if locked {
@@ -563,13 +555,7 @@ pub(crate) async fn run(
             if !extras.is_empty() {
                 warn_user!("Extras have no effect when used outside of a project");
             }
-            if let Some(dev_mode) = dev.dev_mode() {
-                warn_user!(
-                    "`{}` has no effect when used outside of a project",
-                    dev_mode.as_flag()
-                );
-            }
-            if let Some(flag) = dev.groups().and_then(GroupsSpecification::as_flag) {
+            for flag in dev.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used outside of a project");
             }
             if locked {
@@ -663,6 +649,7 @@ pub(crate) async fn run(
                     native_tls,
                     allow_insecure_host,
                     no_config,
+                    active,
                     cache,
                     printer,
                 )
@@ -716,8 +703,7 @@ pub(crate) async fn run(
                     mode,
                     project.workspace().into(),
                     settings.as_ref().into(),
-                    LowerBound::Allow,
-                    &state,
+                    &lock_state,
                     if show_resolution {
                         Box::new(DefaultResolveLogger)
                     } else {
@@ -798,6 +784,7 @@ pub(crate) async fn run(
                     install_options,
                     modifications,
                     settings.as_ref().into(),
+                    &sync_state,
                     if show_resolution {
                         Box::new(DefaultInstallLogger)
                     } else {
@@ -914,97 +901,75 @@ pub(crate) async fn run(
     };
 
     // If necessary, create an environment for the ephemeral requirements or command.
-    let temp_dir;
-    let ephemeral_env = if can_skip_ephemeral(spec.as_ref(), &base_interpreter, &settings) {
-        None
-    } else {
-        debug!("Creating ephemeral environment");
+    let ephemeral_env = match spec {
+        None => None,
+        Some(spec) if can_skip_ephemeral(&spec, &base_interpreter, &settings) => None,
+        Some(spec) => {
+            debug!("Syncing ephemeral requirements");
 
-        Some(match spec.filter(|spec| !spec.is_empty()) {
-            None => {
-                // Create a virtual environment
-                temp_dir = cache.venv_dir()?;
-                uv_virtualenv::create_venv(
-                    temp_dir.path(),
-                    base_interpreter.clone(),
-                    uv_virtualenv::Prompt::None,
-                    false,
-                    false,
-                    false,
-                    false,
-                )?
-            }
-            Some(spec) => {
-                debug!("Syncing ephemeral requirements");
+            let result = CachedEnvironment::from_spec(
+                EnvironmentSpecification::from(spec).with_lock(
+                    lock.as_ref()
+                        .map(|(lock, install_path)| (lock, install_path.as_ref())),
+                ),
+                &base_interpreter,
+                &settings,
+                &sync_state,
+                if show_resolution {
+                    Box::new(DefaultResolveLogger)
+                } else {
+                    Box::new(SummaryResolveLogger)
+                },
+                if show_resolution {
+                    Box::new(DefaultInstallLogger)
+                } else {
+                    Box::new(SummaryInstallLogger)
+                },
+                installer_metadata,
+                connectivity,
+                concurrency,
+                native_tls,
+                allow_insecure_host,
+                cache,
+                printer,
+                preview,
+            )
+            .await;
 
-                let result = CachedEnvironment::from_spec(
-                    EnvironmentSpecification::from(spec).with_lock(
-                        lock.as_ref()
-                            .map(|(lock, install_path)| (lock, install_path.as_ref())),
-                    ),
-                    &base_interpreter,
-                    &settings,
-                    &state,
-                    if show_resolution {
-                        Box::new(DefaultResolveLogger)
-                    } else {
-                        Box::new(SummaryResolveLogger)
-                    },
-                    if show_resolution {
-                        Box::new(DefaultInstallLogger)
-                    } else {
-                        Box::new(SummaryInstallLogger)
-                    },
-                    installer_metadata,
-                    connectivity,
-                    concurrency,
-                    native_tls,
-                    allow_insecure_host,
-                    cache,
-                    printer,
-                    preview,
-                )
-                .await;
+            let environment = match result {
+                Ok(resolution) => resolution,
+                Err(ProjectError::Operation(err)) => {
+                    return diagnostics::OperationDiagnostic::native_tls(native_tls)
+                        .with_context("`--with`")
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                }
+                Err(err) => return Err(err.into()),
+            };
 
-                let environment = match result {
-                    Ok(resolution) => resolution,
-                    Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::native_tls(native_tls)
-                            .with_context("`--with`")
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
-                    }
-                    Err(err) => return Err(err.into()),
-                };
-
-                environment.into()
-            }
-        })
+            Some(environment)
+        }
     };
 
     // If we're running in an ephemeral environment, add a path file to enable loading of
     // the base environment's site packages. Setting `PYTHONPATH` is insufficient, as it doesn't
     // resolve `.pth` files in the base environment.
-    // And `sitecustomize.py` would be an alternative but it can be shadowed by an existing such
+    //
+    // `sitecustomize.py` would be an alternative, but it can be shadowed by an existing such
     // module in the python installation.
     if let Some(ephemeral_env) = ephemeral_env.as_ref() {
-        let ephemeral_site_packages = ephemeral_env
+        let site_packages = base_interpreter
             .site_packages()
             .next()
-            .ok_or_else(|| anyhow!("Ephemeral environment has no site packages directory"))?;
-        let base_site_packages = base_interpreter
-            .site_packages()
-            .next()
-            .ok_or_else(|| anyhow!("Base environment has no site packages directory"))?;
-
-        fs_err::write(
-            ephemeral_site_packages.join("_uv_ephemeral_overlay.pth"),
-            format!(
-                "import site; site.addsitedir(\"{}\")",
-                base_site_packages.escape_for_python()
-            ),
-        )?;
+            .ok_or_else(|| ProjectError::NoSitePackages)?;
+        ephemeral_env.set_overlay(format!(
+            "import site; site.addsitedir(\"{}\")",
+            site_packages.escape_for_python()
+        ))?;
     }
+
+    // Cast from `CachedEnvironment` to `PythonEnvironment`.
+    let ephemeral_env = ephemeral_env.map(PythonEnvironment::from);
 
     // Determine the Python interpreter to use for the command, if necessary.
     let interpreter = ephemeral_env
@@ -1119,77 +1084,19 @@ pub(crate) async fn run(
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
     // TODO(zanieb): Throw a nicer error message if the command is not found
-    let mut handle = process
+    let handle = process
         .spawn()
         .with_context(|| format!("Failed to spawn: `{}`", command.display_executable()))?;
 
-    // Ignore signals in the parent process, deferring them to the child. This is safe as long as
-    // the command is the last thing that runs in this process; otherwise, we'd need to restore the
-    // signal handlers after the command completes.
-    let _handler = tokio::spawn(async { while tokio::signal::ctrl_c().await.is_ok() {} });
-
-    // Exit based on the result of the command.
-    #[cfg(unix)]
-    let status = {
-        use tokio::select;
-        use tokio::signal::unix::{signal, SignalKind};
-
-        let mut term_signal = signal(SignalKind::terminate())?;
-        loop {
-            select! {
-                result = handle.wait() => {
-                    break result;
-                },
-
-                // `SIGTERM`
-                _ = term_signal.recv() => {
-                    let _ = terminate_process(&mut handle);
-                }
-            };
-        }
-    }?;
-
-    #[cfg(not(unix))]
-    let status = handle.wait().await?;
-
-    if let Some(code) = status.code() {
-        debug!("Command exited with code: {code}");
-        if let Ok(code) = u8::try_from(code) {
-            Ok(ExitStatus::External(code))
-        } else {
-            #[allow(clippy::exit)]
-            std::process::exit(code);
-        }
-    } else {
-        #[cfg(unix)]
-        {
-            use std::os::unix::process::ExitStatusExt;
-            debug!("Command exited with signal: {:?}", status.signal());
-        }
-        Ok(ExitStatus::Failure)
-    }
-}
-
-#[cfg(unix)]
-fn terminate_process(child: &mut tokio::process::Child) -> anyhow::Result<()> {
-    use nix::sys::signal::{self, Signal};
-    use nix::unistd::Pid;
-
-    let pid = child.id().context("Failed to get child process ID")?;
-    signal::kill(Pid::from_raw(pid.try_into()?), Signal::SIGTERM).context("Failed to send SIGTERM")
+    run_to_completion(handle).await
 }
 
 /// Returns `true` if we can skip creating an additional ephemeral environment in `uv run`.
 fn can_skip_ephemeral(
-    spec: Option<&RequirementsSpecification>,
+    spec: &RequirementsSpecification,
     base_interpreter: &Interpreter,
     settings: &ResolverInstallerSettings,
 ) -> bool {
-    // No additional requirements.
-    let Some(spec) = spec.as_ref() else {
-        return true;
-    };
-
     let Ok(site_packages) = SitePackages::from_interpreter(base_interpreter) else {
         return false;
     };

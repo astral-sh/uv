@@ -120,6 +120,13 @@ impl TestContext {
         new
     }
 
+    /// Set the "exclude newer" timestamp for all commands in this context.
+    pub fn with_exclude_newer(mut self, exclude_newer: &str) -> Self {
+        self.extra_env
+            .push((EnvVars::UV_EXCLUDE_NEWER.into(), exclude_newer.into()));
+        self
+    }
+
     /// Add extra standard filtering for messages like "Resolved 10 packages" which
     /// can differ between platforms.
     ///
@@ -357,7 +364,7 @@ impl TestContext {
 
         // Exclude `link-mode` on Windows since we set it in the remote test suite
         if cfg!(windows) {
-            filters.push(("--link-mode <LINK_MODE> ".to_string(), String::new()));
+            filters.push((" --link-mode <LINK_MODE>".to_string(), String::new()));
             filters.push((r#"link-mode = "copy"\n"#.to_string(), String::new()));
         }
 
@@ -548,6 +555,9 @@ impl TestContext {
             .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
             .env(EnvVars::UV_TEST_PYTHON_PATH, self.python_path())
             .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
+            // Since downloads, fetches and builds run in parallel, their message output order is
+            // non-deterministic, so can't capture them in test output.
+            .env(EnvVars::UV_TEST_NO_CLI_PROGRESS, "1")
             .env_remove(EnvVars::UV_CACHE_DIR)
             .env_remove(EnvVars::UV_TOOL_BIN_DIR)
             .current_dir(self.temp_dir.path());
@@ -784,7 +794,6 @@ impl TestContext {
         let mut command = self.new_command();
         command.arg("tool").arg("install");
         self.add_shared_args(&mut command, false);
-        command.env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER);
         command
     }
 
@@ -1382,16 +1391,16 @@ pub fn make_project(dir: &Path, name: &str, body: &str) -> anyhow::Result<()> {
 // This is a fine-grained token that only has read-only access to the `uv-private-pypackage` repository
 pub const READ_ONLY_GITHUB_TOKEN: &[&str] = &[
     "Z2l0aHViX3BhdA==",
-    "MTFCR0laQTdRMGdXeGsweHV6ekR2Mg==",
-    "NVZMaExzZmtFMHZ1ZEVNd0pPZXZkV040WUdTcmk2WXREeFB4TFlybGlwRTZONEpHV01FMnFZQWJVUm4=",
+    "MTFCR0laQTdRMGdSQ0JRQVdRTklyQgo=",
+    "cU5vakhySFV2a0ljNUVZY1pzd1k0bUFUWlBuU3VLVDV5eXR0WUxvcHh3UFI0NlpWTlRTblhvVHJHSXEK",
 ];
 
 // This is a fine-grained token that only has read-only access to the `uv-private-pypackage-2` repository
 #[cfg(not(windows))]
 pub const READ_ONLY_GITHUB_TOKEN_2: &[&str] = &[
     "Z2l0aHViX3BhdA==",
-    "MTFCR0laQTdRMHV1MEpwaFp4dFFyRwo=",
-    "cnNmNXJwMHk2WWpteVZvb2ZFc0c5WUs5b2NPcFY1aVpYTnNmdE05eEhaM0lGSExSSktDWTcxeVBVZXkK",
+    "MTFCR0laQTdRMGthWlY4dHppTDdQSwo=",
+    "SHIzUG1tRVZRSHMzQTl2a3NiVnB4Tmk0eTR3R2JVYklLck1qY05naHhMSFVMTDZGVElIMXNYeFhYN2gK",
 ];
 
 /// Decode a split, base64 encoded authentication token.

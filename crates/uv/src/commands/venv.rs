@@ -1,6 +1,7 @@
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::Arc;
 use std::vec;
 
 use anstream::eprint;
@@ -13,12 +14,12 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, KeyringProviderType,
-    LowerBound, NoBinary, NoBuild, PreviewMode, SourceStrategy, TrustedHost,
+    NoBinary, NoBuild, PreviewMode, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
 use uv_fs::Simplified;
-use uv_install_wheel::linker::LinkMode;
+use uv_install_wheel::LinkMode;
 use uv_pypi_types::Requirement;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
@@ -186,7 +187,7 @@ async fn venv_impl(
                 // This isn't strictly necessary and we may want to change it later, but this
                 // avoids a breaking change when adding project environment support to `uv venv`.
                 (project.workspace().install_path() == project_dir)
-                    .then(|| project.workspace().venv())
+                    .then(|| project.workspace().venv(Some(false)))
             })
             .unwrap_or(PathBuf::from(".venv")),
     );
@@ -233,7 +234,11 @@ async fn venv_impl(
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
-            uv_auth::store_credentials(index.raw_url(), credentials);
+            let credentials = Arc::new(credentials);
+            uv_auth::store_credentials(index.raw_url(), credentials.clone());
+            if let Some(root_url) = index.root_url() {
+                uv_auth::store_credentials(&root_url, credentials.clone());
+            }
         }
     }
 
@@ -280,7 +285,11 @@ async fn venv_impl(
         // Add all authenticated sources to the cache.
         for index in index_locations.allowed_indexes() {
             if let Some(credentials) = index.credentials() {
-                uv_auth::store_credentials(index.raw_url(), credentials);
+                let credentials = Arc::new(credentials);
+                uv_auth::store_credentials(index.raw_url(), credentials.clone());
+                if let Some(root_url) = index.root_url() {
+                    uv_auth::store_credentials(&root_url, credentials.clone());
+                }
             }
         }
 
@@ -341,7 +350,6 @@ async fn venv_impl(
             &build_options,
             &build_hasher,
             exclude_newer,
-            LowerBound::Allow,
             sources,
             concurrency,
             preview,

@@ -1242,42 +1242,42 @@ impl<'de> Deserialize<'de> for Source {
         if let Some(workspace) = workspace {
             if index.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `index`",
+                    "cannot specify both `workspace` and `index`",
                 ));
             }
             if git.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `git`",
+                    "cannot specify both `workspace` and `git`",
                 ));
             }
             if url.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `url`",
+                    "cannot specify both `workspace` and `url`",
                 ));
             }
             if path.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `path`",
+                    "cannot specify both `workspace` and `path`",
                 ));
             }
             if rev.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `rev`",
+                    "cannot specify both `workspace` and `rev`",
                 ));
             }
             if tag.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `tag`",
+                    "cannot specify both `workspace` and `tag`",
                 ));
             }
             if branch.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `branch`",
+                    "cannot specify both `workspace` and `branch`",
                 ));
             }
             if editable.is_some() {
                 return Err(serde::de::Error::custom(
-                    "cannot specify both `index` and `editable`",
+                    "cannot specify both `workspace` and `editable`",
                 ));
             }
 
@@ -1312,6 +1312,10 @@ pub enum SourceError {
     UnusedTag(String, String),
     #[error("`{0}` did not resolve to a Git repository, but a Git reference (`--branch {1}`) was provided.")]
     UnusedBranch(String, String),
+    #[error("`{0}` did not resolve to a local directory, but the `--editable` flag was provided. Editable installs are only supported for local directories.")]
+    UnusedEditable(String),
+    #[error("Workspace dependency `{0}` was marked as `--no-editable`, but workspace dependencies are always added in editable mode. Pass `--no-editable` to `uv sync` or `uv run` to install workspace dependencies in non-editable mode.")]
+    UnusedNoEditable(String),
     #[error("Failed to resolve absolute path")]
     Absolute(#[from] std::io::Error),
     #[error("Path contains invalid characters: `{}`", _0.display())]
@@ -1346,6 +1350,20 @@ impl Source {
             }
             if let Some(branch) = branch {
                 return Err(SourceError::UnusedBranch(name.to_string(), branch));
+            }
+        }
+
+        if workspace {
+            // If a workspace source is added with `--no-editable`, error.
+            if editable == Some(false) {
+                return Err(SourceError::UnusedNoEditable(name.to_string()));
+            }
+        } else {
+            // If we resolved a non-path source, and user specified an `--editable` flag, error.
+            if !matches!(source, RequirementSource::Directory { .. }) {
+                if editable == Some(true) {
+                    return Err(SourceError::UnusedEditable(name.to_string()));
+                }
             }
         }
 

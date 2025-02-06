@@ -623,35 +623,6 @@
         "$ref": "#/definitions/ConfigSettingValue"
       }
     },
-    "ConflictPackage": {
-      "description": "The actual conflicting data for a package.\n\nThat is, either an extra or a group name.",
-      "oneOf": [
-        {
-          "type": "object",
-          "required": [
-            "Extra"
-          ],
-          "properties": {
-            "Extra": {
-              "$ref": "#/definitions/ExtraName"
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "required": [
-            "Group"
-          ],
-          "properties": {
-            "Group": {
-              "$ref": "#/definitions/GroupName"
-            }
-          },
-          "additionalProperties": false
-        }
-      ]
-    },
     "ExcludeNewer": {
       "description": "Exclude distributions uploaded after the given timestamp.\n\nAccepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`).",
       "type": "string",
@@ -1104,7 +1075,7 @@
           }
         },
         "no-deps": {
-          "description": "Ignore package dependencies, instead only add those packages explicitly listed on the command line to the resulting the requirements file.",
+          "description": "Ignore package dependencies, instead only add those packages explicitly listed on the command line to the resulting requirements file.",
           "type": [
             "boolean",
             "null"
@@ -1454,16 +1425,33 @@
       ]
     },
     "SchemaConflictItem": {
-      "description": "Like [`ConflictItem`], but for deserialization in `pyproject.toml`.\n\nThe schema format is different from the in-memory format. Specifically, the schema format does not allow specifying the package name (or will make it optional in the future), where as the in-memory format needs the package name.",
+      "description": "A single item in a conflicting set.\n\nEach item is a pair of an (optional) package and a corresponding extra or group name for that package.",
       "type": "object",
-      "required": [
-        "conflict"
-      ],
       "properties": {
-        "conflict": {
-          "$ref": "#/definitions/ConflictPackage"
+        "extra": {
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ExtraName"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "group": {
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/GroupName"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "package": {
+          "default": null,
           "anyOf": [
             {
               "$ref": "#/definitions/PackageName"
@@ -1473,8 +1461,7 @@
             }
           ]
         }
-      },
-      "additionalProperties": false
+      }
     },
     "SchemaConflictSet": {
       "description": "Like [`ConflictSet`], but for deserialization in `pyproject.toml`.\n\nThe schema format is different from the in-memory format. Specifically, the schema format does not allow specifying the package name (or will make it optional in the future), where as the in-memory format needs the package name.",

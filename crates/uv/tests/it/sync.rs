@@ -617,7 +617,7 @@ fn sync_legacy_non_project_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Group `bop` is not defined in any project's `dependency-group` table
+    error: Group `bop` is not defined in any project's `dependency-groups` table
     "###);
 
     Ok(())
@@ -1754,7 +1754,7 @@ fn sync_non_existent_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Group `baz` is not defined in the project's `dependency-group` table
+    error: Group `baz` is not defined in the project's `dependency-groups` table
     "###);
 
     uv_snapshot!(context.filters(), context.sync().arg("--no-group").arg("baz"), @r###"
@@ -1763,7 +1763,7 @@ fn sync_non_existent_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Group `baz` is not defined in the project's `dependency-group` table
+    error: Group `baz` is not defined in the project's `dependency-groups` table
     "###);
 
     // Requesting an empty group should succeed.
@@ -1779,6 +1779,223 @@ fn sync_non_existent_group() -> Result<()> {
      + typing-extensions==4.10.0
     "###);
 
+    Ok(())
+}
+
+#[test]
+fn sync_corner_groups() -> Result<()> {
+    // Testing a bunch of random corner cases of flags so their behaviour is tracked.
+    // It's fine if we decide we want to support these later!
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        dev = ["iniconfig"]
+        foo = ["sniffio"]
+        bar = ["requests"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // --no-dev and --only-dev should error
+    // (This one could be made to work with overloading)
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-dev")
+        .arg("--only-dev"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--no-dev' cannot be used with '--only-dev'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --no-dev --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --dev and --only-group should error if they don't match
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--dev")
+        .arg("--only-group").arg("bar"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--dev' cannot be used with '--only-group <ONLY_GROUP>'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --dev and --only-group should error even if it's dev still
+    // (This one could be made to work the same as --dev --only-dev)
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--dev")
+        .arg("--only-group").arg("dev"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--dev' cannot be used with '--only-group <ONLY_GROUP>'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --group and --only-dev should error if they don't match
+    // (This one could be made to work the same as --dev --only-dev)
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--only-dev")
+        .arg("--group").arg("bar"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--only-dev' cannot be used with '--group <GROUP>'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --only-dev --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --group and --only-dev should error even if it's dev still
+    // (This one could be made to work the same as --dev --only-dev)
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--only-dev")
+        .arg("--group").arg("dev"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--only-dev' cannot be used with '--group <GROUP>'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --only-dev --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --all-groups and --only-dev should error
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--all-groups")
+        .arg("--only-dev"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--all-groups' cannot be used with '--only-dev'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --all-groups --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --all-groups and --only-group should error
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--all-groups")
+        .arg("--only-group").arg("bar"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--all-groups' cannot be used with '--only-group <ONLY_GROUP>'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --all-groups --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --group and --only-group should error if they name disjoint things
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--group").arg("foo")
+        .arg("--only-group").arg("bar"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--group <GROUP>' cannot be used with '--only-group <ONLY_GROUP>'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --group <GROUP> --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --group and --only-group should error if they name same things
+    // (This one would be fair to allow, but... is it worth it?)
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--group").arg("foo")
+        .arg("--only-group").arg("foo"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--group <GROUP>' cannot be used with '--only-group <ONLY_GROUP>'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --group <GROUP> --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // --all-groups and --no-default-groups is redundant but should be --all-groups
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--all-groups")
+        .arg("--no-default-groups"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    Prepared 8 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + iniconfig==2.0.0
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+     + urllib3==2.2.1
+    ");
+
+    // --dev --only-dev should saturate as --only-dev
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--dev")
+        .arg("--only-dev"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    Uninstalled 7 packages in [TIME]
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - idna==3.6
+     - requests==2.31.0
+     - sniffio==1.3.1
+     - typing-extensions==4.10.0
+     - urllib3==2.2.1
+    ");
     Ok(())
 }
 
@@ -1811,7 +2028,7 @@ fn sync_non_existent_default_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Default group `bar` (from `tool.uv.default-groups`) is not defined in the project's `dependency-group` table
+    error: Default group `bar` (from `tool.uv.default-groups`) is not defined in the project's `dependency-groups` table
     "###);
 
     Ok(())
@@ -3183,6 +3400,131 @@ fn sync_custom_environment_path() -> Result<()> {
 }
 
 #[test]
+fn sync_active_environment() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Running `uv sync` with `VIRTUAL_ENV` should warn
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    context
+        .temp_dir
+        .child(".venv")
+        .assert(predicate::path::is_dir());
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::missing());
+
+    // Using `--active` should create the environment
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: foo
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::is_dir());
+
+    // A subsequent sync will re-use the environment
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    // Setting both the `VIRTUAL_ENV` and `UV_PROJECT_ENVIRONMENT` is fine if they agree
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--active")
+        .env(EnvVars::VIRTUAL_ENV, "foo")
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    // If they disagree, we use `VIRTUAL_ENV` because of `--active`
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--active")
+        .env(EnvVars::VIRTUAL_ENV, "foo")
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    context
+        .temp_dir
+        .child("bar")
+        .assert(predicate::path::missing());
+
+    // Requesting another Python version will invalidate the environment
+    uv_snapshot!(context.filters(), context.sync()
+        .env(EnvVars::VIRTUAL_ENV, "foo").arg("--active").arg("-p").arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: foo
+    Creating virtual environment at: foo
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
 #[cfg(feature = "git")]
 fn sync_workspace_custom_environment_path() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -3417,7 +3759,7 @@ fn sync_legacy_non_project_warning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Resolved 2 packages in [TIME]
     Audited 1 package in [TIME]
     "###);
@@ -3429,7 +3771,7 @@ fn sync_legacy_non_project_warning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Resolved 2 packages in [TIME]
     Audited 1 package in [TIME]
     "###);
@@ -3455,7 +3797,7 @@ fn sync_legacy_non_project_warning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=foo` does not match the project environment path `bar` and will be ignored
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `bar` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: bar
     Resolved 2 packages in [TIME]
@@ -3474,7 +3816,7 @@ fn sync_legacy_non_project_warning() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=foo` does not match the project environment path `[TEMP_DIR]/foo` and will be ignored
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `[TEMP_DIR]/foo` and will be ignored; use `--active` to target the active environment instead
     Resolved 2 packages in [TIME]
     Audited 1 package in [TIME]
     "###);
@@ -5003,7 +5345,7 @@ fn sync_all_groups() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Group `foo` is not defined in any project's `dependency-group` table
+    error: Group `foo` is not defined in any project's `dependency-groups` table
     "###);
 
     Ok(())
@@ -5011,7 +5353,7 @@ fn sync_all_groups() -> Result<()> {
 
 #[test]
 fn sync_multiple_sources_index_disjoint_extras() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5043,24 +5385,20 @@ fn sync_multiple_sources_index_disjoint_extras() -> Result<()> {
 
         [[tool.uv.index]]
         name = "torch-cu118"
-        url = "https://download.pytorch.org/whl/cu118"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu118"
         explicit = true
 
         [[tool.uv.index]]
         name = "torch-cu124"
-        url = "https://download.pytorch.org/whl/cu124"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu124"
         explicit = true
         "#,
     )?;
 
     // Generate a lockfile.
-    context
-        .lock()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .assert()
-        .success();
+    context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("cu124").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("cu124"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5500,7 +5838,6 @@ fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Missing version constraint (e.g., a lower bound) for `typing-extensions`
     Resolved 5 packages in [TIME]
     "###);
 

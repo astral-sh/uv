@@ -1534,7 +1534,7 @@ pub enum SatisfiesResult<'lock> {
         BTreeSet<Requirement>,
         BTreeSet<Requirement>,
     ),
-    /// A package in the lockfile contains different `dependency-group` metadata than expected.
+    /// A package in the lockfile contains different `dependency-groups` metadata than expected.
     MismatchedPackageDependencyGroups(
         &'lock PackageName,
         Option<&'lock Version>,

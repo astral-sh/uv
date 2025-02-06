@@ -14,25 +14,28 @@ description:
     Check out the [`uv-docker-example`](https://github.com/astral-sh/uv-docker-example) project for
     an example of best practices when using uv to build an application in Docker.
 
-### Running uv in a container
+uv provides both _distroless_ Docker images, which are useful for
+[copying uv binaries](#installing-uv) into your own image builds, and images derived from popular
+base images, which are useful for using uv in a container. The distroless images do not contain
+anything but the uv binaries. In contrast, the derived images include an operating system with uv
+pre-installed.
 
-A Docker image is published with a built version of uv available. To run a uv command in a
-container:
+As an example, to run uv in a container using a Debian-based image:
 
 ```console
-$ docker run ghcr.io/astral-sh/uv --help
+$ docker run --rm -it ghcr.io/astral-sh/uv:debian uv --help
 ```
 
 ### Available images
 
-uv provides a distroless Docker image including the `uv` binary. The following tags are published:
+The following distroless images are available:
 
 - `ghcr.io/astral-sh/uv:latest`
-- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.5.23`
+- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.5.29`
 - `ghcr.io/astral-sh/uv:{major}.{minor}`, e.g., `ghcr.io/astral-sh/uv:0.5` (the latest patch
   version)
 
-In addition, uv publishes the following images:
+And the following derived images are available:
 
 <!-- prettier-ignore -->
 - Based on `alpine:3.20`:
@@ -67,9 +70,9 @@ In addition, uv publishes the following images:
     - `ghcr.io/astral-sh/uv:python3.8-bookworm-slim`
 <!-- prettier-ignore-end -->
 
-As with the distroless image, each image is published with uv version tags as
+As with the distroless image, each derived image is published with uv version tags as
 `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}-{base}` and
-`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.5.23-alpine`.
+`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.5.29-alpine`.
 
 For more details, see the [GitHub Container](https://github.com/astral-sh/uv/pkgs/container/uv)
 page.
@@ -107,13 +110,25 @@ Note this requires `curl` to be available.
 In either case, it is best practice to pin to a specific uv version, e.g., with:
 
 ```dockerfile
-COPY --from=ghcr.io/astral-sh/uv:0.5.23 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.5.29 /uv /uvx /bin/
 ```
+
+!!! tip
+
+    While the Dockerfile example above pins to a specific tag, it's also
+    possible to pin a specific SHA256. Pinning a specific SHA256 is considered
+    best practice in environments that require reproducible builds as tags can
+    be moved across different commit SHAs.
+
+    ```Dockerfile
+    # e.g., using a hash from a previous release
+    COPY --from=ghcr.io/astral-sh/uv@sha256:2381d6aa60c326b71fd40023f921a0a3b8f91b14d5db6b90402e65a635053709 /uv /uvx /bin/
+    ```
 
 Or, with the installer:
 
 ```dockerfile
-ADD https://astral.sh/uv/0.5.23/install.sh /uv-installer.sh
+ADD https://astral.sh/uv/0.5.29/install.sh /uv-installer.sh
 ```
 
 ### Installing a project
@@ -485,3 +500,59 @@ RUN uv pip install -r pyproject.toml
 COPY . .
 RUN uv pip install -e .
 ```
+
+## Verifying image provenance
+
+The Docker images are signed during the build process to provide proof of their origin. These
+attestations can be used to verify that an image was produced from an official channel.
+
+For example, you can verify the attestations with the
+[GitHub CLI tool `gh`](https://cli.github.com/):
+
+```console
+$ gh attestation verify --owner astral-sh oci://ghcr.io/astral-sh/uv:latest
+Loaded digest sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx for oci://ghcr.io/astral-sh/uv:latest
+Loaded 1 attestation from GitHub API
+
+The following policy criteria will be enforced:
+- OIDC Issuer must match:................... https://token.actions.githubusercontent.com
+- Source Repository Owner URI must match:... https://github.com/astral-sh
+- Predicate type must match:................ https://slsa.dev/provenance/v1
+- Subject Alternative Name must match regex: (?i)^https://github.com/astral-sh/
+
+✓ Verification succeeded!
+
+sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx was attested by:
+REPO          PREDICATE_TYPE                  WORKFLOW
+astral-sh/uv  https://slsa.dev/provenance/v1  .github/workflows/build-docker.yml@refs/heads/main
+```
+
+This tells you that the specific Docker image was built by the official uv Github release workflow
+and hasn't been tampered with since.
+
+GitHub attestations build on the [sigstore.dev infrastructure](https://www.sigstore.dev/). As such
+you can also use the [`cosign` command](https://github.com/sigstore/cosign) to verify the
+attestation blob against the (multi-platform) manifest for `uv`:
+
+```console
+$ REPO=astral-sh/uv
+$ gh attestation download --repo $REPO oci://ghcr.io/${REPO}:latest
+Wrote attestations to file sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.jsonl.
+Any previous content has been overwritten
+
+The trusted metadata is now available at sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.jsonl
+$ docker buildx imagetools inspect ghcr.io/${REPO}:latest --format "{{json .Manifest}}" > manifest.json
+$ cosign verify-blob-attestation \
+    --new-bundle-format \
+    --bundle "$(jq -r .digest manifest.json).jsonl"  \
+    --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
+    --certificate-identity-regexp="^https://github\.com/${REPO}/.*" \
+    <(jq -j '.|del(.digest,.size)' manifest.json)
+Verified OK
+```
+
+!!! tip
+
+    These examples use `latest`, but best practice is to verify the attestation for a specific
+    version tag, e.g., `ghcr.io/astral-sh/uv:0.5.29`, or (even better) the specific image digest,
+    such as `ghcr.io/astral-sh/uv:0.5.27@sha256:5adf09a5a526f380237408032a9308000d14d5947eafa687ad6c6a2476787b4f`.

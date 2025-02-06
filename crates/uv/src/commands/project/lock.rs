@@ -12,10 +12,10 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevGroupsSpecification, ExtrasSpecification, LowerBound, PreviewMode,
-    Reinstall, TrustedHost, Upgrade,
+    Concurrency, Constraints, DevGroupsSpecification, ExtrasSpecification, PreviewMode, Reinstall,
+    TrustedHost, Upgrade,
 };
-use uv_dispatch::{BuildDispatch, SharedState};
+use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
@@ -40,7 +40,9 @@ use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceMember};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::LockTarget;
-use crate::commands::project::{ProjectError, ProjectInterpreter, ScriptInterpreter};
+use crate::commands::project::{
+    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+};
 use crate::commands::reporters::ResolverReporter;
 use crate::commands::{diagnostics, pip, ExitStatus};
 use crate::printer::Printer;
@@ -119,6 +121,7 @@ pub(crate) async fn lock(
                 allow_insecure_host,
                 &install_mirrors,
                 no_config,
+                Some(false),
                 cache,
                 printer,
             )
@@ -151,14 +154,13 @@ pub(crate) async fn lock(
     };
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let state = UniversalState::default();
 
     // Perform the lock operation.
     match do_safe_lock(
         mode,
         target,
         settings.as_ref(),
-        LowerBound::Warn,
         &state,
         Box::new(DefaultResolveLogger),
         connectivity,
@@ -220,8 +222,8 @@ pub(super) async fn do_safe_lock(
     mode: LockMode<'_>,
     target: LockTarget<'_>,
     settings: ResolverSettingsRef<'_>,
-    bounds: LowerBound,
-    state: &SharedState,
+
+    state: &UniversalState,
     logger: Box<dyn ResolveLogger>,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -253,7 +255,6 @@ pub(super) async fn do_safe_lock(
                 interpreter,
                 Some(existing),
                 settings,
-                bounds,
                 state,
                 logger,
                 connectivity,
@@ -293,7 +294,6 @@ pub(super) async fn do_safe_lock(
                 interpreter,
                 existing,
                 settings,
-                bounds,
                 state,
                 logger,
                 connectivity,
@@ -324,8 +324,8 @@ async fn do_lock(
     interpreter: &Interpreter,
     existing_lock: Option<Lock>,
     settings: ResolverSettingsRef<'_>,
-    bounds: LowerBound,
-    state: &SharedState,
+
+    state: &UniversalState,
     logger: Box<dyn ResolveLogger>,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -464,13 +464,21 @@ async fn do_lock(
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
-            uv_auth::store_credentials(index.raw_url(), credentials);
+            let credentials = Arc::new(credentials);
+            uv_auth::store_credentials(index.raw_url(), credentials.clone());
+            if let Some(root_url) = index.root_url() {
+                uv_auth::store_credentials(&root_url, credentials.clone());
+            }
         }
     }
 
     for index in target.indexes() {
         if let Some(credentials) = index.credentials() {
-            uv_auth::store_credentials(index.raw_url(), credentials);
+            let credentials = Arc::new(credentials);
+            uv_auth::store_credentials(index.raw_url(), credentials.clone());
+            if let Some(root_url) = index.root_url() {
+                uv_auth::store_credentials(&root_url, credentials.clone());
+            }
         }
     }
 
@@ -533,7 +541,7 @@ async fn do_lock(
         index_locations,
         &flat_index,
         dependency_metadata,
-        state.clone(),
+        state.fork().into_inner(),
         index_strategy,
         config_setting,
         build_isolation,
@@ -541,7 +549,6 @@ async fn do_lock(
         build_options,
         &build_hasher,
         exclude_newer,
-        bounds,
         sources,
         concurrency,
         preview,

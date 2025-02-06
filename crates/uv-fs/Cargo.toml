@@ -16,20 +16,18 @@ doctest = false
 workspace = true
 
 [dependencies]
-
-cachedir = { workspace = true }
 dunce = { workspace = true }
 either = { workspace = true }
 encoding_rs_io = { workspace = true }
 fs-err = { workspace = true }
 fs2 = { workspace = true }
 path-slash = { workspace = true }
+percent-encoding = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
-tokio = { workspace = true, optional = true}
 tempfile = { workspace = true }
+tokio = { workspace = true, optional = true}
 tracing = { workspace = true }
-urlencoding = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winsafe = { workspace = true }

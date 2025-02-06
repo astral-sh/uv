@@ -27,7 +27,7 @@ pub(crate) async fn self_update(
     // Load the "install receipt" for the current binary. If the receipt is not found, then
     // uv was likely installed via a package manager.
     let Ok(updater) = updater.load_receipt() else {
-        debug!("no receipt found; assuming uv was installed via a package manager");
+        debug!("No receipt found; assuming uv was installed via a package manager");
         writeln!(
             printer.stderr(),
             "{}",

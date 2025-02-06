@@ -146,7 +146,7 @@ fn lock_wheel_registry() -> Result<()> {
 /// Lock a requirement from PyPI.
 #[test]
 fn lock_sdist_registry() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -159,7 +159,7 @@ fn lock_sdist_registry() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -177,6 +177,9 @@ fn lock_sdist_registry() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2025-01-29T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -199,7 +202,7 @@ fn lock_sdist_registry() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -209,7 +212,7 @@ fn lock_sdist_registry() -> Result<()> {
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -221,7 +224,7 @@ fn lock_sdist_registry() -> Result<()> {
     "###);
 
     // Re-install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4148,7 +4151,7 @@ fn lock_requires_python() -> Result<()> {
 /// upper-bound.
 #[test]
 fn lock_requires_python_upper() -> Result<()> {
-    let context = TestContext::new("3.11");
+    let context = TestContext::new("3.11").with_exclude_newer("2024-08-29T00:00:00Z");
 
     let lockfile = context.temp_dir.join("uv.lock");
 
@@ -4164,7 +4167,7 @@ fn lock_requires_python_upper() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_EXCLUDE_NEWER, "2024-08-29T00:00:00Z"), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4256,7 +4259,7 @@ fn lock_requires_python_upper() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").env(EnvVars::UV_EXCLUDE_NEWER, "2024-08-29T00:00:00Z"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4350,7 +4353,7 @@ fn lock_requires_python_exact() -> Result<()> {
 /// Fork, even with a single dependency, if the minimum Python version is increased.
 #[test]
 fn lock_requires_python_fork() -> Result<()> {
-    let context = TestContext::new("3.11");
+    let context = TestContext::new("3.11").with_exclude_newer("2024-08-29T00:00:00Z");
 
     let lockfile = context.temp_dir.join("uv.lock");
 
@@ -4365,7 +4368,7 @@ fn lock_requires_python_fork() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_EXCLUDE_NEWER, "2024-08-29T00:00:00Z"), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4427,7 +4430,7 @@ fn lock_requires_python_fork() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").env(EnvVars::UV_EXCLUDE_NEWER, "2024-08-29T00:00:00Z"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6342,6 +6345,9 @@ fn lock_invalid_hash() -> Result<()> {
         version = 1
         requires-python = ">=3.12"
 
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
         [[package]]
         name = "anyio"
         version = "3.7.0"
@@ -6384,7 +6390,7 @@ fn lock_invalid_hash() -> Result<()> {
         "#)?;
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -6395,7 +6401,7 @@ fn lock_invalid_hash() -> Result<()> {
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -8301,6 +8307,53 @@ fn lock_env_credentials() -> Result<()> {
         "###
         );
     });
+
+    Ok(())
+}
+
+/// Test solving for packages that are pinned to separate indexes in the same realm.
+/// This requires the credentials to be cached at the URL-level instead of the realm-level, or
+/// credentials for one index will be used for both indexes and the request will fail.
+#[test]
+fn lock_multiple_indexes_same_realm_different_credentials() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig", "anyio"]
+
+        [tool.uv.sources]
+        iniconfig = { index = "internal-proxy-heron" }
+        anyio = { index = "internal-proxy-eagle" }
+
+        [[tool.uv.index]]
+        name = "internal-proxy-heron"
+        url = "https://pypi-proxy.fly.dev/basic-auth-heron/simple"
+
+        [[tool.uv.index]]
+        name = "internal-proxy-eagle"
+        url = "https://pypi-proxy.fly.dev/basic-auth-eagle/simple"
+        "#,
+    )?;
+
+    // Provide credentials via environment variables.
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::index_username("INTERNAL_PROXY_HERON"), "public")
+        .env(EnvVars::index_password("INTERNAL_PROXY_HERON"), "heron")
+        .env(EnvVars::index_username("INTERNAL_PROXY_EAGLE"), "public")
+        .env(EnvVars::index_password("INTERNAL_PROXY_EAGLE"), "eagle"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "###);
 
     Ok(())
 }
@@ -13675,7 +13728,7 @@ fn lock_non_project_conditional() -> Result<()> {
     Ok(())
 }
 
-/// Lock a (legacy) non-project workspace root with `dependency-group`.
+/// Lock a (legacy) non-project workspace root with `dependency-groups`.
 #[test]
 fn lock_non_project_group() -> Result<()> {
     let context = TestContext::new("3.10");
@@ -14590,6 +14643,7 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG Found workspace root: `[TEMP_DIR]/`
     DEBUG Adding current workspace member: `[TEMP_DIR]/`
     DEBUG Using Python request `>=3.12` from `requires-python` metadata
+    DEBUG Checking for Python environment at `.venv`
     DEBUG The virtual environment's Python version satisfies `>=3.12`
     DEBUG Using request timeout of [TIME]
     DEBUG Found static `pyproject.toml` for: project @ file://[TEMP_DIR]/
@@ -14667,7 +14721,7 @@ fn lock_named_index() -> Result<()> {
 
         [[tool.uv.index]]
         name = "pytorch"
-        url = "https://download.pytorch.org/whl/cu121"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu121"
         explicit = true
 
         [[tool.uv.index]]
@@ -14744,7 +14798,7 @@ fn lock_default_index() -> Result<()> {
 
         [[tool.uv.index]]
         name = "pytorch"
-        url = "https://download.pytorch.org/whl/cu121"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu121"
         "#,
     )?;
 
@@ -14804,7 +14858,7 @@ fn lock_default_index() -> Result<()> {
 
         [[tool.uv.index]]
         name = "pytorch"
-        url = "https://download.pytorch.org/whl/cu121"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu121"
         default = true
         "#,
     )?;
@@ -14860,7 +14914,7 @@ fn lock_default_index() -> Result<()> {
 
 #[test]
 fn lock_named_index_cli() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -14877,7 +14931,7 @@ fn lock_named_index_cli() -> Result<()> {
     )?;
 
     // The package references a non-existent index.
-    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -14889,7 +14943,7 @@ fn lock_named_index_cli() -> Result<()> {
     "###);
 
     // But it's fine if it comes from the CLI.
-    uv_snapshot!(context.filters(), context.lock().arg("--index").arg("pytorch=https://download.pytorch.org/whl/cu121").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--index").arg("pytorch=https://astral-sh.github.io/pytorch-mirror/whl/cu121"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14908,10 +14962,13 @@ fn lock_named_index_cli() -> Result<()> {
         version = 1
         requires-python = ">=3.12"
 
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
+
         [[package]]
         name = "jinja2"
         version = "3.1.2"
-        source = { registry = "https://download.pytorch.org/whl/cu121" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu121" }
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -14922,7 +14979,7 @@ fn lock_named_index_cli() -> Result<()> {
         [[package]]
         name = "markupsafe"
         version = "3.0.2"
-        source = { registry = "https://download.pytorch.org/whl/cu121" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu121" }
         wheels = [
             { url = "https://download.pytorch.org/whl/MarkupSafe-3.0.2-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:15ab75ef81add55874e7ab7055e9c397312385bd9ced94920f2802310c930396" },
         ]
@@ -14936,7 +14993,7 @@ fn lock_named_index_cli() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "jinja2", specifier = "==3.1.2", index = "https://download.pytorch.org/whl/cu121" }]
+        requires-dist = [{ name = "jinja2", specifier = "==3.1.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu121" }]
         "###
         );
     });
@@ -14964,7 +15021,7 @@ fn lock_repeat_named_index() -> Result<()> {
 
         [[tool.uv.index]]
         name = "pytorch"
-        url = "https://download.pytorch.org/whl/cu121"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu121"
 
         [[tool.uv.index]]
         name = "pytorch"
@@ -15025,7 +15082,7 @@ fn lock_repeat_named_index() -> Result<()> {
 /// This includes names passed in via the CLI.
 #[test]
 fn lock_repeat_named_index_cli() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -15041,12 +15098,12 @@ fn lock_repeat_named_index_cli() -> Result<()> {
 
         [[tool.uv.index]]
         name = "pytorch"
-        url = "https://download.pytorch.org/whl/cu121"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu121"
         "#,
     )?;
 
     // Resolve to the PyTorch index.
-    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15065,13 +15122,16 @@ fn lock_repeat_named_index_cli() -> Result<()> {
         version = 1
         requires-python = ">=3.12"
 
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
+
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "jinja2"
         version = "3.1.2"
-        source = { registry = "https://download.pytorch.org/whl/cu121" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu121" }
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -15082,7 +15142,8 @@ fn lock_repeat_named_index_cli() -> Result<()> {
         [[package]]
         name = "markupsafe"
         version = "2.1.5"
-        source = { registry = "https://download.pytorch.org/whl/cu121" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu121" }
+        sdist = { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5.tar.gz" }
         wheels = [
             { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:8dec4936e9c3100156f8a2dc89c4b88d5c435175ff03413b443469c7c8c5f4d1" },
             { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:3c6b973f22eb18a789b1460b4b91bf04ae3f0c4234a0a6aa6b0a92f6f7b951d4" },
@@ -15108,7 +15169,7 @@ fn lock_repeat_named_index_cli() -> Result<()> {
 
     // Resolve to PyPI, since the PyTorch index is replaced by the Packse index, which doesn't
     // include `jinja2`.
-    uv_snapshot!(context.filters(), context.lock().arg("--index").arg(format!("pytorch={}", packse_index_url())).env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--index").arg(format!("pytorch={}", packse_index_url())), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15126,6 +15187,9 @@ fn lock_repeat_named_index_cli() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
 
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
@@ -17614,7 +17678,7 @@ fn lock_multiple_sources_no_marker() -> Result<()> {
 
 #[test]
 fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -17623,7 +17687,7 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["jinja2>=3"]
+        dependencies = ["jinja2>=3,<3.1.4"]
 
         [tool.uv]
         constraint-dependencies = ["markupsafe<3"]
@@ -17636,15 +17700,15 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
 
         [[tool.uv.index]]
         name = "torch-cu118"
-        url = "https://download.pytorch.org/whl/cu118"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu118"
 
         [[tool.uv.index]]
         name = "torch-cu124"
-        url = "https://download.pytorch.org/whl/cu124"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu124"
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17667,13 +17731,16 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
             "sys_platform != 'win32'",
         ]
 
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
+
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "jinja2"
         version = "3.1.3"
-        source = { registry = "https://download.pytorch.org/whl/cu118" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }
         resolution-markers = [
             "sys_platform == 'win32'",
         ]
@@ -17687,7 +17754,7 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
         [[package]]
         name = "jinja2"
         version = "3.1.3"
-        source = { registry = "https://download.pytorch.org/whl/cu124" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
         resolution-markers = [
             "sys_platform != 'win32'",
         ]
@@ -17701,7 +17768,8 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
         [[package]]
         name = "markupsafe"
         version = "2.1.5"
-        source = { registry = "https://download.pytorch.org/whl/cu118" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }
+        sdist = { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5.tar.gz" }
         wheels = [
             { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:8dec4936e9c3100156f8a2dc89c4b88d5c435175ff03413b443469c7c8c5f4d1" },
             { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:3c6b973f22eb18a789b1460b4b91bf04ae3f0c4234a0a6aa6b0a92f6f7b951d4" },
@@ -17716,21 +17784,21 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "jinja2", version = "3.1.3", source = { registry = "https://download.pytorch.org/whl/cu118" }, marker = "sys_platform == 'win32'" },
-            { name = "jinja2", version = "3.1.3", source = { registry = "https://download.pytorch.org/whl/cu124" }, marker = "sys_platform != 'win32'" },
+            { name = "jinja2", version = "3.1.3", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, marker = "sys_platform == 'win32'" },
+            { name = "jinja2", version = "3.1.3", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "sys_platform != 'win32'" },
         ]
 
         [package.metadata]
         requires-dist = [
-            { name = "jinja2", marker = "sys_platform != 'win32'", specifier = ">=3", index = "https://download.pytorch.org/whl/cu124" },
-            { name = "jinja2", marker = "sys_platform == 'win32'", specifier = ">=3", index = "https://download.pytorch.org/whl/cu118" },
+            { name = "jinja2", marker = "sys_platform != 'win32'", specifier = ">=3,<3.1.4", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" },
+            { name = "jinja2", marker = "sys_platform == 'win32'", specifier = ">=3,<3.1.4", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" },
         ]
         "###
         );
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17744,7 +17812,7 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
 
 #[test]
 fn lock_multiple_sources_index_mixed() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -17753,7 +17821,7 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["jinja2>=3"]
+        dependencies = ["jinja2>=3,<3.1.4"]
 
         [tool.uv]
         constraint-dependencies = ["markupsafe<3"]
@@ -17766,11 +17834,11 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
 
         [[tool.uv.index]]
         name = "torch-cu118"
-        url = "https://download.pytorch.org/whl/cu118"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu118"
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17793,13 +17861,16 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
             "sys_platform != 'win32'",
         ]
 
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
+
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "jinja2"
         version = "3.1.3"
-        source = { registry = "https://download.pytorch.org/whl/cu118" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }
         resolution-markers = [
             "sys_platform == 'win32'",
         ]
@@ -17833,7 +17904,8 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
         [[package]]
         name = "markupsafe"
         version = "2.1.5"
-        source = { registry = "https://download.pytorch.org/whl/cu118" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }
+        sdist = { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5.tar.gz" }
         wheels = [
             { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:8dec4936e9c3100156f8a2dc89c4b88d5c435175ff03413b443469c7c8c5f4d1" },
             { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:3c6b973f22eb18a789b1460b4b91bf04ae3f0c4234a0a6aa6b0a92f6f7b951d4" },
@@ -17848,21 +17920,21 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "jinja2", version = "3.1.3", source = { registry = "https://download.pytorch.org/whl/cu118" }, marker = "sys_platform == 'win32'" },
+            { name = "jinja2", version = "3.1.3", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, marker = "sys_platform == 'win32'" },
             { name = "jinja2", version = "3.1.4", source = { url = "https://files.pythonhosted.org/packages/31/80/3a54838c3fb461f6fec263ebf3a3a41771bd05190238de3486aae8540c36/jinja2-3.1.4-py3-none-any.whl" }, marker = "sys_platform != 'win32'" },
         ]
 
         [package.metadata]
         requires-dist = [
             { name = "jinja2", marker = "sys_platform != 'win32'", url = "https://files.pythonhosted.org/packages/31/80/3a54838c3fb461f6fec263ebf3a3a41771bd05190238de3486aae8540c36/jinja2-3.1.4-py3-none-any.whl" },
-            { name = "jinja2", marker = "sys_platform == 'win32'", specifier = ">=3", index = "https://download.pytorch.org/whl/cu118" },
+            { name = "jinja2", marker = "sys_platform == 'win32'", specifier = ">=3,<3.1.4", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" },
         ]
         "###
         );
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17876,7 +17948,7 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
 
 #[test]
 fn lock_multiple_sources_index_non_total() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -17885,7 +17957,7 @@ fn lock_multiple_sources_index_non_total() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["jinja2>=3"]
+        dependencies = ["jinja2>=3,<3.1.4"]
 
         [tool.uv.sources]
         jinja2 = [
@@ -17894,18 +17966,18 @@ fn lock_multiple_sources_index_non_total() -> Result<()> {
 
         [[tool.uv.index]]
         name = "torch-cu118"
-        url = "https://download.pytorch.org/whl/cu118"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu118"
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    error: Found duplicate package `jinja2==3.1.3 @ registry+https://download.pytorch.org/whl/cu118`
+    error: Found duplicate package `jinja2==3.1.3 @ registry+https://astral-sh.github.io/pytorch-mirror/whl/cu118`
     "###);
 
     Ok(())
@@ -17913,7 +17985,7 @@ fn lock_multiple_sources_index_non_total() -> Result<()> {
 
 #[test]
 fn lock_multiple_sources_index_explicit() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -17960,11 +18032,11 @@ fn lock_multiple_sources_index_explicit() -> Result<()> {
         ]
 
         [options]
-        exclude-newer = "2024-03-25T00:00:00Z"
+        exclude-newer = "2025-01-30T00:00:00Z"
 
         [[package]]
         name = "jinja2"
-        version = "3.1.3"
+        version = "3.1.4"
         source = { registry = "https://pypi.org/simple" }
         resolution-markers = [
             "sys_platform != 'win32'",
@@ -17972,14 +18044,14 @@ fn lock_multiple_sources_index_explicit() -> Result<()> {
         dependencies = [
             { name = "markupsafe", marker = "sys_platform != 'win32'" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/b2/5e/3a21abf3cd467d7876045335e681d276ac32492febe6d98ad89562d1a7e1/Jinja2-3.1.3.tar.gz", hash = "sha256:ac8bd6544d4bb2c9792bf3a159e80bba8fda7f07e81bc3aed565432d5925ba90", size = 268261 }
+        sdist = { url = "https://files.pythonhosted.org/packages/ed/55/39036716d19cab0747a5020fc7e907f362fbf48c984b14e62127f7e68e5d/jinja2-3.1.4.tar.gz", hash = "sha256:4a3aee7acbbe7303aede8e9648d13b8bf88a429282aa6122a993f0ac800cb369", size = 240245 }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/30/6d/6de6be2d02603ab56e72997708809e8a5b0fbfee080735109b40a3564843/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa", size = 133236 },
+            { url = "https://files.pythonhosted.org/packages/31/80/3a54838c3fb461f6fec263ebf3a3a41771bd05190238de3486aae8540c36/jinja2-3.1.4-py3-none-any.whl", hash = "sha256:bc5dd2abb727a5319567b7a813e6a2e7318c39f4f487cfe6c89c6f9c7d25197d", size = 133271 },
         ]
 
         [[package]]
         name = "jinja2"
-        version = "3.1.3"
+        version = "3.1.4"
         source = { registry = "https://test.pypi.org/simple" }
         resolution-markers = [
             "sys_platform == 'win32'",
@@ -17987,27 +18059,47 @@ fn lock_multiple_sources_index_explicit() -> Result<()> {
         dependencies = [
             { name = "markupsafe", marker = "sys_platform == 'win32'" },
         ]
-        sdist = { url = "https://test-files.pythonhosted.org/packages/3e/f0/69ae37cced6b277dc0419dbb1c6e4fb259e5e319a1a971061a2776316bec/Jinja2-3.1.3.tar.gz", hash = "sha256:27fb536952e578492fa66d8681d8967d8bdf1eb36368b1f842b53251c9f0bfe1", size = 268254 }
+        sdist = { url = "https://test-files.pythonhosted.org/packages/ed/55/39036716d19cab0747a5020fc7e907f362fbf48c984b14e62127f7e68e5d/jinja2-3.1.4.tar.gz", hash = "sha256:4a3aee7acbbe7303aede8e9648d13b8bf88a429282aa6122a993f0ac800cb369", size = 240245 }
         wheels = [
-            { url = "https://test-files.pythonhosted.org/packages/47/dc/9d1c0f1ddbedb1e67f7d00e91819b5a9157056ad83bfa64c12ecef8a4f4e/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:ddd11470e8a1dc4c30e3146400f0130fed7d85886c5f8082f309355b4b0c1128", size = 133236 },
+            { url = "https://test-files.pythonhosted.org/packages/31/80/3a54838c3fb461f6fec263ebf3a3a41771bd05190238de3486aae8540c36/jinja2-3.1.4-py3-none-any.whl", hash = "sha256:bc5dd2abb727a5319567b7a813e6a2e7318c39f4f487cfe6c89c6f9c7d25197d", size = 133271 },
         ]
 
         [[package]]
         name = "markupsafe"
-        version = "2.1.5"
+        version = "3.0.2"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/87/5b/aae44c6655f3801e81aa3eef09dbbf012431987ba564d7231722f68df02d/MarkupSafe-2.1.5.tar.gz", hash = "sha256:d283d37a890ba4c1ae73ffadf8046435c76e7bc2247bbb63c00bd1a709c6544b", size = 19384 }
+        sdist = { url = "https://files.pythonhosted.org/packages/b2/97/5d42485e71dfc078108a86d6de8fa46db44a1a9295e89c5d6d4a06e23a62/markupsafe-3.0.2.tar.gz", hash = "sha256:ee55d3edf80167e48ea11a923c7386f4669df67d7994554387f84e7d8b0a2bf0", size = 20537 }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/53/bd/583bf3e4c8d6a321938c13f49d44024dbe5ed63e0a7ba127e454a66da974/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:8dec4936e9c3100156f8a2dc89c4b88d5c435175ff03413b443469c7c8c5f4d1", size = 18215 },
-            { url = "https://files.pythonhosted.org/packages/48/d6/e7cd795fc710292c3af3a06d80868ce4b02bfbbf370b7cee11d282815a2a/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:3c6b973f22eb18a789b1460b4b91bf04ae3f0c4234a0a6aa6b0a92f6f7b951d4", size = 14069 },
-            { url = "https://files.pythonhosted.org/packages/51/b5/5d8ec796e2a08fc814a2c7d2584b55f889a55cf17dd1a90f2beb70744e5c/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ac07bad82163452a6884fe8fa0963fb98c2346ba78d779ec06bd7a6262132aee", size = 29452 },
-            { url = "https://files.pythonhosted.org/packages/0a/0d/2454f072fae3b5a137c119abf15465d1771319dfe9e4acbb31722a0fff91/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f5dfb42c4604dddc8e4305050aa6deb084540643ed5804d7455b5df8fe16f5e5", size = 28462 },
-            { url = "https://files.pythonhosted.org/packages/2d/75/fd6cb2e68780f72d47e6671840ca517bda5ef663d30ada7616b0462ad1e3/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:ea3d8a3d18833cf4304cd2fc9cbb1efe188ca9b5efef2bdac7adc20594a0e46b", size = 27869 },
-            { url = "https://files.pythonhosted.org/packages/b0/81/147c477391c2750e8fc7705829f7351cf1cd3be64406edcf900dc633feb2/MarkupSafe-2.1.5-cp312-cp312-musllinux_1_1_aarch64.whl", hash = "sha256:d050b3361367a06d752db6ead6e7edeb0009be66bc3bae0ee9d97fb326badc2a", size = 33906 },
-            { url = "https://files.pythonhosted.org/packages/8b/ff/9a52b71839d7a256b563e85d11050e307121000dcebc97df120176b3ad93/MarkupSafe-2.1.5-cp312-cp312-musllinux_1_1_i686.whl", hash = "sha256:bec0a414d016ac1a18862a519e54b2fd0fc8bbfd6890376898a6c0891dd82e9f", size = 32296 },
-            { url = "https://files.pythonhosted.org/packages/88/07/2dc76aa51b481eb96a4c3198894f38b480490e834479611a4053fbf08623/MarkupSafe-2.1.5-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:58c98fee265677f63a4385256a6d7683ab1832f3ddd1e66fe948d5880c21a169", size = 33038 },
-            { url = "https://files.pythonhosted.org/packages/96/0c/620c1fb3661858c0e37eb3cbffd8c6f732a67cd97296f725789679801b31/MarkupSafe-2.1.5-cp312-cp312-win32.whl", hash = "sha256:8590b4ae07a35970728874632fed7bd57b26b0102df2d2b233b6d9d82f6c62ad", size = 16572 },
-            { url = "https://files.pythonhosted.org/packages/3f/14/c3554d512d5f9100a95e737502f4a2323a1959f6d0d01e0d0997b35f7b10/MarkupSafe-2.1.5-cp312-cp312-win_amd64.whl", hash = "sha256:823b65d8706e32ad2df51ed89496147a42a2a6e01c13cfb6ffb8b1e92bc910bb", size = 17127 },
+            { url = "https://files.pythonhosted.org/packages/22/09/d1f21434c97fc42f09d290cbb6350d44eb12f09cc62c9476effdb33a18aa/MarkupSafe-3.0.2-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:9778bd8ab0a994ebf6f84c2b949e65736d5575320a17ae8984a77fab08db94cf", size = 14274 },
+            { url = "https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:846ade7b71e3536c4e56b386c2a47adf5741d2d8b94ec9dc3e92e5e1ee1e2225", size = 12348 },
+            { url = "https://files.pythonhosted.org/packages/e0/25/dd5c0f6ac1311e9b40f4af06c78efde0f3b5cbf02502f8ef9501294c425b/MarkupSafe-3.0.2-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:1c99d261bd2d5f6b59325c92c73df481e05e57f19837bdca8413b9eac4bd8028", size = 24149 },
+            { url = "https://files.pythonhosted.org/packages/f3/f0/89e7aadfb3749d0f52234a0c8c7867877876e0a20b60e2188e9850794c17/MarkupSafe-3.0.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e17c96c14e19278594aa4841ec148115f9c7615a47382ecb6b82bd8fea3ab0c8", size = 23118 },
+            { url = "https://files.pythonhosted.org/packages/d5/da/f2eeb64c723f5e3777bc081da884b414671982008c47dcc1873d81f625b6/MarkupSafe-3.0.2-cp312-cp312-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:88416bd1e65dcea10bc7569faacb2c20ce071dd1f87539ca2ab364bf6231393c", size = 22993 },
+            { url = "https://files.pythonhosted.org/packages/da/0e/1f32af846df486dce7c227fe0f2398dc7e2e51d4a370508281f3c1c5cddc/MarkupSafe-3.0.2-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:2181e67807fc2fa785d0592dc2d6206c019b9502410671cc905d132a92866557", size = 24178 },
+            { url = "https://files.pythonhosted.org/packages/c4/f6/bb3ca0532de8086cbff5f06d137064c8410d10779c4c127e0e47d17c0b71/MarkupSafe-3.0.2-cp312-cp312-musllinux_1_2_i686.whl", hash = "sha256:52305740fe773d09cffb16f8ed0427942901f00adedac82ec8b67752f58a1b22", size = 23319 },
+            { url = "https://files.pythonhosted.org/packages/a2/82/8be4c96ffee03c5b4a034e60a31294daf481e12c7c43ab8e34a1453ee48b/MarkupSafe-3.0.2-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:ad10d3ded218f1039f11a75f8091880239651b52e9bb592ca27de44eed242a48", size = 23352 },
+            { url = "https://files.pythonhosted.org/packages/51/ae/97827349d3fcffee7e184bdf7f41cd6b88d9919c80f0263ba7acd1bbcb18/MarkupSafe-3.0.2-cp312-cp312-win32.whl", hash = "sha256:0f4ca02bea9a23221c0182836703cbf8930c5e9454bacce27e767509fa286a30", size = 15097 },
+            { url = "https://files.pythonhosted.org/packages/c1/80/a61f99dc3a936413c3ee4e1eecac96c0da5ed07ad56fd975f1a9da5bc630/MarkupSafe-3.0.2-cp312-cp312-win_amd64.whl", hash = "sha256:8e06879fc22a25ca47312fbe7c8264eb0b662f6db27cb2d3bbbc74b1df4b9b87", size = 15601 },
+            { url = "https://files.pythonhosted.org/packages/83/0e/67eb10a7ecc77a0c2bbe2b0235765b98d164d81600746914bebada795e97/MarkupSafe-3.0.2-cp313-cp313-macosx_10_13_universal2.whl", hash = "sha256:ba9527cdd4c926ed0760bc301f6728ef34d841f405abf9d4f959c478421e4efd", size = 14274 },
+            { url = "https://files.pythonhosted.org/packages/2b/6d/9409f3684d3335375d04e5f05744dfe7e9f120062c9857df4ab490a1031a/MarkupSafe-3.0.2-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:f8b3d067f2e40fe93e1ccdd6b2e1d16c43140e76f02fb1319a05cf2b79d99430", size = 12352 },
+            { url = "https://files.pythonhosted.org/packages/d2/f5/6eadfcd3885ea85fe2a7c128315cc1bb7241e1987443d78c8fe712d03091/MarkupSafe-3.0.2-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:569511d3b58c8791ab4c2e1285575265991e6d8f8700c7be0e88f86cb0672094", size = 24122 },
+            { url = "https://files.pythonhosted.org/packages/0c/91/96cf928db8236f1bfab6ce15ad070dfdd02ed88261c2afafd4b43575e9e9/MarkupSafe-3.0.2-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:15ab75ef81add55874e7ab7055e9c397312385bd9ced94920f2802310c930396", size = 23085 },
+            { url = "https://files.pythonhosted.org/packages/c2/cf/c9d56af24d56ea04daae7ac0940232d31d5a8354f2b457c6d856b2057d69/MarkupSafe-3.0.2-cp313-cp313-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:f3818cb119498c0678015754eba762e0d61e5b52d34c8b13d770f0719f7b1d79", size = 22978 },
+            { url = "https://files.pythonhosted.org/packages/2a/9f/8619835cd6a711d6272d62abb78c033bda638fdc54c4e7f4272cf1c0962b/MarkupSafe-3.0.2-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:cdb82a876c47801bb54a690c5ae105a46b392ac6099881cdfb9f6e95e4014c6a", size = 24208 },
+            { url = "https://files.pythonhosted.org/packages/f9/bf/176950a1792b2cd2102b8ffeb5133e1ed984547b75db47c25a67d3359f77/MarkupSafe-3.0.2-cp313-cp313-musllinux_1_2_i686.whl", hash = "sha256:cabc348d87e913db6ab4aa100f01b08f481097838bdddf7c7a84b7575b7309ca", size = 23357 },
+            { url = "https://files.pythonhosted.org/packages/ce/4f/9a02c1d335caabe5c4efb90e1b6e8ee944aa245c1aaaab8e8a618987d816/MarkupSafe-3.0.2-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:444dcda765c8a838eaae23112db52f1efaf750daddb2d9ca300bcae1039adc5c", size = 23344 },
+            { url = "https://files.pythonhosted.org/packages/ee/55/c271b57db36f748f0e04a759ace9f8f759ccf22b4960c270c78a394f58be/MarkupSafe-3.0.2-cp313-cp313-win32.whl", hash = "sha256:bcf3e58998965654fdaff38e58584d8937aa3096ab5354d493c77d1fdd66d7a1", size = 15101 },
+            { url = "https://files.pythonhosted.org/packages/29/88/07df22d2dd4df40aba9f3e402e6dc1b8ee86297dddbad4872bd5e7b0094f/MarkupSafe-3.0.2-cp313-cp313-win_amd64.whl", hash = "sha256:e6a2a455bd412959b57a172ce6328d2dd1f01cb2135efda2e4576e8a23fa3b0f", size = 15603 },
+            { url = "https://files.pythonhosted.org/packages/62/6a/8b89d24db2d32d433dffcd6a8779159da109842434f1dd2f6e71f32f738c/MarkupSafe-3.0.2-cp313-cp313t-macosx_10_13_universal2.whl", hash = "sha256:b5a6b3ada725cea8a5e634536b1b01c30bcdcd7f9c6fff4151548d5bf6b3a36c", size = 14510 },
+            { url = "https://files.pythonhosted.org/packages/7a/06/a10f955f70a2e5a9bf78d11a161029d278eeacbd35ef806c3fd17b13060d/MarkupSafe-3.0.2-cp313-cp313t-macosx_11_0_arm64.whl", hash = "sha256:a904af0a6162c73e3edcb969eeeb53a63ceeb5d8cf642fade7d39e7963a22ddb", size = 12486 },
+            { url = "https://files.pythonhosted.org/packages/34/cf/65d4a571869a1a9078198ca28f39fba5fbb910f952f9dbc5220afff9f5e6/MarkupSafe-3.0.2-cp313-cp313t-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:4aa4e5faecf353ed117801a068ebab7b7e09ffb6e1d5e412dc852e0da018126c", size = 25480 },
+            { url = "https://files.pythonhosted.org/packages/0c/e3/90e9651924c430b885468b56b3d597cabf6d72be4b24a0acd1fa0e12af67/MarkupSafe-3.0.2-cp313-cp313t-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c0ef13eaeee5b615fb07c9a7dadb38eac06a0608b41570d8ade51c56539e509d", size = 23914 },
+            { url = "https://files.pythonhosted.org/packages/66/8c/6c7cf61f95d63bb866db39085150df1f2a5bd3335298f14a66b48e92659c/MarkupSafe-3.0.2-cp313-cp313t-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:d16a81a06776313e817c951135cf7340a3e91e8c1ff2fac444cfd75fffa04afe", size = 23796 },
+            { url = "https://files.pythonhosted.org/packages/bb/35/cbe9238ec3f47ac9a7c8b3df7a808e7cb50fe149dc7039f5f454b3fba218/MarkupSafe-3.0.2-cp313-cp313t-musllinux_1_2_aarch64.whl", hash = "sha256:6381026f158fdb7c72a168278597a5e3a5222e83ea18f543112b2662a9b699c5", size = 25473 },
+            { url = "https://files.pythonhosted.org/packages/e6/32/7621a4382488aa283cc05e8984a9c219abad3bca087be9ec77e89939ded9/MarkupSafe-3.0.2-cp313-cp313t-musllinux_1_2_i686.whl", hash = "sha256:3d79d162e7be8f996986c064d1c7c817f6df3a77fe3d6859f6f9e7be4b8c213a", size = 24114 },
+            { url = "https://files.pythonhosted.org/packages/0d/80/0985960e4b89922cb5a0bac0ed39c5b96cbc1a536a99f30e8c220a996ed9/MarkupSafe-3.0.2-cp313-cp313t-musllinux_1_2_x86_64.whl", hash = "sha256:131a3c7689c85f5ad20f9f6fb1b866f402c445b220c19fe4308c0b147ccd2ad9", size = 24098 },
+            { url = "https://files.pythonhosted.org/packages/82/78/fedb03c7d5380df2427038ec8d973587e90561b2d90cd472ce9254cf348b/MarkupSafe-3.0.2-cp313-cp313t-win32.whl", hash = "sha256:ba8062ed2cf21c07a9e295d5b8a2a5ce678b913b45fdf68c32d95d6c1291e0b6", size = 15208 },
+            { url = "https://files.pythonhosted.org/packages/4f/65/6079a46068dfceaeabb5dcad6d674f5f5c61a6fa5673746f42a9f4c233b3/MarkupSafe-3.0.2-cp313-cp313t-win_amd64.whl", hash = "sha256:e444a31f8db13eb18ada366ab3cf45fd4b31e4db1236a4448f68778c1d1a5a2f", size = 15739 },
         ]
 
         [[package]]
@@ -18015,8 +18107,8 @@ fn lock_multiple_sources_index_explicit() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "jinja2", version = "3.1.3", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" },
-            { name = "jinja2", version = "3.1.3", source = { registry = "https://test.pypi.org/simple" }, marker = "sys_platform == 'win32'" },
+            { name = "jinja2", version = "3.1.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" },
+            { name = "jinja2", version = "3.1.4", source = { registry = "https://test.pypi.org/simple" }, marker = "sys_platform == 'win32'" },
         ]
 
         [package.metadata]
@@ -18306,7 +18398,7 @@ fn lock_multiple_sources_extra() -> Result<()> {
 
 #[test]
 fn lock_multiple_sources_index_overlapping_extras() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -18332,25 +18424,25 @@ fn lock_multiple_sources_index_overlapping_extras() -> Result<()> {
 
         [[tool.uv.index]]
         name = "torch-cu118"
-        url = "https://download.pytorch.org/whl/cu118"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu118"
         explicit = true
 
         [[tool.uv.index]]
         name = "torch-cu124"
-        url = "https://download.pytorch.org/whl/cu124"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu124"
         explicit = true
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Requirements contain conflicting indexes for package `jinja2` in all marker environments:
-    - https://download.pytorch.org/whl/cu118
-    - https://download.pytorch.org/whl/cu124
+    - https://astral-sh.github.io/pytorch-mirror/whl/cu118
+    - https://astral-sh.github.io/pytorch-mirror/whl/cu124
     "###);
 
     Ok(())
@@ -18359,7 +18451,7 @@ fn lock_multiple_sources_index_overlapping_extras() -> Result<()> {
 /// Sources will be ignored when an `extra` is applied, but references a non-existent extra.
 #[test]
 fn lock_multiple_index_with_missing_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -18377,12 +18469,12 @@ fn lock_multiple_index_with_missing_extra() -> Result<()> {
 
         [[tool.uv.index]]
         name = "torch-cu118"
-        url = "https://download.pytorch.org/whl/cu118"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu118"
         explicit = true
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -18399,7 +18491,7 @@ fn lock_multiple_index_with_missing_extra() -> Result<()> {
 /// group.
 #[test]
 fn lock_multiple_index_with_absent_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -18420,12 +18512,12 @@ fn lock_multiple_index_with_absent_extra() -> Result<()> {
 
         [[tool.uv.index]]
         name = "torch-cu118"
-        url = "https://download.pytorch.org/whl/cu118"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu118"
         explicit = true
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -18441,7 +18533,7 @@ fn lock_multiple_index_with_absent_extra() -> Result<()> {
 /// Sources will be ignored when a `group` is applied, but references a non-existent group.
 #[test]
 fn lock_multiple_index_with_missing_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -18459,12 +18551,12 @@ fn lock_multiple_index_with_missing_group() -> Result<()> {
 
         [[tool.uv.index]]
         name = "torch-cu118"
-        url = "https://download.pytorch.org/whl/cu118"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu118"
         explicit = true
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -18481,7 +18573,7 @@ fn lock_multiple_index_with_missing_group() -> Result<()> {
 /// group.
 #[test]
 fn lock_multiple_index_with_absent_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -18502,12 +18594,12 @@ fn lock_multiple_index_with_absent_group() -> Result<()> {
 
         [[tool.uv.index]]
         name = "torch-cu118"
-        url = "https://download.pytorch.org/whl/cu118"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu118"
         explicit = true
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -20051,9 +20143,7 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
 /// N.B. `hatchling` "flattens" recursive extras.
 #[test]
 fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
-    static EXCLUDE_NEWER: &str = "2025-01-01T00:00:00Z";
-
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -20091,7 +20181,7 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
         .child("__about__.py")
         .write_str("__version__ = '0.1.0'")?;
 
-    uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -20176,7 +20266,7 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
     });
 
     // Re-run with `--locked`. We should accept the lockfile, since the metadata is unchanged.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -20188,7 +20278,7 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
     fs_err::remove_dir_all(&context.cache_dir)?;
 
     // Running with `--offline` should also succeed.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -20205,9 +20295,7 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
 /// N.B. `setuptools` does not "flatten" recursive extras.
 #[test]
 fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
-    static EXCLUDE_NEWER: &str = "2025-01-01T00:00:00Z";
-
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -20251,7 +20339,7 @@ fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
         .child("__init__.py")
         .write_str("__version__ = '0.1.0'")?;
 
-    uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -20336,7 +20424,7 @@ fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
     });
 
     // Re-run with `--locked`. We should accept the lockfile, since the metadata is unchanged.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -20348,13 +20436,413 @@ fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
     fs_err::remove_dir_all(&context.cache_dir)?;
 
     // Running with `--offline` should also succeed.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
+/// See: <https://github.com/astral-sh/uv/issues/11047>
+#[test]
+fn lock_dynamic_built_cache() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        requires-python = ">=3.12"
+        dynamic = ["version"]
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/__about__.py" }]
+
+        [tool.hatch.version]
+        path = "src/__about__.py"
+        scheme = "standard"
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("src")
+        .child("__about__.py")
+        .write_str("__version__ = '0.1.0'")?;
+
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    // Lock the project, which should omit the dynamic version.
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        source = { editable = "." }
+        "###
+        );
+    });
+
+    // Install the project, to force a build.
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    // Remove the lockfile.
+    fs_err::remove_file(context.temp_dir.join("uv.lock"))?;
+
+    // Lock the project, which should omit the dynamic version.
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        source = { editable = "." }
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// See: <https://github.com/astral-sh/uv/issues/11047>
+#[test]
+fn lock_shared_build_dependency() -> Result<()> {
+    let context = TestContext::new("3.13").with_exclude_newer("2025-01-28T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        requires-python = ">=3.8"
+        dynamic = ["version"]
+        dependencies = ["libcst>=1.1.0"]
+
+        [build-system]
+        requires = ["hatchling", "libcst>=1.1.0"]
+        build-backend = "hatchling.build"
+
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/__about__.py" }]
+
+        [tool.hatch.version]
+        path = "src/__about__.py"
+        scheme = "standard"
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("src")
+        .child("__about__.py")
+        .write_str("__version__ = '0.1.0'")?;
+
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--no-build-package")
+        .arg("libcst"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.8"
+        resolution-markers = [
+            "python_full_version >= '3.9'",
+            "python_full_version < '3.9'",
+        ]
+
+        [options]
+        exclude-newer = "2025-01-28T00:00:00Z"
+
+        [[package]]
+        name = "libcst"
+        version = "1.1.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "python_full_version < '3.9'",
+        ]
+        dependencies = [
+            { name = "pyyaml", marker = "python_full_version < '3.9'" },
+            { name = "typing-extensions", marker = "python_full_version < '3.9'" },
+            { name = "typing-inspect", marker = "python_full_version < '3.9'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/81/ef/610498b5e982d9dd64f2af8422ece1be44a946a8dbda15d08087e0e1ff08/libcst-1.1.0.tar.gz", hash = "sha256:0acbacb9a170455701845b7e940e2d7b9519db35a86768d86330a0b0deae1086", size = 764691 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/5c/0a/bdd31ed5c8ad1978aa5d0350e64769ea91c7710a4d34e159c696e6c145e7/libcst-1.1.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:63f75656fd733dc20354c46253fde3cf155613e37643c3eaf6f8818e95b7a3d1", size = 2112700 },
+            { url = "https://files.pythonhosted.org/packages/fb/27/889bc60abece5f5c998560c9d61898e548a48e6a72c75490582cde878e8d/libcst-1.1.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:8ae11eb1ea55a16dc0cdc61b41b29ac347da70fec14cc4381248e141ee2fbe6c", size = 2070222 },
+            { url = "https://files.pythonhosted.org/packages/20/23/d5b4e03fdec2275bd2f96b19a1317fed736f68411dfa6913e206888930ed/libcst-1.1.0-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:4bc745d0c06420fe2644c28d6ddccea9474fb68a2135904043676deb4fa1e6bc", size = 3154843 },
+            { url = "https://files.pythonhosted.org/packages/ac/0d/723754c5a50fd57a3fddc17960e98f809a46a898419a39a5da5795ca6983/libcst-1.1.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8c1f2da45f1c45634090fd8672c15e0159fdc46853336686959b2d093b6e10fa", size = 3194222 },
+            { url = "https://files.pythonhosted.org/packages/b3/d8/9d598a272f2d7687f1936836bd67bf8b13623fbf43210e8745157732a87e/libcst-1.1.0-cp310-cp310-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:003e5e83a12eed23542c4ea20fdc8de830887cc03662432bb36f84f8c4841b81", size = 3300452 },
+            { url = "https://files.pythonhosted.org/packages/82/41/bed99411d679318116673bbd7d96f65ccf382770898719109f5927250b74/libcst-1.1.0-cp310-cp310-win_amd64.whl", hash = "sha256:3ebbb9732ae3cc4ae7a0e97890bed0a57c11d6df28790c2b9c869f7da653c7c7", size = 2031202 },
+            { url = "https://files.pythonhosted.org/packages/9d/01/20eef81a259a7555def181917ac21180b0ccd694b62851d251c69e55b431/libcst-1.1.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:d68c34e3038d3d1d6324eb47744cbf13f2c65e1214cf49db6ff2a6603c1cd838", size = 2112699 },
+            { url = "https://files.pythonhosted.org/packages/b8/e3/f9b7528ebd96e5b507c401830f81274806fe7f76e65668dee9884fdb8465/libcst-1.1.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:9dffa1795c2804d183efb01c0f1efd20a7831db6a21a0311edf90b4100d67436", size = 2070226 },
+            { url = "https://files.pythonhosted.org/packages/3e/88/1a0dd13408be61a5fcd83ecf0ee85c2b4795dab7d3c5544a8ae35f495265/libcst-1.1.0-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:cc9b6ac36d7ec9db2f053014ea488086ca2ed9c322be104fbe2c71ca759da4bb", size = 3154844 },
+            { url = "https://files.pythonhosted.org/packages/13/a6/3414494d9767eb937d2261f070d5edf12dac26cbf8df0f4a9619a119e033/libcst-1.1.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:78b7a38ec4c1c009ac39027d51558b52851fb9234669ba5ba62283185963a31c", size = 3194221 },
+            { url = "https://files.pythonhosted.org/packages/74/a6/3085ab81c6effe43590827cd4748d44621cd94ef6bf9f70a301985e4b566/libcst-1.1.0-cp311-cp311-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:5297a16e575be8173185e936b7765c89a3ca69d4ae217a4af161814a0f9745a7", size = 3300454 },
+            { url = "https://files.pythonhosted.org/packages/01/3b/9f1b0f4401e439bbf42162468c3583799fa80fa441b47ef103f79d0fd61a/libcst-1.1.0-cp311-cp311-win_amd64.whl", hash = "sha256:7ccaf53925f81118aeaadb068a911fac8abaff608817d7343da280616a5ca9c1", size = 2031205 },
+            { url = "https://files.pythonhosted.org/packages/04/bd/0143bc80fee8544d4c3bf7a4ba098b8a86d7a08df2c8cbce1e04300c5f47/libcst-1.1.0-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:75816647736f7e09c6120bdbf408456f99b248d6272277eed9a58cf50fb8bc7d", size = 2112700 },
+            { url = "https://files.pythonhosted.org/packages/93/b8/d144476de088d6b2ed40b7c6a02f89df91f0163cab1315ff5944bf1796a6/libcst-1.1.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:c8f26250f87ca849a7303ed7a4fd6b2c7ac4dec16b7d7e68ca6a476d7c9bfcdb", size = 2070223 },
+            { url = "https://files.pythonhosted.org/packages/b6/98/a30992fa79669e10cf0f7ae8749d460f713f968c66cd48c569c6ed87f705/libcst-1.1.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:2d37326bd6f379c64190a28947a586b949de3a76be00176b0732c8ee87d67ebe", size = 3155322 },
+            { url = "https://files.pythonhosted.org/packages/94/d9/2a2af5d477ea98af05534f76260647da308d20c0cdd10bc05107d2755b0f/libcst-1.1.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e3d8cf974cfa2487b28f23f56c4bff90d550ef16505e58b0dca0493d5293784b", size = 3194986 },
+            { url = "https://files.pythonhosted.org/packages/d6/76/c2867a61f185c1a21cf5e10c8020b763250f5523a042535c609215800389/libcst-1.1.0-cp312-cp312-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:82d1271403509b0a4ee6ff7917c2d33b5a015f44d1e208abb1da06ba93b2a378", size = 3300603 },
+            { url = "https://files.pythonhosted.org/packages/b8/83/1504eb1d4c2cf7f251e1c719734d6f1560dd5532c25871983ef36d9cab03/libcst-1.1.0-cp312-cp312-win_amd64.whl", hash = "sha256:bca1841693941fdd18371824bb19a9702d5784cd347cb8231317dbdc7062c5bc", size = 2031201 },
+            { url = "https://files.pythonhosted.org/packages/df/76/ef29f8f26e9ca89a75c138b1cc4de936bc648607c2fe4e2ee2201201a1b0/libcst-1.1.0-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:f36f592e035ef84f312a12b75989dde6a5f6767fe99146cdae6a9ee9aff40dd0", size = 2112679 },
+            { url = "https://files.pythonhosted.org/packages/4c/29/4cf0e0bdc5c9045ba13c1ef86e75af6db1d55e67b798c9d7f0d2631ff85a/libcst-1.1.0-cp38-cp38-macosx_11_0_arm64.whl", hash = "sha256:f561c9a84eca18be92f4ad90aa9bd873111efbea995449301719a1a7805dbc5c", size = 2070261 },
+            { url = "https://files.pythonhosted.org/packages/df/72/b1a969b0a7f9184f1a7181b30a09d88479aaf9af861bae10d7207780aa88/libcst-1.1.0-cp38-cp38-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:97fbc73c87e9040e148881041fd5ffa2a6ebf11f64b4ccb5b52e574b95df1a15", size = 3154652 },
+            { url = "https://files.pythonhosted.org/packages/4e/9f/9b4278b8e6e2cfd56caab73e69388fc6da1aa42961cbc777a45888db8e11/libcst-1.1.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:99fdc1929703fd9e7408aed2e03f58701c5280b05c8911753a8d8619f7dfdda5", size = 3194182 },
+            { url = "https://files.pythonhosted.org/packages/be/fa/7b8abb0c5e6f30953dd82fba70cbf9c36d3832fc36d329cb408241ac25c2/libcst-1.1.0-cp38-cp38-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:0bf69cbbab5016d938aac4d3ae70ba9ccb3f90363c588b3b97be434e6ba95403", size = 3300688 },
+            { url = "https://files.pythonhosted.org/packages/7f/71/13e5a9f9831aebffced7f42e8304ce9f09ca85f7f713b21d22fb7b571140/libcst-1.1.0-cp38-cp38-win_amd64.whl", hash = "sha256:fe41b33aa73635b1651f64633f429f7aa21f86d2db5748659a99d9b7b1ed2a90", size = 2031062 },
+            { url = "https://files.pythonhosted.org/packages/b7/4f/e989c0b07749143f3608814f712bc27ad48a72f5ba890c4bea7df4258c23/libcst-1.1.0-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:73c086705ed34dbad16c62c9adca4249a556c1b022993d511da70ea85feaf669", size = 2112658 },
+            { url = "https://files.pythonhosted.org/packages/f8/c3/c7e56011c477df755d78ee734dd1caa5e6ff6cc51a07071adbc452df998f/libcst-1.1.0-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:3a07ecfabbbb8b93209f952a365549e65e658831e9231649f4f4e4263cad24b1", size = 2070233 },
+            { url = "https://files.pythonhosted.org/packages/30/f3/49bdd4be2a9a89834e89adf3c0377c1c6387e00634efa0d0c078a49ee034/libcst-1.1.0-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:c653d9121d6572d8b7f8abf20f88b0a41aab77ff5a6a36e5a0ec0f19af0072e8", size = 3155034 },
+            { url = "https://files.pythonhosted.org/packages/bd/d2/544d481b33dbc35381d976221ab1358fab0db4588c2d53214500454e9fd5/libcst-1.1.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5f1cd308a4c2f71d5e4eec6ee693819933a03b78edb2e4cc5e3ad1afd5fb3f07", size = 3194521 },
+            { url = "https://files.pythonhosted.org/packages/60/1c/c2d4e2b6a69fc8fd52ae6c0662dfa4550486712d5e77cf754348e4c85a2c/libcst-1.1.0-cp39-cp39-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:8afb6101b8b3c86c5f9cec6b90ab4da16c3c236fe7396f88e8b93542bb341f7c", size = 3300712 },
+            { url = "https://files.pythonhosted.org/packages/0a/76/b31dba704487daf0845fc2d246ddb1a141a1dd12ef695d30eb4b0aac51c5/libcst-1.1.0-cp39-cp39-win_amd64.whl", hash = "sha256:d22d1abfe49aa60fc61fa867e10875a9b3024ba5a801112f4d7ba42d8d53242e", size = 2031198 },
+        ]
+
+        [[package]]
+        name = "libcst"
+        version = "1.6.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "python_full_version >= '3.9'",
+        ]
+        dependencies = [
+            { name = "pyyaml", marker = "python_full_version >= '3.9'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/f4/ec/d24c0ad33838dfbfe20a760b301d529c63cef32f8b91dae380c97f8bf127/libcst-1.6.0.tar.gz", hash = "sha256:e80ecdbe3fa43b3793cae8fa0b07a985bd9a693edbe6e9d076f5422ecadbf0db", size = 776146 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/06/10/2d14576a0ddf14c08c4b92276abd04c0220c3b9fb006f6d5b6f91d403082/libcst-1.6.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:2f02d0da6dfbad44e6ec4d1e5791e17afe95d9fe89bce4374bf109fd9c103a50", size = 2049474 },
+            { url = "https://files.pythonhosted.org/packages/39/39/04893c1555dd59e4c6e25cd7a6afa6162ccd088a669ed106d992c7b3baca/libcst-1.6.0-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:48406225378ee9208edb1e5a10451bea810262473af1a2f2473737fd16d34e3a", size = 2206659 },
+            { url = "https://files.pythonhosted.org/packages/87/f1/584a83f9b8b0ff18ec79b4daca6bb459abe63b854a67e11d17948b0b0d7f/libcst-1.6.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8bf59a21e9968dc4e7c301fac660bf54bc7d4dcadc0b1abf31b1cac34e800555", size = 2311551 },
+            { url = "https://files.pythonhosted.org/packages/d8/8e/24772a6d7f94b68b1bfbfb767870558a4ecc7d2c728f9dba5c044bc6130b/libcst-1.6.0-cp310-cp310-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:d65550ac686bff9395398afacbc88fe812363703a4161108e8a6db066d30b96e", size = 2394319 },
+            { url = "https://files.pythonhosted.org/packages/d5/84/be29a71cd2c5f4079fa05675b140ec2a83f7b425ee8f75f17232f6223cc7/libcst-1.6.0-cp310-cp310-musllinux_1_2_aarch64.whl", hash = "sha256:5ac6d68364031f0b554d8920a69b33f25ec6ef351fa31b4e8f3676abb729ce36", size = 2254468 },
+            { url = "https://files.pythonhosted.org/packages/a7/16/85d97cd594ca9d38d4f7ea71e13eb43a362374de8b436119f09c95999477/libcst-1.6.0-cp310-cp310-musllinux_1_2_x86_64.whl", hash = "sha256:0c0fb2f7b74605832cc38d79e9d104f92a8aaeec7bf8f2759b20c5ba3786a321", size = 2372379 },
+            { url = "https://files.pythonhosted.org/packages/de/87/53bea5e4e783ddf2b785c4706fdfc5fd74561a47f99995cc1d9f300d20f1/libcst-1.6.0-cp310-cp310-win_amd64.whl", hash = "sha256:1bd11863889b630fe41543b4eb5e2dd445447a7f89e6b58229e83c9e52a74942", size = 2076554 },
+            { url = "https://files.pythonhosted.org/packages/9e/d6/d6b2b6a997cdec90f2492954a1868de7df90d2d7a0b9267e14ded5713c91/libcst-1.6.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:a9e71a046b4a91950125967f5ee67389f25a2511103e5595508f0591a5f50bc0", size = 2049175 },
+            { url = "https://files.pythonhosted.org/packages/18/26/cc5852f725042dff5df2ca98d362f0c633bd70ee14e252665293c7f9b67d/libcst-1.6.0-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:df3f452e074893dfad7746a041caeb3cde75bd9fbca4ea7b223012e112d1da8c", size = 2206182 },
+            { url = "https://files.pythonhosted.org/packages/a2/fe/4227e6c34a96b1fe36bbe0f48ebe09cbed267a89ab4827bed58a794776ee/libcst-1.6.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:31e45f88d4a9a8e5b690ed14a564fcbace14b10f5e7b6797d6d97f4226b395da", size = 2311286 },
+            { url = "https://files.pythonhosted.org/packages/22/c1/db676774b3e3e6d7e604d4b520df609c8c9e7990c39c3c2a2216687c1d6c/libcst-1.6.0-cp311-cp311-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:1bd00399d20bf93590b6f02647f8be08e2b730e050e6b7360f669254e69c98f5", size = 2393885 },
+            { url = "https://files.pythonhosted.org/packages/6b/8a/5cb362e992d3ad822ea93233175e0f26da16bf852532969918da439a85a5/libcst-1.6.0-cp311-cp311-musllinux_1_2_aarch64.whl", hash = "sha256:d25132f24edc24895082589645dbb8972c0eff6c9716ff71932fa72643d7c74f", size = 2254001 },
+            { url = "https://files.pythonhosted.org/packages/a9/65/81bd981ca6e1712b16ec1c43b90e886cacb36bd6e12f50c27550ade4dc1a/libcst-1.6.0-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:38f3f25d4f5d8713cdb6a7bd41d75299de3c2416b9890a34d9b05417b8e64c1d", size = 2371855 },
+            { url = "https://files.pythonhosted.org/packages/d4/87/f1613e0ec216f29fd45e720eef1e440adfefc809d4e1bb3fc466a1db49bc/libcst-1.6.0-cp311-cp311-win_amd64.whl", hash = "sha256:91242ccbae6e7a070b33ebe03d3677c54bf678653538fbaa89597a59e4a13b2d", size = 2076392 },
+            { url = "https://files.pythonhosted.org/packages/89/ca/4b92261d0cecfab5e22ccd7582f5b2d6fec9ec19884d28d66f1bc1dc9b79/libcst-1.6.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:cd2b28688dabf0f7a166b47ab1c7d5c0b6ef8c9a05ad932618471a33fe591a4a", size = 2044342 },
+            { url = "https://files.pythonhosted.org/packages/39/cb/3764a5eb00e3e31f3ce28e8abd1aa99934bc63006798799593d3525d2677/libcst-1.6.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:6a12a4766ce5874ccb31a1cc095cff47e2fb35755954965fe77458d9e5b361a8", size = 2202123 },
+            { url = "https://files.pythonhosted.org/packages/6e/0d/ec24969e39a6d9afee6080366de7303d59b43611882a29b30fc28dba0488/libcst-1.6.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:bfcd78a5e775f155054ed50d047a260cd23f0f6a89ef2a57e10bdb9c697680b8", size = 2303775 },
+            { url = "https://files.pythonhosted.org/packages/36/a3/c40304fe76c3add626dc19ab2c1ecbcfd1df7714414d7b4e3a0d130a8389/libcst-1.6.0-cp312-cp312-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:5786240358b122ad901bb0b7e6b7467085b2317333233d7c7d7cac46388fbd77", size = 2388341 },
+            { url = "https://files.pythonhosted.org/packages/c3/f1/e820b8f9e19769ca7a57a719980abacf805609777a58df68ed1cb8cd328d/libcst-1.6.0-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:c527472093b5b64ffa65d33c472da38952827abbca18c786d559d6d6122bc891", size = 2248883 },
+            { url = "https://files.pythonhosted.org/packages/6c/d4/bc4c91f61dbb892db53148f39d6d8a45a5cbb4c19953ededb39bbcf60d3d/libcst-1.6.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:63a8893dfc344b9b08bfaf4e433b16a7e2e9361f8362fa73eaecc4d379c328ba", size = 2365027 },
+            { url = "https://files.pythonhosted.org/packages/e1/b5/d84b56528f88e7f3fe792b91bd21beb406159b3283bd7c891737982f7b07/libcst-1.6.0-cp312-cp312-win_amd64.whl", hash = "sha256:4cd011fcd79b76be216440ec296057780223674bc2566662c4bc50d3c5ecd58e", size = 2070680 },
+            { url = "https://files.pythonhosted.org/packages/04/3e/80f5bbcc06a8d101d1a35ff1c7c0866e6b41ae07843a47e5c6c84f5bbf10/libcst-1.6.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:96506807dc01c9efcea8ab57d9ea18fdc87b85514cc8ee2f8568fab6df861f02", size = 2044340 },
+            { url = "https://files.pythonhosted.org/packages/2c/b3/1f36c271a91eef880740a7826d7a953dbcec434adcbee070a2e75cfb94d0/libcst-1.6.0-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:dac722aade8796a1e78662c3ed424f0ab9f1dc0e8fdf3088610354cdd709e53f", size = 2202286 },
+            { url = "https://files.pythonhosted.org/packages/c4/23/dbb2bbe21c1943dcd52be7423ddb9e9b7ab1cf4c44e25cceee30fa2136db/libcst-1.6.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:1b8370d0f7092a17b7fcda0e1539d0162cf35a0c19af94842b09c9dddc382acd", size = 2303867 },
+            { url = "https://files.pythonhosted.org/packages/e6/49/61bb0baa61745dc7b91fdb97fbed16149b22d88f254696d54645fea9df25/libcst-1.6.0-cp313-cp313-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:8e4fcd791cab0fe8287b6edd0d78512b6475b87d906562a5d2d0999cb6d23b8d", size = 2389158 },
+            { url = "https://files.pythonhosted.org/packages/3c/39/dcfe6c02e087e3241e8e799b2ddb92e32a65076eec846205e96e3a928139/libcst-1.6.0-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:3fb953fc0155532f366ff40f6a23f191250134d6928e02074ae4eb3531fa6c30", size = 2248820 },
+            { url = "https://files.pythonhosted.org/packages/20/5b/db239fcf1417bdff283ed76b027b4039e1c377d38aa3b979f32bcf34fa94/libcst-1.6.0-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:2f3c85602e5a6d3aec0a8fc74230363f943004d7c2b2a6a1c09b320b61692241", size = 2365139 },
+            { url = "https://files.pythonhosted.org/packages/38/7f/ed56f5724305c08235d1edc580275aa13c8303e93d374d4fe73162907e88/libcst-1.6.0-cp313-cp313-win_amd64.whl", hash = "sha256:c4486921bebd33d67bbbd605aff8bfaefd2d13dc73c20c1fde2fb245880b7fd6", size = 2070695 },
+            { url = "https://files.pythonhosted.org/packages/0f/66/20afe2de02a30d74b2a3e0aacb5938a926664db73c42e430948915d02e81/libcst-1.6.0-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:b3d274115d134a550fe8a0b38780a28a659d4a35ac6068c7c92fffe6661b519c", size = 2049393 },
+            { url = "https://files.pythonhosted.org/packages/14/32/54e9f017d0824711f4a8e5f990f17ba0ff10e5763de5ecf673b590a27e28/libcst-1.6.0-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:d45513f6cd3dbb2a80cf21a53bc6e6e560414edea17c474c784100e10aebe921", size = 2207738 },
+            { url = "https://files.pythonhosted.org/packages/25/29/87aa47fc8e8b233ee831629444b792161cc29934b75f1232f523f785e1c2/libcst-1.6.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f8c70a124d7a7d326abdc9a6261013c57d36f21c6c6370de5dd3e6a040c4ee5e", size = 2311951 },
+            { url = "https://files.pythonhosted.org/packages/27/9d/b5879b34b739fcc9826dec90686fa28aade096edd5b729cb518d31371509/libcst-1.6.0-cp39-cp39-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:bdc95df61838d708adb37e18af1615491f6cac59557fd11077664dd956fe4528", size = 2394329 },
+            { url = "https://files.pythonhosted.org/packages/ee/16/f404cdbcb4748a2184a83be33987a98c382e1f95f927b3305cc23f04a89d/libcst-1.6.0-cp39-cp39-musllinux_1_2_aarch64.whl", hash = "sha256:05c32de72553cb93ff606c7d2421ce1eab1f0740c8c4b715444e2ae42f42b1b6", size = 2254964 },
+            { url = "https://files.pythonhosted.org/packages/9b/51/674b34974cd1c5484b29c72cf472d74f6c01b5228b231a1d97121c9fe573/libcst-1.6.0-cp39-cp39-musllinux_1_2_x86_64.whl", hash = "sha256:69b705f5b1faa66f115ede52a970d7613d3a8fb988834f853f7fb46870a041d2", size = 2372717 },
+            { url = "https://files.pythonhosted.org/packages/85/b4/f230eddb5afdd37e96d4de6e5314cdd38b2d8ece145b7a4a523851ab21a3/libcst-1.6.0-cp39-cp39-win_amd64.whl", hash = "sha256:984512829a80f963bfc1803342219a4264a8d4206df0a30eae9bce921357a938", size = 2076934 },
+        ]
+
+        [[package]]
+        name = "mypy-extensions"
+        version = "1.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/98/a4/1ab47638b92648243faf97a5aeb6ea83059cc3624972ab6b8d2316078d3f/mypy_extensions-1.0.0.tar.gz", hash = "sha256:75dbf8955dc00442a438fc4d0666508a9a97b6bd41aa2f0ffe9d2f2725af0782", size = 4433 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/2a/e2/5d3f6ada4297caebe1a2add3b126fe800c96f56dbe5d1988a2cbe0b267aa/mypy_extensions-1.0.0-py3-none-any.whl", hash = "sha256:4392f6c0eb8a5668a69e23d168ffa70f0be9ccfd32b5cc2d26a34ae5b844552d", size = 4695 },
+        ]
+
+        [[package]]
+        name = "project"
+        source = { editable = "." }
+        dependencies = [
+            { name = "libcst", version = "1.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
+            { name = "libcst", version = "1.6.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "libcst", specifier = ">=1.1.0" }]
+
+        [[package]]
+        name = "pyyaml"
+        version = "6.0.2"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/54/ed/79a089b6be93607fa5cdaedf301d7dfb23af5f25c398d5ead2525b063e17/pyyaml-6.0.2.tar.gz", hash = "sha256:d584d9ec91ad65861cc08d42e834324ef890a082e591037abe114850ff7bbc3e", size = 130631 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/9b/95/a3fac87cb7158e231b5a6012e438c647e1a87f09f8e0d123acec8ab8bf71/PyYAML-6.0.2-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:0a9a2848a5b7feac301353437eb7d5957887edbf81d56e903999a75a3d743086", size = 184199 },
+            { url = "https://files.pythonhosted.org/packages/c7/7a/68bd47624dab8fd4afbfd3c48e3b79efe09098ae941de5b58abcbadff5cb/PyYAML-6.0.2-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:29717114e51c84ddfba879543fb232a6ed60086602313ca38cce623c1d62cfbf", size = 171758 },
+            { url = "https://files.pythonhosted.org/packages/49/ee/14c54df452143b9ee9f0f29074d7ca5516a36edb0b4cc40c3f280131656f/PyYAML-6.0.2-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:8824b5a04a04a047e72eea5cec3bc266db09e35de6bdfe34c9436ac5ee27d237", size = 718463 },
+            { url = "https://files.pythonhosted.org/packages/4d/61/de363a97476e766574650d742205be468921a7b532aa2499fcd886b62530/PyYAML-6.0.2-cp310-cp310-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:7c36280e6fb8385e520936c3cb3b8042851904eba0e58d277dca80a5cfed590b", size = 719280 },
+            { url = "https://files.pythonhosted.org/packages/6b/4e/1523cb902fd98355e2e9ea5e5eb237cbc5f3ad5f3075fa65087aa0ecb669/PyYAML-6.0.2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ec031d5d2feb36d1d1a24380e4db6d43695f3748343d99434e6f5f9156aaa2ed", size = 751239 },
+            { url = "https://files.pythonhosted.org/packages/b7/33/5504b3a9a4464893c32f118a9cc045190a91637b119a9c881da1cf6b7a72/PyYAML-6.0.2-cp310-cp310-musllinux_1_1_aarch64.whl", hash = "sha256:936d68689298c36b53b29f23c6dbb74de12b4ac12ca6cfe0e047bedceea56180", size = 695802 },
+            { url = "https://files.pythonhosted.org/packages/5c/20/8347dcabd41ef3a3cdc4f7b7a2aff3d06598c8779faa189cdbf878b626a4/PyYAML-6.0.2-cp310-cp310-musllinux_1_1_x86_64.whl", hash = "sha256:23502f431948090f597378482b4812b0caae32c22213aecf3b55325e049a6c68", size = 720527 },
+            { url = "https://files.pythonhosted.org/packages/be/aa/5afe99233fb360d0ff37377145a949ae258aaab831bde4792b32650a4378/PyYAML-6.0.2-cp310-cp310-win32.whl", hash = "sha256:2e99c6826ffa974fe6e27cdb5ed0021786b03fc98e5ee3c5bfe1fd5015f42b99", size = 144052 },
+            { url = "https://files.pythonhosted.org/packages/b5/84/0fa4b06f6d6c958d207620fc60005e241ecedceee58931bb20138e1e5776/PyYAML-6.0.2-cp310-cp310-win_amd64.whl", hash = "sha256:a4d3091415f010369ae4ed1fc6b79def9416358877534caf6a0fdd2146c87a3e", size = 161774 },
+            { url = "https://files.pythonhosted.org/packages/f8/aa/7af4e81f7acba21a4c6be026da38fd2b872ca46226673c89a758ebdc4fd2/PyYAML-6.0.2-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:cc1c1159b3d456576af7a3e4d1ba7e6924cb39de8f67111c735f6fc832082774", size = 184612 },
+            { url = "https://files.pythonhosted.org/packages/8b/62/b9faa998fd185f65c1371643678e4d58254add437edb764a08c5a98fb986/PyYAML-6.0.2-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:1e2120ef853f59c7419231f3bf4e7021f1b936f6ebd222406c3b60212205d2ee", size = 172040 },
+            { url = "https://files.pythonhosted.org/packages/ad/0c/c804f5f922a9a6563bab712d8dcc70251e8af811fce4524d57c2c0fd49a4/PyYAML-6.0.2-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:5d225db5a45f21e78dd9358e58a98702a0302f2659a3c6cd320564b75b86f47c", size = 736829 },
+            { url = "https://files.pythonhosted.org/packages/51/16/6af8d6a6b210c8e54f1406a6b9481febf9c64a3109c541567e35a49aa2e7/PyYAML-6.0.2-cp311-cp311-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:5ac9328ec4831237bec75defaf839f7d4564be1e6b25ac710bd1a96321cc8317", size = 764167 },
+            { url = "https://files.pythonhosted.org/packages/75/e4/2c27590dfc9992f73aabbeb9241ae20220bd9452df27483b6e56d3975cc5/PyYAML-6.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:3ad2a3decf9aaba3d29c8f537ac4b243e36bef957511b4766cb0057d32b0be85", size = 762952 },
+            { url = "https://files.pythonhosted.org/packages/9b/97/ecc1abf4a823f5ac61941a9c00fe501b02ac3ab0e373c3857f7d4b83e2b6/PyYAML-6.0.2-cp311-cp311-musllinux_1_1_aarch64.whl", hash = "sha256:ff3824dc5261f50c9b0dfb3be22b4567a6f938ccce4587b38952d85fd9e9afe4", size = 735301 },
+            { url = "https://files.pythonhosted.org/packages/45/73/0f49dacd6e82c9430e46f4a027baa4ca205e8b0a9dce1397f44edc23559d/PyYAML-6.0.2-cp311-cp311-musllinux_1_1_x86_64.whl", hash = "sha256:797b4f722ffa07cc8d62053e4cff1486fa6dc094105d13fea7b1de7d8bf71c9e", size = 756638 },
+            { url = "https://files.pythonhosted.org/packages/22/5f/956f0f9fc65223a58fbc14459bf34b4cc48dec52e00535c79b8db361aabd/PyYAML-6.0.2-cp311-cp311-win32.whl", hash = "sha256:11d8f3dd2b9c1207dcaf2ee0bbbfd5991f571186ec9cc78427ba5bd32afae4b5", size = 143850 },
+            { url = "https://files.pythonhosted.org/packages/ed/23/8da0bbe2ab9dcdd11f4f4557ccaf95c10b9811b13ecced089d43ce59c3c8/PyYAML-6.0.2-cp311-cp311-win_amd64.whl", hash = "sha256:e10ce637b18caea04431ce14fabcf5c64a1c61ec9c56b071a4b7ca131ca52d44", size = 161980 },
+            { url = "https://files.pythonhosted.org/packages/86/0c/c581167fc46d6d6d7ddcfb8c843a4de25bdd27e4466938109ca68492292c/PyYAML-6.0.2-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:c70c95198c015b85feafc136515252a261a84561b7b1d51e3384e0655ddf25ab", size = 183873 },
+            { url = "https://files.pythonhosted.org/packages/a8/0c/38374f5bb272c051e2a69281d71cba6fdb983413e6758b84482905e29a5d/PyYAML-6.0.2-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:ce826d6ef20b1bc864f0a68340c8b3287705cae2f8b4b1d932177dcc76721725", size = 173302 },
+            { url = "https://files.pythonhosted.org/packages/c3/93/9916574aa8c00aa06bbac729972eb1071d002b8e158bd0e83a3b9a20a1f7/PyYAML-6.0.2-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:1f71ea527786de97d1a0cc0eacd1defc0985dcf6b3f17bb77dcfc8c34bec4dc5", size = 739154 },
+            { url = "https://files.pythonhosted.org/packages/95/0f/b8938f1cbd09739c6da569d172531567dbcc9789e0029aa070856f123984/PyYAML-6.0.2-cp312-cp312-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:9b22676e8097e9e22e36d6b7bda33190d0d400f345f23d4065d48f4ca7ae0425", size = 766223 },
+            { url = "https://files.pythonhosted.org/packages/b9/2b/614b4752f2e127db5cc206abc23a8c19678e92b23c3db30fc86ab731d3bd/PyYAML-6.0.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:80bab7bfc629882493af4aa31a4cfa43a4c57c83813253626916b8c7ada83476", size = 767542 },
+            { url = "https://files.pythonhosted.org/packages/d4/00/dd137d5bcc7efea1836d6264f049359861cf548469d18da90cd8216cf05f/PyYAML-6.0.2-cp312-cp312-musllinux_1_1_aarch64.whl", hash = "sha256:0833f8694549e586547b576dcfaba4a6b55b9e96098b36cdc7ebefe667dfed48", size = 731164 },
+            { url = "https://files.pythonhosted.org/packages/c9/1f/4f998c900485e5c0ef43838363ba4a9723ac0ad73a9dc42068b12aaba4e4/PyYAML-6.0.2-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:8b9c7197f7cb2738065c481a0461e50ad02f18c78cd75775628afb4d7137fb3b", size = 756611 },
+            { url = "https://files.pythonhosted.org/packages/df/d1/f5a275fdb252768b7a11ec63585bc38d0e87c9e05668a139fea92b80634c/PyYAML-6.0.2-cp312-cp312-win32.whl", hash = "sha256:ef6107725bd54b262d6dedcc2af448a266975032bc85ef0172c5f059da6325b4", size = 140591 },
+            { url = "https://files.pythonhosted.org/packages/0c/e8/4f648c598b17c3d06e8753d7d13d57542b30d56e6c2dedf9c331ae56312e/PyYAML-6.0.2-cp312-cp312-win_amd64.whl", hash = "sha256:7e7401d0de89a9a855c839bc697c079a4af81cf878373abd7dc625847d25cbd8", size = 156338 },
+            { url = "https://files.pythonhosted.org/packages/ef/e3/3af305b830494fa85d95f6d95ef7fa73f2ee1cc8ef5b495c7c3269fb835f/PyYAML-6.0.2-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:efdca5630322a10774e8e98e1af481aad470dd62c3170801852d752aa7a783ba", size = 181309 },
+            { url = "https://files.pythonhosted.org/packages/45/9f/3b1c20a0b7a3200524eb0076cc027a970d320bd3a6592873c85c92a08731/PyYAML-6.0.2-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:50187695423ffe49e2deacb8cd10510bc361faac997de9efef88badc3bb9e2d1", size = 171679 },
+            { url = "https://files.pythonhosted.org/packages/7c/9a/337322f27005c33bcb656c655fa78325b730324c78620e8328ae28b64d0c/PyYAML-6.0.2-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:0ffe8360bab4910ef1b9e87fb812d8bc0a308b0d0eef8c8f44e0254ab3b07133", size = 733428 },
+            { url = "https://files.pythonhosted.org/packages/a3/69/864fbe19e6c18ea3cc196cbe5d392175b4cf3d5d0ac1403ec3f2d237ebb5/PyYAML-6.0.2-cp313-cp313-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:17e311b6c678207928d649faa7cb0d7b4c26a0ba73d41e99c4fff6b6c3276484", size = 763361 },
+            { url = "https://files.pythonhosted.org/packages/04/24/b7721e4845c2f162d26f50521b825fb061bc0a5afcf9a386840f23ea19fa/PyYAML-6.0.2-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:70b189594dbe54f75ab3a1acec5f1e3faa7e8cf2f1e08d9b561cb41b845f69d5", size = 759523 },
+            { url = "https://files.pythonhosted.org/packages/2b/b2/e3234f59ba06559c6ff63c4e10baea10e5e7df868092bf9ab40e5b9c56b6/PyYAML-6.0.2-cp313-cp313-musllinux_1_1_aarch64.whl", hash = "sha256:41e4e3953a79407c794916fa277a82531dd93aad34e29c2a514c2c0c5fe971cc", size = 726660 },
+            { url = "https://files.pythonhosted.org/packages/fe/0f/25911a9f080464c59fab9027482f822b86bf0608957a5fcc6eaac85aa515/PyYAML-6.0.2-cp313-cp313-musllinux_1_1_x86_64.whl", hash = "sha256:68ccc6023a3400877818152ad9a1033e3db8625d899c72eacb5a668902e4d652", size = 751597 },
+            { url = "https://files.pythonhosted.org/packages/14/0d/e2c3b43bbce3cf6bd97c840b46088a3031085179e596d4929729d8d68270/PyYAML-6.0.2-cp313-cp313-win32.whl", hash = "sha256:bc2fa7c6b47d6bc618dd7fb02ef6fdedb1090ec036abab80d4681424b84c1183", size = 140527 },
+            { url = "https://files.pythonhosted.org/packages/fa/de/02b54f42487e3d3c6efb3f89428677074ca7bf43aae402517bc7cca949f3/PyYAML-6.0.2-cp313-cp313-win_amd64.whl", hash = "sha256:8388ee1976c416731879ac16da0aff3f63b286ffdd57cdeb95f3f2e085687563", size = 156446 },
+            { url = "https://files.pythonhosted.org/packages/74/d9/323a59d506f12f498c2097488d80d16f4cf965cee1791eab58b56b19f47a/PyYAML-6.0.2-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:24471b829b3bf607e04e88d79542a9d48bb037c2267d7927a874e6c205ca7e9a", size = 183218 },
+            { url = "https://files.pythonhosted.org/packages/74/cc/20c34d00f04d785f2028737e2e2a8254e1425102e730fee1d6396f832577/PyYAML-6.0.2-cp38-cp38-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:d7fded462629cfa4b685c5416b949ebad6cec74af5e2d42905d41e257e0869f5", size = 728067 },
+            { url = "https://files.pythonhosted.org/packages/20/52/551c69ca1501d21c0de51ddafa8c23a0191ef296ff098e98358f69080577/PyYAML-6.0.2-cp38-cp38-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:d84a1718ee396f54f3a086ea0a66d8e552b2ab2017ef8b420e92edbc841c352d", size = 757812 },
+            { url = "https://files.pythonhosted.org/packages/fd/7f/2c3697bba5d4aa5cc2afe81826d73dfae5f049458e44732c7a0938baa673/PyYAML-6.0.2-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:9056c1ecd25795207ad294bcf39f2db3d845767be0ea6e6a34d856f006006083", size = 746531 },
+            { url = "https://files.pythonhosted.org/packages/8c/ab/6226d3df99900e580091bb44258fde77a8433511a86883bd4681ea19a858/PyYAML-6.0.2-cp38-cp38-musllinux_1_1_x86_64.whl", hash = "sha256:82d09873e40955485746739bcb8b4586983670466c23382c19cffecbf1fd8706", size = 800820 },
+            { url = "https://files.pythonhosted.org/packages/a0/99/a9eb0f3e710c06c5d922026f6736e920d431812ace24aae38228d0d64b04/PyYAML-6.0.2-cp38-cp38-win32.whl", hash = "sha256:43fa96a3ca0d6b1812e01ced1044a003533c47f6ee8aca31724f78e93ccc089a", size = 145514 },
+            { url = "https://files.pythonhosted.org/packages/75/8a/ee831ad5fafa4431099aa4e078d4c8efd43cd5e48fbc774641d233b683a9/PyYAML-6.0.2-cp38-cp38-win_amd64.whl", hash = "sha256:01179a4a8559ab5de078078f37e5c1a30d76bb88519906844fd7bdea1b7729ff", size = 162702 },
+            { url = "https://files.pythonhosted.org/packages/65/d8/b7a1db13636d7fb7d4ff431593c510c8b8fca920ade06ca8ef20015493c5/PyYAML-6.0.2-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:688ba32a1cffef67fd2e9398a2efebaea461578b0923624778664cc1c914db5d", size = 184777 },
+            { url = "https://files.pythonhosted.org/packages/0a/02/6ec546cd45143fdf9840b2c6be8d875116a64076218b61d68e12548e5839/PyYAML-6.0.2-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:a8786accb172bd8afb8be14490a16625cbc387036876ab6ba70912730faf8e1f", size = 172318 },
+            { url = "https://files.pythonhosted.org/packages/0e/9a/8cc68be846c972bda34f6c2a93abb644fb2476f4dcc924d52175786932c9/PyYAML-6.0.2-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:d8e03406cac8513435335dbab54c0d385e4a49e4945d2909a581c83647ca0290", size = 720891 },
+            { url = "https://files.pythonhosted.org/packages/e9/6c/6e1b7f40181bc4805e2e07f4abc10a88ce4648e7e95ff1abe4ae4014a9b2/PyYAML-6.0.2-cp39-cp39-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:f753120cb8181e736c57ef7636e83f31b9c0d1722c516f7e86cf15b7aa57ff12", size = 722614 },
+            { url = "https://files.pythonhosted.org/packages/3d/32/e7bd8535d22ea2874cef6a81021ba019474ace0d13a4819c2a4bce79bd6a/PyYAML-6.0.2-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:3b1fdb9dc17f5a7677423d508ab4f243a726dea51fa5e70992e59a7411c89d19", size = 737360 },
+            { url = "https://files.pythonhosted.org/packages/d7/12/7322c1e30b9be969670b672573d45479edef72c9a0deac3bb2868f5d7469/PyYAML-6.0.2-cp39-cp39-musllinux_1_1_aarch64.whl", hash = "sha256:0b69e4ce7a131fe56b7e4d770c67429700908fc0752af059838b1cfb41960e4e", size = 699006 },
+            { url = "https://files.pythonhosted.org/packages/82/72/04fcad41ca56491995076630c3ec1e834be241664c0c09a64c9a2589b507/PyYAML-6.0.2-cp39-cp39-musllinux_1_1_x86_64.whl", hash = "sha256:a9f8c2e67970f13b16084e04f134610fd1d374bf477b17ec1599185cf611d725", size = 723577 },
+            { url = "https://files.pythonhosted.org/packages/ed/5e/46168b1f2757f1fcd442bc3029cd8767d88a98c9c05770d8b420948743bb/PyYAML-6.0.2-cp39-cp39-win32.whl", hash = "sha256:6395c297d42274772abc367baaa79683958044e5d3835486c16da75d2a694631", size = 144593 },
+            { url = "https://files.pythonhosted.org/packages/19/87/5124b1c1f2412bb95c59ec481eaf936cd32f0fe2a7b16b97b81c4c017a6a/PyYAML-6.0.2-cp39-cp39-win_amd64.whl", hash = "sha256:39693e1f8320ae4f43943590b49779ffb98acb81f788220ea932a6b6c51004d8", size = 162312 },
+        ]
+
+        [[package]]
+        name = "typing-extensions"
+        version = "4.12.2"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/df/db/f35a00659bc03fec321ba8bce9420de607a1d37f8342eee1863174c69557/typing_extensions-4.12.2.tar.gz", hash = "sha256:1a7ead55c7e559dd4dee8856e3a88b41225abfe1ce8df57b7c13915fe121ffb8", size = 85321 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d", size = 37438 },
+        ]
+
+        [[package]]
+        name = "typing-inspect"
+        version = "0.9.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "mypy-extensions", marker = "python_full_version < '3.9'" },
+            { name = "typing-extensions", marker = "python_full_version < '3.9'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/dc/74/1789779d91f1961fa9438e9a8710cdae6bd138c80d7303996933d117264a/typing_inspect-0.9.0.tar.gz", hash = "sha256:b23fc42ff6f6ef6954e4852c1fb512cdd18dbea03134f91f856a95ccc9461f78", size = 13825 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/65/f3/107a22063bf27bdccf2024833d3445f4eea42b2e598abfbd46f6a63b6cb0/typing_inspect-0.9.0-py3-none-any.whl", hash = "sha256:9ee6fc59062311ef8547596ab6b955e1b8aa46242d854bfc78f4f6b0eff35f9f", size = 8827 },
+        ]
+        "###
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
     "###);
 
     Ok(())
@@ -22603,8 +23091,39 @@ fn lock_script_path() -> Result<()> {
 }
 
 #[test]
-fn lock_pytorch_cpu() -> Result<()> {
+fn lock_script_error() -> Result<()> {
     let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to read `script.py` (not found); run `uv init --script script.py` to create a PEP 723 script
+    "###);
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! { r"
+        import anyio
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `script.py` does not contain a PEP 723 metadata tag; run `uv init --script script.py` to initialize the script
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn lock_pytorch_cpu() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -22617,12 +23136,12 @@ fn lock_pytorch_cpu() -> Result<()> {
 
         [project.optional-dependencies]
         cpu = [
-          "torch>=2.5.1",
-          "torchvision>=0.20.1",
+          "torch>=2.5.1,<2.5.2",
+          "torchvision>=0.20.1,<0.20.2",
         ]
         cu124 = [
-          "torch>=2.5.1",
-          "torchvision>=0.20.1",
+          "torch>=2.5.1,<2.5.2",
+          "torchvision>=0.20.1,<0.20.2",
         ]
 
         [tool.uv]
@@ -22671,17 +23190,17 @@ fn lock_pytorch_cpu() -> Result<()> {
 
         [[tool.uv.index]]
         name = "pytorch-cpu"
-        url = "https://download.pytorch.org/whl/cpu"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cpu"
         explicit = true
 
         [[tool.uv.index]]
         name = "pytorch-cu124"
-        url = "https://download.pytorch.org/whl/cu124"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu124"
         explicit = true
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -22710,6 +23229,9 @@ fn lock_pytorch_cpu() -> Result<()> {
             { package = "project", extra = "cpu" },
             { package = "project", extra = "cu124" },
         ]]
+
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
 
         [manifest]
         constraints = [
@@ -23043,26 +23565,26 @@ fn lock_pytorch_cpu() -> Result<()> {
 
         [package.optional-dependencies]
         cpu = [
-            { name = "torch", version = "2.5.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'" },
-            { name = "torch", version = "2.5.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-            { name = "torchvision", version = "0.20.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'" },
-            { name = "torchvision", version = "0.20.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+            { name = "torch", version = "2.5.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'" },
+            { name = "torch", version = "2.5.1+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+            { name = "torchvision", version = "0.20.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'" },
+            { name = "torchvision", version = "0.20.1+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
         ]
         cu124 = [
-            { name = "torch", version = "2.5.1", source = { registry = "https://download.pytorch.org/whl/cu124" }, marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
-            { name = "torch", version = "2.5.1+cu124", source = { registry = "https://download.pytorch.org/whl/cu124" }, marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
-            { name = "torchvision", version = "0.20.1", source = { registry = "https://download.pytorch.org/whl/cu124" }, marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
-            { name = "torchvision", version = "0.20.1+cu124", source = { registry = "https://download.pytorch.org/whl/cu124" }, marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
+            { name = "torch", version = "2.5.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
+            { name = "torch", version = "2.5.1+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
+            { name = "torchvision", version = "0.20.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
+            { name = "torchvision", version = "0.20.1+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
         ]
 
         [package.metadata]
         requires-dist = [
             { name = "jinja2", specifier = "<=3.1.4" },
             { name = "numpy", specifier = "<=2.2.0" },
-            { name = "torch", marker = "extra == 'cpu'", specifier = ">=2.5.1", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "project", extra = "cpu" } },
-            { name = "torch", marker = "extra == 'cu124'", specifier = ">=2.5.1", index = "https://download.pytorch.org/whl/cu124", conflict = { package = "project", extra = "cu124" } },
-            { name = "torchvision", marker = "extra == 'cpu'", specifier = ">=0.20.1", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "project", extra = "cpu" } },
-            { name = "torchvision", marker = "extra == 'cu124'", specifier = ">=0.20.1", index = "https://download.pytorch.org/whl/cu124", conflict = { package = "project", extra = "cu124" } },
+            { name = "torch", marker = "extra == 'cpu'", specifier = ">=2.5.1,<2.5.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cpu", conflict = { package = "project", extra = "cpu" } },
+            { name = "torch", marker = "extra == 'cu124'", specifier = ">=2.5.1,<2.5.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "project", extra = "cu124" } },
+            { name = "torchvision", marker = "extra == 'cpu'", specifier = ">=0.20.1,<0.20.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cpu", conflict = { package = "project", extra = "cpu" } },
+            { name = "torchvision", marker = "extra == 'cu124'", specifier = ">=0.20.1,<0.20.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "project", extra = "cu124" } },
         ]
 
         [[package]]
@@ -23089,7 +23611,7 @@ fn lock_pytorch_cpu() -> Result<()> {
         [[package]]
         name = "torch"
         version = "2.5.1"
-        source = { registry = "https://download.pytorch.org/whl/cpu" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
         resolution-markers = [
             "(platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'",
         ]
@@ -23110,7 +23632,7 @@ fn lock_pytorch_cpu() -> Result<()> {
         [[package]]
         name = "torch"
         version = "2.5.1"
-        source = { registry = "https://download.pytorch.org/whl/cu124" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
         resolution-markers = [
             "platform_machine == 'aarch64' and sys_platform == 'linux'",
         ]
@@ -23130,7 +23652,7 @@ fn lock_pytorch_cpu() -> Result<()> {
         [[package]]
         name = "torch"
         version = "2.5.1+cpu"
-        source = { registry = "https://download.pytorch.org/whl/cpu" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
         resolution-markers = [
             "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')",
         ]
@@ -23152,7 +23674,7 @@ fn lock_pytorch_cpu() -> Result<()> {
         [[package]]
         name = "torch"
         version = "2.5.1+cu124"
-        source = { registry = "https://download.pytorch.org/whl/cu124" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
         resolution-markers = [
             "platform_machine != 'aarch64' or sys_platform != 'linux'",
         ]
@@ -23187,14 +23709,14 @@ fn lock_pytorch_cpu() -> Result<()> {
         [[package]]
         name = "torchvision"
         version = "0.20.1"
-        source = { registry = "https://download.pytorch.org/whl/cpu" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
         resolution-markers = [
             "(platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'",
         ]
         dependencies = [
             { name = "numpy", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'" },
             { name = "pillow", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'" },
-            { name = "torch", version = "2.5.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'" },
+            { name = "torch", version = "2.5.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'" },
         ]
         wheels = [
             { url = "https://download.pytorch.org/whl/cpu/torchvision-0.20.1-cp312-cp312-linux_aarch64.whl", hash = "sha256:9f853ba4497ac4691815ad41b523ee23cf5ba4f87b1ce869d704052e233ca8b7" },
@@ -23204,14 +23726,14 @@ fn lock_pytorch_cpu() -> Result<()> {
         [[package]]
         name = "torchvision"
         version = "0.20.1"
-        source = { registry = "https://download.pytorch.org/whl/cu124" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
         resolution-markers = [
             "platform_machine == 'aarch64' and sys_platform == 'linux'",
         ]
         dependencies = [
             { name = "numpy", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
             { name = "pillow", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
-            { name = "torch", version = "2.5.1", source = { registry = "https://download.pytorch.org/whl/cu124" }, marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
+            { name = "torch", version = "2.5.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
         ]
         wheels = [
             { url = "https://download.pytorch.org/whl/cu124/torchvision-0.20.1-cp312-cp312-linux_aarch64.whl", hash = "sha256:3e3289e53d0cb5d1b7f55b3f5912f46a08293c6791585ba2fc32c12cded9f9af" },
@@ -23220,14 +23742,14 @@ fn lock_pytorch_cpu() -> Result<()> {
         [[package]]
         name = "torchvision"
         version = "0.20.1+cpu"
-        source = { registry = "https://download.pytorch.org/whl/cpu" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
         resolution-markers = [
             "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')",
         ]
         dependencies = [
             { name = "numpy", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
             { name = "pillow", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-            { name = "torch", version = "2.5.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+            { name = "torch", version = "2.5.1+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
         ]
         wheels = [
             { url = "https://download.pytorch.org/whl/cpu/torchvision-0.20.1%2Bcpu-cp312-cp312-linux_x86_64.whl", hash = "sha256:5f46c7ac7f00a065cb40bfb1e1bfc4ba16a35f5d46b3fe70cca6b3cea7f822f7" },
@@ -23237,14 +23759,14 @@ fn lock_pytorch_cpu() -> Result<()> {
         [[package]]
         name = "torchvision"
         version = "0.20.1+cu124"
-        source = { registry = "https://download.pytorch.org/whl/cu124" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
         resolution-markers = [
             "platform_machine != 'aarch64' or sys_platform != 'linux'",
         ]
         dependencies = [
             { name = "numpy", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
             { name = "pillow", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
-            { name = "torch", version = "2.5.1+cu124", source = { registry = "https://download.pytorch.org/whl/cu124" }, marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
+            { name = "torch", version = "2.5.1+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
         ]
         wheels = [
             { url = "https://download.pytorch.org/whl/cu124/torchvision-0.20.1%2Bcu124-cp312-cp312-linux_x86_64.whl", hash = "sha256:d1053ec5054549e7dac2613b151bffe323f3c924939d296df4d7d34925aaf3ad" },
@@ -23284,7 +23806,7 @@ fn lock_pytorch_cpu() -> Result<()> {
 /// Regression test for: <https://github.com/astral-sh/uv/issues/10772>
 #[test]
 fn lock_pytorch_preferences() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -23319,17 +23841,17 @@ fn lock_pytorch_preferences() -> Result<()> {
 
         [[tool.uv.index]]
         name = "pytorch-cpu"
-        url = "https://download.pytorch.org/whl/cpu"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cpu"
         explicit = true
 
         [[tool.uv.index]]
         name = "pytorch-cu118"
-        url = "https://download.pytorch.org/whl/cu118"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu118"
         explicit = true
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -23359,6 +23881,9 @@ fn lock_pytorch_preferences() -> Result<()> {
             { package = "project", extra = "cpu" },
             { package = "project", extra = "cu118" },
         ]]
+
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
 
         [[package]]
         name = "filelock"
@@ -23594,21 +24119,21 @@ fn lock_pytorch_preferences() -> Result<()> {
 
         [package.optional-dependencies]
         cpu = [
-            { name = "torch", version = "2.2.2", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
+            { name = "torch", version = "2.2.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
             { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
-            { name = "torch", version = "2.2.2+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+            { name = "torch", version = "2.2.2+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
         ]
         cu118 = [
             { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
-            { name = "torch", version = "2.2.2+cu118", source = { registry = "https://download.pytorch.org/whl/cu118" }, marker = "sys_platform != 'darwin'" },
+            { name = "torch", version = "2.2.2+cu118", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, marker = "sys_platform != 'darwin'" },
         ]
 
         [package.metadata]
         requires-dist = [
             { name = "torch", marker = "sys_platform == 'darwin' and extra == 'cpu'", specifier = "==2.2.2" },
             { name = "torch", marker = "sys_platform == 'darwin' and extra == 'cu118'", specifier = "==2.2.2" },
-            { name = "torch", marker = "sys_platform != 'darwin' and extra == 'cpu'", specifier = "==2.2.2", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "project", extra = "cpu" } },
-            { name = "torch", marker = "sys_platform != 'darwin' and extra == 'cu118'", specifier = "==2.2.2", index = "https://download.pytorch.org/whl/cu118", conflict = { package = "project", extra = "cu118" } },
+            { name = "torch", marker = "sys_platform != 'darwin' and extra == 'cpu'", specifier = "==2.2.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cpu", conflict = { package = "project", extra = "cpu" } },
+            { name = "torch", marker = "sys_platform != 'darwin' and extra == 'cu118'", specifier = "==2.2.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118", conflict = { package = "project", extra = "cu118" } },
         ]
 
         [[package]]
@@ -23626,7 +24151,7 @@ fn lock_pytorch_preferences() -> Result<()> {
         [[package]]
         name = "torch"
         version = "2.2.2"
-        source = { registry = "https://download.pytorch.org/whl/cpu" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
         resolution-markers = [
             "platform_machine == 'aarch64' and sys_platform == 'linux'",
         ]
@@ -23686,7 +24211,7 @@ fn lock_pytorch_preferences() -> Result<()> {
         [[package]]
         name = "torch"
         version = "2.2.2+cpu"
-        source = { registry = "https://download.pytorch.org/whl/cpu" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
         resolution-markers = [
             "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')",
         ]
@@ -23710,7 +24235,7 @@ fn lock_pytorch_preferences() -> Result<()> {
         [[package]]
         name = "torch"
         version = "2.2.2+cu118"
-        source = { registry = "https://download.pytorch.org/whl/cu118" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }
         resolution-markers = [
             "sys_platform != 'darwin'",
         ]

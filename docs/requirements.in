@@ -6,3 +6,4 @@ mdformat>=0.7.17
 mdformat-mkdocs>=2.0.4
 mdformat-admon>=2.0.2
 mkdocs-redirects>=1.2.2
+mkdocs-git-revision-date-localized-plugin>=1.3.0

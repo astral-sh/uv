@@ -3,7 +3,6 @@ use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
 use crate::common::{uv_snapshot, TestContext};
-use uv_static::EnvVars;
 
 // All of the tests in this file should use `tool.uv.conflicts` in some way.
 //
@@ -2192,7 +2191,7 @@ fn mixed() -> Result<()> {
 
 #[test]
 fn multiple_sources_index_disjoint_extras() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2224,17 +2223,17 @@ fn multiple_sources_index_disjoint_extras() -> Result<()> {
 
         [[tool.uv.index]]
         name = "torch-cu118"
-        url = "https://download.pytorch.org/whl/cu118"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu118"
         explicit = true
 
         [[tool.uv.index]]
         name = "torch-cu124"
-        url = "https://download.pytorch.org/whl/cu124"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu124"
         explicit = true
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2257,13 +2256,16 @@ fn multiple_sources_index_disjoint_extras() -> Result<()> {
             { package = "project", extra = "cu124" },
         ]]
 
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
+
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "jinja2"
         version = "3.1.2"
-        source = { registry = "https://download.pytorch.org/whl/cu118" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -2274,7 +2276,7 @@ fn multiple_sources_index_disjoint_extras() -> Result<()> {
         [[package]]
         name = "jinja2"
         version = "3.1.3"
-        source = { registry = "https://download.pytorch.org/whl/cu124" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -2307,23 +2309,23 @@ fn multiple_sources_index_disjoint_extras() -> Result<()> {
 
         [package.optional-dependencies]
         cu118 = [
-            { name = "jinja2", version = "3.1.2", source = { registry = "https://download.pytorch.org/whl/cu118" } },
+            { name = "jinja2", version = "3.1.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" } },
         ]
         cu124 = [
-            { name = "jinja2", version = "3.1.3", source = { registry = "https://download.pytorch.org/whl/cu124" } },
+            { name = "jinja2", version = "3.1.3", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" } },
         ]
 
         [package.metadata]
         requires-dist = [
-            { name = "jinja2", marker = "extra == 'cu118'", specifier = "==3.1.2", index = "https://download.pytorch.org/whl/cu118", conflict = { package = "project", extra = "cu118" } },
-            { name = "jinja2", marker = "extra == 'cu124'", specifier = "==3.1.3", index = "https://download.pytorch.org/whl/cu124", conflict = { package = "project", extra = "cu124" } },
+            { name = "jinja2", marker = "extra == 'cu118'", specifier = "==3.1.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118", conflict = { package = "project", extra = "cu118" } },
+            { name = "jinja2", marker = "extra == 'cu124'", specifier = "==3.1.3", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "project", extra = "cu124" } },
         ]
         "###
         );
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2337,7 +2339,7 @@ fn multiple_sources_index_disjoint_extras() -> Result<()> {
 
 #[test]
 fn multiple_sources_index_disjoint_groups() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2369,17 +2371,17 @@ fn multiple_sources_index_disjoint_groups() -> Result<()> {
 
         [[tool.uv.index]]
         name = "torch-cu118"
-        url = "https://download.pytorch.org/whl/cu118"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu118"
         explicit = true
 
         [[tool.uv.index]]
         name = "torch-cu124"
-        url = "https://download.pytorch.org/whl/cu124"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu124"
         explicit = true
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2402,13 +2404,16 @@ fn multiple_sources_index_disjoint_groups() -> Result<()> {
             { package = "project", group = "cu124" },
         ]]
 
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
+
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "jinja2"
         version = "3.1.2"
-        source = { registry = "https://download.pytorch.org/whl/cu118" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -2419,7 +2424,7 @@ fn multiple_sources_index_disjoint_groups() -> Result<()> {
         [[package]]
         name = "jinja2"
         version = "3.1.3"
-        source = { registry = "https://download.pytorch.org/whl/cu124" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -2452,23 +2457,23 @@ fn multiple_sources_index_disjoint_groups() -> Result<()> {
 
         [package.dev-dependencies]
         cu118 = [
-            { name = "jinja2", version = "3.1.2", source = { registry = "https://download.pytorch.org/whl/cu118" } },
+            { name = "jinja2", version = "3.1.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" } },
         ]
         cu124 = [
-            { name = "jinja2", version = "3.1.3", source = { registry = "https://download.pytorch.org/whl/cu124" } },
+            { name = "jinja2", version = "3.1.3", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" } },
         ]
 
         [package.metadata]
 
         [package.metadata.requires-dev]
-        cu118 = [{ name = "jinja2", specifier = "==3.1.2", index = "https://download.pytorch.org/whl/cu118", conflict = { package = "project", group = "cu118" } }]
-        cu124 = [{ name = "jinja2", specifier = "==3.1.3", index = "https://download.pytorch.org/whl/cu124", conflict = { package = "project", group = "cu124" } }]
+        cu118 = [{ name = "jinja2", specifier = "==3.1.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118", conflict = { package = "project", group = "cu118" } }]
+        cu124 = [{ name = "jinja2", specifier = "==3.1.3", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "project", group = "cu124" } }]
         "###
         );
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2482,7 +2487,7 @@ fn multiple_sources_index_disjoint_groups() -> Result<()> {
 
 #[test]
 fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2514,17 +2519,17 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
 
         [[tool.uv.index]]
         name = "torch-cu118"
-        url = "https://download.pytorch.org/whl/cu118"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu118"
         explicit = true
 
         [[tool.uv.index]]
         name = "torch-cu124"
-        url = "https://download.pytorch.org/whl/cu124"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu124"
         explicit = true
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2547,6 +2552,9 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
             { package = "project", extra = "cu124" },
         ]]
 
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
+
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
 
@@ -2562,7 +2570,7 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
         [[package]]
         name = "jinja2"
         version = "3.1.2"
-        source = { registry = "https://download.pytorch.org/whl/cu118" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -2578,7 +2586,7 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
         [[package]]
         name = "jinja2"
         version = "3.1.3"
-        source = { registry = "https://download.pytorch.org/whl/cu124" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -2616,23 +2624,23 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
 
         [package.optional-dependencies]
         cu118 = [
-            { name = "jinja2", version = "3.1.2", source = { registry = "https://download.pytorch.org/whl/cu118" }, extra = ["i18n"] },
+            { name = "jinja2", version = "3.1.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, extra = ["i18n"] },
         ]
         cu124 = [
-            { name = "jinja2", version = "3.1.3", source = { registry = "https://download.pytorch.org/whl/cu124" }, extra = ["i18n"] },
+            { name = "jinja2", version = "3.1.3", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, extra = ["i18n"] },
         ]
 
         [package.metadata]
         requires-dist = [
-            { name = "jinja2", extras = ["i18n"], marker = "extra == 'cu118'", specifier = "==3.1.2", index = "https://download.pytorch.org/whl/cu118", conflict = { package = "project", extra = "cu118" } },
-            { name = "jinja2", extras = ["i18n"], marker = "extra == 'cu124'", specifier = "==3.1.3", index = "https://download.pytorch.org/whl/cu124", conflict = { package = "project", extra = "cu124" } },
+            { name = "jinja2", extras = ["i18n"], marker = "extra == 'cu118'", specifier = "==3.1.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118", conflict = { package = "project", extra = "cu118" } },
+            { name = "jinja2", extras = ["i18n"], marker = "extra == 'cu124'", specifier = "==3.1.3", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "project", extra = "cu124" } },
         ]
         "###
         );
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2646,7 +2654,7 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
 
 #[test]
 fn multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2678,17 +2686,17 @@ fn multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
 
         [[tool.uv.index]]
         name = "torch-cu118"
-        url = "https://download.pytorch.org/whl/cu118"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu118"
         explicit = true
 
         [[tool.uv.index]]
         name = "torch-cu124"
-        url = "https://download.pytorch.org/whl/cu124"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu124"
         explicit = true
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2717,13 +2725,16 @@ fn multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
             { package = "project", extra = "cu124" },
         ]]
 
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
+
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "jinja2"
         version = "3.1.2"
-        source = { registry = "https://download.pytorch.org/whl/cu118" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }
         resolution-markers = [
             "sys_platform == 'darwin'",
         ]
@@ -2752,7 +2763,7 @@ fn multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
         [[package]]
         name = "jinja2"
         version = "3.1.3"
-        source = { registry = "https://download.pytorch.org/whl/cu124" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -2785,25 +2796,25 @@ fn multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
 
         [package.optional-dependencies]
         cu118 = [
-            { name = "jinja2", version = "3.1.2", source = { registry = "https://download.pytorch.org/whl/cu118" }, marker = "sys_platform == 'darwin'" },
+            { name = "jinja2", version = "3.1.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, marker = "sys_platform == 'darwin'" },
             { name = "jinja2", version = "3.1.2", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'darwin'" },
         ]
         cu124 = [
-            { name = "jinja2", version = "3.1.3", source = { registry = "https://download.pytorch.org/whl/cu124" } },
+            { name = "jinja2", version = "3.1.3", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" } },
         ]
 
         [package.metadata]
         requires-dist = [
-            { name = "jinja2", marker = "sys_platform == 'darwin' and extra == 'cu118'", specifier = "==3.1.2", index = "https://download.pytorch.org/whl/cu118", conflict = { package = "project", extra = "cu118" } },
+            { name = "jinja2", marker = "sys_platform == 'darwin' and extra == 'cu118'", specifier = "==3.1.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118", conflict = { package = "project", extra = "cu118" } },
             { name = "jinja2", marker = "sys_platform != 'darwin' and extra == 'cu118'", specifier = "==3.1.2" },
-            { name = "jinja2", marker = "extra == 'cu124'", specifier = "==3.1.3", index = "https://download.pytorch.org/whl/cu124", conflict = { package = "project", extra = "cu124" } },
+            { name = "jinja2", marker = "extra == 'cu124'", specifier = "==3.1.3", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "project", extra = "cu124" } },
         ]
         "###
         );
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4418,7 +4429,7 @@ conflicts = [
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.3.0
-     + idna==3.5
+     + idna==3.6
      + sniffio==1.3.1
     "###);
 
@@ -4451,8 +4462,8 @@ conflicts = [
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
             { name = "idna", version = "3.4", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-proxy1-x2' or (extra == 'extra-6-proxy1-x3' and extra == 'extra-7-project-x1')" },
-            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-proxy1-x3' or (extra == 'extra-6-proxy1-x2' and extra == 'extra-7-project-x1') or (extra != 'extra-6-proxy1-x2' and extra != 'extra-7-project-x1')" },
-            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-6-proxy1-x2' and extra == 'extra-6-proxy1-x3') or (extra != 'extra-6-proxy1-x3' and extra == 'extra-7-project-x1') or (extra != 'extra-6-proxy1-x2' and extra == 'extra-7-project-x1')" },
+            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-proxy1-x3' or (extra == 'extra-6-proxy1-x2' and extra == 'extra-7-project-x1')" },
+            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-project-x1' or (extra == 'extra-6-proxy1-x2' and extra == 'extra-6-proxy1-x3') or (extra != 'extra-6-proxy1-x2' and extra != 'extra-6-proxy1-x3')" },
             { name = "sniffio" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
@@ -4553,7 +4564,7 @@ conflicts = [
 /// [1]: <https://github.com/astral-sh/uv/issues/9289>
 #[test]
 fn jinja_no_conflict_markers1() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4585,22 +4596,17 @@ fn jinja_no_conflict_markers1() -> Result<()> {
 
         [[tool.uv.index]]
         name = "torch-cu118"
-        url = "https://download.pytorch.org/whl/cu118"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu118"
         explicit = true
 
         [[tool.uv.index]]
         name = "torch-cu124"
-        url = "https://download.pytorch.org/whl/cu124"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu124"
         explicit = true
         "#,
     )?;
 
-    let mut cmd = context.sync();
-    // I guess --exclude-newer doesn't work with the torch indices?
-    // That's because the Torch indices are missing the upload date
-    // metadata. We pin our versions anyway, so this should be fine.
-    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
-    uv_snapshot!(context.filters(), cmd, @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4623,6 +4629,9 @@ fn jinja_no_conflict_markers1() -> Result<()> {
             { package = "project", extra = "cu124" },
         ]]
 
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
+
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
 
@@ -4638,7 +4647,7 @@ fn jinja_no_conflict_markers1() -> Result<()> {
         [[package]]
         name = "jinja2"
         version = "3.1.2"
-        source = { registry = "https://download.pytorch.org/whl/cu118" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -4654,7 +4663,7 @@ fn jinja_no_conflict_markers1() -> Result<()> {
         [[package]]
         name = "jinja2"
         version = "3.1.3"
-        source = { registry = "https://download.pytorch.org/whl/cu124" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -4692,16 +4701,16 @@ fn jinja_no_conflict_markers1() -> Result<()> {
 
         [package.optional-dependencies]
         cu118 = [
-            { name = "jinja2", version = "3.1.2", source = { registry = "https://download.pytorch.org/whl/cu118" }, extra = ["i18n"] },
+            { name = "jinja2", version = "3.1.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, extra = ["i18n"] },
         ]
         cu124 = [
-            { name = "jinja2", version = "3.1.3", source = { registry = "https://download.pytorch.org/whl/cu124" }, extra = ["i18n"] },
+            { name = "jinja2", version = "3.1.3", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, extra = ["i18n"] },
         ]
 
         [package.metadata]
         requires-dist = [
-            { name = "jinja2", extras = ["i18n"], marker = "extra == 'cu118'", specifier = "==3.1.2", index = "https://download.pytorch.org/whl/cu118", conflict = { package = "project", extra = "cu118" } },
-            { name = "jinja2", extras = ["i18n"], marker = "extra == 'cu124'", specifier = "==3.1.3", index = "https://download.pytorch.org/whl/cu124", conflict = { package = "project", extra = "cu124" } },
+            { name = "jinja2", extras = ["i18n"], marker = "extra == 'cu118'", specifier = "==3.1.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118", conflict = { package = "project", extra = "cu118" } },
+            { name = "jinja2", extras = ["i18n"], marker = "extra == 'cu124'", specifier = "==3.1.3", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "project", extra = "cu124" } },
         ]
         "###
         );
@@ -4715,7 +4724,7 @@ fn jinja_no_conflict_markers1() -> Result<()> {
 /// shouldn't see any conflict markers in the lock file here.
 #[test]
 fn jinja_no_conflict_markers2() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4747,22 +4756,17 @@ fn jinja_no_conflict_markers2() -> Result<()> {
 
         [[tool.uv.index]]
         name = "torch-cu118"
-        url = "https://download.pytorch.org/whl/cu118"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu118"
         explicit = true
 
         [[tool.uv.index]]
         name = "torch-cu124"
-        url = "https://download.pytorch.org/whl/cu124"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu124"
         explicit = true
         "#,
     )?;
 
-    let mut cmd = context.sync();
-    // I guess --exclude-newer doesn't work with the torch indices?
-    // That's because the Torch indices are missing the upload date
-    // metadata. We pin our versions anyway, so this should be fine.
-    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
-    uv_snapshot!(context.filters(), cmd, @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4791,13 +4795,16 @@ fn jinja_no_conflict_markers2() -> Result<()> {
             { package = "project", extra = "cu124" },
         ]]
 
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
+
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "jinja2"
         version = "3.1.2"
-        source = { registry = "https://download.pytorch.org/whl/cu118" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }
         resolution-markers = [
             "sys_platform == 'darwin'",
         ]
@@ -4826,7 +4833,7 @@ fn jinja_no_conflict_markers2() -> Result<()> {
         [[package]]
         name = "jinja2"
         version = "3.1.3"
-        source = { registry = "https://download.pytorch.org/whl/cu124" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -4859,18 +4866,18 @@ fn jinja_no_conflict_markers2() -> Result<()> {
 
         [package.optional-dependencies]
         cu118 = [
-            { name = "jinja2", version = "3.1.2", source = { registry = "https://download.pytorch.org/whl/cu118" }, marker = "sys_platform == 'darwin'" },
+            { name = "jinja2", version = "3.1.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, marker = "sys_platform == 'darwin'" },
             { name = "jinja2", version = "3.1.2", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'darwin'" },
         ]
         cu124 = [
-            { name = "jinja2", version = "3.1.3", source = { registry = "https://download.pytorch.org/whl/cu124" } },
+            { name = "jinja2", version = "3.1.3", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" } },
         ]
 
         [package.metadata]
         requires-dist = [
-            { name = "jinja2", marker = "sys_platform == 'darwin' and extra == 'cu118'", specifier = "==3.1.2", index = "https://download.pytorch.org/whl/cu118", conflict = { package = "project", extra = "cu118" } },
+            { name = "jinja2", marker = "sys_platform == 'darwin' and extra == 'cu118'", specifier = "==3.1.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118", conflict = { package = "project", extra = "cu118" } },
             { name = "jinja2", marker = "sys_platform != 'darwin' and extra == 'cu118'", specifier = "==3.1.2" },
-            { name = "jinja2", marker = "extra == 'cu124'", specifier = "==3.1.3", index = "https://download.pytorch.org/whl/cu124", conflict = { package = "project", extra = "cu124" } },
+            { name = "jinja2", marker = "extra == 'cu124'", specifier = "==3.1.3", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "project", extra = "cu124" } },
         ]
         "###
         );
@@ -7285,7 +7292,7 @@ fn deduplicate_resolution_markers() -> Result<()> {
 
 #[test]
 fn overlapping_resolution_markers() -> Result<()> {
-    let context = TestContext::new("3.10");
+    let context = TestContext::new("3.10").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7321,12 +7328,12 @@ fn overlapping_resolution_markers() -> Result<()> {
 
         [[tool.uv.index]]
         name = "pytorch-cpu"
-        url = "https://download.pytorch.org/whl/cpu"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cpu"
         explicit = true
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7359,6 +7366,9 @@ fn overlapping_resolution_markers() -> Result<()> {
             { package = "ads-mega-model", extra = "cu118" },
         ]]
 
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
+
         [[package]]
         name = "ads-mega-model"
         version = "0.1.0"
@@ -7369,9 +7379,9 @@ fn overlapping_resolution_markers() -> Result<()> {
 
         [package.optional-dependencies]
         cpu = [
-            { name = "torch", version = "2.2.2", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
+            { name = "torch", version = "2.2.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
             { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
-            { name = "torch", version = "2.2.2+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+            { name = "torch", version = "2.2.2+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
         ]
         cu118 = [
             { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" } },
@@ -7380,7 +7390,7 @@ fn overlapping_resolution_markers() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "torch", marker = "sys_platform == 'darwin' and extra == 'cpu'", specifier = "==2.2.2" },
-            { name = "torch", marker = "sys_platform != 'darwin' and extra == 'cpu'", specifier = "==2.2.2", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "ads-mega-model", extra = "cpu" } },
+            { name = "torch", marker = "sys_platform != 'darwin' and extra == 'cpu'", specifier = "==2.2.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cpu", conflict = { package = "ads-mega-model", extra = "cpu" } },
             { name = "torch", marker = "extra == 'cu118'", specifier = "==2.2.2" },
             { name = "wandb", specifier = "==0.17.6" },
         ]
@@ -7815,7 +7825,7 @@ fn overlapping_resolution_markers() -> Result<()> {
         [[package]]
         name = "torch"
         version = "2.2.2"
-        source = { registry = "https://download.pytorch.org/whl/cpu" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
         resolution-markers = [
             "platform_machine == 'aarch64' and sys_platform == 'linux'",
         ]
@@ -7873,7 +7883,7 @@ fn overlapping_resolution_markers() -> Result<()> {
         [[package]]
         name = "torch"
         version = "2.2.2+cpu"
-        source = { registry = "https://download.pytorch.org/whl/cpu" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
         resolution-markers = [
             "platform_machine != 'aarch64' and sys_platform == 'linux'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",

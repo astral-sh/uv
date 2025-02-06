@@ -16,8 +16,8 @@ use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, LowerBound, PreviewMode,
-    Reinstall, SourceStrategy,
+    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, PreviewMode, Reinstall,
+    SourceStrategy,
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
@@ -86,14 +86,14 @@ pub struct BuildDispatch<'a> {
     shared_state: SharedState,
     dependency_metadata: &'a DependencyMetadata,
     build_isolation: BuildIsolation<'a>,
-    link_mode: uv_install_wheel::linker::LinkMode,
+    link_mode: uv_install_wheel::LinkMode,
     build_options: &'a BuildOptions,
     config_settings: &'a ConfigSettings,
     hasher: &'a HashStrategy,
     exclude_newer: Option<ExcludeNewer>,
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
-    bounds: LowerBound,
+
     sources: SourceStrategy,
     concurrency: Concurrency,
     preview: PreviewMode,
@@ -112,11 +112,10 @@ impl<'a> BuildDispatch<'a> {
         index_strategy: IndexStrategy,
         config_settings: &'a ConfigSettings,
         build_isolation: BuildIsolation<'a>,
-        link_mode: uv_install_wheel::linker::LinkMode,
+        link_mode: uv_install_wheel::LinkMode,
         build_options: &'a BuildOptions,
         hasher: &'a HashStrategy,
         exclude_newer: Option<ExcludeNewer>,
-        bounds: LowerBound,
         sources: SourceStrategy,
         concurrency: Concurrency,
         preview: PreviewMode,
@@ -139,7 +138,7 @@ impl<'a> BuildDispatch<'a> {
             exclude_newer,
             source_build_context: SourceBuildContext::default(),
             build_extra_env_vars: FxHashMap::default(),
-            bounds,
+
             sources,
             concurrency,
             preview,
@@ -192,10 +191,6 @@ impl BuildContext for BuildDispatch<'_> {
 
     fn config_settings(&self) -> &ConfigSettings {
         self.config_settings
-    }
-
-    fn bounds(&self) -> LowerBound {
-        self.bounds
     }
 
     fn sources(&self) -> SourceStrategy {
@@ -511,41 +506,44 @@ impl BuildContext for BuildDispatch<'_> {
 pub struct SharedState {
     /// The resolved Git references.
     git: GitResolver,
+    /// The discovered capabilities for each registry index.
+    capabilities: IndexCapabilities,
     /// The fetched package versions and metadata.
     index: InMemoryIndex,
     /// The downloaded distributions.
     in_flight: InFlight,
-    /// The discovered capabilities for each registry index.
-    capabilities: IndexCapabilities,
 }
 
 impl SharedState {
-    pub fn new(
-        git: GitResolver,
-        index: InMemoryIndex,
-        in_flight: InFlight,
-        capabilities: IndexCapabilities,
-    ) -> Self {
+    /// Fork the [`SharedState`], creating a new in-memory index and in-flight cache.
+    ///
+    /// State that is universally applicable (like the Git resolver and index capabilities)
+    /// are retained.
+    #[must_use]
+    pub fn fork(&self) -> Self {
         Self {
-            git,
-            index,
-            in_flight,
-            capabilities,
+            git: self.git.clone(),
+            capabilities: self.capabilities.clone(),
+            ..Default::default()
         }
     }
 
+    /// Return the [`GitResolver`] used by the [`SharedState`].
     pub fn git(&self) -> &GitResolver {
         &self.git
     }
 
+    /// Return the [`InMemoryIndex`] used by the [`SharedState`].
     pub fn index(&self) -> &InMemoryIndex {
         &self.index
     }
 
+    /// Return the [`InFlight`] used by the [`SharedState`].
     pub fn in_flight(&self) -> &InFlight {
         &self.in_flight
     }
 
+    /// Return the [`IndexCapabilities`] used by the [`SharedState`].
     pub fn capabilities(&self) -> &IndexCapabilities {
         &self.capabilities
     }

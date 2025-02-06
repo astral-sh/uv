@@ -25,7 +25,7 @@ uv provides a standalone installer to download and install uv:
     Request a specific version by including it in the URL:
 
     ```console
-    $ curl -LsSf https://astral.sh/uv/0.5.23/install.sh | sh
+    $ curl -LsSf https://astral.sh/uv/0.5.29/install.sh | sh
     ```
 
 === "Windows"
@@ -41,7 +41,7 @@ uv provides a standalone installer to download and install uv:
     Request a specific version by including it in the URL:
 
     ```console
-    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.5.23/install.ps1 | iex"
+    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.5.29/install.ps1 | iex"
     ```
 
 !!! tip
@@ -158,39 +158,77 @@ $ pip install --upgrade uv
 
 ## Shell autocompletion
 
+!!! tip
+
+    You can run `echo $SHELL` to help you determine your shell.
+
 To enable shell autocompletion for uv commands, run one of the following:
 
-=== "Linux and macOS"
+=== "Bash"
 
     ```bash
-    # Determine your shell (e.g., with `echo $SHELL`), then run one of:
     echo 'eval "$(uv generate-shell-completion bash)"' >> ~/.bashrc
+    ```
+
+=== "Zsh"
+
+    ```bash
     echo 'eval "$(uv generate-shell-completion zsh)"' >> ~/.zshrc
+    ```
+
+=== "fish"
+
+    ```bash
     echo 'uv generate-shell-completion fish | source' >> ~/.config/fish/config.fish
+    ```
+
+=== "Elvish"
+
+    ```bash
     echo 'eval (uv generate-shell-completion elvish | slurp)' >> ~/.elvish/rc.elv
     ```
 
-=== "Windows"
+=== "PowerShell / pwsh"
 
     ```powershell
+    if (!(Test-Path -Path $PROFILE)) {
+      New-Item -ItemType File -Path $PROFILE -Force
+    }
     Add-Content -Path $PROFILE -Value '(& uv generate-shell-completion powershell) | Out-String | Invoke-Expression'
     ```
 
 To enable shell autocompletion for uvx, run one of the following:
 
-=== "Linux and macOS"
+=== "Bash"
 
     ```bash
-    # Determine your shell (e.g., with `echo $SHELL`), then run one of:
     echo 'eval "$(uvx --generate-shell-completion bash)"' >> ~/.bashrc
+    ```
+
+=== "Zsh"
+
+    ```bash
     echo 'eval "$(uvx --generate-shell-completion zsh)"' >> ~/.zshrc
+    ```
+
+=== "fish"
+
+    ```bash
     echo 'uvx --generate-shell-completion fish | source' >> ~/.config/fish/config.fish
+    ```
+
+=== "Elvish"
+
+    ```bash
     echo 'eval (uvx --generate-shell-completion elvish | slurp)' >> ~/.elvish/rc.elv
     ```
 
-=== "Windows"
+=== "PowerShell / pwsh"
 
     ```powershell
+    if (!(Test-Path -Path $PROFILE)) {
+      New-Item -ItemType File -Path $PROFILE -Force
+    }
     Add-Content -Path $PROFILE -Value '(& uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression'
     ```
 

@@ -6,7 +6,6 @@ use either::Either;
 use thiserror::Error;
 use url::Url;
 
-use uv_configuration::LowerBound;
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{Index, IndexLocations, IndexName, Origin};
 use uv_git::GitReference;
@@ -16,7 +15,6 @@ use uv_pep508::{looks_like_git_repository, MarkerTree, VerbatimUrl, VersionOrUrl
 use uv_pypi_types::{
     ConflictItem, ParsedUrlError, Requirement, RequirementSource, VerbatimParsedUrl,
 };
-use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
 use uv_workspace::Workspace;
 
@@ -45,7 +43,7 @@ impl LoweredRequirement {
         group: Option<&GroupName>,
         locations: &'data IndexLocations,
         workspace: &'data Workspace,
-        lower_bound: LowerBound,
+
         git_member: Option<&'data GitWorkspaceMember<'data>>,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + 'data {
         // Identify the source from the `tool.uv.sources` table.
@@ -136,19 +134,6 @@ impl LoweredRequirement {
         }
 
         let Some(sources) = sources else {
-            let has_sources = !project_sources.is_empty() || !workspace.sources().is_empty();
-            if matches!(lower_bound, LowerBound::Warn) {
-                // Support recursive editable inclusions.
-                if has_sources
-                    && requirement.version_or_url.is_none()
-                    && project_name.is_none_or(|project_name| *project_name != requirement.name)
-                {
-                    warn_user_once!(
-                        "Missing version constraint (e.g., a lower bound) for `{}`",
-                        requirement.name
-                    );
-                }
-            }
             return Either::Left(std::iter::once(Ok(Self(Requirement::from(requirement)))));
         };
 
@@ -252,12 +237,7 @@ impl LoweredRequirement {
                                     })
                                 }
                             });
-                            let source = registry_source(
-                                &requirement,
-                                index.into_url(),
-                                conflict,
-                                lower_bound,
-                            );
+                            let source = registry_source(&requirement, index.into_url(), conflict);
                             (source, marker)
                         }
                         Source::Workspace {
@@ -367,7 +347,6 @@ impl LoweredRequirement {
         sources: &'data BTreeMap<PackageName, Sources>,
         indexes: &'data [Index],
         locations: &'data IndexLocations,
-        lower_bound: LowerBound,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + 'data {
         let source = sources.get(&requirement.name).cloned();
 
@@ -473,12 +452,7 @@ impl LoweredRequirement {
                                 ));
                             };
                             let conflict = None;
-                            let source = registry_source(
-                                &requirement,
-                                index.into_url(),
-                                conflict,
-                                lower_bound,
-                            );
+                            let source = registry_source(&requirement, index.into_url(), conflict);
                             (source, marker)
                         }
                         Source::Workspace { .. } => {
@@ -652,40 +626,23 @@ fn registry_source(
     requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
     index: Url,
     conflict: Option<ConflictItem>,
-    bounds: LowerBound,
 ) -> RequirementSource {
     match &requirement.version_or_url {
-        None => {
-            if matches!(bounds, LowerBound::Warn) {
-                warn_user_once!(
-                    "Missing version constraint (e.g., a lower bound) for `{}`",
-                    requirement.name
-                );
-            }
-            RequirementSource::Registry {
-                specifier: VersionSpecifiers::empty(),
-                index: Some(index),
-                conflict,
-            }
-        }
+        None => RequirementSource::Registry {
+            specifier: VersionSpecifiers::empty(),
+            index: Some(index),
+            conflict,
+        },
         Some(VersionOrUrl::VersionSpecifier(version)) => RequirementSource::Registry {
             specifier: version.clone(),
             index: Some(index),
             conflict,
         },
-        Some(VersionOrUrl::Url(_)) => {
-            if matches!(bounds, LowerBound::Warn) {
-                warn_user_once!(
-                    "Missing version constraint (e.g., a lower bound) for `{}` due to use of a URL specifier",
-                    requirement.name
-                );
-            }
-            RequirementSource::Registry {
-                specifier: VersionSpecifiers::empty(),
-                index: Some(index),
-                conflict,
-            }
-        }
+        Some(VersionOrUrl::Url(_)) => RequirementSource::Registry {
+            specifier: VersionSpecifiers::empty(),
+            index: Some(index),
+            conflict,
+        },
     }
 }
 

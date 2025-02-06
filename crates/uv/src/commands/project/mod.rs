@@ -8,17 +8,18 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
+use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, ExtrasSpecification,
-    GroupsSpecification, LowerBound, PreviewMode, Reinstall, TrustedHost, Upgrade,
+    PreviewMode, Reinstall, TrustedHost, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     Index, Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_fs::{Simplified, CWD};
+use uv_fs::{LockedFile, Simplified, CWD};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
@@ -137,16 +138,16 @@ pub(crate) enum ProjectError {
         PathBuf,
     ),
 
-    #[error("Group `{0}` is not defined in the project's `dependency-group` table")]
+    #[error("Group `{0}` is not defined in the project's `dependency-groups` table")]
     MissingGroupProject(GroupName),
 
-    #[error("Group `{0}` is not defined in any project's `dependency-group` table")]
+    #[error("Group `{0}` is not defined in any project's `dependency-groups` table")]
     MissingGroupWorkspace(GroupName),
 
     #[error("PEP 723 scripts do not support dependency groups, but group `{0}` was specified")]
     MissingGroupScript(GroupName),
 
-    #[error("Default group `{0}` (from `tool.uv.default-groups`) is not defined in the project's `dependency-group` table")]
+    #[error("Default group `{0}` (from `tool.uv.default-groups`) is not defined in the project's `dependency-groups` table")]
     MissingDefaultGroup(GroupName),
 
     #[error("Supported environments must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
@@ -175,6 +176,12 @@ pub(crate) enum ProjectError {
 
     #[error("Failed to parse PEP 723 script metadata")]
     Pep723ScriptTomlParse(#[source] toml::de::Error),
+
+    #[error("Failed to remove ephemeral overlay")]
+    OverlayRemoval(#[source] std::io::Error),
+
+    #[error("Failed to find `site-packages` directory for environment")]
+    NoSitePackages,
 
     #[error(transparent)]
     DependencyGroup(#[from] DependencyGroupError),
@@ -281,7 +288,8 @@ impl std::fmt::Display for ConflictError {
                     self.conflicts
                         .iter()
                         .map(|conflict| match conflict {
-                            ConflictPackage::Group(ref group) if self.dev.is_default(group) =>
+                            ConflictPackage::Group(ref group)
+                                if self.dev.contains_because_default(group) =>
                                 format!("`{group}` (enabled by default)"),
                             ConflictPackage::Group(ref group) => format!("`{group}`"),
                             ConflictPackage::Extra(..) => unreachable!(),
@@ -300,7 +308,9 @@ impl std::fmt::Display for ConflictError {
                         .map(|(i, conflict)| {
                             let conflict = match conflict {
                                 ConflictPackage::Extra(ref extra) => format!("extra `{extra}`"),
-                                ConflictPackage::Group(ref group) if self.dev.is_default(group) => {
+                                ConflictPackage::Group(ref group)
+                                    if self.dev.contains_because_default(group) =>
+                                {
                                     format!("group `{group}` (enabled by default)")
                                 }
                                 ConflictPackage::Group(ref group) => format!("group `{group}`"),
@@ -315,6 +325,49 @@ impl std::fmt::Display for ConflictError {
 }
 
 impl std::error::Error for ConflictError {}
+
+/// A [`SharedState`] instance to use for universal resolution.
+#[derive(Default, Clone)]
+pub(crate) struct UniversalState(SharedState);
+
+impl std::ops::Deref for UniversalState {
+    type Target = SharedState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl UniversalState {
+    /// Fork the [`UniversalState`] to create a [`PlatformState`].
+    pub(crate) fn fork(&self) -> PlatformState {
+        PlatformState(self.0.fork())
+    }
+}
+
+/// A [`SharedState`] instance to use for platform-specific resolution.
+#[derive(Default, Clone)]
+pub(crate) struct PlatformState(SharedState);
+
+impl std::ops::Deref for PlatformState {
+    type Target = SharedState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl PlatformState {
+    /// Fork the [`PlatformState`] to create a [`UniversalState`].
+    pub(crate) fn fork(&self) -> UniversalState {
+        UniversalState(self.0.fork())
+    }
+
+    /// Create a [`SharedState`] from the [`PlatformState`].
+    pub(crate) fn into_inner(self) -> SharedState {
+        self.0
+    }
+}
 
 /// Compute the `Requires-Python` bound for the [`Workspace`].
 ///
@@ -553,6 +606,7 @@ impl ProjectInterpreter {
         allow_insecure_host: &[TrustedHost],
         install_mirrors: &PythonInstallMirrors,
         no_config: bool,
+        active: Option<bool>,
         cache: &Cache,
         printer: Printer,
     ) -> Result<Self, ProjectError> {
@@ -565,7 +619,7 @@ impl ProjectInterpreter {
             .await?;
 
         // Read from the virtual environment first.
-        let venv = workspace.venv();
+        let venv = workspace.venv(active);
         match PythonEnvironment::from_root(&venv, cache) {
             Ok(venv) => {
                 if python_request.as_ref().map_or(true, |request| {
@@ -692,6 +746,18 @@ impl ProjectInterpreter {
             ProjectInterpreter::Interpreter(interpreter) => interpreter,
             ProjectInterpreter::Environment(venv) => venv.into_interpreter(),
         }
+    }
+
+    /// Grab a file lock for the environment to prevent concurrent writes across processes.
+    pub(crate) async fn lock(workspace: &Workspace) -> Result<LockedFile, std::io::Error> {
+        LockedFile::acquire(
+            std::env::temp_dir().join(format!(
+                "uv-{}.lock",
+                cache_digest(workspace.install_path())
+            )),
+            workspace.install_path().simplified_display(),
+        )
+        .await
     }
 }
 
@@ -875,9 +941,13 @@ pub(crate) async fn get_or_init_environment(
     native_tls: bool,
     allow_insecure_host: &[TrustedHost],
     no_config: bool,
+    active: Option<bool>,
     cache: &Cache,
     printer: Printer,
 ) -> Result<PythonEnvironment, ProjectError> {
+    // Lock the project environment to avoid synchronization issues.
+    let _lock = ProjectInterpreter::lock(workspace).await?;
+
     match ProjectInterpreter::discover(
         workspace,
         workspace.install_path().as_ref(),
@@ -889,6 +959,7 @@ pub(crate) async fn get_or_init_environment(
         allow_insecure_host,
         install_mirrors,
         no_config,
+        active,
         cache,
         printer,
     )
@@ -899,7 +970,7 @@ pub(crate) async fn get_or_init_environment(
 
         // Otherwise, create a virtual environment with the discovered interpreter.
         ProjectInterpreter::Interpreter(interpreter) => {
-            let venv = workspace.venv();
+            let venv = workspace.venv(active);
 
             // Avoid removing things that are not virtual environments
             let should_remove = match (venv.try_exists(), venv.join("pyvenv.cfg").try_exists()) {
@@ -1035,7 +1106,11 @@ pub(crate) async fn resolve_names(
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
-            uv_auth::store_credentials(index.raw_url(), credentials);
+            let credentials = Arc::new(credentials);
+            uv_auth::store_credentials(index.raw_url(), credentials.clone());
+            if let Some(root_url) = index.root_url() {
+                uv_auth::store_credentials(&root_url, credentials.clone());
+            }
         }
     }
 
@@ -1087,7 +1162,6 @@ pub(crate) async fn resolve_names(
         build_options,
         &build_hasher,
         *exclude_newer,
-        LowerBound::Allow,
         *sources,
         concurrency,
         preview,
@@ -1137,7 +1211,7 @@ pub(crate) async fn resolve_environment(
     spec: EnvironmentSpecification<'_>,
     interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,
-    state: &SharedState,
+    state: &PlatformState,
     logger: Box<dyn ResolveLogger>,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -1185,7 +1259,11 @@ pub(crate) async fn resolve_environment(
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
-            uv_auth::store_credentials(index.raw_url(), credentials);
+            let credentials = Arc::new(credentials);
+            uv_auth::store_credentials(index.raw_url(), credentials.clone());
+            if let Some(root_url) = index.root_url() {
+                uv_auth::store_credentials(&root_url, credentials.clone());
+            }
         }
     }
 
@@ -1266,7 +1344,7 @@ pub(crate) async fn resolve_environment(
         index_locations,
         &flat_index,
         dependency_metadata,
-        state.clone(),
+        state.clone().into_inner(),
         index_strategy,
         config_setting,
         build_isolation,
@@ -1274,7 +1352,6 @@ pub(crate) async fn resolve_environment(
         build_options,
         &build_hasher,
         exclude_newer,
-        LowerBound::Allow,
         sources,
         concurrency,
         preview,
@@ -1316,7 +1393,7 @@ pub(crate) async fn sync_environment(
     venv: PythonEnvironment,
     resolution: &Resolution,
     settings: InstallerSettingsRef<'_>,
-    state: &SharedState,
+    state: &PlatformState,
     logger: Box<dyn InstallLogger>,
     installer_metadata: bool,
     connectivity: Connectivity,
@@ -1352,7 +1429,11 @@ pub(crate) async fn sync_environment(
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
-            uv_auth::store_credentials(index.raw_url(), credentials);
+            let credentials = Arc::new(credentials);
+            uv_auth::store_credentials(index.raw_url(), credentials.clone());
+            if let Some(root_url) = index.root_url() {
+                uv_auth::store_credentials(&root_url, credentials.clone());
+            }
         }
     }
 
@@ -1402,7 +1483,7 @@ pub(crate) async fn sync_environment(
         index_locations,
         &flat_index,
         dependency_metadata,
-        state.clone(),
+        state.clone().into_inner(),
         index_strategy,
         config_setting,
         build_isolation,
@@ -1410,7 +1491,6 @@ pub(crate) async fn sync_environment(
         build_options,
         &build_hasher,
         exclude_newer,
-        LowerBound::Allow,
         sources,
         concurrency,
         preview,
@@ -1547,7 +1627,11 @@ pub(crate) async fn update_environment(
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
-            uv_auth::store_credentials(index.raw_url(), credentials);
+            let credentials = Arc::new(credentials);
+            uv_auth::store_credentials(index.raw_url(), credentials.clone());
+            if let Some(root_url) = index.root_url() {
+                uv_auth::store_credentials(&root_url, credentials.clone());
+            }
         }
     }
 
@@ -1621,7 +1705,6 @@ pub(crate) async fn update_environment(
         build_options,
         &build_hasher,
         *exclude_newer,
-        LowerBound::Allow,
         *sources,
         concurrency,
         preview,
@@ -1761,11 +1844,7 @@ impl DependencyGroupsTarget<'_> {
     /// Validate the dependency groups requested by the [`DevGroupsSpecification`].
     #[allow(clippy::result_large_err)]
     pub(crate) fn validate(self, dev: &DevGroupsSpecification) -> Result<(), ProjectError> {
-        for group in dev
-            .groups()
-            .into_iter()
-            .flat_map(GroupsSpecification::names)
-        {
+        for group in dev.explicit_names() {
             match self {
                 Self::Workspace(workspace) => {
                     // The group must be defined in the workspace.

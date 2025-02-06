@@ -160,8 +160,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: cargo-bins/cargo-binstall@main
-      - run: cargo binstall --no-confirm cargo-shear
+      - name: "Install cargo shear"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-shear
       - run: cargo shear
 
   # We use the large GitHub actions runners
@@ -349,28 +351,34 @@ jobs:
         target-arch: ["x86_64", "i686"]
     steps:
       - uses: actions/checkout@v4
+      - name: Setup Dev Drive
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
       - name: "Install Rust toolchain"
-        working-directory: ${{ github.workspace }}/crates/uv-trampoline
+        working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
         run: |
           rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
           rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: ${{ github.workspace }}/crates/uv-trampoline
       - name: "Test committed binaries"
-        working-directory: ${{ github.workspace }}
+        working-directory: ${{ env.UV_WORKSPACE }}
         run: |
           rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
           cargo test -p uv-trampoline-builder --target ${{ matrix.target-arch }}-pc-windows-msvc
       # Build and copy the new binaries
       - name: "Build"
-        working-directory: ${{ github.workspace }}/crates/uv-trampoline
+        working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
         run: |
           cargo build --target ${{ matrix.target-arch }}-pc-windows-msvc
           cp target/${{ matrix.target-arch }}-pc-windows-msvc/debug/uv-trampoline-console.exe trampolines/uv-trampoline-${{ matrix.target-arch }}-console.exe
           cp target/${{ matrix.target-arch }}-pc-windows-msvc/debug/uv-trampoline-gui.exe trampolines/uv-trampoline-${{ matrix.target-arch }}-gui.exe
       - name: "Test new binaries"
-        working-directory: ${{ github.workspace }}
+        working-directory: ${{ env.UV_WORKSPACE }}
         run: |
           # We turn off the default "production" test feature since these are debug binaries
           cargo test -p uv-trampoline-builder --target ${{ matrix.target-arch }}-pc-windows-msvc --no-default-features
@@ -389,6 +397,8 @@ jobs:
       MKDOCS_INSIDERS_SSH_KEY_EXISTS: ${{ secrets.MKDOCS_INSIDERS_SSH_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v5
       - uses: actions/setup-python@v5
       - name: "Add SSH key"
@@ -655,13 +665,19 @@ jobs:
       matrix:
         include:
           - repo: "prefecthq/prefect"
-            command: "uv pip install -e '.[dev]'"
+            commands:
+              - "uv venv"
+              - "uv pip install -e '.[dev]'"
             python: "3.9"
           - repo: "pallets/flask"
-            command: "uv pip install -r requirements/dev.txt"
+            commands:
+              - "uv venv"
+              - "uv pip install -r requirements/dev.txt"
             python: "3.12"
           - repo: "pydantic/pydantic-core"
-            command: "uv sync --group all"
+            commands:
+              - "uv sync --group all"
+              - "uv lock --upgrade"
             python: "3.12"
       fail-fast: false
     steps:
@@ -683,8 +699,14 @@ jobs:
 
       - name: "Test"
         run: |
-          ./uv venv
-          ./${{ matrix.command }}
+          echo '${{ toJSON(matrix.commands) }}' | jq -r '.[]' | while read cmd; do
+            echo "+ $cmd" >&2
+            if [[ $cmd == uv* ]]; then
+              ./$cmd
+            else
+              $cmd
+            fi
+          done
 
   smoke-test-linux:
     timeout-minutes: 10

@@ -875,6 +875,37 @@ fn add_raw_error() -> Result<()> {
     Ok(())
 }
 
+#[test]
+#[cfg(feature = "git")]
+fn add_editable_error() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    // Provide `--editable` with a non-source tree.
+    uv_snapshot!(context.filters(), context.add().arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl").arg("--editable"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `flask` did not resolve to a local directory, but the `--editable` flag was provided. Editable installs are only supported for local directories.
+    "###);
+
+    Ok(())
+}
+
 /// Add an unnamed requirement.
 #[test]
 #[cfg(feature = "git")]
@@ -1744,7 +1775,7 @@ fn add_remove_workspace() -> Result<()> {
     Ok(())
 }
 
-/// `uv add --dev` should update `dev-dependencies` (rather than `dependency-group.dev`) if a
+/// `uv add --dev` should update `dev-dependencies` (rather than `dependency-groups.dev`) if a
 /// dependency already exists in `dev-dependencies`.
 #[test]
 fn update_existing_dev() -> Result<()> {
@@ -1815,7 +1846,7 @@ fn update_existing_dev() -> Result<()> {
     Ok(())
 }
 
-/// `uv add --dev` should add to `dev-dependencies` (rather than `dependency-group.dev`) if it
+/// `uv add --dev` should add to `dev-dependencies` (rather than `dependency-groups.dev`) if it
 /// exists.
 #[test]
 fn add_existing_dev() -> Result<()> {
@@ -1880,7 +1911,7 @@ fn add_existing_dev() -> Result<()> {
     Ok(())
 }
 
-/// `uv add --group dev` should update `dev-dependencies` (rather than `dependency-group.dev`) if a
+/// `uv add --group dev` should update `dev-dependencies` (rather than `dependency-groups.dev`) if a
 /// dependency already exists.
 #[test]
 fn update_existing_dev_group() -> Result<()> {
@@ -1945,7 +1976,7 @@ fn update_existing_dev_group() -> Result<()> {
     Ok(())
 }
 
-/// `uv add --group dev` should add to `dependency-group` even if `dev-dependencies` exists.
+/// `uv add --group dev` should add to `dependency-groups` even if `dev-dependencies` exists.
 #[test]
 fn add_existing_dev_group() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2012,7 +2043,7 @@ fn add_existing_dev_group() -> Result<()> {
     Ok(())
 }
 
-/// `uv remove --dev` should remove from both `dev-dependencies` and `dependency-group.dev`.
+/// `uv remove --dev` should remove from both `dev-dependencies` and `dependency-groups.dev`.
 #[test]
 fn remove_both_dev() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2077,7 +2108,7 @@ fn remove_both_dev() -> Result<()> {
     Ok(())
 }
 
-/// `uv remove --group dev` should remove from both `dev-dependencies` and `dependency-group.dev`.
+/// `uv remove --group dev` should remove from both `dev-dependencies` and `dependency-groups.dev`.
 #[test]
 fn remove_both_dev_group() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2186,6 +2217,24 @@ fn add_workspace_editable() -> Result<()> {
     "#})?;
 
     let child1 = context.temp_dir.join("child1");
+
+    // `--no-editable` should error.
+    let mut add_cmd = context.add();
+    add_cmd
+        .arg("child2")
+        .arg("--no-editable")
+        .current_dir(&child1);
+
+    uv_snapshot!(context.filters(), add_cmd, @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Workspace dependency `child2` was marked as `--no-editable`, but workspace dependencies are always added in editable mode. Pass `--no-editable` to `uv sync` or `uv run` to install workspace dependencies in non-editable mode.
+    "###);
+
+    // `--editable` should not.
     let mut add_cmd = context.add();
     add_cmd.arg("child2").arg("--editable").current_dir(&child1);
 
@@ -6881,7 +6930,7 @@ fn add_no_warn_index_url() -> Result<()> {
 /// Add an index provided via `--index`.
 #[test]
 fn add_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -6895,7 +6944,7 @@ fn add_index() -> Result<()> {
         constraint-dependencies = ["markupsafe<3"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").arg("--index").arg("https://pypi.org/simple").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").arg("--index").arg("https://pypi.org/simple"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6941,6 +6990,9 @@ fn add_index() -> Result<()> {
         version = 1
         requires-python = ">=3.12"
 
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
+
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
 
@@ -6968,7 +7020,7 @@ fn add_index() -> Result<()> {
     });
 
     // Adding a subsequent index should put it _above_ the existing index.
-    uv_snapshot!(context.filters(), context.add().arg("jinja2").arg("--index").arg("pytorch=https://download.pytorch.org/whl/cu121").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("jinja2").arg("--index").arg("pytorch=https://astral-sh.github.io/pytorch-mirror/whl/cu121"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6977,7 +7029,7 @@ fn add_index() -> Result<()> {
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + jinja2==3.1.3
+     + jinja2==3.1.4
      + markupsafe==2.1.5
     "###);
 
@@ -6994,7 +7046,7 @@ fn add_index() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "iniconfig==2.0.0",
-            "jinja2>=3.1.3",
+            "jinja2>=3.1.4",
         ]
 
         [tool.uv]
@@ -7002,7 +7054,7 @@ fn add_index() -> Result<()> {
 
         [[tool.uv.index]]
         name = "pytorch"
-        url = "https://download.pytorch.org/whl/cu121"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu121"
 
         [tool.uv.sources]
         jinja2 = { index = "pytorch" }
@@ -7023,6 +7075,9 @@ fn add_index() -> Result<()> {
         version = 1
         requires-python = ">=3.12"
 
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
+
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
 
@@ -7037,19 +7092,20 @@ fn add_index() -> Result<()> {
 
         [[package]]
         name = "jinja2"
-        version = "3.1.3"
-        source = { registry = "https://download.pytorch.org/whl/cu121" }
+        version = "3.1.4"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu121" }
         dependencies = [
             { name = "markupsafe" },
         ]
         wheels = [
-            { url = "https://download.pytorch.org/whl/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa" },
+            { url = "https://download.pytorch.org/whl/Jinja2-3.1.4-py3-none-any.whl" },
         ]
 
         [[package]]
         name = "markupsafe"
         version = "2.1.5"
-        source = { registry = "https://download.pytorch.org/whl/cu121" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu121" }
+        sdist = { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5.tar.gz" }
         wheels = [
             { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:8dec4936e9c3100156f8a2dc89c4b88d5c435175ff03413b443469c7c8c5f4d1" },
             { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:3c6b973f22eb18a789b1460b4b91bf04ae3f0c4234a0a6aa6b0a92f6f7b951d4" },
@@ -7071,25 +7127,21 @@ fn add_index() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "iniconfig", specifier = "==2.0.0" },
-            { name = "jinja2", specifier = ">=3.1.3", index = "https://download.pytorch.org/whl/cu121" },
+            { name = "jinja2", specifier = ">=3.1.4", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu121" },
         ]
         "###
         );
     });
 
     // Adding a subsequent index with the same name should replace it.
-    uv_snapshot!(context.filters(), context.add().arg("jinja2").arg("--index").arg("pytorch=https://test.pypi.org/simple").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("jinja2").arg("--index").arg("pytorch=https://test.pypi.org/simple"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
-     - jinja2==3.1.3
-     + jinja2==3.1.4
+    Audited 3 packages in [TIME]
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -7105,7 +7157,7 @@ fn add_index() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "iniconfig==2.0.0",
-            "jinja2>=3.1.3",
+            "jinja2>=3.1.4",
         ]
 
         [tool.uv]
@@ -7133,6 +7185,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
 
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
@@ -7188,14 +7243,14 @@ fn add_index() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "iniconfig", specifier = "==2.0.0" },
-            { name = "jinja2", specifier = ">=3.1.3", index = "https://test.pypi.org/simple" },
+            { name = "jinja2", specifier = ">=3.1.4", index = "https://test.pypi.org/simple" },
         ]
         "###
         );
     });
 
     // Adding a subsequent index with the same URL should bump it to the top.
-    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--index").arg("https://pypi.org/simple").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--index").arg("https://pypi.org/simple"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7220,7 +7275,7 @@ fn add_index() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "iniconfig==2.0.0",
-            "jinja2>=3.1.3",
+            "jinja2>=3.1.4",
             "typing-extensions>=4.12.2",
         ]
 
@@ -7249,6 +7304,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
 
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
@@ -7305,7 +7363,7 @@ fn add_index() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "iniconfig", specifier = "==2.0.0" },
-            { name = "jinja2", specifier = ">=3.1.3", index = "https://test.pypi.org/simple" },
+            { name = "jinja2", specifier = ">=3.1.4", index = "https://test.pypi.org/simple" },
             { name = "typing-extensions", specifier = ">=4.12.2" },
         ]
 
@@ -7322,7 +7380,7 @@ fn add_index() -> Result<()> {
     });
 
     // Adding a subsequent index with the same URL should bump it to the top, but retain the name.
-    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--index").arg("https://test.pypi.org/simple").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--index").arg("https://test.pypi.org/simple"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7345,7 +7403,7 @@ fn add_index() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "iniconfig==2.0.0",
-            "jinja2>=3.1.3",
+            "jinja2>=3.1.4",
             "typing-extensions>=4.12.2",
         ]
 
@@ -7374,6 +7432,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
 
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
@@ -7430,7 +7491,7 @@ fn add_index() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "iniconfig", specifier = "==2.0.0" },
-            { name = "jinja2", specifier = ">=3.1.3", index = "https://test.pypi.org/simple" },
+            { name = "jinja2", specifier = ">=3.1.4", index = "https://test.pypi.org/simple" },
             { name = "typing-extensions", specifier = ">=4.12.2" },
         ]
 

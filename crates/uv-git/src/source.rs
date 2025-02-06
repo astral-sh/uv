@@ -22,6 +22,8 @@ pub struct GitSource {
     git: GitUrl,
     /// The HTTP client to use for fetching.
     client: ClientWithMiddleware,
+    /// Whether to disable SSL verification.
+    disable_ssl: bool,
     /// The path to the Git source database.
     cache: PathBuf,
     /// The reporter to use for this source.
@@ -37,9 +39,19 @@ impl GitSource {
     ) -> Self {
         Self {
             git,
+            disable_ssl: false,
             client: client.into(),
             cache: cache.into(),
             reporter: None,
+        }
+    }
+
+    /// Disable SSL verification for this [`GitSource`].
+    #[must_use]
+    pub fn dangerous(self) -> Self {
+        Self {
+            disable_ssl: true,
+            ..self
         }
     }
 
@@ -96,6 +108,7 @@ impl GitSource {
                     &self.git.reference,
                     locked_rev.map(GitOid::from),
                     &self.client,
+                    self.disable_ssl,
                 )?;
 
                 (db, actual_rev, task)
@@ -120,7 +133,7 @@ impl GitSource {
         // Report the checkout operation to the reporter.
         if let Some(task) = task {
             if let Some(reporter) = self.reporter.as_ref() {
-                reporter.on_checkout_complete(remote.url(), short_id.as_str(), task);
+                reporter.on_checkout_complete(remote.url(), actual_rev.as_str(), task);
             }
         }
 

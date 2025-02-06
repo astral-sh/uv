@@ -71,7 +71,7 @@ hello = "example:app"
 ### Plugin entry points
 
 Projects may define entry points for plugin discovery in the
-[`\[project.entry-points\]`](https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins/#using-package-metadata)
+[`[project.entry-points]`](https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins/#using-package-metadata)
 table of the `pyproject.toml`.
 
 For example, to register the `example-plugin-a` package as a plugin for `example`:
@@ -190,8 +190,10 @@ To target this environment, you'd export `UV_PROJECT_ENVIRONMENT=/usr/local`.
 
 !!! note
 
-    uv does not read the `VIRTUAL_ENV` environment variable during project operations. A warning
-    will be displayed if `VIRTUAL_ENV` is set to a different path than the project's environment.
+    By default, uv does not read the `VIRTUAL_ENV` environment variable during project operations.
+    A warning will be displayed if `VIRTUAL_ENV` is set to a different path than the project's
+    environment. The `--active` flag can be used to opt-in to respecting `VIRTUAL_ENV`. The
+    `--no-active` flag can be used to silence the warning.
 
 ## Limited resolution environments
 
@@ -317,7 +319,7 @@ You could run the following sequence of commands to sync `flash-attn`:
 
 ```console
 $ uv venv
-$ uv pip install torch
+$ uv pip install torch setuptools
 $ uv sync
 ```
 

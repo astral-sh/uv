@@ -30,7 +30,7 @@ use uv_configuration::{
     SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl};
-use uv_install_wheel::linker::LinkMode;
+use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep508::{ExtraName, RequirementOrigin};
 use uv_pypi_types::{Requirement, SupportedEnvironments};
@@ -194,12 +194,14 @@ pub(crate) struct InitSettings {
     pub(crate) name: Option<PackageName>,
     pub(crate) package: bool,
     pub(crate) kind: InitKind,
+    pub(crate) bare: bool,
     pub(crate) description: Option<String>,
+    pub(crate) no_description: bool,
     pub(crate) vcs: Option<VersionControlSystem>,
     pub(crate) build_backend: Option<ProjectBuildBackend>,
     pub(crate) no_readme: bool,
     pub(crate) author_from: Option<AuthorFrom>,
-    pub(crate) no_pin_python: bool,
+    pub(crate) pin_python: bool,
     pub(crate) no_workspace: bool,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -215,17 +217,21 @@ impl InitSettings {
             r#virtual,
             package,
             no_package,
+            bare,
             app,
             lib,
             script,
             description,
+            no_description,
             vcs,
             build_backend,
             no_readme,
             author_from,
             no_pin_python,
+            pin_python,
             no_workspace,
             python,
+            ..
         } = args;
 
         let kind = match (app, lib, script) {
@@ -243,17 +249,21 @@ impl InitSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
+        let no_description = no_description || (bare && description.is_none());
+
         Self {
             path,
             name,
             package,
             kind,
+            bare,
             description,
-            vcs,
+            no_description,
+            vcs: vcs.or(bare.then_some(VersionControlSystem::None)),
             build_backend,
-            no_readme,
+            no_readme: no_readme || bare,
             author_from,
-            no_pin_python,
+            pin_python: flag(pin_python, no_pin_python).unwrap_or(!bare),
             no_workspace,
             python: python.and_then(Maybe::into_option),
             install_mirrors,
@@ -279,6 +289,7 @@ pub(crate) struct RunSettings {
     pub(crate) all_packages: bool,
     pub(crate) package: Option<PackageName>,
     pub(crate) no_project: bool,
+    pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -316,6 +327,8 @@ impl RunSettings {
             with_editable,
             with_requirements,
             isolated,
+            active,
+            no_active,
             no_sync,
             locked,
             frozen,
@@ -378,6 +391,7 @@ impl RunSettings {
             package,
             no_project,
             no_sync,
+            active: flag(active, no_active),
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
@@ -941,6 +955,7 @@ impl PythonPinSettings {
 pub(crate) struct SyncSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
+    pub(crate) active: Option<bool>,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: DevGroupsSpecification,
     pub(crate) editable: EditableMode,
@@ -979,6 +994,8 @@ impl SyncSettings {
             no_install_package,
             locked,
             frozen,
+            active,
+            no_active,
             installer,
             build,
             refresh,
@@ -999,6 +1016,7 @@ impl SyncSettings {
         Self {
             locked,
             frozen,
+            active: flag(active, no_active),
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 no_extra,
@@ -1088,6 +1106,7 @@ impl LockSettings {
 pub(crate) struct AddSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
+    pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
     pub(crate) packages: Vec<String>,
     pub(crate) requirements: Vec<PathBuf>,
@@ -1127,6 +1146,8 @@ impl AddSettings {
             no_sync,
             locked,
             frozen,
+            active,
+            no_active,
             installer,
             build,
             refresh,
@@ -1198,6 +1219,7 @@ impl AddSettings {
         Self {
             locked,
             frozen,
+            active: flag(active, no_active),
             no_sync,
             packages,
             requirements,
@@ -1228,6 +1250,7 @@ impl AddSettings {
 pub(crate) struct RemoveSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
+    pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
     pub(crate) packages: Vec<PackageName>,
     pub(crate) dependency_type: DependencyType,
@@ -1251,6 +1274,8 @@ impl RemoveSettings {
             no_sync,
             locked,
             frozen,
+            active,
+            no_active,
             installer,
             build,
             refresh,
@@ -1282,6 +1307,7 @@ impl RemoveSettings {
         Self {
             locked,
             frozen,
+            active: flag(active, no_active),
             no_sync,
             packages,
             dependency_type,

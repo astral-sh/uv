@@ -12,7 +12,7 @@ use tracing::debug;
 pub use archive::ArchiveId;
 use uv_cache_info::Timestamp;
 use uv_distribution_types::InstalledDist;
-use uv_fs::{cachedir, directories};
+use uv_fs::{cachedir, directories, LockedFile};
 use uv_normalize::PackageName;
 use uv_pypi_types::ResolutionMetadata;
 
@@ -74,6 +74,12 @@ impl CacheEntry {
     pub fn with_file(&self, file: impl AsRef<Path>) -> Self {
         Self(self.dir().join(file))
     }
+
+    /// Acquire the [`CacheEntry`] as an exclusive lock.
+    pub async fn lock(&self) -> Result<LockedFile, io::Error> {
+        fs_err::create_dir_all(self.dir())?;
+        LockedFile::acquire(self.path(), self.path().display()).await
+    }
 }
 
 impl AsRef<Path> for CacheEntry {
@@ -96,6 +102,12 @@ impl CacheShard {
     #[must_use]
     pub fn shard(&self, dir: impl AsRef<Path>) -> Self {
         Self(self.0.join(dir.as_ref()))
+    }
+
+    /// Acquire the cache entry as an exclusive lock.
+    pub async fn lock(&self) -> Result<LockedFile, io::Error> {
+        fs_err::create_dir_all(self.as_ref())?;
+        LockedFile::acquire(self.join(".lock"), self.display()).await
     }
 }
 
@@ -781,7 +793,7 @@ impl CacheBucket {
         match self {
             // Note that when bumping this, you'll also need to bump it
             // in crates/uv/tests/cache_prune.rs.
-            Self::SourceDistributions => "sdists-v6",
+            Self::SourceDistributions => "sdists-v7",
             Self::FlatIndex => "flat-index-v2",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v4",

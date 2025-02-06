@@ -387,15 +387,18 @@ enum Security {
 impl BaseClient {
     /// Selects the appropriate client based on the host's trustworthiness.
     pub fn for_host(&self, url: &Url) -> &ClientWithMiddleware {
-        if self
-            .allow_insecure_host
-            .iter()
-            .any(|allow_insecure_host| allow_insecure_host.matches(url))
-        {
+        if self.disable_ssl(url) {
             &self.dangerous_client
         } else {
             &self.client
         }
+    }
+
+    /// Returns `true` if the host is trusted to use the insecure client.
+    pub fn disable_ssl(&self, url: &Url) -> bool {
+        self.allow_insecure_host
+            .iter()
+            .any(|allow_insecure_host| allow_insecure_host.matches(url))
     }
 
     /// The configured client timeout, in seconds.
@@ -456,7 +459,7 @@ impl RetryableStrategy for UvRetryableStrategy {
 ///
 /// These cases should be safe to retry with [`Retryable::Transient`].
 pub fn is_extended_transient_error(err: &dyn Error) -> bool {
-    trace!("Attempting to retry error: {err:?}");
+    trace!("Considering retry of error: {err:?}");
 
     if let Some(io) = find_source::<std::io::Error>(&err) {
         if io.kind() == std::io::ErrorKind::ConnectionReset

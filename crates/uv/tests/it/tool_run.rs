@@ -241,9 +241,13 @@ fn tool_run_suggest_valid_commands() {
 
 #[test]
 fn tool_run_warn_executable_not_in_from() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    // FastAPI 0.111 is only available from this date onwards.
+    let context = TestContext::new("3.12")
+        .with_exclude_newer("2024-05-04T00:00:00Z")
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
+
     let mut filters = context.filters();
     filters.push(("\\+ uvloop(.+)\n ", ""));
     // Strip off the `fastapi` command output.
@@ -253,8 +257,6 @@ fn tool_run_warn_executable_not_in_from() {
         .arg("--from")
         .arg("fastapi")
         .arg("fastapi")
-        .env(EnvVars::UV_EXCLUDE_NEWER, "2024-05-04T00:00:00Z") // TODO: Remove this once EXCLUDE_NEWER is bumped past 2024-05-04
-        // (FastAPI 0.111 is only available from this date onwards)
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: false
@@ -1393,5 +1395,193 @@ fn tool_run_latest() {
     pytest 7.0.0
 
     ----- stderr -----
+    "###);
+}
+
+#[test]
+fn tool_run_python() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python")
+        .arg("-c")
+        .arg("print('Hello, world!')"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved in [TIME]
+    "###);
+}
+
+#[test]
+fn tool_run_python_at_version() {
+    let context = TestContext::new_with_versions(&["3.12", "3.11"])
+        .with_filtered_counts()
+        .with_filtered_python_sources();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+            .arg("python@3.12")
+            .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python@3.11")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    "###);
+
+    // Request a version via `-p`
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("-p")
+        .arg("3.11")
+        .arg("python")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    "###);
+
+    // Request a version in the tool and `-p`
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("-p")
+        .arg("3.12")
+        .arg("python@3.11")
+        .arg("--version"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Received multiple Python version requests: `3.12` and `3.11`
+    "###);
+
+    // Request a version that does not exist
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python@3.12.99"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python 3.12.[X] in [PYTHON SOURCES]
+    "###);
+
+    // Request an invalid version
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python@3.300"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+    
+    ----- stderr -----
+    error: Invalid version request: 3.300
+    "###);
+
+    // Request `@latest` (not yet supported)
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python@latest")
+        .arg("--version"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Requesting the 'latest' Python version is not yet supported
+    "###);
+}
+
+#[test]
+fn tool_run_python_from() {
+    let context = TestContext::new_with_versions(&["3.12", "3.11"])
+        .with_filtered_counts()
+        .with_filtered_python_sources();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("python")
+        .arg("python")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("python@3.11")
+        .arg("python")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("python>=3.12")
+        .arg("python")
+        .arg("--version"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Using `--from python<specifier>` is not supported. Use `python@<version>` instead.
     "###);
 }

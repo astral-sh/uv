@@ -1032,6 +1032,83 @@ fn allow_incompatibilities() -> Result<()> {
 }
 
 #[test]
+fn install_extras() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Request extras for an editable path
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--all-extras")
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file. Use `<dir>[extra]` syntax or `-r <file>` instead.
+    "###
+    );
+
+    // Request extras for a source tree
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--all-extras")
+        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file. Use `package[extra]` syntax instead.
+    "###
+    );
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==3.7.0")?;
+
+    // Request extras for a requirements file
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--all-extras")
+        .arg("-r").arg("requirements.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file. Use `package[extra]` syntax instead.
+    "###
+    );
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "project"
+version = "0.1.0"
+dependencies = ["anyio==3.7.0"]
+"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--all-extras")
+        .arg("-r").arg("pyproject.toml"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
 fn install_editable() {
     let context = TestContext::new("3.12");
 
@@ -1302,6 +1379,60 @@ fn install_editable_pep_508_requirements_txt() -> Result<()> {
     "###
     );
 
+    requirements_txt.write_str(&indoc::formatdoc! {r"
+        --editable black[d] @ file://{workspace_root}/scripts/packages/black_editable
+        ",
+        workspace_root = context.workspace_root.simplified_display(),
+    })?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    requirements_txt.write_str(&indoc::formatdoc! {r"
+        --editable=black[d] @ file://{workspace_root}/scripts/packages/black_editable
+        ",
+        workspace_root = context.workspace_root.simplified_display(),
+    })?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    requirements_txt.write_str(&indoc::formatdoc! {r"
+        --editable= black[d] @ file://{workspace_root}/scripts/packages/black_editable
+        ",
+        workspace_root = context.workspace_root.simplified_display(),
+    })?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
     Ok(())
 }
 
@@ -1557,10 +1688,9 @@ fn install_no_index_version() {
 /// Ref: <https://github.com/astral-sh/uv/issues/1600>
 #[test]
 fn install_extra_index_url_has_priority() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2024-03-09T00:00:00Z");
 
     uv_snapshot!(context.pip_install()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg("https://test.pypi.org/simple")
         .arg("--extra-index-url")
@@ -1573,9 +1703,7 @@ fn install_extra_index_url_has_priority() {
         // the fix, uv will check pypi.org first since it is given
         // priority via --extra-index-url.
         .arg("black==24.2.0")
-        .arg("--no-deps")
-        .arg("--exclude-newer")
-        .arg("2024-03-09"), @r###"
+        .arg("--no-deps"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2400,7 +2528,7 @@ fn only_binary_editable_setup_py() {
 /// don't propagate the `--prerelease` flag to the source distribution build regardless.
 #[test]
 fn no_prerelease_hint_source_builds() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2018-10-08");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -2415,7 +2543,7 @@ fn no_prerelease_hint_source_builds() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.pip_install().arg(".").env(EnvVars::UV_EXCLUDE_NEWER, "2018-10-08"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install().arg("."), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4445,12 +4573,11 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
 /// Ref: <https://github.com/astral-sh/uv/issues/2276>
 #[test]
 fn install_utf16le_requirements() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_binary(&utf8_to_utf16_with_bom_le("tomli<=2.0.1"))?;
 
     uv_snapshot!(context.pip_install()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("-r")
         .arg("requirements.txt"), @r###"
     success: true
@@ -4472,12 +4599,11 @@ fn install_utf16le_requirements() -> Result<()> {
 /// Ref: <https://github.com/astral-sh/uv/issues/2276>
 #[test]
 fn install_utf16be_requirements() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_binary(&utf8_to_utf16_with_bom_be("tomli<=2.0.1"))?;
 
     uv_snapshot!(context.pip_install()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("-r")
         .arg("requirements.txt"), @r###"
     success: true
@@ -6431,9 +6557,7 @@ fn require_hashes_override() -> Result<()> {
 /// Critically, one package (`requests`) depends on another (`urllib3`).
 #[test]
 fn require_hashes_marker() -> Result<()> {
-    static EXCLUDE_NEWER: &str = "2025-01-01T00:00:00Z";
-
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
 
     // Write to a requirements file.
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -6546,7 +6670,6 @@ fn require_hashes_marker() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.pip_install()
-        .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
         .arg("-r")
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
@@ -7439,6 +7562,106 @@ fn install_relocatable() -> Result<()> {
     Ok(())
 }
 
+/// Install requesting Python 3.12 when the virtual environment uses 3.11
+#[test]
+fn install_incompatible_python_version() {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"]);
+
+    // Initialize the virtual environment with 3.11
+    context.reset_venv();
+
+    // Request Python 3.12; which should fail
+    uv_snapshot!(context.filters(), context.pip_install().arg("-p").arg("3.12")
+        .arg("anyio"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No virtual environment found for Python 3.12; run `uv venv` to create an environment, or pass `--system` to install into a non-virtual environment
+    "###
+    );
+}
+
+/// Install requesting Python 3.12 when the virtual environment uses 3.11, but there's also
+/// a broken interpreter in the PATH.
+#[test]
+#[cfg(unix)]
+fn install_incompatible_python_version_interpreter_broken_in_path() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let context = TestContext::new_with_versions(&["3.11", "3.12"]);
+
+    // Initialize the virtual environment with 3.11
+    context.reset_venv();
+
+    // Create a "broken" Python executable in the test context `bin`
+    let contents = r"#!/bin/sh
+    echo 'error: intentionally broken python executable' >&2
+    exit 1";
+    let python = context
+        .bin_dir
+        .join(format!("python3{}", std::env::consts::EXE_SUFFIX));
+    fs_err::write(&python, contents)?;
+
+    let mut perms = fs_err::metadata(&python)?.permissions();
+    perms.set_mode(0o755);
+    fs_err::set_permissions(&python, perms)?;
+
+    // Put the broken interpreter _before_ the other interpreters in the PATH
+    let path = std::env::join_paths(
+        std::iter::once(context.bin_dir.to_path_buf())
+            .chain(std::env::split_paths(&context.python_path())),
+    )
+    .unwrap();
+
+    // Request Python 3.12, which should fail since the virtual environment does not have a matching
+    // version.
+    // Since the broken interpreter is at the front of the PATH, this query error should be raised
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-p").arg("3.12")
+        .arg("anyio")
+        // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
+        .env("UV_TEST_PYTHON_PATH", path.as_os_str()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to inspect Python interpreter from first executable in the search path at `[BIN]/python3`
+      Caused by: Querying Python at `[BIN]/python3` failed with exit status exit status: 1
+
+    [stderr]
+    error: intentionally broken python executable
+    "###
+    );
+
+    // Put the broken interpreter _after_ the other interpreters in the PATH
+    let path = std::env::join_paths(
+        std::env::split_paths(&context.python_path())
+            .chain(std::iter::once(context.bin_dir.to_path_buf())),
+    )
+    .unwrap();
+
+    // Since the broken interpreter is not at the front of the PATH, the query error should not be
+    // raised
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-p").arg("3.12")
+        .arg("anyio")
+        // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
+        .env("UV_TEST_PYTHON_PATH", path.as_os_str()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No virtual environment found for Python 3.12; run `uv venv` to create an environment, or pass `--system` to install into a non-virtual environment
+    "###
+    );
+
+    Ok(())
+}
+
 /// Include a `build_constraints.txt` file with an incompatible constraint.
 #[test]
 fn incompatible_build_constraint() -> Result<()> {
@@ -8214,14 +8437,11 @@ fn static_metadata_already_installed() -> Result<()> {
 /// `circular-one` was a runtime dependency.
 #[test]
 fn cyclic_build_dependency() {
-    static EXCLUDE_NEWER: &str = "2025-01-02T00:00:00Z";
-
-    let context = TestContext::new("3.13");
+    let context = TestContext::new("3.13").with_exclude_newer("2025-01-02T00:00:00Z");
 
     // Installing with `--no-binary circular-one` should fail, since we'll end up in a recursive
     // build.
     uv_snapshot!(context.filters(), context.pip_install()
-        .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
         .arg("circular-one")
         .arg("--extra-index-url")
         .arg("https://test.pypi.org/simple")
@@ -8243,7 +8463,6 @@ fn cyclic_build_dependency() {
 
     // Installing without `--no-binary circular-one` should succeed, since we can use the wheel.
     uv_snapshot!(context.filters(), context.pip_install()
-        .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
         .arg("circular-one")
         .arg("--extra-index-url")
         .arg("https://test.pypi.org/simple")
@@ -8371,6 +8590,112 @@ fn direct_url_json_direct_url() -> Result<()> {
 
     let direct_url_content = fs_err::read_to_string(direct_url.path())?;
     insta::assert_snapshot!(direct_url_content, @r###"{"url":"https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz","archive_info":{}}"###);
+
+    Ok(())
+}
+
+/// Regression test that we don't discover workspaces with `--no-sources`.
+///
+/// We have a workspace dependency shadowing a PyPI package and using this package's version to
+/// check that by default we respect workspace package, but with `--no-sources`, we ignore them.
+#[test]
+fn no_sources_workspace_discovery() -> Result<()> {
+    let context = TestContext::new("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {
+        r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        dependencies = ["anyio"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv.sources]
+        anyio = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["anyio"]
+        "#
+    })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
+
+    let anyio = context.temp_dir.child("anyio");
+    anyio.child("pyproject.toml").write_str(indoc! {
+        r#"
+        [project]
+        name = "anyio"
+        version = "2.0.0"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#
+    })?;
+    anyio
+        .child("src")
+        .child("anyio")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--upgrade")
+        .arg("--no-sources")
+        .arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 3 packages in [TIME]
+     - anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    // Reverse direction: Check that we switch back to the workspace package with `--upgrade`.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--upgrade")
+        .arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.3.0
+     + anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
+    "###
+    );
 
     Ok(())
 }

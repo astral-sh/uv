@@ -3,6 +3,7 @@ use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::Arc;
 use std::{fmt, io};
 
 use anyhow::{Context, Result};
@@ -16,14 +17,12 @@ use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
-use uv_auth::store_credentials;
 use uv_build_backend::check_direct_build;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildKind, BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints,
-    HashCheckingMode, IndexStrategy, KeyringProviderType, LowerBound, PreviewMode, SourceStrategy,
-    TrustedHost,
+    HashCheckingMode, IndexStrategy, KeyringProviderType, PreviewMode, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_filename::{
@@ -31,7 +30,7 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, SourceDist};
 use uv_fs::{relative_to, Simplified};
-use uv_install_wheel::linker::LinkMode;
+use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_python::{
@@ -496,7 +495,11 @@ async fn build_package(
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
-            store_credentials(index.raw_url(), credentials);
+            let credentials = Arc::new(credentials);
+            uv_auth::store_credentials(index.raw_url(), credentials.clone());
+            if let Some(root_url) = index.root_url() {
+                uv_auth::store_credentials(&root_url, credentials.clone());
+            }
         }
     }
 
@@ -576,7 +579,6 @@ async fn build_package(
         build_options,
         &hasher,
         exclude_newer,
-        LowerBound::Allow,
         sources,
         concurrency,
         preview,

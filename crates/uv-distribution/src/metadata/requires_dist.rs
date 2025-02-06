@@ -4,13 +4,13 @@ use std::slice;
 
 use rustc_hash::FxHashSet;
 
-use uv_configuration::{LowerBound, SourceStrategy};
+use uv_configuration::SourceStrategy;
 use uv_distribution_types::IndexLocations;
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep508::MarkerTree;
 use uv_workspace::dependency_groups::FlatDependencyGroups;
 use uv_workspace::pyproject::{Sources, ToolUvSources};
-use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
+use uv_workspace::{DiscoveryOptions, MemberDiscovery, ProjectWorkspace};
 
 use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
 use crate::Metadata;
@@ -49,21 +49,19 @@ impl RequiresDist {
         git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         sources: SourceStrategy,
-        lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
         // TODO(konsti): Cache workspace discovery.
-        let discovery_options = if let Some(git_member) = &git_member {
-            DiscoveryOptions {
-                stop_discovery_at: Some(
-                    git_member
-                        .fetch_root
-                        .parent()
-                        .expect("git checkout has a parent"),
-                ),
-                ..Default::default()
-            }
-        } else {
-            DiscoveryOptions::default()
+        let discovery_options = DiscoveryOptions {
+            stop_discovery_at: git_member.map(|git_member| {
+                git_member
+                    .fetch_root
+                    .parent()
+                    .expect("git checkout has a parent")
+            }),
+            members: match sources {
+                SourceStrategy::Enabled => MemberDiscovery::default(),
+                SourceStrategy::Disabled => MemberDiscovery::None,
+            },
         };
         let Some(project_workspace) =
             ProjectWorkspace::from_maybe_project_root(install_path, &discovery_options).await?
@@ -71,14 +69,7 @@ impl RequiresDist {
             return Ok(Self::from_metadata23(metadata));
         };
 
-        Self::from_project_workspace(
-            metadata,
-            &project_workspace,
-            git_member,
-            locations,
-            sources,
-            lower_bound,
-        )
+        Self::from_project_workspace(metadata, &project_workspace, git_member, locations, sources)
     }
 
     fn from_project_workspace(
@@ -87,7 +78,6 @@ impl RequiresDist {
         git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
-        lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
@@ -179,7 +169,6 @@ impl RequiresDist {
                                 Some(&group),
                                 locations,
                                 project_workspace.workspace(),
-                                lower_bound,
                                 git_member,
                             )
                             .map(
@@ -224,7 +213,6 @@ impl RequiresDist {
                         group,
                         locations,
                         project_workspace.workspace(),
-                        lower_bound,
                         git_member,
                     )
                     .map(move |requirement| match requirement {
@@ -475,7 +463,7 @@ mod test {
     use indoc::indoc;
     use insta::assert_snapshot;
 
-    use uv_configuration::{LowerBound, SourceStrategy};
+    use uv_configuration::SourceStrategy;
     use uv_distribution_types::IndexLocations;
     use uv_normalize::PackageName;
     use uv_pep508::Requirement;
@@ -508,7 +496,6 @@ mod test {
             None,
             &IndexLocations::default(),
             SourceStrategy::default(),
-            LowerBound::default(),
         )?)
     }
 

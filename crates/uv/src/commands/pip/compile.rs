@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::env;
 use std::path::Path;
+use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
@@ -12,8 +13,8 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification,
-    ExtrasSpecification, IndexStrategy, LowerBound, NoBinary, NoBuild, PreviewMode, Reinstall,
-    SourceStrategy, TrustedHost, Upgrade,
+    ExtrasSpecification, IndexStrategy, NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy,
+    TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -22,7 +23,7 @@ use uv_distribution_types::{
     Origin, UnresolvedRequirementSpecification, Verbatim,
 };
 use uv_fs::Simplified;
-use uv_install_wheel::linker::LinkMode;
+use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pypi_types::{Conflicts, Requirement, SupportedEnvironments};
 use uv_python::{
@@ -292,7 +293,11 @@ pub(crate) async fn pip_compile(
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
-            uv_auth::store_credentials(index.raw_url(), credentials);
+            let credentials = Arc::new(credentials);
+            uv_auth::store_credentials(index.raw_url(), credentials.clone());
+            if let Some(root_url) = index.root_url() {
+                uv_auth::store_credentials(&root_url, credentials.clone());
+            }
         }
     }
 
@@ -356,7 +361,6 @@ pub(crate) async fn pip_compile(
         &build_options,
         &build_hashes,
         exclude_newer,
-        LowerBound::Warn,
         sources,
         concurrency,
         preview,

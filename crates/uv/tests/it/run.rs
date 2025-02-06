@@ -5,7 +5,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{fixture::ChildPath, prelude::*};
 use indoc::indoc;
 use insta::assert_snapshot;
-use predicates::str::contains;
+use predicates::{prelude::predicate, str::contains};
 use std::path::Path;
 use uv_fs::copy_dir_all;
 use uv_python::PYTHON_VERSION_FILENAME;
@@ -1639,7 +1639,7 @@ fn run_group() -> Result<()> {
     warning: `--group foo` has no effect when used alongside `--no-project`
     "###);
 
-    uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("--group").arg("bar").arg("--no-project").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("--group").arg("bar").arg("--no-project").arg("main.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1649,7 +1649,7 @@ fn run_group() -> Result<()> {
 
     ----- stderr -----
     warning: `--group` has no effect when used alongside `--no-project`
-    "###);
+    ");
 
     uv_snapshot!(context.filters(), context.run().arg("--group").arg("dev").arg("--no-project").arg("main.py"), @r###"
     success: true
@@ -2354,7 +2354,7 @@ fn run_from_directory() -> Result<()> {
     3.12.[X]
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=.venv` does not match the project environment path `[PROJECT_VENV]/` and will be ignored
+    warning: `VIRTUAL_ENV=.venv` does not match the project environment path `[PROJECT_VENV]/` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: [PROJECT_VENV]/
     Resolved 1 package in [TIME]
@@ -2370,7 +2370,7 @@ fn run_from_directory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=.venv` does not match the project environment path `[PROJECT_VENV]/` and will be ignored
+    warning: `VIRTUAL_ENV=.venv` does not match the project environment path `[PROJECT_VENV]/` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: [PROJECT_VENV]/
     Resolved 1 package in [TIME]
@@ -2387,7 +2387,7 @@ fn run_from_directory() -> Result<()> {
     3.12.[X]
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
@@ -2402,7 +2402,7 @@ fn run_from_directory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
@@ -2417,7 +2417,7 @@ fn run_from_directory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
@@ -2446,7 +2446,7 @@ fn run_from_directory() -> Result<()> {
     3.10.[X]
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=.venv` does not match the project environment path `[PROJECT_VENV]/` and will be ignored
+    warning: `VIRTUAL_ENV=.venv` does not match the project environment path `[PROJECT_VENV]/` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
     Creating virtual environment at: [PROJECT_VENV]/
     Resolved 1 package in [TIME]
@@ -2462,7 +2462,7 @@ fn run_from_directory() -> Result<()> {
     3.10.[X]
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
@@ -3266,7 +3266,7 @@ fn run_gui_script_explicit_windows() -> Result<()> {
         if not executable.startswith("pythonw"):
             print(f"Error: Expected pythonw.exe but got: {executable}", file=sys.stderr)
             sys.exit(1)
-        
+
         print(f"Using executable: {executable}", file=sys.stderr)
     "#})?;
 
@@ -3344,6 +3344,195 @@ fn run_gui_script_explicit_unix() -> Result<()> {
     Resolved in [TIME]
     Audited in [TIME]
     Using executable: python3
+    "###);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn run_linked_environment_path() -> Result<()> {
+    use anyhow::Ok;
+
+    let context = TestContext::new("3.12")
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["black"]
+        "#,
+    )?;
+
+    // Create a link from `target` -> virtual environment
+    fs_err::os::unix::fs::symlink(&context.venv, context.temp_dir.child("target"))?;
+
+    // Running `uv sync` should use the environment at `target``
+    uv_snapshot!(context.filters(), context.sync()
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "target"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    "###);
+
+    // `sys.prefix` and `sys.executable` should be from the `target` directory
+    uv_snapshot!(context.filters(), context.run()
+        .env_remove("VIRTUAL_ENV")  // Ignore the test context's active virtual environment
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "target")
+        .arg("python").arg("-c").arg("import sys; print(sys.prefix); print(sys.executable)"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/target
+    [TEMP_DIR]/target/[BIN]/python
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Audited 6 packages in [TIME]
+    "###);
+
+    // And, similarly, the entrypoint should use `target`
+    let black_entrypoint = context.read("target/bin/black");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            black_entrypoint, @r###"
+        #![TEMP_DIR]/target/[BIN]/python
+        # -*- coding: utf-8 -*-
+        import sys
+        from black import patched_main
+        if __name__ == "__main__":
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
+            sys.exit(patched_main())
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn run_active_environment() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Running `uv run` with `VIRTUAL_ENV` should warn
+    uv_snapshot!(context.filters(), context.run()
+        .arg("python").arg("--version")
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    warning: `VIRTUAL_ENV=foo` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    // Using `--no-active` should silence the warning
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--no-active")
+        .arg("python").arg("--version")
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    context
+        .temp_dir
+        .child(".venv")
+        .assert(predicate::path::is_dir());
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::missing());
+
+    // Using `--active` should create the environment
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--active")
+        .arg("python").arg("--version")
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: foo
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::is_dir());
+
+    // Requesting a different Python version should invalidate the environment
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--active")
+        .arg("-p").arg("3.12")
+        .arg("python").arg("--version")
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: foo
+    Creating virtual environment at: foo
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
     "###);
 
     Ok(())
@@ -3772,6 +3961,161 @@ fn run_with_group_conflict() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
+    "###);
+
+    Ok(())
+}
+
+/// Test that a signal n makes the process exit with code 128+n.
+#[cfg(unix)]
+#[test]
+fn exit_status_signal() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let script = context.temp_dir.child("segfault.py");
+    script.write_str(indoc! {r"
+        import os
+        os.kill(os.getpid(), 11)
+    "})?;
+    let status = context.run().arg(script.path()).status()?;
+    assert_eq!(status.code().expect("a status code"), 139);
+    Ok(())
+}
+
+#[test]
+fn run_repeated() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.13"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = ["iniconfig"]
+        "#
+    })?;
+
+    // Import `iniconfig` in the context of the project.
+    uv_snapshot!(
+        context.filters(),
+        context.run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    "###);
+
+    // Re-running shouldn't require reinstalling `typing-extensions`, since the environment is cached.
+    uv_snapshot!(
+        context.filters(),
+        context.run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    Resolved 1 package in [TIME]
+    "###);
+
+    // Re-running as a tool shouldn't require reinstalling `typing-extensions`, since the environment is cached.
+    uv_snapshot!(
+        context.filters(),
+        context.tool_run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Traceback (most recent call last):
+      File "<string>", line 1, in <module>
+        import typing_extensions; import iniconfig
+                                  ^^^^^^^^^^^^^^^^
+    ModuleNotFoundError: No module named 'iniconfig'
+    "###);
+
+    Ok(())
+}
+
+/// See: <https://github.com/astral-sh/uv/issues/11117>
+#[test]
+fn run_without_overlay() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.13"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = ["iniconfig"]
+        "#
+    })?;
+
+    // Import `iniconfig` in the context of the project.
+    uv_snapshot!(
+        context.filters(),
+        context.run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    "###);
+
+    // Import `iniconfig` in the context of a `tool run` command, which should fail.
+    uv_snapshot!(
+        context.filters(),
+        context.tool_run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Traceback (most recent call last):
+      File "<string>", line 1, in <module>
+        import typing_extensions; import iniconfig
+                                  ^^^^^^^^^^^^^^^^
+    ModuleNotFoundError: No module named 'iniconfig'
+    "###);
+
+    // Re-running in the context of the project should reset the overlay.
+    uv_snapshot!(
+        context.filters(),
+        context.run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    Resolved 1 package in [TIME]
     "###);
 
     Ok(())

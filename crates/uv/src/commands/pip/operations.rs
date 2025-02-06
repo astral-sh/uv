@@ -26,7 +26,7 @@ use uv_distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, Name, Resolution,
 };
 use uv_fs::Simplified;
-use uv_install_wheel::linker::LinkMode;
+use uv_install_wheel::LinkMode;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
@@ -60,13 +60,27 @@ pub(crate) async fn read_requirements(
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
     // return an error.
     if !extras.is_empty() && !requirements.iter().any(RequirementsSource::allows_extras) {
+        let hint = if requirements.iter().any(|source| {
+            matches!(
+                source,
+                RequirementsSource::Editable(_) | RequirementsSource::SourceTree(_)
+            )
+        }) {
+            "Use `<dir>[extra]` syntax or `-r <file>` instead."
+        } else {
+            "Use `package[extra]` syntax instead."
+        };
         return Err(anyhow!(
-            "Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file."
+            "Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file. {hint}"
         )
         .into());
     }
     if !groups.is_empty() && !requirements.iter().any(RequirementsSource::allows_groups) {
-        return Err(anyhow!("Requesting groups requires a `pyproject.toml`.").into());
+        let flags = groups.history().as_flags_pretty().join(" ");
+        return Err(anyhow!(
+            "Requesting groups requires a `pyproject.toml`. Requested via: {flags}"
+        )
+        .into());
     }
 
     // Read all requirements from the provided sources.

@@ -1,22 +1,22 @@
 use tracing::debug;
 
-use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
-use crate::commands::project::install_target::InstallTarget;
-use crate::commands::project::{
-    resolve_environment, sync_environment, EnvironmentSpecification, ProjectError,
-};
-use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, hash_digest};
 use uv_client::Connectivity;
 use uv_configuration::{
     Concurrency, DevGroupsManifest, ExtrasSpecification, InstallOptions, PreviewMode, TrustedHost,
 };
-use uv_dispatch::SharedState;
 use uv_distribution_types::{Name, Resolution};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::Installable;
+
+use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
+use crate::commands::project::install_target::InstallTarget;
+use crate::commands::project::{
+    resolve_environment, sync_environment, EnvironmentSpecification, PlatformState, ProjectError,
+};
+use crate::printer::Printer;
+use crate::settings::ResolverInstallerSettings;
 
 /// A [`PythonEnvironment`] stored in the cache.
 #[derive(Debug)]
@@ -34,7 +34,7 @@ impl CachedEnvironment {
         spec: EnvironmentSpecification<'_>,
         interpreter: &Interpreter,
         settings: &ResolverInstallerSettings,
-        state: &SharedState,
+        state: &PlatformState,
         resolve: Box<dyn ResolveLogger>,
         install: Box<dyn InstallLogger>,
         installer_metadata: bool,
@@ -93,7 +93,7 @@ impl CachedEnvironment {
         install_options: InstallOptions,
         settings: &ResolverInstallerSettings,
         interpreter: &Interpreter,
-        state: &SharedState,
+        state: &PlatformState,
         install: Box<dyn InstallLogger>,
         installer_metadata: bool,
         connectivity: Connectivity,
@@ -143,7 +143,7 @@ impl CachedEnvironment {
         resolution: Resolution,
         interpreter: Interpreter,
         settings: &ResolverInstallerSettings,
-        state: &SharedState,
+        state: &PlatformState,
         install: Box<dyn InstallLogger>,
         installer_metadata: bool,
         connectivity: Connectivity,
@@ -216,6 +216,36 @@ impl CachedEnvironment {
         Ok(Self(PythonEnvironment::from_root(root, cache)?))
     }
 
+    /// Set the ephemeral overlay for a Python environment.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn set_overlay(&self, contents: impl AsRef<[u8]>) -> Result<(), ProjectError> {
+        let site_packages = self
+            .0
+            .site_packages()
+            .next()
+            .ok_or(ProjectError::NoSitePackages)?;
+        let overlay_path = site_packages.join("_uv_ephemeral_overlay.pth");
+        fs_err::write(overlay_path, contents)?;
+        Ok(())
+    }
+
+    /// Clear the ephemeral overlay for a Python environment, if it exists.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn clear_overlay(&self) -> Result<(), ProjectError> {
+        let site_packages = self
+            .0
+            .site_packages()
+            .next()
+            .ok_or(ProjectError::NoSitePackages)?;
+        let overlay_path = site_packages.join("_uv_ephemeral_overlay.pth");
+        match fs_err::remove_file(overlay_path) {
+            Ok(()) => (),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => (),
+            Err(err) => return Err(ProjectError::OverlayRemoval(err)),
+        }
+        Ok(())
+    }
+
     /// Convert the [`CachedEnvironment`] into an [`Interpreter`].
     pub(crate) fn into_interpreter(self) -> Interpreter {
         self.0.into_interpreter()
@@ -230,18 +260,24 @@ impl CachedEnvironment {
         interpreter: &Interpreter,
         cache: &Cache,
     ) -> Result<Interpreter, uv_python::Error> {
-        if let Some(interpreter) = interpreter.to_base_interpreter(cache)? {
+        let base_python = if cfg!(unix) {
+            interpreter.find_base_python()?
+        } else {
+            interpreter.to_base_python()?
+        };
+        if base_python == interpreter.sys_executable() {
             debug!(
                 "Caching via base interpreter: `{}`",
                 interpreter.sys_executable().display()
             );
-            Ok(interpreter)
-        } else {
-            debug!(
-                "Caching via interpreter: `{}`",
-                interpreter.sys_executable().display()
-            );
             Ok(interpreter.clone())
+        } else {
+            let base_interpreter = Interpreter::query(base_python, cache)?;
+            debug!(
+                "Caching via base interpreter: `{}`",
+                base_interpreter.sys_executable().display()
+            );
+            Ok(base_interpreter)
         }
     }
 }
