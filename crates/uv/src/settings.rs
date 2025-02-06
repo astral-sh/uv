@@ -19,8 +19,8 @@ use uv_cli::{
     AddArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
     PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
-    PythonListFormat, PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs,
-    ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs,
+    PythonListFormat, PythonPinArgs, RemoveArgs, RunArgs, SyncArgs, ToolDirArgs, ToolInstallArgs,
+    ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, ValidatedPythonUninstallArgs, VenvArgs,
 };
 use uv_client::Connectivity;
 use uv_configuration::{
@@ -863,10 +863,10 @@ impl PythonUninstallSettings {
     /// Resolve the [`PythonUninstallSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(
-        args: PythonUninstallArgs,
+        args: ValidatedPythonUninstallArgs,
         _filesystem: Option<FilesystemOptions>,
     ) -> Self {
-        let PythonUninstallArgs {
+        let ValidatedPythonUninstallArgs {
             install_dir,
             targets,
             all,

@@ -1177,7 +1177,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Commands::Python(PythonNamespace {
             command: PythonCommand::Uninstall(args),
         }) => {
-            // Resolve the settings from the command-line arguments and workspace configuration.
+            // Custom Validation the cli PythonUninstallArgs.
+            let args = args.validate()?;
             let args = settings::PythonUninstallSettings::resolve(args, filesystem);
             show_settings!(args);
 
