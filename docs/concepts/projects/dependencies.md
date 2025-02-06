@@ -633,8 +633,8 @@ lint = [
 ]
 ```
 
-Once groups are defined, the `--all-groups`, `--no-default-groups`, `--group`, `--only-group`,
-and `--no-group` options can be used to include or exclude their dependencies.
+Once groups are defined, the `--all-groups`, `--no-default-groups`, `--group`, `--only-group`, and
+`--no-group` options can be used to include or exclude their dependencies.
 
 !!! tip
 
