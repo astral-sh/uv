@@ -3091,6 +3091,13 @@ pub struct SyncArgs {
     #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "locked")]
     pub frozen: bool,
 
+    /// Perform a dry run, without writing the lockfile or modifying the project environment.
+    ///
+    /// In dry-run mode, uv will resolve the project's dependencies and report on the resulting
+    /// changes to both the lockfile and the project environment, but will not modify either.
+    #[arg(long, conflicts_with = "locked", conflicts_with = "frozen")]
+    pub dry_run: bool,
+
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
 

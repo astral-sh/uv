@@ -957,6 +957,7 @@ impl PythonPinSettings {
 pub(crate) struct SyncSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
+    pub(crate) dry_run: bool,
     pub(crate) active: Option<bool>,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: DevGroupsSpecification,
@@ -998,6 +999,7 @@ impl SyncSettings {
             frozen,
             active,
             no_active,
+            dry_run,
             installer,
             build,
             refresh,
@@ -1018,6 +1020,7 @@ impl SyncSettings {
         Self {
             locked,
             frozen,
+            dry_run,
             active: flag(active, no_active),
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),

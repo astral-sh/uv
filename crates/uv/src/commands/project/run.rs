@@ -47,7 +47,8 @@ use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     default_dependency_groups, validate_project_requires_python, DependencyGroupsTarget,
-    EnvironmentSpecification, ProjectError, ScriptInterpreter, UniversalState, WorkspacePython,
+    EnvironmentSpecification, ProjectEnvironment, ProjectError, ScriptInterpreter, UniversalState,
+    WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::run::run_to_completion;
@@ -639,7 +640,7 @@ pub(crate) async fn run(
             } else {
                 // If we're not isolating the environment, reuse the base environment for the
                 // project.
-                project::get_or_init_environment(
+                ProjectEnvironment::get_or_init(
                     project.workspace(),
                     python.as_deref().map(PythonRequest::parse),
                     &install_mirrors,
@@ -651,9 +652,11 @@ pub(crate) async fn run(
                     no_config,
                     active,
                     cache,
+                    false,
                     printer,
                 )
                 .await?
+                .into_environment()
             };
 
             if no_sync {
@@ -796,6 +799,7 @@ pub(crate) async fn run(
                     native_tls,
                     allow_insecure_host,
                     cache,
+                    false,
                     printer,
                     preview,
                 )
