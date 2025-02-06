@@ -2171,9 +2171,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Build into a temporary directory, to prevent partial builds.
         let tempdir_id = nanoid::nanoid!();
-        let temp_dir = self
-            .build_context
-            .cache().root().join(tempdir_id);
+        let temp_dir = self.build_context.cache().root().join(tempdir_id);
 
         fs_err::tokio::create_dir(&temp_dir)
             .await
