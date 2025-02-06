@@ -3462,7 +3462,9 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
-</dd><dt><code>--editable</code>, <code>-e</code></dt><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
+</dd><dt><code>--editable</code>, <code>-e</code></dt><dd><p>Install the requirements as editable, so changes in the source directory are reflected in the tool</p>
+
+</dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
 

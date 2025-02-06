@@ -3928,9 +3928,6 @@ pub struct ToolInstallArgs {
     /// The package to install commands from.
     pub package: String,
 
-    #[arg(short, long)]
-    pub editable: bool,
-
     /// The package to install commands from.
     ///
     /// This option is provided for parity with `uv tool run`, but is redundant with `package`.
@@ -3941,13 +3938,18 @@ pub struct ToolInstallArgs {
     #[arg(long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
-    /// Include the given packages as editables.
-    #[arg(long)]
-    pub with_editable: Vec<comma::CommaSeparatedRequirements>,
-
     /// Run all requirements listed in the given `requirements.txt` files.
     #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
+
+    /// Install the requirements as editable, so changes in the source directory are reflected in
+    /// the tool.
+    #[arg(short, long)]
+    pub editable: bool,
+
+    /// Include the given packages as editables.
+    #[arg(long)]
+    pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
     /// Constrain versions using the given requirements files.
     ///
