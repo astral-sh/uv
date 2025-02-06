@@ -18,7 +18,7 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
 use uv_build_backend::check_direct_build;
-use uv_cache::{Cache, CacheBucket};
+use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildKind, BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints,
@@ -672,13 +672,15 @@ async fn build_package(
             let reader = fs_err::tokio::File::open(&path).await?;
             let ext = SourceDistExtension::from_path(path.as_path())
                 .map_err(|err| Error::InvalidSourceDistExt(path.user_display().to_string(), err))?;
-            let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::SourceDistributions))?;
-            uv_extract::stream::archive(reader, ext, temp_dir.path()).await?;
+            let tempdir_id = nanoid::nanoid!();
+            let temp_dir = cache.root().join(tempdir_id);
+            fs_err::tokio::create_dir_all(&temp_dir).await?;
+            uv_extract::stream::archive(reader, ext, &temp_dir).await?;
 
             // Extract the top-level directory from the archive.
-            let extracted = match uv_extract::strip_component(temp_dir.path()) {
+            let extracted = match uv_extract::strip_component(&temp_dir) {
                 Ok(top_level) => top_level,
-                Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.path().to_path_buf(),
+                Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir,
                 Err(err) => return Err(err.into()),
             };
 

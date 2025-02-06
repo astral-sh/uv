@@ -108,11 +108,14 @@ jobs:
         run: rustup show
 
       - uses: astral-sh/setup-uv@v5
+        with:
+          version: '0.5.24'
+
       - name: "Install required Python versions"
         run: uv python install
 
-      - name: "Cargo build"
-        run: cargo build --release
+#      - name: "Cargo build"
+#        run: cargo build --release
 
       - name: "Clone basedpyright"
         run: git clone https://github.com/DetachHead/basedpyright.git
@@ -145,7 +148,7 @@ jobs:
         working-directory: basedpyright
         continue-on-error: true
         run: |
-          ../target/release/uv build --config-setting regenerate_docstubs=false --cache-dir foo
+          uv build --config-setting regenerate_docstubs=false --cache-dir foo
 
       - uses: actions/upload-artifact@v4
         with:

@@ -4503,6 +4503,7 @@ dependencies = [
  "itertools 0.14.0",
  "jiff",
  "miette",
+ "nanoid",
  "nix",
  "owo-colors",
  "petgraph",
