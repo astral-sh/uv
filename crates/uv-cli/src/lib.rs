@@ -4505,16 +4505,18 @@ impl PythonUninstallArgs {
     pub fn validate(mut self) -> Result<ValidatedPythonUninstallArgs, clap::Error> {
         // Update targets from the environment if needed
         self.get_env_targets();
-        
+
         if self.targets.is_none() && !self.all {
+            // Generate a clap Error if no targets are provided through cli or env and `--all` isn't set. A dummy command is instantiated to format the error
             const ERRORMESSAGE: &str = "the following required arguments were not provided:\n  \x1b[36m<TARGETS>...\x1b[0m";
-            let override_usage_str = "uv python uninstall \x1b[36m<TARGETS>...\x1b[0m";
-            let mut uv_cmd = Command::new("_uv")
+            let override_usage_str =
+                "uv python uninstall \x1b[36m--install-dir <INSTALL_DIR> <TARGETS>...\x1b[0m";
+            let mut dummy_cmd = Command::new("dummy_for_styling")
                 .override_usage(override_usage_str)
                 .styles(STYLES);
 
             let err: Error =
-                Error::raw(ErrorKind::MissingRequiredArgument, ERRORMESSAGE).format(&mut uv_cmd);
+                Error::raw(ErrorKind::MissingRequiredArgument, ERRORMESSAGE).format(&mut dummy_cmd);
             err.exit();
         }
         Ok(ValidatedPythonUninstallArgs {

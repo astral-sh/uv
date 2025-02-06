@@ -1046,18 +1046,16 @@ fn python_install_default_from_env() {
     "###);
 
     // We should ignore `UV_PYTHON` here
-    uv_snapshot!(context.filters(), context.python_uninstall().arg("--all").env(EnvVars::UV_PYTHON, "3.11"), @r###"
-    success: false
-    exit_code: 2
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--all").env(EnvVars::UV_PYTHON, "3.11"), @r"
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: the argument '--all' cannot be used with '<TARGETS>...'
-
-    Usage: uv python uninstall --all --install-dir <INSTALL_DIR> <TARGETS>...
-
-    For more information, try '--help'.
-    "###);
+    Searching for Python installations
+    Uninstalled Python 3.12.8 in [TIME]
+     - cpython-3.12.8-[PLATFORM]
+    ");
 }
 
 #[cfg(target_os = "macos")]

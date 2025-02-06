@@ -5309,12 +5309,12 @@ Uninstall Python versions
 <h3 class="cli-reference">Usage</h3>
 
 ```
-uv python uninstall [OPTIONS] <TARGETS>...
+uv python uninstall [OPTIONS] [TARGETS]...
 ```
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt><code>TARGETS</code></dt><dd><p>The Python version(s) to uninstall. See <a href="#uv-python">uv python</a> to view supported request formats</p>
+<dl class="cli-reference"><dt><code>TARGETS</code></dt><dd><p>The Python version(s) to uninstall. targets can also be set through the <code>UV_PYTHON</code> env variable, however the clap env functionality is not used here to avoid conflicts with the <code>--all</code> flag if target set through env. See <a href="#uv-python">uv python</a> to view supported request formats</p>
 
 </dd></dl>
 
