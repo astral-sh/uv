@@ -11,6 +11,7 @@ use tracing::debug;
 
 pub use archive::ArchiveId;
 use uv_cache_info::Timestamp;
+use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::InstalledDist;
 use uv_fs::{cachedir, directories, LockedFile};
 use uv_normalize::PackageName;
@@ -355,10 +356,20 @@ impl Cache {
                 if bucket.is_dir() {
                     for entry in walkdir::WalkDir::new(bucket) {
                         let entry = entry?;
-                        if entry.file_type().is_symlink() {
-                            if let Ok(target) = fs_err::canonicalize(entry.path()) {
-                                references.insert(target);
-                            }
+
+                        // Identify entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
+                        let Some(filename) = entry
+                            .path()
+                            .file_name()
+                            .and_then(|file_name| file_name.to_str())
+                        else {
+                            continue;
+                        };
+                        if WheelFilename::from_stem(filename).is_err() {
+                            continue;
+                        }
+                        if let Ok(target) = uv_fs::resolve_symlink(entry.path()) {
+                            references.insert(target);
                         }
                     }
                 }
@@ -380,10 +391,20 @@ impl Cache {
                 if bucket.is_dir() {
                     for entry in walkdir::WalkDir::new(bucket) {
                         let entry = entry?;
-                        if entry.file_type().is_symlink() {
-                            if let Ok(target) = fs_err::canonicalize(entry.path()) {
-                                references.insert(target);
-                            }
+
+                        // Identify entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
+                        let Some(filename) = entry
+                            .path()
+                            .file_name()
+                            .and_then(|file_name| file_name.to_str())
+                        else {
+                            continue;
+                        };
+                        if WheelFilename::from_stem(filename).is_err() {
+                            continue;
+                        }
+                        if let Ok(target) = uv_fs::resolve_symlink(entry.path()) {
+                            references.insert(target);
                         }
                     }
                 }
@@ -483,19 +504,29 @@ impl Cache {
                     continue;
                 }
 
-                // Remove any symlinks and directories in the revision. The symlinks represent
-                // unzipped wheels, and the directories represent the source distribution archives.
+                // Remove everything except the built wheel archive and the metadata.
                 for entry in fs_err::read_dir(entry.path())? {
                     let entry = entry?;
                     let path = entry.path();
 
-                    if path.is_dir() {
-                        debug!("Removing unzipped built wheel entry: {}", path.display());
-                        summary += rm_rf(path)?;
-                    } else if path.is_symlink() {
-                        debug!("Removing unzipped built wheel entry: {}", path.display());
-                        summary += rm_rf(path)?;
+                    // Retain the resolved metadata (`metadata.msgpack`).
+                    if path
+                        .file_name()
+                        .is_some_and(|file_name| file_name == "metadata.msgpack")
+                    {
+                        continue;
                     }
+
+                    // Retain any built wheel archives.
+                    if path
+                        .extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
+                    {
+                        continue;
+                    }
+
+                    debug!("Removing unzipped built wheel entry: {}", path.display());
+                    summary += rm_rf(path)?;
                 }
             }
         }
@@ -508,10 +539,20 @@ impl Cache {
             if bucket.is_dir() {
                 for entry in walkdir::WalkDir::new(bucket) {
                     let entry = entry?;
-                    if entry.file_type().is_symlink() {
-                        if let Ok(target) = fs_err::canonicalize(entry.path()) {
-                            references.insert(target);
-                        }
+
+                    // Identify entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
+                    let Some(filename) = entry
+                        .path()
+                        .file_name()
+                        .and_then(|file_name| file_name.to_str())
+                    else {
+                        continue;
+                    };
+                    if WheelFilename::from_stem(filename).is_err() {
+                        continue;
+                    }
+                    if let Ok(target) = uv_fs::resolve_symlink(entry.path()) {
+                        references.insert(target);
                     }
                 }
             }
@@ -691,7 +732,7 @@ pub enum CacheBucket {
     ///
     /// ...may be cached as:
     /// ```text
-    /// built-wheels-v3/
+    /// built-wheels-v4/
     /// ├── git
     /// │   └── 2122faf3e081fb7a
     /// │       └── 7a2d650a4a7b4d04
@@ -793,7 +834,7 @@ impl CacheBucket {
         match self {
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/it/cache_prune.rs`.
-            Self::SourceDistributions => "sdists-v7",
+            Self::SourceDistributions => "sdists-v8",
             Self::FlatIndex => "flat-index-v2",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v4",
@@ -807,7 +848,7 @@ impl CacheBucket {
             // in `crates/uv-distribution/src/archive.rs`.
             Self::Archive => "archive-v0",
             Self::Builds => "builds-v0",
-            Self::Environments => "environments-v1",
+            Self::Environments => "environments-v2",
         }
     }
 

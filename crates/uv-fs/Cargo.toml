@@ -37,7 +37,6 @@ rustix = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 backon = { workspace = true }
-junction = { workspace = true }
 
 [features]
 default = []

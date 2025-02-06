@@ -34,7 +34,7 @@ impl CachedWheel {
         let filename = WheelFilename::from_stem(filename).ok()?;
 
         // Convert to a cached wheel.
-        let archive = path.canonicalize().ok()?;
+        let archive = uv_fs::resolve_symlink(path).ok()?;
         let entry = CacheEntry::from_path(archive);
         let hashes = Vec::new();
         let cache_info = CacheInfo::default();

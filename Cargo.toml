@@ -117,7 +117,6 @@ indicatif = { version = "0.17.8" }
 indoc = { version = "2.0.5" }
 itertools = { version = "0.14.0" }
 jiff = { version = "0.1.14", features = ["serde"] }
-junction = { version = "1.2.0" }
 mailparse = { version = "0.15.0" }
 md-5 = { version = "0.10.6" }
 memchr = { version = "2.7.4" }

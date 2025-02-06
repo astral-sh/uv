@@ -6,7 +6,7 @@ use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_key::cache_digest;
 use uv_configuration::ConfigSettings;
 use uv_distribution_types::{CachedRegistryDist, Hashed, Index, IndexLocations, IndexUrl};
-use uv_fs::{directories, files, symlinks};
+use uv_fs::{directories, files};
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
 use uv_types::HashStrategy;
@@ -205,7 +205,7 @@ impl<'a> RegistryWheelIndex<'a> {
                         cache_shard.shard(cache_digest(build_configuration))
                     };
 
-                    for wheel_dir in symlinks(cache_shard) {
+                    for wheel_dir in uv_fs::entries(cache_shard) {
                         if let Some(wheel) = CachedWheel::from_built_source(wheel_dir) {
                             if wheel.filename.compatibility(tags).is_compatible() {
                                 // Enforce hash-checking based on the source distribution.

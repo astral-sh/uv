@@ -90,7 +90,7 @@ impl TryFrom<CacheArgs> for Cache {
 fn migrate_windows_cache(source: &Path, destination: &Path) -> Result<(), io::Error> {
     // The list of expected cache buckets in v0.3.0.
     for directory in [
-        "built-wheels-v3",
+        "built-wheels-v4",
         "flat-index-v0",
         "git-v0",
         "interpreter-v2",
