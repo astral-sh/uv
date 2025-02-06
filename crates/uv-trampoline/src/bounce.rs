@@ -187,7 +187,7 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
                 }));
 
                 if path_len > MAX_PATH_LEN {
-                    error_and_exit("Only paths with a length up to 32KBs are supported but the python path has a length of {}", path_len);
+                    error_and_exit(&format!("Only paths with a length up to 32KBs are supported but the python path has a length of {}", path_len));
                 }
 
                 // SAFETY: path len is guaranteed to be less than 32KBs
@@ -365,13 +365,13 @@ fn close_handles(si: &STARTUPINFOA, is_gui: bool) {
         if let Ok(handle) = unsafe { GetStdHandle(std_handle) } {
             unsafe { CloseHandle(handle) }.unwrap_or_else(|_| {
                 warn(
-                    format!("Failed to close standard device handle {}", handle.0 as u32),
+                    &format!("Failed to close standard device handle {}", handle.0 as u32),
                     is_gui,
                 );
             });
             unsafe { SetStdHandle(std_handle, INVALID_HANDLE_VALUE) }.unwrap_or_else(|_| {
                 warn(
-                    format!("Failed to modify standard device handle {}", std_handle.0),
+                    &format!("Failed to modify standard device handle {}", std_handle.0),
                     is_gui,
                 );
             });
@@ -398,7 +398,7 @@ fn close_handles(si: &STARTUPINFOA, is_gui: bool) {
         }
         unsafe { CloseHandle(handle) }.unwrap_or_else(|_| {
             warn(
-                format!("Failed to close child file descriptors at {}", i),
+                &format!("Failed to close child file descriptors at {}", i),
                 is_gui,
             );
         });
@@ -509,16 +509,16 @@ pub fn bounce(is_gui: bool) -> ! {
 }
 
 #[cold]
-fn warn(message: &str, is_gui: bool) -> ! {
+fn warn(message: &str, is_gui: bool) {
     // Don't emit warnings in GUI mode, as our version of eprintln turns into a popup!
     if !is_gui {
-        eprintln!("{message}");
+        eprintln!("{}", message);
     }
 }
 
 #[cold]
 fn error_and_exit(message: &str) -> ! {
-    eprintln!("{message}");
+    eprintln!("{}", message);
     exit_with_status(1);
 }
 
@@ -537,7 +537,7 @@ fn print_last_error_and_exit(message: &str) -> ! {
         err.kind().to_string(),
         err_no_str
     );
-    error_and_exit(message);
+    error_and_exit(&message);
 }
 
 #[cold]
