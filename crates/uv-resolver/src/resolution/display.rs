@@ -404,6 +404,13 @@ fn strip_extras<'dist>(graph: &IntermediatePetGraph<'dist>) -> RequirementsTxtGr
                 let index = *entry.get();
                 let node: &mut RequirementsTxtDist = &mut next[index];
                 node.extras.clear();
+                // Consider:
+                // ```
+                // foo[bar]==1.0.0; sys_platform == 'linux'
+                // foo==1.0.0; sys_platform != 'linux'
+                // ```
+                // In this case, we want to write `foo==1.0.0; sys_platform == 'linux' or sys_platform == 'windows'`
+                node.markers.or(dist.markers);
             }
             std::collections::hash_map::Entry::Vacant(entry) => {
                 let index = next.add_node(dist.clone());
