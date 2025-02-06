@@ -1090,7 +1090,7 @@ mod tests {
         fs::write(
             &mocked_interpreter,
             formatdoc! {r"
-        #!/bin/bash
+        #!/bin/sh
         echo '{json}'
         "},
         )
@@ -1109,7 +1109,7 @@ mod tests {
         fs::write(
             &mocked_interpreter,
             formatdoc! {r"
-        #!/bin/bash
+        #!/bin/sh
         echo '{}'
         ", json.replace("3.12", "3.13")},
         )
