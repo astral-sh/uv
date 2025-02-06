@@ -319,7 +319,7 @@ You could run the following sequence of commands to sync `flash-attn`:
 
 ```console
 $ uv venv
-$ uv pip install torch
+$ uv pip install torch setuptools
 $ uv sync
 ```
 
