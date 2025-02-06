@@ -46,8 +46,8 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    init_script_python_requirement, PlatformState, ProjectError, ProjectInterpreter,
-    ScriptInterpreter, UniversalState,
+    init_script_python_requirement, PlatformState, ProjectEnvironment, ProjectError,
+    ProjectInterpreter, ScriptInterpreter, UniversalState,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{diagnostics, project, ExitStatus};
@@ -223,7 +223,7 @@ pub(crate) async fn add(
             AddTarget::Project(project, Box::new(PythonTarget::Interpreter(interpreter)))
         } else {
             // Discover or create the virtual environment.
-            let venv = project::get_or_init_environment(
+            let venv = ProjectEnvironment::get_or_init(
                 project.workspace(),
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
@@ -235,9 +235,11 @@ pub(crate) async fn add(
                 no_config,
                 active,
                 cache,
+                false,
                 printer,
             )
-            .await?;
+            .await?
+            .into_environment();
 
             AddTarget::Project(project, Box::new(PythonTarget::Environment(venv)))
         }
@@ -880,6 +882,7 @@ async fn lock_and_sync(
         native_tls,
         allow_insecure_host,
         cache,
+        false,
         printer,
         preview,
     )

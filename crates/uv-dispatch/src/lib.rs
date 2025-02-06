@@ -93,7 +93,6 @@ pub struct BuildDispatch<'a> {
     exclude_newer: Option<ExcludeNewer>,
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
-
     sources: SourceStrategy,
     concurrency: Concurrency,
     preview: PreviewMode,

@@ -222,7 +222,6 @@ pub(super) async fn do_safe_lock(
     mode: LockMode<'_>,
     target: LockTarget<'_>,
     settings: ResolverSettingsRef<'_>,
-
     state: &UniversalState,
     logger: Box<dyn ResolveLogger>,
     connectivity: Connectivity,
@@ -324,7 +323,6 @@ async fn do_lock(
     interpreter: &Interpreter,
     existing_lock: Option<Lock>,
     settings: ResolverSettingsRef<'_>,
-
     state: &UniversalState,
     logger: Box<dyn ResolveLogger>,
     connectivity: Connectivity,

@@ -1554,6 +1554,10 @@ uv sync [OPTIONS]
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
+</dd><dt><code>--dry-run</code></dt><dd><p>Perform a dry run, without writing the lockfile or modifying the project environment.</p>
+
+<p>In dry-run mode, uv will resolve the project&#8217;s dependencies and report on the resulting changes to both the lockfile and the project environment, but will not modify either.</p>
+
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>

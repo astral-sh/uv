@@ -1,8 +1,10 @@
+use std::fmt::Write;
 use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -14,6 +16,7 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{
     DirectorySourceDist, Dist, Index, Resolution, ResolvedDist, SourceDist,
 };
+use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep508::{MarkerTree, VersionOrUrl};
@@ -30,12 +33,13 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, 
 use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::install_target::InstallTarget;
-use crate::commands::project::lock::{do_safe_lock, LockMode};
+use crate::commands::project::lock::{do_safe_lock, LockMode, LockResult};
+use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     default_dependency_groups, detect_conflicts, DependencyGroupsTarget, PlatformState,
-    ProjectError, UniversalState,
+    ProjectEnvironment, ProjectError, UniversalState,
 };
-use crate::commands::{diagnostics, project, ExitStatus};
+use crate::commands::{diagnostics, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings};
 
@@ -45,6 +49,7 @@ pub(crate) async fn sync(
     project_dir: &Path,
     locked: bool,
     frozen: bool,
+    dry_run: bool,
     active: Option<bool>,
     all_packages: bool,
     package: Option<PackageName>,
@@ -116,7 +121,7 @@ pub(crate) async fn sync(
     }
 
     // Discover or create the virtual environment.
-    let venv = project::get_or_init_environment(
+    let environment = match ProjectEnvironment::get_or_init(
         project.workspace(),
         python.as_deref().map(PythonRequest::parse),
         &install_mirrors,
@@ -128,9 +133,54 @@ pub(crate) async fn sync(
         no_config,
         active,
         cache,
+        dry_run,
         printer,
     )
-    .await?;
+    .await?
+    {
+        ProjectEnvironment::Existing(environment) => {
+            if dry_run {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format!(
+                        "Discovered existing environment at: {}",
+                        environment.root().user_display().bold()
+                    )
+                    .dimmed()
+                )?;
+            }
+            environment
+        }
+        ProjectEnvironment::Replaced(environment, root) => {
+            if dry_run {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format!(
+                        "Would replace existing virtual environment at: {}",
+                        root.user_display().bold()
+                    )
+                    .dimmed()
+                )?;
+            }
+            environment
+        }
+        ProjectEnvironment::New(environment, root) => {
+            if dry_run {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format!(
+                        "Would create virtual environment at: {}",
+                        root.user_display().bold()
+                    )
+                    .dimmed()
+                )?;
+            }
+            environment
+        }
+    };
 
     // Initialize any shared state.
     let state = UniversalState::default();
@@ -139,14 +189,18 @@ pub(crate) async fn sync(
     let mode = if frozen {
         LockMode::Frozen
     } else if locked {
-        LockMode::Locked(venv.interpreter())
+        LockMode::Locked(environment.interpreter())
+    } else if dry_run {
+        LockMode::DryRun(environment.interpreter())
     } else {
-        LockMode::Write(venv.interpreter())
+        LockMode::Write(environment.interpreter())
     };
+
+    let target = LockTarget::from(project.workspace());
 
     let lock = match do_safe_lock(
         mode,
-        project.workspace().into(),
+        target,
         settings.as_ref().into(),
         &state,
         Box::new(DefaultResolveLogger),
@@ -160,7 +214,46 @@ pub(crate) async fn sync(
     )
     .await
     {
-        Ok(result) => result.into_lock(),
+        Ok(result) => {
+            if dry_run {
+                match result {
+                    LockResult::Unchanged(..) => {
+                        writeln!(
+                            printer.stderr(),
+                            "{}",
+                            format!(
+                                "Found up-to-date lockfile at: {}",
+                                target.lock_path().user_display().bold()
+                            )
+                            .dimmed()
+                        )?;
+                    }
+                    LockResult::Changed(None, ..) => {
+                        writeln!(
+                            printer.stderr(),
+                            "{}",
+                            format!(
+                                "Would create lockfile at: {}",
+                                target.lock_path().user_display().bold()
+                            )
+                            .dimmed()
+                        )?;
+                    }
+                    LockResult::Changed(Some(..), ..) => {
+                        writeln!(
+                            printer.stderr(),
+                            "{}",
+                            format!(
+                                "Would update lockfile at: {}",
+                                target.lock_path().user_display().bold()
+                            )
+                            .dimmed()
+                        )?;
+                    }
+                }
+            }
+            result.into_lock()
+        }
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(native_tls)
                 .report(err)
@@ -219,7 +312,7 @@ pub(crate) async fn sync(
     // Perform the sync operation.
     match do_sync(
         target,
-        &venv,
+        &environment,
         &extras,
         &dev.with_defaults(defaults),
         editable,
@@ -234,6 +327,7 @@ pub(crate) async fn sync(
         native_tls,
         allow_insecure_host,
         cache,
+        dry_run,
         printer,
         preview,
     )
@@ -270,6 +364,7 @@ pub(super) async fn do_sync(
     native_tls: bool,
     allow_insecure_host: &[TrustedHost],
     cache: &Cache,
+    dry_run: bool,
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<(), ProjectError> {
@@ -390,7 +485,6 @@ pub(super) async fn do_sync(
     // optional on the downstream APIs.
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
-    let dry_run = false;
 
     // Extract the hashes from the lockfile.
     let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
