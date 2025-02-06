@@ -1066,15 +1066,15 @@ fn python_install_default_from_env() {
         .with_managed_python_dirs();
 
     // Install the version specified by the `UV_PYTHON` environment variable by default
-    uv_snapshot!(context.filters(), context.python_install().env(EnvVars::UV_PYTHON, "3.12"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().env(EnvVars::UV_PYTHON, "3.12"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.12.8 in [TIME]
-     + cpython-3.12.8-[PLATFORM]
-    "###);
+    Installed Python 3.12.9 in [TIME]
+     + cpython-3.12.9-[PLATFORM]
+    ");
 
     // But prefer explicit requests
     uv_snapshot!(context.filters(), context.python_install().arg("3.11").env(EnvVars::UV_PYTHON, "3.12"), @r###"
