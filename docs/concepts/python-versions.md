@@ -110,6 +110,11 @@ latest version. If a `.python-version` file is present, uv will install the Pyth
 the file. A project that requires multiple Python versions may define a `.python-versions` file. If
 present, uv will install all of the Python versions listed in the file.
 
+!!! important
+
+    The available Python versions are frozen for each uv release. To install new Python versions,
+    you may need upgrade uv.
+
 ### Installing Python executables
 
 !!! important
