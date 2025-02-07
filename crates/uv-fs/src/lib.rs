@@ -1,6 +1,7 @@
-use fs2::FileExt;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
+
+use fs2::FileExt;
 use tempfile::NamedTempFile;
 use tracing::{debug, error, info, trace, warn};
 
@@ -616,15 +617,46 @@ impl LockedFile {
     }
 
     #[cfg(unix)]
-    fn create(path: impl AsRef<Path>) -> std::io::Result<fs_err::File> {
-        use fs_err::os::unix::fs::OpenOptionsExt;
+    fn create(path: impl AsRef<Path>) -> Result<fs_err::File, std::io::Error> {
+        use std::os::unix::fs::PermissionsExt;
 
-        fs_err::OpenOptions::new()
+        // If path already exists, return it.
+        if let Ok(file) = fs_err::OpenOptions::new()
             .read(true)
             .write(true)
-            .create(true)
-            .mode(0o777)
             .open(path.as_ref())
+        {
+            return Ok(file);
+        }
+
+        // Otherwise, create a temporary file with 777 permissions. We must set
+        // permissions _after_ creating the file, to override the `umask`.
+        let file = if let Some(parent) = path.as_ref().parent() {
+            NamedTempFile::new_in(parent)?
+        } else {
+            NamedTempFile::new()?
+        };
+        if let Err(err) = file
+            .as_file()
+            .set_permissions(std::fs::Permissions::from_mode(0o777))
+        {
+            warn!("Failed to set permissions on temporary file: {err}");
+        }
+
+        // Try to move the file to path, but if path exists now, just open path
+        match file.persist_noclobber(path.as_ref()) {
+            Ok(file) => Ok(fs_err::File::from_parts(file, path.as_ref())),
+            Err(err) => {
+                if err.error.kind() == std::io::ErrorKind::AlreadyExists {
+                    fs_err::OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .open(path.as_ref())
+                } else {
+                    Err(err.error)
+                }
+            }
+        }
     }
 
     #[cfg(not(unix))]
