@@ -95,4 +95,37 @@ files = [
 ]
 
 [tool.uv]
-managed = false
+package = false
+
+[dependency-groups]
+dev = [
+    "poethepoet",
+]
+
+[tool.poe.tasks]
+test = "cargo nextest run"
+check.sequence = ["fmt-rust", "fmt-docs", "fmt-yaml", "fmt-python", "lint-python", "check-python-types", "check-python-project", "build-docs"]
+check.ignore_fail = true
+fmt-rust = "cargo fmt --all --check"
+fmt-docs = "npx prettier --prose-wrap always --check 'docs/**/*.md' README.md"
+fmt-yaml = "npx prettier --check '**/*.{json5,yaml,yml}'"
+fmt-python = "uvx ruff format --diff ."
+lint-python = "uvx ruff check ."
+check-python-types = "uvx mypy"
+check-python-project = "uvx --from 'validate-pyproject[all,store]' validate-pyproject pyproject.toml"
+build-docs-public = "uvx --with-requirements docs/requirements.txt mkdocs build --strict -f mkdocs.public.yml"
+build-docs-insiders = "uvx --with-requirements docs/requirements.txt mkdocs build --strict -f mkdocs.insiders.yml"
+release = "./scripts/release.sh"
+generate.sequence = ["generate-references", "generate-python-downloads"]
+generate-references = "cargo dev generate-all"
+generate-python-downloads = "uv run crates/uv-python/template-download-metadata.py"
+
+[tool.poe.tasks.build-docs]
+control.expr = "'${MKDOCS_INSIDERS_SSH_KEY}'"
+
+[[tool.poe.tasks.build-docs.switch]]
+case = ""
+ref = "build-docs-public"
+
+[[tool.poe.tasks.build-docs.switch]]
+ref = "build-docs-insiders"
