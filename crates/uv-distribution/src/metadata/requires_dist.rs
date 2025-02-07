@@ -209,7 +209,7 @@ impl RequiresDist {
                         project_workspace.project_root(),
                         project_sources,
                         project_indexes,
-                        extra.as_ref(),
+                        extra.as_deref(),
                         group,
                         locations,
                         project_workspace.workspace(),
@@ -262,7 +262,7 @@ impl RequiresDist {
                     // If there is no such requirement with the extra, error.
                     if !metadata.requires_dist.iter().any(|requirement| {
                         requirement.name == *name
-                            && requirement.marker.top_level_extra_name().as_ref() == Some(extra)
+                            && requirement.marker.top_level_extra_name().as_deref() == Some(extra)
                     }) {
                         return Err(MetadataError::IncompleteSourceExtra(
                             name.clone(),
@@ -385,7 +385,7 @@ impl FlatRequiresDist {
 
             // Find the requirements for the extra.
             for requirement in &requirements {
-                if requirement.marker.top_level_extra_name().as_ref() == Some(&extra) {
+                if requirement.marker.top_level_extra_name().as_deref() == Some(&extra) {
                     let requirement = {
                         let mut marker = marker;
                         marker.and(requirement.marker);
