@@ -5,9 +5,15 @@ pub struct EnvVars;
 
 #[attribute_env_vars_metadata]
 impl EnvVars {
-    /// The path to the uv binary that was used to invoke a command.
+    /// The path to the binary that was used to invoke uv.
     ///
-    /// uv sets this when calling subcommands like `uv run`.
+    /// This is propagated to all subprocesses spawned by uv.
+    ///
+    /// If the executable was invoked through a symbolic link, some platforms will return the path
+    /// of the symbolic link and other platforms will return the path of the symbolic link’s target.
+    ///
+    /// See <https://doc.rust-lang.org/std/env/fn.current_exe.html#security> for security
+    /// considerations.
     pub const UV: &'static str = "UV";
 
     /// Equivalent to the `--offline` command-line argument. If set, uv will disable network access.
