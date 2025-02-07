@@ -123,7 +123,7 @@ impl From<VersionSpecifier> for Ranges<Version> {
 ///
 /// These semantics are used for testing Python compatibility (e.g., `requires-python` against
 /// the user's installed Python version). In that context, it's more intuitive that `3.13.0b0`
-/// is allowed for projects that declare `requires-python = ">3.13"`.
+/// is allowed for projects that declare `requires-python = ">=3.13"`.
 ///
 /// See: <https://github.com/pypa/pip/blob/a432c7f4170b9ef798a15f035f5dfdb4cc939f35/src/pip/_internal/resolution/resolvelib/candidates.py#L540>
 pub fn release_specifiers_to_ranges(specifiers: VersionSpecifiers) -> Ranges<Version> {
