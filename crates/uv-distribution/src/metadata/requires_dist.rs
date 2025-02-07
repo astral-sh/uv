@@ -370,6 +370,12 @@ impl FlatRequiresDist {
             return Self(requirements);
         }
 
+        // Memoize the top level extras, in the same order as `requirements`
+        let top_level_extras: Vec<_> = requirements
+            .iter()
+            .map(|req| req.marker.top_level_extra_name())
+            .collect();
+
         // Transitively process all extras that are recursively included.
         let mut flattened = requirements.clone();
         let mut seen = FxHashSet::<(ExtraName, MarkerTree)>::default();
@@ -384,33 +390,34 @@ impl FlatRequiresDist {
             }
 
             // Find the requirements for the extra.
-            for requirement in &requirements {
-                if requirement.marker.top_level_extra_name().as_deref() == Some(&extra) {
-                    let requirement = {
-                        let mut marker = marker;
-                        marker.and(requirement.marker);
-                        uv_pypi_types::Requirement {
-                            name: requirement.name.clone(),
-                            extras: requirement.extras.clone(),
-                            groups: requirement.groups.clone(),
-                            source: requirement.source.clone(),
-                            origin: requirement.origin.clone(),
-                            marker: marker.simplify_extras(slice::from_ref(&extra)),
-                        }
-                    };
-                    if requirement.name == *name {
-                        // Add each transitively included extra.
-                        queue.extend(
-                            requirement
-                                .extras
-                                .iter()
-                                .cloned()
-                                .map(|extra| (extra, requirement.marker)),
-                        );
-                    } else {
-                        // Add the requirements for that extra.
-                        flattened.push(requirement);
+            for (requirement, top_level_extra) in requirements.iter().zip(top_level_extras.iter()) {
+                if top_level_extra.as_deref() != Some(&extra) {
+                    continue;
+                }
+                let requirement = {
+                    let mut marker = marker;
+                    marker.and(requirement.marker);
+                    uv_pypi_types::Requirement {
+                        name: requirement.name.clone(),
+                        extras: requirement.extras.clone(),
+                        groups: requirement.groups.clone(),
+                        source: requirement.source.clone(),
+                        origin: requirement.origin.clone(),
+                        marker: marker.simplify_extras(slice::from_ref(&extra)),
                     }
+                };
+                if requirement.name == *name {
+                    // Add each transitively included extra.
+                    queue.extend(
+                        requirement
+                            .extras
+                            .iter()
+                            .cloned()
+                            .map(|extra| (extra, requirement.marker)),
+                    );
+                } else {
+                    // Add the requirements for that extra.
+                    flattened.push(requirement);
                 }
             }
         }
