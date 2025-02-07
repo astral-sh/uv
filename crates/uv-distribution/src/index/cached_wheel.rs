@@ -127,7 +127,14 @@ impl CachedWheel {
         // Read the pointer.
         let pointer = HttpArchivePointer::read_from(path).ok()??;
         let cache_info = pointer.to_cache_info();
-        let Archive { id, hashes } = pointer.into_archive();
+        let archive = pointer.into_archive();
+
+        // Ignore stale pointers.
+        if !archive.exists(cache) {
+            return None;
+        }
+
+        let Archive { id, hashes, .. } = archive;
 
         let entry = cache.entry(CacheBucket::Archive, "", id);
 
@@ -151,7 +158,14 @@ impl CachedWheel {
         // Read the pointer.
         let pointer = LocalArchivePointer::read_from(path).ok()??;
         let cache_info = pointer.to_cache_info();
-        let Archive { id, hashes } = pointer.into_archive();
+        let archive = pointer.into_archive();
+
+        // Ignore stale pointers.
+        if !archive.exists(cache) {
+            return None;
+        }
+
+        let Archive { id, hashes, .. } = archive;
 
         // Convert to a cached wheel.
         let entry = cache.entry(CacheBucket::Archive, "", id);
