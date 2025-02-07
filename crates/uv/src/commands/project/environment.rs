@@ -3,16 +3,12 @@ use tracing::debug;
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, hash_digest};
 use uv_client::Connectivity;
-use uv_configuration::{
-    Concurrency, DevGroupsManifest, ExtrasSpecification, InstallOptions, PreviewMode, TrustedHost,
-};
+use uv_configuration::{Concurrency, PreviewMode, TrustedHost};
 use uv_distribution_types::{Name, Resolution};
 use uv_python::{Interpreter, PythonEnvironment};
-use uv_resolver::Installable;
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::Modifications;
-use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::{
     resolve_environment, sync_environment, EnvironmentSpecification, PlatformState, ProjectError,
 };
@@ -68,93 +64,6 @@ impl CachedEnvironment {
             .await?,
         );
 
-        Self::from_resolution(
-            resolution,
-            interpreter,
-            settings,
-            state,
-            install,
-            installer_metadata,
-            connectivity,
-            concurrency,
-            native_tls,
-            allow_insecure_host,
-            cache,
-            printer,
-            preview,
-        )
-        .await
-    }
-
-    /// Get or create an [`CachedEnvironment`] based on a given [`InstallTarget`].
-    pub(crate) async fn from_lock(
-        target: InstallTarget<'_>,
-        extras: &ExtrasSpecification,
-        dev: &DevGroupsManifest,
-        install_options: InstallOptions,
-        settings: &ResolverInstallerSettings,
-        interpreter: &Interpreter,
-        state: &PlatformState,
-        install: Box<dyn InstallLogger>,
-        installer_metadata: bool,
-        connectivity: Connectivity,
-        concurrency: Concurrency,
-        native_tls: bool,
-        allow_insecure_host: &[TrustedHost],
-        cache: &Cache,
-        printer: Printer,
-        preview: PreviewMode,
-    ) -> Result<Self, ProjectError> {
-        let interpreter = Self::base_interpreter(interpreter, cache)?;
-
-        // Determine the tags, markers, and interpreter to use for resolution.
-        let tags = interpreter.tags()?;
-        let marker_env = interpreter.resolver_marker_environment();
-
-        // Read the lockfile.
-        let resolution = target.to_resolution(
-            &marker_env,
-            tags,
-            extras,
-            dev,
-            &settings.build_options,
-            &install_options,
-        )?;
-
-        Self::from_resolution(
-            resolution,
-            interpreter,
-            settings,
-            state,
-            install,
-            installer_metadata,
-            connectivity,
-            concurrency,
-            native_tls,
-            allow_insecure_host,
-            cache,
-            printer,
-            preview,
-        )
-        .await
-    }
-
-    /// Get or create an [`CachedEnvironment`] based on a given [`Resolution`].
-    pub(crate) async fn from_resolution(
-        resolution: Resolution,
-        interpreter: Interpreter,
-        settings: &ResolverInstallerSettings,
-        state: &PlatformState,
-        install: Box<dyn InstallLogger>,
-        installer_metadata: bool,
-        connectivity: Connectivity,
-        concurrency: Concurrency,
-        native_tls: bool,
-        allow_insecure_host: &[TrustedHost],
-        cache: &Cache,
-        printer: Printer,
-        preview: PreviewMode,
-    ) -> Result<Self, ProjectError> {
         // Hash the resolution by hashing the generated lockfile.
         // TODO(charlie): If the resolution contains any mutable metadata (like a path or URL
         // dependency), skip this step.

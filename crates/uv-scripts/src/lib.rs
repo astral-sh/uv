@@ -65,7 +65,7 @@ impl Pep723Item {
 }
 
 /// A reference to a PEP 723 item.
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum Pep723ItemRef<'item> {
     /// A PEP 723 script read from disk.
     Script(&'item Pep723Script),

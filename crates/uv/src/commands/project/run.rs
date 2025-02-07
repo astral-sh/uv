@@ -46,9 +46,9 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, validate_project_requires_python, DependencyGroupsTarget,
-    EnvironmentSpecification, ProjectEnvironment, ProjectError, ScriptInterpreter, UniversalState,
-    WorkspacePython,
+    default_dependency_groups, update_environment, validate_project_requires_python,
+    DependencyGroupsTarget, EnvironmentSpecification, ProjectEnvironment, ProjectError,
+    ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::run::run_to_completion;
@@ -191,23 +191,6 @@ pub(crate) async fn run(
             }
         }
 
-        // Discover the interpreter for the script.
-        let interpreter = ScriptInterpreter::discover(
-            (&script).into(),
-            python.as_deref().map(PythonRequest::parse),
-            python_preference,
-            python_downloads,
-            connectivity,
-            native_tls,
-            allow_insecure_host,
-            &install_mirrors,
-            no_config,
-            cache,
-            printer,
-        )
-        .await?
-        .into_interpreter();
-
         // If a lockfile already exists, lock the script.
         if let Some(target) = script
             .as_script()
@@ -216,17 +199,34 @@ pub(crate) async fn run(
         {
             debug!("Found existing lockfile for script");
 
+            // Discover the interpreter for the script.
+            let environment = ScriptEnvironment::get_or_init(
+                script.as_script().unwrap(),
+                python.as_deref().map(PythonRequest::parse),
+                python_preference,
+                python_downloads,
+                connectivity,
+                native_tls,
+                allow_insecure_host,
+                &install_mirrors,
+                no_config,
+                cache,
+                printer,
+            )
+            .await?
+            .into_environment();
+
             // Determine the lock mode.
             let mode = if frozen {
                 LockMode::Frozen
             } else if locked {
-                LockMode::Locked(&interpreter)
+                LockMode::Locked(environment.interpreter())
             } else {
-                LockMode::Write(&interpreter)
+                LockMode::Write(environment.interpreter())
             };
 
             // Generate a lockfile.
-            let lock = project::lock::do_safe_lock(
+            let lock = match project::lock::do_safe_lock(
                 mode,
                 target,
                 settings.as_ref().into(),
@@ -244,19 +244,35 @@ pub(crate) async fn run(
                 printer,
                 preview,
             )
-            .await?
-            .into_lock();
+            .await
+            {
+                Ok(result) => result.into_lock(),
+                Err(ProjectError::Operation(err)) => {
+                    return diagnostics::OperationDiagnostic::native_tls(native_tls)
+                        .with_context("script")
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                }
+                Err(err) => return Err(err.into()),
+            };
 
-            let result = CachedEnvironment::from_lock(
-                InstallTarget::Script {
-                    script: script.as_script().unwrap(),
-                    lock: &lock,
-                },
-                &ExtrasSpecification::default(),
-                &DevGroupsSpecification::default().with_defaults(Vec::new()),
-                InstallOptions::default(),
-                &settings,
-                &interpreter,
+            // Sync the environment.
+            let target = InstallTarget::Script {
+                script: script.as_script().unwrap(),
+                lock: &lock,
+            };
+
+            let install_options = InstallOptions::default();
+
+            match project::sync::do_sync(
+                target,
+                &environment,
+                &extras,
+                &dev.with_defaults(Vec::new()),
+                editable,
+                install_options,
+                modifications,
+                settings.as_ref().into(),
                 &sync_state,
                 if show_resolution {
                     Box::new(DefaultInstallLogger)
@@ -269,13 +285,13 @@ pub(crate) async fn run(
                 native_tls,
                 allow_insecure_host,
                 cache,
+                DryRun::Disabled,
                 printer,
                 preview,
             )
-            .await;
-
-            let environment = match result {
-                Ok(resolution) => resolution,
+            .await
+            {
+                Ok(()) => {}
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::native_tls(native_tls)
                         .with_context("script")
@@ -283,10 +299,7 @@ pub(crate) async fn run(
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                 }
                 Err(err) => return Err(err.into()),
-            };
-
-            // Clear any existing overlay.
-            environment.clear_overlay()?;
+            }
 
             Some(environment.into_interpreter())
         } else {
@@ -312,14 +325,14 @@ pub(crate) async fn run(
                     .to_owned(),
                 Pep723Item::Stdin(..) | Pep723Item::Remote(..) => std::env::current_dir()?,
             };
-            let script = script.into_metadata();
+            let metadata = script.metadata();
 
             // Install the script requirements, if necessary. Otherwise, use an isolated environment.
-            if let Some(dependencies) = script.dependencies {
+            if let Some(dependencies) = metadata.dependencies.as_ref() {
                 // Collect any `tool.uv.index` from the script.
                 let empty = Vec::default();
                 let script_indexes = match settings.sources {
-                    SourceStrategy::Enabled => script
+                    SourceStrategy::Enabled => metadata
                         .tool
                         .as_ref()
                         .and_then(|tool| tool.uv.as_ref())
@@ -331,7 +344,7 @@ pub(crate) async fn run(
                 // Collect any `tool.uv.sources` from the script.
                 let empty = BTreeMap::default();
                 let script_sources = match settings.sources {
-                    SourceStrategy::Enabled => script
+                    SourceStrategy::Enabled => metadata
                         .tool
                         .as_ref()
                         .and_then(|tool| tool.uv.as_ref())
@@ -341,7 +354,8 @@ pub(crate) async fn run(
                 };
 
                 let requirements = dependencies
-                    .into_iter()
+                    .iter()
+                    .cloned()
                     .flat_map(|requirement| {
                         LoweredRequirement::from_non_workspace_requirement(
                             requirement,
@@ -353,7 +367,7 @@ pub(crate) async fn run(
                         .map_ok(LoweredRequirement::into_inner)
                     })
                     .collect::<Result<_, _>>()?;
-                let constraints = script
+                let constraints = metadata
                     .tool
                     .as_ref()
                     .and_then(|tool| tool.uv.as_ref())
@@ -372,7 +386,7 @@ pub(crate) async fn run(
                         .map_ok(LoweredRequirement::into_inner)
                     })
                     .collect::<Result<Vec<_>, _>>()?;
-                let overrides = script
+                let overrides = metadata
                     .tool
                     .as_ref()
                     .and_then(|tool| tool.uv.as_ref())
@@ -394,49 +408,139 @@ pub(crate) async fn run(
 
                 let spec =
                     RequirementsSpecification::from_overrides(requirements, constraints, overrides);
-                let result = CachedEnvironment::from_spec(
-                    EnvironmentSpecification::from(spec),
-                    &interpreter,
-                    &settings,
-                    &sync_state,
-                    if show_resolution {
-                        Box::new(DefaultResolveLogger)
-                    } else {
-                        Box::new(SummaryResolveLogger)
-                    },
-                    if show_resolution {
-                        Box::new(DefaultInstallLogger)
-                    } else {
-                        Box::new(SummaryInstallLogger)
-                    },
-                    installer_metadata,
-                    connectivity,
-                    concurrency,
-                    native_tls,
-                    allow_insecure_host,
-                    cache,
-                    printer,
-                    preview,
-                )
-                .await;
 
-                let environment = match result {
-                    Ok(resolution) => resolution,
-                    Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::native_tls(native_tls)
-                            .with_context("script")
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                if let Some(script) = script.as_script() {
+                    // If the script is a local file, use a persistent environment.
+                    let environment = ScriptEnvironment::get_or_init(
+                        script,
+                        python.as_deref().map(PythonRequest::parse),
+                        python_preference,
+                        python_downloads,
+                        connectivity,
+                        native_tls,
+                        allow_insecure_host,
+                        &install_mirrors,
+                        no_config,
+                        cache,
+                        printer,
+                    )
+                    .await?
+                    .into_environment();
+
+                    match update_environment(
+                        environment,
+                        spec,
+                        modifications,
+                        &settings,
+                        &sync_state,
+                        if show_resolution {
+                            Box::new(DefaultResolveLogger)
+                        } else {
+                            Box::new(SummaryResolveLogger)
+                        },
+                        if show_resolution {
+                            Box::new(DefaultInstallLogger)
+                        } else {
+                            Box::new(SummaryInstallLogger)
+                        },
+                        installer_metadata,
+                        connectivity,
+                        concurrency,
+                        native_tls,
+                        allow_insecure_host,
+                        cache,
+                        printer,
+                        preview,
+                    )
+                    .await
+                    {
+                        Ok(update) => Some(update.into_environment().into_interpreter()),
+                        Err(ProjectError::Operation(err)) => {
+                            return diagnostics::OperationDiagnostic::native_tls(native_tls)
+                                .with_context("script")
+                                .report(err)
+                                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                        }
+                        Err(err) => return Err(err.into()),
                     }
-                    Err(err) => return Err(err.into()),
-                };
+                } else {
+                    // Otherwise, use an ephemeral environment.
+                    let interpreter = ScriptInterpreter::discover(
+                        (&script).into(),
+                        python.as_deref().map(PythonRequest::parse),
+                        python_preference,
+                        python_downloads,
+                        connectivity,
+                        native_tls,
+                        allow_insecure_host,
+                        &install_mirrors,
+                        no_config,
+                        cache,
+                        printer,
+                    )
+                    .await?
+                    .into_interpreter();
 
-                // Clear any existing overlay.
-                environment.clear_overlay()?;
+                    let result = CachedEnvironment::from_spec(
+                        EnvironmentSpecification::from(spec),
+                        &interpreter,
+                        &settings,
+                        &sync_state,
+                        if show_resolution {
+                            Box::new(DefaultResolveLogger)
+                        } else {
+                            Box::new(SummaryResolveLogger)
+                        },
+                        if show_resolution {
+                            Box::new(DefaultInstallLogger)
+                        } else {
+                            Box::new(SummaryInstallLogger)
+                        },
+                        installer_metadata,
+                        connectivity,
+                        concurrency,
+                        native_tls,
+                        allow_insecure_host,
+                        cache,
+                        printer,
+                        preview,
+                    )
+                    .await;
 
-                Some(environment.into_interpreter())
+                    let environment = match result {
+                        Ok(resolution) => resolution,
+                        Err(ProjectError::Operation(err)) => {
+                            return diagnostics::OperationDiagnostic::native_tls(native_tls)
+                                .with_context("script")
+                                .report(err)
+                                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                        }
+                        Err(err) => return Err(err.into()),
+                    };
+
+                    // Clear any existing overlay.
+                    environment.clear_overlay()?;
+
+                    Some(environment.into_interpreter())
+                }
             } else {
                 // Create a virtual environment.
+                let interpreter = ScriptInterpreter::discover(
+                    (&script).into(),
+                    python.as_deref().map(PythonRequest::parse),
+                    python_preference,
+                    python_downloads,
+                    connectivity,
+                    native_tls,
+                    allow_insecure_host,
+                    &install_mirrors,
+                    no_config,
+                    cache,
+                    printer,
+                )
+                .await?
+                .into_interpreter();
+
                 temp_dir = cache.venv_dir()?;
                 let environment = uv_virtualenv::create_venv(
                     temp_dir.path(),
@@ -471,7 +575,7 @@ pub(crate) async fn run(
             warn_user!("Extras are not supported for Python scripts with inline metadata");
         }
         for flag in dev.history().as_flags_pretty() {
-            warn_user!("`{flag}` is not supported for Python scripts with inline metadata",);
+            warn_user!("`{flag}` is not supported for Python scripts with inline metadata");
         }
         if all_packages {
             warn_user!(
