@@ -6504,3 +6504,108 @@ fn find_links_relative_in_config_works_from_subdir() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn sync_dry_run() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Perform a `--dry-run`.
+    uv_snapshot!(context.filters(), context.sync().arg("--dry-run"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Would create virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Would create lockfile at: uv.lock
+    Would download 1 package
+    Would install 1 package
+     + iniconfig==2.0.0
+    "###);
+
+    // Update the environment.
+    context.sync().assert().success();
+
+    // Update the requirements.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--dry-run"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Discovered existing environment at: .venv
+    Resolved 2 packages in [TIME]
+    Would update lockfile at: uv.lock
+    Would download 1 package
+    Would uninstall 1 package
+    Would install 1 package
+     - iniconfig==2.0.0
+     + typing-extensions==4.10.0
+    "###);
+
+    // Update the `requires-python`.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = "==3.8.*"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--dry-run"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
+    Would replace existing virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Would update lockfile at: uv.lock
+    Would install 1 package
+     + iniconfig==2.0.0
+    "###);
+
+    // Update the environment.
+    context.sync().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync().arg("--dry-run"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Discovered existing environment at: .venv
+    Resolved 2 packages in [TIME]
+    Found up-to-date lockfile at: uv.lock
+    Audited 1 package in [TIME]
+    Would make no changes
+    "###);
+
+    Ok(())
+}

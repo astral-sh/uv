@@ -18736,6 +18736,7 @@ fn lock_dry_run_noop() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
+    No lockfile changes detected
     "###);
 
     Ok(())

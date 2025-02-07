@@ -11,8 +11,8 @@ use uv_cache::Cache;
 use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, ExtrasSpecification,
-    PreviewMode, Reinstall, TrustedHost, Upgrade,
+    Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, DryRun,
+    ExtrasSpecification, PreviewMode, Reinstall, TrustedHost, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::DistributionDatabase;
@@ -930,124 +930,170 @@ impl ScriptPython {
     }
 }
 
-/// Initialize a virtual environment for the current project.
-pub(crate) async fn get_or_init_environment(
-    workspace: &Workspace,
-    python: Option<PythonRequest>,
-    install_mirrors: &PythonInstallMirrors,
-    python_preference: PythonPreference,
-    python_downloads: PythonDownloads,
-    connectivity: Connectivity,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
-    no_config: bool,
-    active: Option<bool>,
-    cache: &Cache,
-    printer: Printer,
-) -> Result<PythonEnvironment, ProjectError> {
-    // Lock the project environment to avoid synchronization issues.
-    let _lock = ProjectInterpreter::lock(workspace).await?;
+/// The Python environment for a project.
+#[derive(Debug)]
+enum ProjectEnvironment {
+    /// An existing [`PythonEnvironment`] was discovered, which satisfies the project's requirements.
+    Existing(PythonEnvironment),
+    /// An existing [`PythonEnvironment`] was discovered, but did not satisfy the project's
+    /// requirements, and so was replaced.
+    ///
+    /// In `--dry-run` mode, the environment will not be replaced, but this variant will still be
+    /// returned.
+    Replaced(PythonEnvironment, PathBuf),
+    /// A new [`PythonEnvironment`] was created.
+    ///
+    /// In `--dry-run` mode, the environment will not be created, but this variant will still be
+    /// returned.
+    New(PythonEnvironment, PathBuf),
+}
 
-    match ProjectInterpreter::discover(
-        workspace,
-        workspace.install_path().as_ref(),
-        python,
-        python_preference,
-        python_downloads,
-        connectivity,
-        native_tls,
-        allow_insecure_host,
-        install_mirrors,
-        no_config,
-        active,
-        cache,
-        printer,
-    )
-    .await?
-    {
-        // If we found an existing, compatible environment, use it.
-        ProjectInterpreter::Environment(environment) => Ok(environment),
+impl ProjectEnvironment {
+    /// Initialize a virtual environment for the current project.
+    pub(crate) async fn get_or_init(
+        workspace: &Workspace,
+        python: Option<PythonRequest>,
+        install_mirrors: &PythonInstallMirrors,
+        python_preference: PythonPreference,
+        python_downloads: PythonDownloads,
+        connectivity: Connectivity,
+        native_tls: bool,
+        allow_insecure_host: &[TrustedHost],
+        no_config: bool,
+        active: Option<bool>,
+        cache: &Cache,
+        dry_run: DryRun,
+        printer: Printer,
+    ) -> Result<Self, ProjectError> {
+        // Lock the project environment to avoid synchronization issues.
+        let _lock = ProjectInterpreter::lock(workspace).await?;
 
-        // Otherwise, create a virtual environment with the discovered interpreter.
-        ProjectInterpreter::Interpreter(interpreter) => {
-            let venv = workspace.venv(active);
+        match ProjectInterpreter::discover(
+            workspace,
+            workspace.install_path().as_ref(),
+            python,
+            python_preference,
+            python_downloads,
+            connectivity,
+            native_tls,
+            allow_insecure_host,
+            install_mirrors,
+            no_config,
+            active,
+            cache,
+            printer,
+        )
+        .await?
+        {
+            // If we found an existing, compatible environment, use it.
+            ProjectInterpreter::Environment(environment) => Ok(Self::Existing(environment)),
 
-            // Avoid removing things that are not virtual environments
-            let should_remove = match (venv.try_exists(), venv.join("pyvenv.cfg").try_exists()) {
-                // It's a virtual environment we can remove it
-                (_, Ok(true)) => true,
-                // It doesn't exist at all, we should use it without deleting it to avoid TOCTOU bugs
-                (Ok(false), Ok(false)) => false,
-                // If it's not a virtual environment, bail
-                (Ok(true), Ok(false)) => {
-                    // Unless it's empty, in which case we just ignore it
-                    if venv.read_dir().is_ok_and(|mut dir| dir.next().is_none()) {
-                        false
-                    } else {
+            // Otherwise, create a virtual environment with the discovered interpreter.
+            ProjectInterpreter::Interpreter(interpreter) => {
+                let venv = workspace.venv(active);
+
+                // Avoid removing things that are not virtual environments
+                let replace = match (venv.try_exists(), venv.join("pyvenv.cfg").try_exists()) {
+                    // It's a virtual environment we can remove it
+                    (_, Ok(true)) => true,
+                    // It doesn't exist at all, we should use it without deleting it to avoid TOCTOU bugs
+                    (Ok(false), Ok(false)) => false,
+                    // If it's not a virtual environment, bail
+                    (Ok(true), Ok(false)) => {
+                        // Unless it's empty, in which case we just ignore it
+                        if venv.read_dir().is_ok_and(|mut dir| dir.next().is_none()) {
+                            false
+                        } else {
+                            return Err(ProjectError::InvalidProjectEnvironmentDir(
+                                venv,
+                                "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
+                            ));
+                        }
+                    }
+                    // Similarly, if we can't _tell_ if it exists we should bail
+                    (_, Err(err)) | (Err(err), _) => {
                         return Err(ProjectError::InvalidProjectEnvironmentDir(
                             venv,
-                            "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
+                            format!("it is not a compatible environment but cannot be recreated because uv cannot determine if it is a virtual environment: {err}"),
                         ));
                     }
-                }
-                // Similarly, if we can't _tell_ if it exists we should bail
-                (_, Err(err)) | (Err(err), _) => {
-                    return Err(ProjectError::InvalidProjectEnvironmentDir(
-                        venv,
-                        format!("it is not a compatible environment but cannot be recreated because uv cannot determine if it is a virtual environment: {err}"),
-                    ));
-                }
-            };
+                };
 
-            // Remove the existing virtual environment if it doesn't meet the requirements.
-            if should_remove {
-                match fs_err::remove_dir_all(&venv) {
-                    Ok(()) => {
-                        writeln!(
-                            printer.stderr(),
-                            "Removed virtual environment at: {}",
-                            venv.user_display().cyan()
-                        )?;
+                // Under `--dry-run`, avoid modifying the environment.
+                if dry_run.enabled() {
+                    let environment = PythonEnvironment::from_interpreter(interpreter);
+                    return Ok(if replace {
+                        Self::Replaced(environment, venv)
+                    } else {
+                        Self::New(environment, venv)
+                    });
+                }
+
+                // Remove the existing virtual environment if it doesn't meet the requirements.
+                if replace {
+                    match fs_err::remove_dir_all(&venv) {
+                        Ok(()) => {
+                            writeln!(
+                                printer.stderr(),
+                                "Removed virtual environment at: {}",
+                                venv.user_display().cyan()
+                            )?;
+                        }
+                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(e) => return Err(e.into()),
                     }
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(e) => return Err(e.into()),
+                }
+
+                writeln!(
+                    printer.stderr(),
+                    "Creating virtual environment at: {}",
+                    venv.user_display().cyan()
+                )?;
+
+                // Determine a prompt for the environment, in order of preference:
+                //
+                // 1) The name of the project
+                // 2) The name of the directory at the root of the workspace
+                // 3) No prompt
+                let prompt = workspace
+                    .pyproject_toml()
+                    .project
+                    .as_ref()
+                    .map(|p| p.name.to_string())
+                    .or_else(|| {
+                        workspace
+                            .install_path()
+                            .file_name()
+                            .map(|f| f.to_string_lossy().to_string())
+                    })
+                    .map(uv_virtualenv::Prompt::Static)
+                    .unwrap_or(uv_virtualenv::Prompt::None);
+
+                let environment = uv_virtualenv::create_venv(
+                    &venv,
+                    interpreter,
+                    prompt,
+                    false,
+                    false,
+                    false,
+                    false,
+                )?;
+
+                if replace {
+                    Ok(Self::Replaced(environment, venv))
+                } else {
+                    Ok(Self::New(environment, venv))
                 }
             }
+        }
+    }
 
-            writeln!(
-                printer.stderr(),
-                "Creating virtual environment at: {}",
-                venv.user_display().cyan()
-            )?;
-
-            // Determine a prompt for the environment, in order of preference:
-            //
-            // 1) The name of the project
-            // 2) The name of the directory at the root of the workspace
-            // 3) No prompt
-            let prompt = workspace
-                .pyproject_toml()
-                .project
-                .as_ref()
-                .map(|p| p.name.to_string())
-                .or_else(|| {
-                    workspace
-                        .install_path()
-                        .file_name()
-                        .map(|f| f.to_string_lossy().to_string())
-                })
-                .map(uv_virtualenv::Prompt::Static)
-                .unwrap_or(uv_virtualenv::Prompt::None);
-
-            Ok(uv_virtualenv::create_venv(
-                &venv,
-                interpreter,
-                prompt,
-                false,
-                false,
-                false,
-                false,
-            )?)
+    /// Convert the [`ProjectEnvironment`] into a [`PythonEnvironment`].
+    pub(crate) fn into_environment(self) -> PythonEnvironment {
+        match self {
+            Self::Existing(environment) => environment,
+            Self::Replaced(environment, ..) => environment,
+            Self::New(environment, ..) => environment,
         }
     }
 }
@@ -1462,7 +1508,7 @@ pub(crate) async fn sync_environment(
     // optional on the downstream APIs.
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
-    let dry_run = false;
+    let dry_run = DryRun::default();
     let hasher = HashStrategy::default();
 
     // Resolve the flat indexes from `--find-links`.
@@ -1669,7 +1715,7 @@ pub(crate) async fn update_environment(
     // optional on the downstream APIs.
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
-    let dry_run = false;
+    let dry_run = DryRun::default();
     let extras = ExtrasSpecification::default();
     let groups = DevGroupsSpecification::default();
     let hasher = HashStrategy::default();
