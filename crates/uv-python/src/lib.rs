@@ -292,7 +292,7 @@ mod tests {
             fs_err::write(
                 path,
                 formatdoc! {r"
-                #!/bin/bash
+                #!/bin/sh
                 echo '{json}'
                 "},
             )?;
@@ -314,7 +314,7 @@ mod tests {
             fs_err::write(
                 path,
                 formatdoc! {r"
-                #!/bin/bash
+                #!/bin/sh
                 echo '{output}' 1>&2
                 "},
             )?;
@@ -535,7 +535,7 @@ mod tests {
         fs_err::write(
             children[0].join(format!("python{}", env::consts::EXE_SUFFIX)),
             formatdoc! {r"
-        #!/bin/bash
+        #!/bin/sh
         echo 'foo'
         "},
         )?;
