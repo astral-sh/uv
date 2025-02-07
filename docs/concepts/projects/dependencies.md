@@ -608,8 +608,8 @@ dev = [
 ```
 
 The `dev` group is special-cased; there are `--dev`, `--only-dev`, and `--no-dev` flags to toggle
-inclusion or exclusion of its dependencies, although you probably want `--no-default-groups` over
-`--no-dev`. Additionally, the `dev` group is [synced by default](#default-groups).
+inclusion or exclusion of its dependencies. See `--no-default-groups` to disable all default groups
+instead. Additionally, the `dev` group is [synced by default](#default-groups).
 
 ### Dependency groups
 
