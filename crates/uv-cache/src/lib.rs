@@ -31,6 +31,7 @@ mod by_timestamp;
 mod cli;
 mod removal;
 mod wheel;
+mod link;
 
 /// A [`CacheEntry`] which may or may not exist yet.
 #[derive(Debug, Clone)]

@@ -33,6 +33,8 @@ impl CachedWheel {
         let filename = path.file_name()?.to_str()?;
         let filename = WheelFilename::from_stem(filename).ok()?;
 
+        println!("filename: {:?}", filename);
+
         // Convert to a cached wheel.
         let archive = uv_fs::resolve_symlink(path).ok()?;
         let entry = CacheEntry::from_path(archive);

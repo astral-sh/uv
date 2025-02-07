@@ -42,7 +42,7 @@ pub(crate) async fn uninstall(
 
         if let Some(top_level) = installations.root().parent() {
             // Remove the `toolchains` symlink.
-            match uv_fs::remove_symlink(top_level.join("toolchains")) {
+            match fs_err::tokio::remove_file(top_level.join("toolchains")).await {
                 Ok(()) => {}
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
                 Err(err) => return Err(err.into()),

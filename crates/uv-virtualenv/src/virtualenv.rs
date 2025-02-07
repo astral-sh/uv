@@ -157,12 +157,12 @@ pub(crate) fn create(
 
     #[cfg(unix)]
     {
-        uv_fs::replace_symlink(&base_python, &executable)?;
-        uv_fs::replace_symlink(
+        replace_symlink(&base_python, &executable)?;
+        replace_symlink(
             "python",
             scripts.join(format!("python{}", interpreter.python_major())),
         )?;
-        uv_fs::replace_symlink(
+        replace_symlink(
             "python",
             scripts.join(format!(
                 "python{}.{}",
@@ -172,15 +172,15 @@ pub(crate) fn create(
         )?;
 
         if interpreter.markers().implementation_name() == "pypy" {
-            uv_fs::replace_symlink(
+            replace_symlink(
                 "python",
                 scripts.join(format!("pypy{}", interpreter.python_major())),
             )?;
-            uv_fs::replace_symlink("python", scripts.join("pypy"))?;
+            replace_symlink("python", scripts.join("pypy"))?;
         }
 
         if interpreter.markers().implementation_name() == "graalpy" {
-            uv_fs::replace_symlink("python", scripts.join("graalpy"))?;
+            replace_symlink("python", scripts.join("graalpy"))?;
         }
     }
 
@@ -616,4 +616,23 @@ fn copy_launcher_windows(
     }
 
     Err(Error::NotFound(base_python.user_display().to_string()))
+}
+
+pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    // Attempt to create the symlink directly.
+    match std::os::unix::fs::symlink(src.as_ref(), dst.as_ref()) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+            // Create a symlink, using a temporary file to ensure atomicity.
+            let temp_dir = tempfile::tempdir_in(dst.as_ref().parent().unwrap())?;
+            let temp_file = temp_dir.path().join("link");
+            std::os::unix::fs::symlink(src, &temp_file)?;
+
+            // Move the symlink into the target location.
+            fs_err::rename(&temp_file, dst.as_ref())?;
+
+            Ok(())
+        }
+        Err(err) => Err(err),
+    }
 }
