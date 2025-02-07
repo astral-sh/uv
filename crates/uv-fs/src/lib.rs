@@ -599,7 +599,7 @@ impl LockedFile {
         path: impl AsRef<Path>,
         resource: impl Display,
     ) -> Result<Self, std::io::Error> {
-        let file = fs_err::File::create(path.as_ref())?;
+        let file = Self::create(path)?;
         let resource = resource.to_string();
         Self::lock_file_blocking(file, &resource)
     }
@@ -610,9 +610,30 @@ impl LockedFile {
         path: impl AsRef<Path>,
         resource: impl Display,
     ) -> Result<Self, std::io::Error> {
-        let file = fs_err::File::create(path.as_ref())?;
+        let file = Self::create(path)?;
         let resource = resource.to_string();
         tokio::task::spawn_blocking(move || Self::lock_file_blocking(file, &resource)).await?
+    }
+
+    #[cfg(unix)]
+    fn create(path: impl AsRef<Path>) -> std::io::Result<fs_err::File> {
+        use fs_err::os::unix::fs::OpenOptionsExt;
+
+        fs_err::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .mode(0o777)
+            .open(path.as_ref())
+    }
+
+    #[cfg(not(unix))]
+    fn create(path: impl AsRef<Path>) -> std::io::Result<fs_err::File> {
+        fs_err::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(path.as_ref())
     }
 }
 
