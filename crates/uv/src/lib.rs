@@ -1810,6 +1810,21 @@ where
     I: IntoIterator<Item = T>,
     T: Into<OsString> + Clone,
 {
+    // Set the `UV` variable to the current executable so it is implicitly propagated to all child
+    // processes, e.g., in `uv run`.
+    #[allow(unsafe_code)]
+    {
+        if let Ok(current_exe) = std::env::current_exe() {
+            // SAFETY: This is safe because we are running it early in `main` before spawning any
+            // threads and uv assumes it has full control over the process at this time.
+            unsafe {
+                // This will become unsafe in Rust 2024
+                // See https://doc.rust-lang.org/std/env/fn.set_var.html#safety
+                std::env::set_var(EnvVars::UV, current_exe);
+            }
+        }
+    }
+
     // `std::env::args` is not `Send` so we parse before passing to our runtime
     // https://github.com/rust-lang/rust/pull/48005
     let cli = match Cli::try_parse_from(args) {
@@ -1860,19 +1875,6 @@ where
             err.exit()
         }
     };
-
-    // Set the `UV` variable, we do this before spawning any threads because it is unsafe to set
-    // environment variables in a multi-threaded runtime.
-    #[allow(unsafe_code)]
-    {
-        if let Ok(current_exe) = std::env::current_exe() {
-            // This will become unsafe in Rust 2024
-            // https://doc.rust-lang.org/std/env/fn.set_var.html#safety
-            unsafe {
-                std::env::set_var(EnvVars::UV, current_exe);
-            }
-        }
-    }
 
     // Running out of stack has been an issue for us. We box types and futures in various places
     // to mitigate this, with this being an especially important case.

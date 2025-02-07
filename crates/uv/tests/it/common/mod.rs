@@ -363,7 +363,7 @@ impl TestContext {
         let mut filters = Vec::new();
 
         filters.extend(
-            Self::path_patterns(&get_bin())
+            Self::path_patterns(get_bin())
                 .into_iter()
                 .map(|pattern| (pattern, "[UV]".to_string())),
         );
