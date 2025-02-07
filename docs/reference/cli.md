@@ -485,7 +485,7 @@ uv run [OPTIONS] [COMMAND]
 
 <p>When used in a project, these dependencies will be layered on top of the project environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified by the project.</p>
 
-</dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Run with the given packages installed as editables.</p>
+</dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Run with the given packages installed in editable mode.</p>
 
 <p>When used in a project, these dependencies will be layered on top of the project environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified by the project.</p>
 
@@ -3381,7 +3381,7 @@ uv tool run [OPTIONS] [COMMAND]
 
 </dd><dt><code>--with</code> <i>with</i></dt><dd><p>Run with the given packages installed</p>
 
-</dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Run with the given packages installed as editables</p>
+</dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Run with the given packages installed in editable mode</p>
 
 <p>When used in a project, these dependencies will be layered on top of the uv tool&#8217;s environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified.</p>
 
@@ -3474,7 +3474,9 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
-</dd><dt><code>--editable</code>, <code>-e</code></dt><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
+</dd><dt><code>--editable</code>, <code>-e</code></dt><dd><p>Install the target package in editable mode, such that changes in the package&#8217;s source directory are reflected without reinstallation</p>
+
+</dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
 
@@ -3715,7 +3717,7 @@ uv tool install [OPTIONS] <PACKAGE>
 
 </dd><dt><code>--with</code> <i>with</i></dt><dd><p>Include the following extra requirements</p>
 
-</dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Include the given packages as editables</p>
+</dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Include the given packages in editable mode</p>
 
 </dd><dt><code>--with-requirements</code> <i>with-requirements</i></dt><dd><p>Run all requirements listed in the given <code>requirements.txt</code> files</p>
 

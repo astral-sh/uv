@@ -2798,7 +2798,7 @@ pub struct RunArgs {
     #[arg(long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
-    /// Run with the given packages installed as editables.
+    /// Run with the given packages installed in editable mode.
     ///
     /// When used in a project, these dependencies will be layered on top of the project environment
     /// in a separate, ephemeral environment. These dependencies are allowed to conflict with those
@@ -3901,7 +3901,7 @@ pub struct ToolRunArgs {
     #[arg(long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
-    /// Run with the given packages installed as editables
+    /// Run with the given packages installed in editable mode
     ///
     /// When used in a project, these dependencies will be layered on top of the uv tool's
     /// environment in a separate, ephemeral environment. These dependencies are allowed to conflict
@@ -3955,9 +3955,6 @@ pub struct ToolInstallArgs {
     /// The package to install commands from.
     pub package: String,
 
-    #[arg(short, long)]
-    pub editable: bool,
-
     /// The package to install commands from.
     ///
     /// This option is provided for parity with `uv tool run`, but is redundant with `package`.
@@ -3968,13 +3965,18 @@ pub struct ToolInstallArgs {
     #[arg(long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
-    /// Include the given packages as editables.
-    #[arg(long)]
-    pub with_editable: Vec<comma::CommaSeparatedRequirements>,
-
     /// Run all requirements listed in the given `requirements.txt` files.
     #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
+
+    /// Install the target package in editable mode, such that changes in the package's source
+    /// directory are reflected without reinstallation.
+    #[arg(short, long)]
+    pub editable: bool,
+
+    /// Include the given packages in editable mode.
+    #[arg(long)]
+    pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
     /// Constrain versions using the given requirements files.
     ///
