@@ -58,6 +58,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         std::env::set_current_dir(directory)?;
     }
 
+    // Set the `UV` variable
+    if let Ok(current_exe) = std::env::current_exe() {
+        std::env::set_var(EnvVars::UV, current_exe);
+    }
+
     // Determine the project directory.
     let project_dir = cli
         .top_level

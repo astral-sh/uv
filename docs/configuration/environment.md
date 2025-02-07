@@ -534,6 +534,12 @@ Path to system-level configuration directory on Windows systems.
 
 Use to create the tracing durations file via the `tracing-durations-export` feature.
 
+### `UV`
+
+The path to the uv binary that was used to invoke a command.
+
+uv sets this when calling subcommands like `uv run`.
+
 ### `VIRTUAL_ENV`
 
 Used to detect an activated virtual environment.

@@ -362,6 +362,12 @@ impl TestContext {
 
         let mut filters = Vec::new();
 
+        filters.extend(
+            Self::path_patterns(&get_bin())
+                .into_iter()
+                .map(|pattern| (pattern, "[UV]".to_string())),
+        );
+
         // Exclude `link-mode` on Windows since we set it in the remote test suite
         if cfg!(windows) {
             filters.push((" --link-mode <LINK_MODE>".to_string(), String::new()));

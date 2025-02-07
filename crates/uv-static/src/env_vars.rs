@@ -5,6 +5,11 @@ pub struct EnvVars;
 
 #[attribute_env_vars_metadata]
 impl EnvVars {
+    /// The path to the uv binary that was used to invoke a command.
+    ///
+    /// uv sets this when calling subcommands like `uv run`.
+    pub const UV: &'static str = "UV";
+
     /// Equivalent to the `--offline` command-line argument. If set, uv will disable network access.
     pub const UV_OFFLINE: &'static str = "UV_OFFLINE";
 
