@@ -797,17 +797,19 @@ impl CacheBucket {
     fn to_str(self) -> &'static str {
         match self {
             // Note that when bumping this, you'll also need to bump it
-            // in crates/uv/tests/cache_prune.rs.
+            // in `crates/uv/tests/it/cache_prune.rs`.
             Self::SourceDistributions => "sdists-v7",
             Self::FlatIndex => "flat-index-v2",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v4",
             // Note that when bumping this, you'll also need to bump it
-            // in crates/uv/tests/cache_clean.rs.
+            // in `crates/uv/tests/it/cache_clean.rs`.
             Self::Simple => "simple-v15",
             // Note that when bumping this, you'll also need to bump it
-            // in crates/uv/tests/cache_prune.rs.
-            Self::Wheels => "wheels-v3",
+            // in `crates/uv/tests/it/cache_prune.rs`.
+            Self::Wheels => "wheels-v4",
+            // Note that when bumping this, you'll also need to bump it
+            // in `crates/uv-distribution/src/archive.rs`.
             Self::Archive => "archive-v0",
             Self::Builds => "builds-v0",
             Self::Environments => "environments-v1",
