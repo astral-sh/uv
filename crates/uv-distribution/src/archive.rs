@@ -2,6 +2,11 @@ use uv_cache::{ArchiveId, Cache};
 use uv_distribution_types::Hashed;
 use uv_pypi_types::HashDigest;
 
+/// The version of the archive bucket.
+///
+/// Must be kept in-sync with the version in [`uv_cache::CacheBucket::to_str`].
+const ARCHIVE_VERSION: u8 = 0;
+
 /// An archive (unzipped wheel) that exists in the local cache.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Archive {
@@ -9,17 +14,23 @@ pub struct Archive {
     pub id: ArchiveId,
     /// The computed hashes of the archive.
     pub hashes: Vec<HashDigest>,
+    /// The version of the archive bucket.
+    pub version: u8,
 }
 
 impl Archive {
     /// Create a new [`Archive`] with the given ID and hashes.
     pub(crate) fn new(id: ArchiveId, hashes: Vec<HashDigest>) -> Self {
-        Self { id, hashes }
+        Self {
+            id,
+            hashes,
+            version: ARCHIVE_VERSION,
+        }
     }
 
     /// Returns `true` if the archive exists in the cache.
     pub(crate) fn exists(&self, cache: &Cache) -> bool {
-        cache.archive(&self.id).exists()
+        self.version == ARCHIVE_VERSION && cache.archive(&self.id).exists()
     }
 }
 
