@@ -2700,7 +2700,7 @@ pub struct RunArgs {
     /// Disable the development dependency group.
     ///
     /// This option is an alias of `--no-group dev`.
-    /// You probably actually want `--no-default-groups`.
+    /// See `--no-default-groups` to disable all default groups instead.
     ///
     /// This option is only available when running in a project.
     #[arg(long, overrides_with("dev"))]
@@ -2714,23 +2714,23 @@ pub struct RunArgs {
 
     /// Disable the specified dependency group.
     ///
-    /// This is specifically for disabling individual default groups or to
-    /// modify `--all-groups`. It also has priority over `--group`.
+    /// This options always takes precedence over default groups,
+    /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
-    /// Don't implicitly include the default dependency groups.
+    /// Ignore the the default dependency groups.
     ///
-    /// `--group` can still be used to add back individual defaulted groups,
-    /// making this unlike `--no-group <some-default-group>`.
+    /// uv includes the groups defined in `tool.uv.default-groups` by default.
+    /// This disables that option, however, specific groups can still be included with `--group`.
     #[arg(long)]
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
     ///
-    /// The project and its normal dependencies will be omitted.
+    /// The project and its dependencies will be omitted.
     ///
     /// May be provided multiple times. Implies `--no-default-groups`.
     #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"])]
@@ -2750,7 +2750,7 @@ pub struct RunArgs {
 
     /// Only include the development dependency group.
     ///
-    /// The project and its normal dependencies will be omitted.
+    /// The project and its dependencies will be omitted.
     ///
     /// This option is an alias for `--only-group dev`. Implies `--no-default-groups`.
     #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
@@ -2977,13 +2977,13 @@ pub struct SyncArgs {
     /// Disable the development dependency group.
     ///
     /// This option is an alias of `--no-group dev`.
-    /// You probably actually want `--no-default-groups`.
+    /// See `--no-default-groups` to disable all default groups instead.
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
     /// Only include the development dependency group.
     ///
-    /// The project and its normal dependencies will be omitted.
+    /// The project and its dependencies will be omitted.
     ///
     /// This option is an alias for `--only-group dev`. Implies `--no-default-groups`.
     #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
@@ -3000,23 +3000,23 @@ pub struct SyncArgs {
 
     /// Disable the specified dependency group.
     ///
-    /// This is specifically for disabling individual default groups or to
-    /// modify `--all-groups`. It also has priority over `--group`.
+    /// This options always takes precedence over default groups,
+    /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
-    /// Don't implicitly include the default dependency groups.
+    /// Ignore the the default dependency groups.
     ///
-    /// `--group` can still be used to add back individual defaulted groups,
-    /// making this unlike `--no-group <some-default-group>`.
+    /// uv includes the groups defined in `tool.uv.default-groups` by default.
+    /// This disables that option, however, specific groups can still be included with `--group`.
     #[arg(long)]
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
     ///
-    /// The project and its normal dependencies will be omitted.
+    /// The project and its dependencies will be omitted.
     ///
     /// May be provided multiple times. Implies `--no-default-groups`.
     #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"])]
@@ -3465,7 +3465,7 @@ pub struct TreeArgs {
 
     /// Only include the development dependency group.
     ///
-    /// The project and its normal dependencies will be omitted.
+    /// The project and its dependencies will be omitted.
     ///
     /// This option is an alias for `--only-group dev`. Implies `--no-default-groups`.
     #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
@@ -3474,7 +3474,7 @@ pub struct TreeArgs {
     /// Disable the development dependency group.
     ///
     /// This option is an alias of `--no-group dev`.
-    /// You probably actually want `--no-default-groups`.
+    /// See `--no-default-groups` to disable all default groups instead.
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
@@ -3486,23 +3486,23 @@ pub struct TreeArgs {
 
     /// Disable the specified dependency group.
     ///
-    /// This is specifically for disabling individual default groups or to
-    /// modify `--all-groups`. It also has priority over `--group`.
+    /// This options always takes precedence over default groups,
+    /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
-    /// Don't implicitly include the default dependency groups.
+    /// Ignore the the default dependency groups.
     ///
-    /// `--group` can still be used to add back individual defaulted groups,
-    /// making this unlike `--no-group <some-default-group>`.
+    /// uv includes the groups defined in `tool.uv.default-groups` by default.
+    /// This disables that option, however, specific groups can still be included with `--group`.
     #[arg(long)]
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
     ///
-    /// The project and its normal dependencies will be omitted.
+    /// The project and its dependencies will be omitted.
     ///
     /// May be provided multiple times. Implies `--no-default-groups`.
     #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"])]
@@ -3639,13 +3639,13 @@ pub struct ExportArgs {
     /// Disable the development dependency group.
     ///
     /// This option is an alias of `--no-group dev`.
-    /// You probably actually want `--no-default-groups`.
+    /// See `--no-default-groups` to disable all default groups instead.
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
     /// Only include the development dependency group.
     ///
-    /// The project and its normal dependencies will be omitted.
+    /// The project and its dependencies will be omitted.
     ///
     /// This option is an alias for `--only-group dev`. Implies `--no-default-groups`.
     #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
@@ -3659,23 +3659,23 @@ pub struct ExportArgs {
 
     /// Disable the specified dependency group.
     ///
-    /// This is specifically for disabling individual default groups or to
-    /// modify `--all-groups`. It also has priority over `--group`.
+    /// This options always takes precedence over default groups,
+    /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
-    /// Don't implicitly include the default dependency groups.
+    /// Ignore the the default dependency groups.
     ///
-    /// `--group` can still be used to add back individual defaulted groups,
-    /// making this unlike `--no-group <some-default-group>`.
+    /// uv includes the groups defined in `tool.uv.default-groups` by default.
+    /// This disables that option, however, specific groups can still be included with `--group`.
     #[arg(long)]
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
     ///
-    /// The project and its normal dependencies will be omitted.
+    /// The project and its dependencies will be omitted.
     ///
     /// May be provided multiple times. Implies `--no-default-groups`.
     #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"])]
