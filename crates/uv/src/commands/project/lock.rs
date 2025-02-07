@@ -175,11 +175,14 @@ pub(crate) async fn lock(
     {
         Ok(lock) => {
             if dry_run {
-                let changed = if let LockResult::Changed(previous, lock) = &lock {
-                    report_upgrades(previous.as_ref(), lock, printer, dry_run)?
-                } else {
-                    false
-                };
+                // In `--dry-run` mode, show all changes.
+                let mut changed = false;
+                if let LockResult::Changed(previous, lock) = &lock {
+                    for event in LockEvent::detect_changes(previous.as_ref(), lock, dry_run) {
+                        changed = true;
+                        writeln!(printer.stderr(), "{event}")?;
+                    }
+                }
                 if !changed {
                     writeln!(
                         printer.stderr(),
@@ -189,7 +192,9 @@ pub(crate) async fn lock(
                 }
             } else {
                 if let LockResult::Changed(Some(previous), lock) = &lock {
-                    report_upgrades(Some(previous), lock, printer, dry_run)?;
+                    for event in LockEvent::detect_changes(Some(previous), lock, dry_run) {
+                        writeln!(printer.stderr(), "{event}")?;
+                    }
                 }
             }
 
@@ -1072,47 +1077,86 @@ impl ValidatedLock {
     }
 }
 
-/// Reports on the versions that were upgraded in the new lockfile.
-///
-/// Returns `true` if any upgrades were reported.
-fn report_upgrades(
-    existing_lock: Option<&Lock>,
-    new_lock: &Lock,
-    printer: Printer,
-    dry_run: bool,
-) -> anyhow::Result<bool> {
-    let existing_packages: FxHashMap<&PackageName, BTreeSet<Option<&Version>>> =
-        if let Some(existing_lock) = existing_lock {
-            existing_lock.packages().iter().fold(
-                FxHashMap::with_capacity_and_hasher(existing_lock.packages().len(), FxBuildHasher),
+/// A modification to a lockfile.
+#[derive(Debug, Clone)]
+pub(crate) enum LockEvent<'lock> {
+    Update(
+        bool,
+        PackageName,
+        BTreeSet<Option<&'lock Version>>,
+        BTreeSet<Option<&'lock Version>>,
+    ),
+    Add(bool, PackageName, BTreeSet<Option<&'lock Version>>),
+    Remove(bool, PackageName, BTreeSet<Option<&'lock Version>>),
+}
+
+impl<'lock> LockEvent<'lock> {
+    /// Detect the change events between an (optional) existing and updated lockfile.
+    pub(crate) fn detect_changes(
+        existing_lock: Option<&'lock Lock>,
+        new_lock: &'lock Lock,
+        dry_run: bool,
+    ) -> impl Iterator<Item = Self> {
+        // Identify the package-versions in the existing lockfile.
+        let mut existing_packages: FxHashMap<&PackageName, BTreeSet<Option<&Version>>> =
+            if let Some(existing_lock) = existing_lock {
+                existing_lock.packages().iter().fold(
+                    FxHashMap::with_capacity_and_hasher(
+                        existing_lock.packages().len(),
+                        FxBuildHasher,
+                    ),
+                    |mut acc, package| {
+                        acc.entry(package.name())
+                            .or_default()
+                            .insert(package.version());
+                        acc
+                    },
+                )
+            } else {
+                FxHashMap::default()
+            };
+
+        // Identify the package-versions in the updated lockfile.
+        let mut new_packages: FxHashMap<&PackageName, BTreeSet<Option<&Version>>> =
+            new_lock.packages().iter().fold(
+                FxHashMap::with_capacity_and_hasher(new_lock.packages().len(), FxBuildHasher),
                 |mut acc, package| {
                     acc.entry(package.name())
                         .or_default()
                         .insert(package.version());
                     acc
                 },
-            )
-        } else {
-            FxHashMap::default()
-        };
+            );
 
-    let new_distributions: FxHashMap<&PackageName, BTreeSet<Option<&Version>>> =
-        new_lock.packages().iter().fold(
-            FxHashMap::with_capacity_and_hasher(new_lock.packages().len(), FxBuildHasher),
-            |mut acc, package| {
-                acc.entry(package.name())
-                    .or_default()
-                    .insert(package.version());
-                acc
-            },
-        );
+        let names = existing_packages
+            .keys()
+            .chain(new_packages.keys())
+            .map(|name| (*name).clone())
+            .collect::<BTreeSet<_>>();
 
-    let mut updated = false;
-    for name in existing_packages
-        .keys()
-        .chain(new_distributions.keys())
-        .collect::<BTreeSet<_>>()
-    {
+        names.into_iter().filter_map(move |name| {
+            match (existing_packages.remove(&name), new_packages.remove(&name)) {
+                (Some(existing_versions), Some(new_versions)) => {
+                    if existing_versions != new_versions {
+                        Some(Self::Update(dry_run, name, existing_versions, new_versions))
+                    } else {
+                        None
+                    }
+                }
+                (Some(existing_versions), None) => {
+                    Some(Self::Remove(dry_run, name, existing_versions))
+                }
+                (None, Some(new_versions)) => Some(Self::Add(dry_run, name, new_versions)),
+                (None, None) => {
+                    unreachable!("The key `{name}` should exist in at least one of the maps");
+                }
+            }
+        })
+    }
+}
+
+impl std::fmt::Display for LockEvent<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         /// Format a version for inclusion in the upgrade report.
         fn format_version(version: Option<&Version>) -> String {
             version
@@ -1120,56 +1164,51 @@ fn report_upgrades(
                 .unwrap_or_else(|| "(dynamic)".to_string())
         }
 
-        updated = true;
-        match (existing_packages.get(name), new_distributions.get(name)) {
-            (Some(existing_versions), Some(new_versions)) => {
-                if existing_versions != new_versions {
-                    let existing_versions = existing_versions
-                        .iter()
-                        .map(|version| format_version(*version))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    let new_versions = new_versions
-                        .iter()
-                        .map(|version| format_version(*version))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    writeln!(
-                        printer.stderr(),
-                        "{} {name} {existing_versions} -> {new_versions}",
-                        if dry_run { "Update" } else { "Updated" }.green().bold()
-                    )?;
-                }
-            }
-            (Some(existing_versions), None) => {
+        match self {
+            Self::Update(dry_run, name, existing_versions, new_versions) => {
                 let existing_versions = existing_versions
                     .iter()
                     .map(|version| format_version(*version))
                     .collect::<Vec<_>>()
                     .join(", ");
-                writeln!(
-                    printer.stderr(),
-                    "{} {name} {existing_versions}",
-                    if dry_run { "Remove" } else { "Removed" }.red().bold()
-                )?;
-            }
-            (None, Some(new_versions)) => {
                 let new_versions = new_versions
                     .iter()
                     .map(|version| format_version(*version))
                     .collect::<Vec<_>>()
                     .join(", ");
-                writeln!(
-                    printer.stderr(),
-                    "{} {name} {new_versions}",
-                    if dry_run { "Add" } else { "Added" }.green().bold()
-                )?;
+
+                write!(
+                    f,
+                    "{} {name} {existing_versions} -> {new_versions}",
+                    if *dry_run { "Update" } else { "Updated" }.green().bold()
+                )
             }
-            (None, None) => {
-                unreachable!("The key `{name}` should exist in at least one of the maps");
+            Self::Add(dry_run, name, new_versions) => {
+                let new_versions = new_versions
+                    .iter()
+                    .map(|version| format_version(*version))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                write!(
+                    f,
+                    "{} {name} {new_versions}",
+                    if *dry_run { "Add" } else { "Added" }.green().bold()
+                )
+            }
+            Self::Remove(dry_run, name, existing_versions) => {
+                let existing_versions = existing_versions
+                    .iter()
+                    .map(|version| format_version(*version))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                write!(
+                    f,
+                    "{} {name} {existing_versions}",
+                    if *dry_run { "Remove" } else { "Removed" }.red().bold()
+                )
             }
         }
     }
-
-    Ok(updated)
 }
