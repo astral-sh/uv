@@ -4120,3 +4120,20 @@ fn run_without_overlay() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn run_uv_variable() {
+    let context = TestContext::new("3.12");
+
+    // Display the `UV` variable
+    uv_snapshot!(
+        context.filters(),
+        context.run().arg("python").arg("-c").arg("import os; print(os.environ['UV'])"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [UV]
+
+    ----- stderr -----
+    "###);
+}
