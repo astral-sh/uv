@@ -81,6 +81,8 @@ pub enum Error {
     InvalidDataRoot { name: String, path: PathBuf },
     #[error("Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: {}", _0.user_display())]
     VenvInSourceTree(PathBuf),
+    #[error("Expected a direct src directory with `__init__.py` at: {}", _0.user_display())]
+    MissingDirectSrcModule(PathBuf),
     #[error("Inconsistent metadata between prepare and build step: {0}")]
     InconsistentSteps(&'static str),
     #[error("Failed to write to {}", _0.user_display())]

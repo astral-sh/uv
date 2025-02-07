@@ -23,6 +23,18 @@ pub struct BuildBackendSettings {
     )]
     pub(crate) module_root: PathBuf,
 
+    /// Use `module-root` itself as the package instead of nesting the module name below it.
+    ///
+    /// The direct src layout is a custom uv extension for a `src/__init__.py` layout. It avoids
+    /// nesting the package name below `src`, but always requires installation because Python would
+    /// otherwise import the package as `src` rather than by the project name.
+    #[option(
+        default = r#"false"#,
+        value_type = "bool",
+        example = r#"direct-src = true"#
+    )]
+    pub(crate) direct_src: bool,
+
     /// The name of the module directory inside `module-root`.
     ///
     /// The default module name is the package name with dots and dashes replaced by underscores.
@@ -177,6 +189,7 @@ impl Default for BuildBackendSettings {
     fn default() -> Self {
         Self {
             module_root: PathBuf::from("src"),
+            direct_src: false,
             module_name: None,
             source_include: Vec::new(),
             default_excludes: true,

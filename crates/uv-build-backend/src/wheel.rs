@@ -17,7 +17,7 @@ use tracing::{debug, trace};
 use walkdir::WalkDir;
 
 use uv_distribution_filename::WheelFilename;
-use uv_fs::Simplified;
+use uv_fs::{Simplified, normalize_path};
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
 use uv_preview::PreviewFeature;
@@ -38,6 +38,9 @@ const WHOLE_FILE_ZIP_ENTRY_LIMIT: u64 = 16 * 1024 * 1024;
 // down read/write loop overhead compared to the 8 KiB default while remaining a
 // small fixed allocation for entries that are too large for `write_entry_whole`.
 const ZIP_STREAM_BUFFER_SIZE: usize = 128 * 1024;
+
+/// A meta path finder to add support for `src/__init__.py` layouts, which we copy into the venv.
+static UV_DIRECT_SRC_FINDER: &str = include_str!("uv_direct_src_finder.py");
 
 /// Build a wheel from the source tree and place it in the output directory.
 pub fn build_wheel(
@@ -269,6 +272,7 @@ pub fn build_editable(
     metadata_directory: Option<&Path>,
     uv_version: &str,
     show_warnings: bool,
+    preview: bool,
 ) -> Result<WheelFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
@@ -302,21 +306,72 @@ pub fn build_editable(
     let temp_file = uv_fs::tempfile_in(wheel_dir)?;
     let mut wheel_writer = ZipDirectoryWriter::new_wheel(temp_file.as_file());
 
-    debug!("Adding pth file to {}", wheel_path.user_display());
-    // Check that a module root exists in the directory we're linking from the `.pth` file
-    let (src_root, _module_relative) = find_roots(
-        source_tree,
-        &pyproject_toml,
-        &settings.module_root,
-        settings.module_name.as_ref(),
-        settings.namespace,
-        show_warnings,
-    )?;
+    if settings.direct_src {
+        let relative_module_root = normalize_path(&settings.module_root);
+        let src_root = source_tree.join(&relative_module_root);
+        if !normalize_path(&src_root).starts_with(normalize_path(source_tree)) {
+            return Err(Error::InvalidModuleRoot(relative_module_root.to_path_buf()));
+        }
+        if !preview {
+            warn_user_once!(
+                "The direct src layout is experimental and may be removed without warning"
+            );
+        }
+        debug!(
+            "Adding direct src pth file to {}",
+            wheel_path.user_display()
+        );
+        if !src_root.join("__init__.py").is_file() {
+            return Err(Error::MissingDirectSrcModule(src_root));
+        }
 
-    wheel_writer.write_bytes(
-        &format!("{}.pth", pyproject_toml.name().as_dist_info_name()),
-        src_root.as_os_str().as_encoded_bytes(),
-    )?;
+        // Lines in pth files starting with `import ` are executed, so we have to cram all our code
+        // into the same line. Example unfolded code:
+        // ```python
+        // import sys
+        // from _foo_bar_direct_src_support import UvFlatEditableFinder
+        // sys.meta_path.append(UvFlatEditableFinder("foo_bar", "/home/ferris/projects/foo_bar/src"))
+        // ```
+        let load_finder = [
+            "import sys",
+            &format!(
+                "from _{}_direct_src_support import UvDirectSrcFinder",
+                pyproject_toml.name().as_dist_info_name()
+            ),
+            &format!(
+                r#"sys.meta_path.insert(0, UvDirectSrcFinder("{}", "{}"))"#,
+                pyproject_toml.name().as_dist_info_name(),
+                src_root.display()
+            ),
+        ]
+        .join("; ");
+        wheel_writer.write_bytes(
+            &format!("{}.pth", pyproject_toml.name().as_dist_info_name()),
+            load_finder.as_bytes(),
+        )?;
+        wheel_writer.write_bytes(
+            &format!(
+                "_{}_direct_src_support.py",
+                pyproject_toml.name().as_dist_info_name()
+            ),
+            UV_DIRECT_SRC_FINDER.as_bytes(),
+        )?;
+    } else {
+        debug!("Adding pth file to {}", wheel_path.user_display());
+        // Check that a module root exists in the directory we're linking from the `.pth` file.
+        let (src_root, _module_relative) = find_roots(
+            source_tree,
+            &pyproject_toml,
+            &settings.module_root,
+            settings.module_name.as_ref(),
+            settings.namespace,
+            show_warnings,
+        )?;
+        wheel_writer.write_bytes(
+            &format!("{}.pth", pyproject_toml.name().as_dist_info_name()),
+            src_root.as_os_str().as_encoded_bytes(),
+        )?;
+    }
 
     write_data_files(
         source_tree,

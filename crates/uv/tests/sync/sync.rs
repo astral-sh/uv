@@ -17541,3 +17541,57 @@ fn sync_frozen_workspace_member_git_credentials() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn direct_src_editable() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "flat"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [tool.uv.build-backend]
+            direct-src = true
+
+            [build-system]
+            requires = ["uv_build>=0.7,<10000"]
+            build-backend = "uv_build"
+    "#})?;
+    context
+        .temp_dir
+        .child("src/__init__.py")
+        .write_str(indoc! {r#"
+            def say_hi():
+                print("🐊")
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + flat==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    uv_snapshot!(context.run().arg("python").arg("-c").arg("import flat; flat.say_hi()"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    🐊
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked 1 package in [TIME]
+    "###);
+
+    Ok(())
+}

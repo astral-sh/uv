@@ -2021,6 +2021,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             } => commands::build_backend::build_editable(
                 &wheel_directory,
                 metadata_directory.as_deref(),
+                globals.preview,
             ),
             BuildBackendCommand::GetRequiresForBuildSdist => {
                 commands::build_backend::get_requires_for_build_sdist()
