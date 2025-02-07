@@ -4646,6 +4646,7 @@ dependencies = [
  "thiserror 2.0.11",
  "toml",
  "tracing",
+ "uv-configuration",
  "uv-distribution-filename",
  "uv-fs",
  "uv-globfilter",

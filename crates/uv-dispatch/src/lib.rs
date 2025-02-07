@@ -461,6 +461,7 @@ impl BuildContext for BuildDispatch<'_> {
         debug!("Performing direct build for {identifier}");
 
         let output_dir = output_dir.to_path_buf();
+        let preview = self.preview;
         let filename = tokio::task::spawn_blocking(move || -> Result<_> {
             let filename = match build_kind {
                 BuildKind::Wheel => {
@@ -486,6 +487,7 @@ impl BuildContext for BuildDispatch<'_> {
                         &output_dir,
                         None,
                         uv_version::version(),
+                        preview,
                     )?;
                     DistFilename::WheelFilename(wheel)
                 }

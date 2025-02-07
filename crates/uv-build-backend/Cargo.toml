@@ -13,6 +13,7 @@ license.workspace = true
 doctest = false
 
 [dependencies]
+uv-configuration = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-fs = { workspace = true }
 uv-globfilter = { workspace = true }
