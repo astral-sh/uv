@@ -17,7 +17,7 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{
-    Concurrency, DevGroupsSpecification, EditableMode, ExtrasSpecification, InstallOptions,
+    Concurrency, DevGroupsSpecification, DryRun, EditableMode, ExtrasSpecification, InstallOptions,
     PreviewMode, SourceStrategy, TrustedHost,
 };
 use uv_distribution::LoweredRequirement;
@@ -652,7 +652,7 @@ pub(crate) async fn run(
                     no_config,
                     active,
                     cache,
-                    false,
+                    DryRun::Disabled,
                     printer,
                 )
                 .await?
@@ -799,7 +799,7 @@ pub(crate) async fn run(
                     native_tls,
                     allow_insecure_host,
                     cache,
-                    false,
+                    DryRun::Disabled,
                     printer,
                     preview,
                 )

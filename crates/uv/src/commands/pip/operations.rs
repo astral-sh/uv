@@ -13,7 +13,7 @@ use uv_tool::InstalledTools;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification, DryRun,
     ExtrasSpecification, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
@@ -418,7 +418,7 @@ pub(crate) async fn install(
     venv: &PythonEnvironment,
     logger: Box<dyn InstallLogger>,
     installer_metadata: bool,
-    dry_run: bool,
+    dry_run: DryRun,
     printer: Printer,
 ) -> Result<Changelog, Error> {
     let start = std::time::Instant::now();
@@ -439,7 +439,7 @@ pub(crate) async fn install(
         )
         .context("Failed to determine installation plan")?;
 
-    if dry_run {
+    if dry_run.enabled() {
         report_dry_run(resolution, plan, modifications, start, printer)?;
         return Ok(Changelog::default());
     }

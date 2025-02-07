@@ -12,8 +12,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevGroupsSpecification, ExtrasSpecification, PreviewMode, Reinstall,
-    TrustedHost, Upgrade,
+    Concurrency, Constraints, DevGroupsSpecification, DryRun, ExtrasSpecification, PreviewMode,
+    Reinstall, TrustedHost, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -79,7 +79,7 @@ pub(crate) async fn lock(
     project_dir: &Path,
     locked: bool,
     frozen: bool,
-    dry_run: bool,
+    dry_run: DryRun,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
@@ -146,7 +146,7 @@ pub(crate) async fn lock(
 
         if locked {
             LockMode::Locked(&interpreter)
-        } else if dry_run {
+        } else if dry_run.enabled() {
             LockMode::DryRun(&interpreter)
         } else {
             LockMode::Write(&interpreter)
@@ -174,7 +174,7 @@ pub(crate) async fn lock(
     .await
     {
         Ok(lock) => {
-            if dry_run {
+            if dry_run.enabled() {
                 // In `--dry-run` mode, show all changes.
                 let mut changed = false;
                 if let LockResult::Changed(previous, lock) = &lock {
@@ -1081,13 +1081,13 @@ impl ValidatedLock {
 #[derive(Debug, Clone)]
 pub(crate) enum LockEvent<'lock> {
     Update(
-        bool,
+        DryRun,
         PackageName,
         BTreeSet<Option<&'lock Version>>,
         BTreeSet<Option<&'lock Version>>,
     ),
-    Add(bool, PackageName, BTreeSet<Option<&'lock Version>>),
-    Remove(bool, PackageName, BTreeSet<Option<&'lock Version>>),
+    Add(DryRun, PackageName, BTreeSet<Option<&'lock Version>>),
+    Remove(DryRun, PackageName, BTreeSet<Option<&'lock Version>>),
 }
 
 impl<'lock> LockEvent<'lock> {
@@ -1095,7 +1095,7 @@ impl<'lock> LockEvent<'lock> {
     pub(crate) fn detect_changes(
         existing_lock: Option<&'lock Lock>,
         new_lock: &'lock Lock,
-        dry_run: bool,
+        dry_run: DryRun,
     ) -> impl Iterator<Item = Self> {
         // Identify the package-versions in the existing lockfile.
         let mut existing_packages: FxHashMap<&PackageName, BTreeSet<Option<&Version>>> =
@@ -1180,7 +1180,13 @@ impl std::fmt::Display for LockEvent<'_> {
                 write!(
                     f,
                     "{} {name} {existing_versions} -> {new_versions}",
-                    if *dry_run { "Update" } else { "Updated" }.green().bold()
+                    if dry_run.enabled() {
+                        "Update"
+                    } else {
+                        "Updated"
+                    }
+                    .green()
+                    .bold()
                 )
             }
             Self::Add(dry_run, name, new_versions) => {
@@ -1193,7 +1199,9 @@ impl std::fmt::Display for LockEvent<'_> {
                 write!(
                     f,
                     "{} {name} {new_versions}",
-                    if *dry_run { "Add" } else { "Added" }.green().bold()
+                    if dry_run.enabled() { "Add" } else { "Added" }
+                        .green()
+                        .bold()
                 )
             }
             Self::Remove(dry_run, name, existing_versions) => {
@@ -1206,7 +1214,13 @@ impl std::fmt::Display for LockEvent<'_> {
                 write!(
                     f,
                     "{} {name} {existing_versions}",
-                    if *dry_run { "Remove" } else { "Removed" }.red().bold()
+                    if dry_run.enabled() {
+                        "Remove"
+                    } else {
+                        "Removed"
+                    }
+                    .red()
+                    .bold()
                 )
             }
         }

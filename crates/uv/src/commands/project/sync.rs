@@ -9,7 +9,7 @@ use owo_colors::OwoColorize;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, EditableMode,
+    Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, DryRun, EditableMode,
     ExtrasSpecification, HashCheckingMode, InstallOptions, PreviewMode, TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
@@ -49,7 +49,7 @@ pub(crate) async fn sync(
     project_dir: &Path,
     locked: bool,
     frozen: bool,
-    dry_run: bool,
+    dry_run: DryRun,
     active: Option<bool>,
     all_packages: bool,
     package: Option<PackageName>,
@@ -139,7 +139,7 @@ pub(crate) async fn sync(
     .await?
     {
         ProjectEnvironment::Existing(environment) => {
-            if dry_run {
+            if dry_run.enabled() {
                 writeln!(
                     printer.stderr(),
                     "{}",
@@ -153,7 +153,7 @@ pub(crate) async fn sync(
             environment
         }
         ProjectEnvironment::Replaced(environment, root) => {
-            if dry_run {
+            if dry_run.enabled() {
                 writeln!(
                     printer.stderr(),
                     "{}",
@@ -167,7 +167,7 @@ pub(crate) async fn sync(
             environment
         }
         ProjectEnvironment::New(environment, root) => {
-            if dry_run {
+            if dry_run.enabled() {
                 writeln!(
                     printer.stderr(),
                     "{}",
@@ -190,7 +190,7 @@ pub(crate) async fn sync(
         LockMode::Frozen
     } else if locked {
         LockMode::Locked(environment.interpreter())
-    } else if dry_run {
+    } else if dry_run.enabled() {
         LockMode::DryRun(environment.interpreter())
     } else {
         LockMode::Write(environment.interpreter())
@@ -215,7 +215,7 @@ pub(crate) async fn sync(
     .await
     {
         Ok(result) => {
-            if dry_run {
+            if dry_run.enabled() {
                 match result {
                     LockResult::Unchanged(..) => {
                         writeln!(
@@ -364,7 +364,7 @@ pub(super) async fn do_sync(
     native_tls: bool,
     allow_insecure_host: &[TrustedHost],
     cache: &Cache,
-    dry_run: bool,
+    dry_run: DryRun,
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<(), ProjectError> {

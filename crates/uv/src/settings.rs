@@ -22,10 +22,11 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, DevGroupsSpecification, EditableMode, ExportFormat,
-    ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType,
-    NoBinary, NoBuild, PreviewMode, ProjectBuildBackend, Reinstall, RequiredVersion,
-    SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
+    BuildOptions, Concurrency, ConfigSettings, DevGroupsSpecification, DryRun, EditableMode,
+    ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
+    KeyringProviderType, NoBinary, NoBuild, PreviewMode, ProjectBuildBackend, Reinstall,
+    RequiredVersion, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
+    VersionControlSystem,
 };
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl};
 use uv_install_wheel::LinkMode;
@@ -957,7 +958,7 @@ impl PythonPinSettings {
 pub(crate) struct SyncSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
-    pub(crate) dry_run: bool,
+    pub(crate) dry_run: DryRun,
     pub(crate) active: Option<bool>,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: DevGroupsSpecification,
@@ -1020,7 +1021,7 @@ impl SyncSettings {
         Self {
             locked,
             frozen,
-            dry_run,
+            dry_run: DryRun::from_args(dry_run),
             active: flag(active, no_active),
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
@@ -1064,7 +1065,7 @@ impl SyncSettings {
 pub(crate) struct LockSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
-    pub(crate) dry_run: bool,
+    pub(crate) dry_run: DryRun,
     pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -1095,7 +1096,7 @@ impl LockSettings {
         Self {
             locked: check,
             frozen: check_exists,
-            dry_run,
+            dry_run: DryRun::from_args(dry_run),
             script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
@@ -1679,7 +1680,7 @@ pub(crate) struct PipSyncSettings {
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
-    pub(crate) dry_run: bool,
+    pub(crate) dry_run: DryRun,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
 }
@@ -1728,7 +1729,7 @@ impl PipSyncSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            dry_run,
+            dry_run: DryRun::from_args(dry_run),
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {
@@ -1767,7 +1768,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
-    pub(crate) dry_run: bool,
+    pub(crate) dry_run: DryRun,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
     pub(crate) modifications: Modifications,
@@ -1861,7 +1862,7 @@ impl PipInstallSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            dry_run,
+            dry_run: DryRun::from_args(dry_run),
             constraints_from_workspace,
             overrides_from_workspace,
             modifications: if flag(exact, inexact).unwrap_or(false) {
@@ -1902,7 +1903,7 @@ impl PipInstallSettings {
 pub(crate) struct PipUninstallSettings {
     pub(crate) package: Vec<String>,
     pub(crate) requirements: Vec<PathBuf>,
-    pub(crate) dry_run: bool,
+    pub(crate) dry_run: DryRun,
     pub(crate) settings: PipSettings,
 }
 
@@ -1927,7 +1928,7 @@ impl PipUninstallSettings {
         Self {
             package,
             requirements,
-            dry_run,
+            dry_run: DryRun::from_args(dry_run),
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),

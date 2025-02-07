@@ -9,7 +9,7 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification, DryRun,
     ExtrasSpecification, HashCheckingMode, IndexStrategy, PreviewMode, Reinstall, SourceStrategy,
     TrustedHost, Upgrade,
 };
@@ -75,7 +75,7 @@ pub(crate) async fn pip_sync(
     native_tls: bool,
     allow_insecure_host: &[TrustedHost],
     cache: Cache,
-    dry_run: bool,
+    dry_run: DryRun,
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
@@ -425,7 +425,7 @@ pub(crate) async fn pip_sync(
     operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
     // Notify the user of any environment diagnostics.
-    if strict && !dry_run {
+    if strict && !dry_run.enabled() {
         operations::diagnose_environment(&resolution, &environment, &marker_env, printer)?;
     }
 
