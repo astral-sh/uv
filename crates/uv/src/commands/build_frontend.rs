@@ -42,7 +42,7 @@ use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
-use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
 #[derive(Debug, Error)]
 enum Error {
@@ -580,6 +580,7 @@ async fn build_package(
         &hasher,
         exclude_newer,
         sources,
+        WorkspaceCache::default(),
         concurrency,
         preview,
     );

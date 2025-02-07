@@ -43,7 +43,7 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::PyProjectToml;
-use uv_workspace::{ProjectWorkspace, Workspace};
+use uv_workspace::{ProjectWorkspace, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
@@ -1209,6 +1209,7 @@ pub(crate) async fn resolve_names(
         &build_hasher,
         *exclude_newer,
         *sources,
+        WorkspaceCache::default(),
         concurrency,
         preview,
     );
@@ -1399,6 +1400,7 @@ pub(crate) async fn resolve_environment(
         &build_hasher,
         exclude_newer,
         sources,
+        WorkspaceCache::default(),
         concurrency,
         preview,
     );
@@ -1538,6 +1540,7 @@ pub(crate) async fn sync_environment(
         &build_hasher,
         exclude_newer,
         sources,
+        WorkspaceCache::default(),
         concurrency,
         preview,
     );
@@ -1752,6 +1755,7 @@ pub(crate) async fn update_environment(
         &build_hasher,
         *exclude_newer,
         *sources,
+        WorkspaceCache::default(),
         concurrency,
         preview,
     );

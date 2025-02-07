@@ -38,6 +38,7 @@ use uv_types::{
     AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages, HashStrategy,
     InFlight,
 };
+use uv_workspace::WorkspaceCache;
 
 #[derive(Debug, Error)]
 pub enum BuildDispatchError {
@@ -94,6 +95,7 @@ pub struct BuildDispatch<'a> {
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
     sources: SourceStrategy,
+    workspace_cache: WorkspaceCache,
     concurrency: Concurrency,
     preview: PreviewMode,
 }
@@ -116,6 +118,7 @@ impl<'a> BuildDispatch<'a> {
         hasher: &'a HashStrategy,
         exclude_newer: Option<ExcludeNewer>,
         sources: SourceStrategy,
+        workspace_cache: WorkspaceCache,
         concurrency: Concurrency,
         preview: PreviewMode,
     ) -> Self {
@@ -137,8 +140,8 @@ impl<'a> BuildDispatch<'a> {
             exclude_newer,
             source_build_context: SourceBuildContext::default(),
             build_extra_env_vars: FxHashMap::default(),
-
             sources,
+            workspace_cache,
             concurrency,
             preview,
         }
@@ -194,6 +197,10 @@ impl BuildContext for BuildDispatch<'_> {
 
     fn sources(&self) -> SourceStrategy {
         self.sources
+    }
+
+    fn workspace_cache(&self) -> &WorkspaceCache {
+        &self.workspace_cache
     }
 
     fn locations(&self) -> &IndexLocations {

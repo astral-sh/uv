@@ -13,7 +13,7 @@ use uv_python::{
     VersionFileDiscoveryOptions, PYTHON_VERSION_FILENAME,
 };
 use uv_warnings::warn_user_once;
-use uv_workspace::{DiscoveryOptions, VirtualProject};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::commands::{project::find_requires_python, ExitStatus};
 use crate::printer::Printer;
@@ -31,7 +31,13 @@ pub(crate) async fn pin(
     let virtual_project = if no_project {
         None
     } else {
-        match VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await {
+        match VirtualProject::discover(
+            project_dir,
+            &DiscoveryOptions::default(),
+            &WorkspaceCache::default(),
+        )
+        .await
+        {
             Ok(virtual_project) => Some(virtual_project),
             Err(err) => {
                 debug!("Failed to discover virtual project: {err}");

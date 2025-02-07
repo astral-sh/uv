@@ -36,7 +36,7 @@ use uv_scripts::{Pep723ItemRef, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceMember};
+use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceMember};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::LockTarget;
@@ -553,6 +553,7 @@ async fn do_lock(
         &build_hasher,
         exclude_newer,
         sources,
+        WorkspaceCache::default(),
         concurrency,
         preview,
     );

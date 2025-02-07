@@ -36,7 +36,7 @@ use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, Source, SourceError};
 use uv_workspace::pyproject_mut::{ArrayEdit, DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
+use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryResolveLogger,
@@ -104,6 +104,7 @@ pub(crate) async fn add(
     }
 
     let reporter = PythonDownloadReporter::single(printer);
+    let workspace_cache = WorkspaceCache::default();
 
     let target = if let Some(script) = script {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
@@ -182,7 +183,8 @@ pub(crate) async fn add(
                     .with_context(|| format!("Package `{package}` not found in workspace"))?,
             )
         } else {
-            VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
+            VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+                .await?
         };
 
         // For non-project workspace roots, allow dev dependencies, but nothing else.
@@ -345,6 +347,7 @@ pub(crate) async fn add(
                 &build_hasher,
                 settings.exclude_newer,
                 sources,
+                WorkspaceCache::default(),
                 concurrency,
                 preview,
             );

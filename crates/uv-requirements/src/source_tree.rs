@@ -19,6 +19,7 @@ use uv_pypi_types::Requirement;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
 use uv_warnings::warn_user_once;
+
 #[derive(Debug, Clone)]
 pub struct SourceTreeResolution {
     /// The requirements sourced from the source trees.

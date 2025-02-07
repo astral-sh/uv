@@ -9,7 +9,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{HashDigest, ResolutionMetadata};
 use uv_workspace::dependency_groups::DependencyGroupError;
-use uv_workspace::WorkspaceError;
+use uv_workspace::{WorkspaceCache, WorkspaceError};
 
 pub use crate::metadata::build_requires::BuildRequires;
 pub use crate::metadata::lowering::LoweredRequirement;
@@ -80,6 +80,7 @@ impl Metadata {
         git_source: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         sources: SourceStrategy,
+        workspace_cache: &WorkspaceCache,
     ) -> Result<Self, MetadataError> {
         // Lower the requirements.
         let requires_dist = uv_pypi_types::RequiresDist {
@@ -100,6 +101,7 @@ impl Metadata {
             git_source,
             locations,
             sources,
+            workspace_cache,
         )
         .await?;
 

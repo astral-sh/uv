@@ -1163,6 +1163,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         None,
                         self.build_context.locations(),
                         self.build_context.sources(),
+                        self.build_context.workspace_cache(),
                     )
                     .await?,
                 ));
@@ -1215,6 +1216,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             None,
                             self.build_context.locations(),
                             self.build_context.sources(),
+                            self.build_context.workspace_cache(),
                         )
                         .await?,
                     ));
@@ -1263,6 +1265,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     None,
                     self.build_context.locations(),
                     self.build_context.sources(),
+                    self.build_context.workspace_cache(),
                 )
                 .await?,
             ));
@@ -1320,6 +1323,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 None,
                 self.build_context.locations(),
                 self.build_context.sources(),
+                self.build_context.workspace_cache(),
             )
             .await?,
         ))
@@ -1387,6 +1391,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     None,
                     self.build_context.locations(),
                     self.build_context.sources(),
+                    self.build_context.workspace_cache(),
                 )
                 .await?;
                 Ok(Some(requires_dist))
@@ -1643,6 +1648,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             Some(&git_member),
                             self.build_context.locations(),
                             self.build_context.sources(),
+                            self.build_context.workspace_cache(),
                         )
                         .await?,
                     ));
@@ -1675,6 +1681,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                 Some(&git_member),
                                 self.build_context.locations(),
                                 self.build_context.sources(),
+                                self.build_context.workspace_cache(),
                             )
                             .await?,
                         ));
@@ -1726,6 +1733,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     Some(&git_member),
                     self.build_context.locations(),
                     self.build_context.sources(),
+                    self.build_context.workspace_cache(),
                 )
                 .await?,
             ));
@@ -1783,6 +1791,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Some(&git_member),
                 self.build_context.locations(),
                 self.build_context.sources(),
+                self.build_context.workspace_cache(),
             )
             .await?,
         ))

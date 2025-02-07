@@ -35,7 +35,7 @@ use uv_scripts::Pep723Item;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache, WorkspaceError};
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
@@ -457,6 +457,7 @@ pub(crate) async fn run(
 
     // The lockfile used for the base environment.
     let mut lock: Option<(Lock, PathBuf)> = None;
+    let workspace_cache = WorkspaceCache::default();
 
     // Discover and sync the base environment.
     let temp_dir;
@@ -506,7 +507,13 @@ pub(crate) async fn run(
                     .with_context(|| format!("Package `{package}` not found in workspace"))?,
             ))
         } else {
-            match VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await {
+            match VirtualProject::discover(
+                project_dir,
+                &DiscoveryOptions::default(),
+                &workspace_cache,
+            )
+            .await
+            {
                 Ok(project) => {
                     if no_project {
                         debug!("Ignoring discovered project due to `--no-project`");

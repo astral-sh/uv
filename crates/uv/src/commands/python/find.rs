@@ -6,7 +6,7 @@ use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_python::{EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest};
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
 use crate::commands::{
     project::{validate_project_requires_python, WorkspacePython},
@@ -32,7 +32,13 @@ pub(crate) async fn find(
     let project = if no_project {
         None
     } else {
-        match VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await {
+        match VirtualProject::discover(
+            project_dir,
+            &DiscoveryOptions::default(),
+            &WorkspaceCache::default(),
+        )
+        .await
+        {
             Ok(project) => Some(project),
             Err(WorkspaceError::MissingProject(_)) => None,
             Err(WorkspaceError::MissingPyprojectToml) => None,

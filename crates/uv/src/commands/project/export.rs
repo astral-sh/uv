@@ -16,7 +16,7 @@ use uv_normalize::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_resolver::RequirementsTxtExport;
 use uv_scripts::{Pep723ItemRef, Pep723Script};
-use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace};
+use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::install_target::InstallTarget;
@@ -82,6 +82,7 @@ pub(crate) async fn export(
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
     // Identify the target.
+    let workspace_cache = WorkspaceCache::default();
     let target = if let Some(script) = script {
         ExportTarget::Script(script)
     } else {
@@ -92,6 +93,7 @@ pub(crate) async fn export(
                     members: MemberDiscovery::None,
                     ..DiscoveryOptions::default()
                 },
+                &workspace_cache,
             )
             .await?
         } else if let Some(package) = package.as_ref() {
@@ -102,7 +104,8 @@ pub(crate) async fn export(
                     .with_context(|| format!("Package `{package}` not found in workspace"))?,
             )
         } else {
-            VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
+            VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+                .await?
         };
         ExportTarget::Project(project)
     };

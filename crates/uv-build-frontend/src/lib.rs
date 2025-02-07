@@ -26,6 +26,7 @@ use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{debug, info_span, instrument, Instrument};
 
+pub use crate::error::{Error, MissingHeaderCause};
 use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
 use uv_distribution::BuildRequires;
 use uv_distribution_types::{IndexLocations, Resolution};
@@ -36,8 +37,7 @@ use uv_pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, SourceBuildTrait};
-
-pub use crate::error::{Error, MissingHeaderCause};
+use uv_workspace::WorkspaceCache;
 
 /// The default backend to use when PEP 517 is used without a `build-system` section.
 static DEFAULT_BACKEND: LazyLock<Pep517Backend> = LazyLock::new(|| Pep517Backend {
@@ -279,6 +279,7 @@ impl SourceBuild {
             locations,
             source_strategy,
             &default_backend,
+            build_context.workspace_cache(),
         )
         .await
         .map_err(|err| *err)?;
@@ -451,6 +452,7 @@ impl SourceBuild {
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
         default_backend: &Pep517Backend,
+        workspace_cache: &WorkspaceCache,
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
         match fs::read_to_string(source_tree.join("pyproject.toml")) {
             Ok(toml) => {
@@ -480,6 +482,7 @@ impl SourceBuild {
                                     install_path,
                                     locations,
                                     source_strategy,
+                                    workspace_cache,
                                 )
                                 .await
                                 .map_err(Error::Lowering)?;
@@ -909,6 +912,7 @@ async fn create_pep517_build_environment(
                 install_path,
                 locations,
                 source_strategy,
+                build_context.workspace_cache(),
             )
             .await
             .map_err(Error::Lowering)?;

@@ -29,7 +29,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_shell::{shlex_posix, shlex_windows, Shell};
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::pip::operations::{report_interpreter, Changelog};
@@ -158,7 +158,13 @@ async fn venv_impl(
     let project = if no_project {
         None
     } else {
-        match VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await {
+        match VirtualProject::discover(
+            project_dir,
+            &DiscoveryOptions::default(),
+            &WorkspaceCache::default(),
+        )
+        .await
+        {
             Ok(project) => Some(project),
             Err(WorkspaceError::MissingProject(_)) => None,
             Err(WorkspaceError::MissingPyprojectToml) => None,
@@ -351,6 +357,7 @@ async fn venv_impl(
             &build_hasher,
             exclude_newer,
             sources,
+            WorkspaceCache::default(),
             concurrency,
             preview,
         );

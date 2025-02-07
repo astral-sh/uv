@@ -6,6 +6,12 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, enabled, Level};
 
+use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
+use crate::commands::pip::operations::Modifications;
+use crate::commands::pip::operations::{report_interpreter, report_target_environment};
+use crate::commands::pip::{operations, resolution_markers, resolution_tags};
+use crate::commands::{diagnostics, ExitStatus};
+use crate::printer::Printer;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -34,13 +40,7 @@ use uv_resolver::{
     ResolutionMode, ResolverEnvironment,
 };
 use uv_types::{BuildIsolation, HashStrategy};
-
-use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
-use crate::commands::pip::operations::Modifications;
-use crate::commands::pip::operations::{report_interpreter, report_target_environment};
-use crate::commands::pip::{operations, resolution_markers, resolution_tags};
-use crate::commands::{diagnostics, ExitStatus};
-use crate::printer::Printer;
+use uv_workspace::WorkspaceCache;
 
 /// Install packages into the current environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -391,6 +391,7 @@ pub(crate) async fn pip_install(
         &build_hasher,
         exclude_newer,
         sources,
+        WorkspaceCache::default(),
         concurrency,
         preview,
     );

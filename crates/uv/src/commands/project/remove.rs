@@ -22,7 +22,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
+use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
@@ -65,6 +65,7 @@ pub(crate) async fn remove(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
+    let workspace_cache = WorkspaceCache::default();
     let target = if let Some(script) = script {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
         if package.is_some() {
@@ -98,7 +99,8 @@ pub(crate) async fn remove(
                     .with_context(|| format!("Package `{package}` not found in workspace"))?,
             )
         } else {
-            VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
+            VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+                .await?
         };
 
         RemoveTarget::Project(project)

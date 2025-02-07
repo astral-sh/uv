@@ -43,7 +43,6 @@ impl LoweredRequirement {
         group: Option<&GroupName>,
         locations: &'data IndexLocations,
         workspace: &'data Workspace,
-
         git_member: Option<&'data GitWorkspaceMember<'data>>,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + 'data {
         // Identify the source from the `tool.uv.sources` table.
@@ -79,11 +78,14 @@ impl LoweredRequirement {
         });
 
         // If you use a package that's part of the workspace...
-        if workspace.packages().contains_key(&requirement.name) {
-            // And it's not a recursive self-inclusion (extras that activate other extras), e.g.
-            // `framework[machine_learning]` depends on `framework[cuda]`.
-            if project_name.is_none_or(|project_name| *project_name != requirement.name) {
-                // It must be declared as a workspace source.
+        if let Some(member) = workspace.packages().get(&requirement.name) {
+            // ... and it's not the root member, and it's not a recursive self-inclusion
+            // (extras that activate other extras), e.g. `framework[machine_learning]` depends on
+            // `framework[cuda]` ...
+            if member.root() != workspace.install_path()
+                && project_name.is_none_or(|project_name| *project_name != requirement.name)
+            {
+                // ... then it must be declared as a workspace source.
                 let Some(sources) = sources.as_ref() else {
                     // No sources were declared for the workspace package.
                     return Either::Left(std::iter::once(Err(
