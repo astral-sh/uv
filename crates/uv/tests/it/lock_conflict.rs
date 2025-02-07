@@ -5281,65 +5281,65 @@ fn extra_inferences() -> Result<()> {
         version = "2.5.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "alembic" },
-            { name = "apache-airflow-providers-common-sql", version = "1.8.1", source = { registry = "https://pypi.org/simple" } },
-            { name = "apache-airflow-providers-ftp", version = "3.6.1", source = { registry = "https://pypi.org/simple" } },
-            { name = "apache-airflow-providers-http", version = "4.7.0", source = { registry = "https://pypi.org/simple" } },
-            { name = "apache-airflow-providers-imap", version = "3.4.0", source = { registry = "https://pypi.org/simple" } },
-            { name = "apache-airflow-providers-sqlite", version = "3.5.0", source = { registry = "https://pypi.org/simple" } },
-            { name = "argcomplete" },
-            { name = "attrs" },
-            { name = "blinker" },
-            { name = "cattrs" },
-            { name = "colorlog" },
-            { name = "configupdater" },
-            { name = "connexion", extra = ["flask", "swagger-ui"] },
-            { name = "cron-descriptor" },
-            { name = "croniter" },
-            { name = "cryptography" },
-            { name = "deprecated" },
-            { name = "dill" },
-            { name = "flask" },
-            { name = "flask-appbuilder", version = "4.1.4", source = { registry = "https://pypi.org/simple" } },
-            { name = "flask-caching" },
-            { name = "flask-login" },
-            { name = "flask-session" },
-            { name = "flask-wtf" },
-            { name = "graphviz" },
-            { name = "gunicorn" },
-            { name = "httpx" },
-            { name = "itsdangerous" },
-            { name = "jinja2" },
-            { name = "jsonschema" },
-            { name = "lazy-object-proxy" },
-            { name = "linkify-it-py" },
-            { name = "lockfile" },
-            { name = "markdown" },
-            { name = "markdown-it-py" },
-            { name = "markupsafe" },
-            { name = "marshmallow-oneofschema" },
-            { name = "mdit-py-plugins" },
-            { name = "packaging" },
-            { name = "pathspec" },
-            { name = "pendulum" },
-            { name = "pluggy" },
-            { name = "psutil" },
-            { name = "pygments" },
-            { name = "pyjwt" },
-            { name = "python-daemon" },
-            { name = "python-dateutil" },
-            { name = "python-nvd3" },
-            { name = "python-slugify" },
-            { name = "rich" },
-            { name = "setproctitle" },
-            { name = "sqlalchemy" },
-            { name = "sqlalchemy-jsonfield" },
-            { name = "tabulate" },
-            { name = "tenacity" },
-            { name = "termcolor" },
-            { name = "typing-extensions" },
-            { name = "unicodecsv" },
-            { name = "werkzeug" },
+            { name = "alembic", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "apache-airflow-providers-common-sql", version = "1.8.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "apache-airflow-providers-ftp", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "apache-airflow-providers-http", version = "4.7.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "apache-airflow-providers-imap", version = "3.4.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "apache-airflow-providers-sqlite", version = "3.5.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "argcomplete", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "attrs", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "blinker", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "cattrs", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "colorlog", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "configupdater", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "connexion", extra = ["flask", "swagger-ui"], marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "cron-descriptor", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "croniter", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "cryptography", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "deprecated", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "dill", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "flask", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "flask-appbuilder", version = "4.1.4", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "flask-caching", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "flask-login", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "flask-session", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "flask-wtf", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "graphviz", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "gunicorn", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "httpx", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "itsdangerous", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "jinja2", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "jsonschema", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "lazy-object-proxy", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "linkify-it-py", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "lockfile", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "markdown", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "markdown-it-py", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "markupsafe", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "marshmallow-oneofschema", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "mdit-py-plugins", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "packaging", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "pathspec", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "pendulum", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "pluggy", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "psutil", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "pygments", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "pyjwt", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "python-daemon", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "python-dateutil", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "python-nvd3", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "python-slugify", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "rich", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "setproctitle", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "sqlalchemy", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "sqlalchemy-jsonfield", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "tabulate", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "tenacity", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "termcolor", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "typing-extensions", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "unicodecsv", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "werkzeug", marker = "extra == 'extra-3-pkg-x1'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/eb/7d/fef0976adf269614870aa0aea79782601040f2b46267bbf03cf5314f2a67/apache-airflow-2.5.0.tar.gz", hash = "sha256:cd6c6c2d7dc2a0af9d509442d2ea4aaa150d55a8d950769f1635c497c396a3c9", size = 6080151 }
         wheels = [
@@ -5425,8 +5425,8 @@ fn extra_inferences() -> Result<()> {
         version = "1.8.1"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" } },
-            { name = "sqlparse" },
+            { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "sqlparse", marker = "extra == 'extra-3-pkg-x1'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/97/4c/7360977c53952ed7b5ab4e13f1c433c6bbf00ab13e3221dc72e57ef668b5/apache_airflow_providers_common_sql-1.8.1.tar.gz", hash = "sha256:1cd2fdfc7ce7a8a7475943672bdf1cdf424a0a355e47d0a2fb56046fec473050", size = 29503 }
         wheels = [
@@ -5452,7 +5452,7 @@ fn extra_inferences() -> Result<()> {
         version = "3.6.1"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" } },
+            { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/5f/db/8ba81e6f25b726ee3bc971bcd20c344d8ce0a4dea3d0524096115daf92e5/apache-airflow-providers-ftp-3.6.1.tar.gz", hash = "sha256:a3c8659d1455f6e8a0a3f6a960b15cb6d69e7572f8826037a4002c397d26ac12", size = 16778 }
         wheels = [
@@ -5476,11 +5476,11 @@ fn extra_inferences() -> Result<()> {
         version = "4.7.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "aiohttp" },
-            { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" } },
-            { name = "asgiref" },
-            { name = "requests" },
-            { name = "requests-toolbelt" },
+            { name = "aiohttp", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "asgiref", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "requests", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "requests-toolbelt", marker = "extra == 'extra-3-pkg-x1'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/3d/e7/b6ed57dedf075d8bb9dc82382b364a5055083f2758df3f0e5f25c4ae3085/apache-airflow-providers-http-4.7.0.tar.gz", hash = "sha256:ec2fbaeb997ebbc597e086f5cb6e7c92d7955854a1b54f4fc6549b7efb9b7daa", size = 20792 }
         wheels = [
@@ -5508,7 +5508,7 @@ fn extra_inferences() -> Result<()> {
         version = "3.4.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" } },
+            { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/f6/d1/524c13c4c98040d2139305530a0c4acb773dc37bb578c41ec135ca438bae/apache-airflow-providers-imap-3.4.0.tar.gz", hash = "sha256:347f78efa0e1353f90be78244fad0136d7c0cb1af25b9a3ba296d4e31fb53f6c", size = 15806 }
         wheels = [
@@ -5532,8 +5532,8 @@ fn extra_inferences() -> Result<()> {
         version = "3.5.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" } },
-            { name = "apache-airflow-providers-common-sql", version = "1.8.1", source = { registry = "https://pypi.org/simple" } },
+            { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "apache-airflow-providers-common-sql", version = "1.8.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/62/4a/ba727087ef486e16e028ba169c198007a1dcbde569179bfbec6b57602054/apache-airflow-providers-sqlite-3.5.0.tar.gz", hash = "sha256:6f47c25d7fb026fa8b8b4dc8edfee1491998255048255625716fceaae2c67024", size = 12946 }
         wheels = [
@@ -5907,26 +5907,26 @@ fn extra_inferences() -> Result<()> {
         version = "4.1.4"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "apispec", version = "3.3.2", source = { registry = "https://pypi.org/simple" }, extra = ["yaml"] },
-            { name = "click" },
-            { name = "colorama" },
-            { name = "email-validator" },
-            { name = "flask" },
-            { name = "flask-babel" },
-            { name = "flask-jwt-extended" },
-            { name = "flask-login" },
-            { name = "flask-sqlalchemy" },
-            { name = "flask-wtf" },
-            { name = "jsonschema" },
-            { name = "marshmallow" },
-            { name = "marshmallow-enum" },
-            { name = "marshmallow-sqlalchemy" },
-            { name = "prison" },
-            { name = "pyjwt" },
-            { name = "python-dateutil" },
-            { name = "sqlalchemy" },
-            { name = "sqlalchemy-utils" },
-            { name = "wtforms" },
+            { name = "apispec", version = "3.3.2", source = { registry = "https://pypi.org/simple" }, extra = ["yaml"], marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "click", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "colorama", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "email-validator", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "flask", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "flask-babel", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "flask-jwt-extended", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "flask-login", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "flask-sqlalchemy", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "flask-wtf", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "jsonschema", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "marshmallow", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "marshmallow-enum", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "marshmallow-sqlalchemy", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "prison", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "pyjwt", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "python-dateutil", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "sqlalchemy", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "sqlalchemy-utils", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "wtforms", marker = "extra == 'extra-3-pkg-x1'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/95/53/f7a191ba8a42cb4f2dd2248658c5adc16ddea5f4b4e1d832c2fb3a51cd18/Flask-AppBuilder-4.1.4.tar.gz", hash = "sha256:601f71348152886ac801835101a6e4427cebf23f82865d9c2d5964ace8a1bfec", size = 7030368 }
         wheels = [
@@ -8662,7 +8662,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
             "python_full_version < '3.11' and sys_platform != 'win32'",
         ]
         dependencies = [
-            { name = "nvidia-cublas-cu12", version = "12.1.3.1", source = { registry = "https://pypi.org/simple" } },
+            { name = "nvidia-cublas-cu12", version = "12.1.3.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-m3gnet'" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ff/74/a2e2be7fb83aaedec84f391f082cf765dfb635e7caa9b49065f73e4835d8/nvidia_cudnn_cu12-8.9.2.26-py3-none-manylinux1_x86_64.whl", hash = "sha256:5ccb288774fdfb07a7e7025ffec286971c06d8d7b4fb162525334616d7629ff9", size = 731725872 },
@@ -8765,9 +8765,9 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
             "python_full_version < '3.11' and sys_platform != 'win32'",
         ]
         dependencies = [
-            { name = "nvidia-cublas-cu12", version = "12.1.3.1", source = { registry = "https://pypi.org/simple" } },
-            { name = "nvidia-cusparse-cu12", version = "12.1.0.106", source = { registry = "https://pypi.org/simple" } },
-            { name = "nvidia-nvjitlink-cu12", version = "12.8.61", source = { registry = "https://pypi.org/simple" } },
+            { name = "nvidia-cublas-cu12", version = "12.1.3.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-m3gnet'" },
+            { name = "nvidia-cusparse-cu12", version = "12.1.0.106", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-m3gnet'" },
+            { name = "nvidia-nvjitlink-cu12", version = "12.8.61", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-m3gnet'" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/bc/1d/8de1e5c67099015c834315e333911273a8c6aaba78923dd1d1e25fc5f217/nvidia_cusolver_cu12-11.4.5.107-py3-none-manylinux1_x86_64.whl", hash = "sha256:8a7ec542f0412294b15072fa7dab71d31334014a69f953004ea7a118206fe0dd", size = 124161928 },
@@ -8807,7 +8807,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
             "python_full_version < '3.11' and sys_platform != 'win32'",
         ]
         dependencies = [
-            { name = "nvidia-nvjitlink-cu12", version = "12.8.61", source = { registry = "https://pypi.org/simple" } },
+            { name = "nvidia-nvjitlink-cu12", version = "12.8.61", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-m3gnet'" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/65/5b/cfaeebf25cd9fdec14338ccb16f6b2c4c7fa9163aefcf057d86b9cc248bb/nvidia_cusparse_cu12-12.1.0.106-py3-none-manylinux1_x86_64.whl", hash = "sha256:f3b50f42cf363f86ab21f720998517a659a48131e8d538dc02f8768237bd884c", size = 195958278 },
@@ -9716,24 +9716,24 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
             "python_full_version < '3.11' and sys_platform != 'win32'",
         ]
         dependencies = [
-            { name = "filelock" },
-            { name = "fsspec" },
-            { name = "jinja2" },
-            { name = "networkx" },
-            { name = "nvidia-cublas-cu12", version = "12.1.3.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
-            { name = "nvidia-cuda-cupti-cu12", version = "12.1.105", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
-            { name = "nvidia-cuda-nvrtc-cu12", version = "12.1.105", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
-            { name = "nvidia-cuda-runtime-cu12", version = "12.1.105", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
-            { name = "nvidia-cudnn-cu12", version = "8.9.2.26", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
-            { name = "nvidia-cufft-cu12", version = "11.0.2.54", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
-            { name = "nvidia-curand-cu12", version = "10.3.2.106", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
-            { name = "nvidia-cusolver-cu12", version = "11.4.5.107", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
-            { name = "nvidia-cusparse-cu12", version = "12.1.0.106", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
-            { name = "nvidia-nccl-cu12", version = "2.19.3", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
-            { name = "nvidia-nvtx-cu12", version = "12.1.105", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
-            { name = "sympy", version = "1.13.3", source = { registry = "https://pypi.org/simple" } },
-            { name = "triton", version = "2.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' and platform_machine == 'x86_64' and sys_platform == 'linux'" },
-            { name = "typing-extensions" },
+            { name = "filelock", marker = "extra == 'extra-4-test-m3gnet'" },
+            { name = "fsspec", marker = "extra == 'extra-4-test-m3gnet'" },
+            { name = "jinja2", marker = "extra == 'extra-4-test-m3gnet'" },
+            { name = "networkx", marker = "extra == 'extra-4-test-m3gnet'" },
+            { name = "nvidia-cublas-cu12", version = "12.1.3.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
+            { name = "nvidia-cuda-cupti-cu12", version = "12.1.105", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
+            { name = "nvidia-cuda-nvrtc-cu12", version = "12.1.105", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
+            { name = "nvidia-cuda-runtime-cu12", version = "12.1.105", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
+            { name = "nvidia-cudnn-cu12", version = "8.9.2.26", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
+            { name = "nvidia-cufft-cu12", version = "11.0.2.54", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
+            { name = "nvidia-curand-cu12", version = "10.3.2.106", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
+            { name = "nvidia-cusolver-cu12", version = "11.4.5.107", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
+            { name = "nvidia-cusparse-cu12", version = "12.1.0.106", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
+            { name = "nvidia-nccl-cu12", version = "2.19.3", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
+            { name = "nvidia-nvtx-cu12", version = "12.1.105", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
+            { name = "sympy", version = "1.13.3", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-m3gnet'" },
+            { name = "triton", version = "2.2.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.12' and platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-m3gnet') or (python_full_version >= '3.12' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
+            { name = "typing-extensions", marker = "extra == 'extra-4-test-m3gnet'" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/a7/ad/fbe7d4cffb76da4e478438853b51305361c719cff929ab70a808e7fb75e7/torch-2.2.1-cp310-cp310-manylinux1_x86_64.whl", hash = "sha256:8d3bad336dd2c93c6bcb3268e8e9876185bda50ebde325ef211fb565c7d15273", size = 755527312 },
@@ -9848,7 +9848,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
             { name = "lightning-utilities" },
             { name = "numpy" },
             { name = "packaging" },
-            { name = "torch", version = "2.2.1", source = { registry = "https://pypi.org/simple" } },
+            { name = "torch", version = "2.2.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-m3gnet'" },
             { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-chgnet' or extra != 'extra-4-test-m3gnet'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/14/c5/8d916585d4d6eb158105c21b28cd4b0ed296d74e499bf8f104368de16619/torchmetrics-1.6.1.tar.gz", hash = "sha256:a5dc236694b392180949fdd0a0fcf2b57135c8b600e557c725e077eb41e53e64", size = 540022 }
@@ -9877,7 +9877,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
             "python_full_version < '3.11' and sys_platform != 'win32'",
         ]
         dependencies = [
-            { name = "filelock" },
+            { name = "filelock", marker = "extra == 'extra-4-test-m3gnet'" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/95/05/ed974ce87fe8c8843855daa2136b3409ee1c126707ab54a8b72815c08b49/triton-2.2.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a2294514340cfe4e8f4f9e5c66c702744c4a117d25e618bd08469d0bfed1e2e5", size = 167900779 },
