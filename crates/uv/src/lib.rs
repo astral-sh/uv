@@ -58,11 +58,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         std::env::set_current_dir(directory)?;
     }
 
-    // Set the `UV` variable
-    if let Ok(current_exe) = std::env::current_exe() {
-        std::env::set_var(EnvVars::UV, current_exe);
-    }
-
     // Determine the project directory.
     let project_dir = cli
         .top_level
@@ -1865,6 +1860,19 @@ where
             err.exit()
         }
     };
+
+    // Set the `UV` variable, we do this before spawning any threads because it is unsafe to set
+    // environment variables in a multi-threaded runtime.
+    #[allow(unsafe_code)]
+    {
+        if let Ok(current_exe) = std::env::current_exe() {
+            // This will become unsafe in Rust 2024
+            // https://doc.rust-lang.org/std/env/fn.set_var.html#safety
+            unsafe {
+                std::env::set_var(EnvVars::UV, current_exe);
+            }
+        }
+    }
 
     // Running out of stack has been an issue for us. We box types and futures in various places
     // to mitigate this, with this being an especially important case.
