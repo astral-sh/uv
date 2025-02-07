@@ -32,7 +32,7 @@ use windows::Win32::{
     },
 };
 
-use crate::{eprintln, format};
+use crate::{error, format, warn};
 
 const PATH_LEN_SIZE: usize = size_of::<u32>();
 const MAX_PATH_LEN: u32 = 32 * 1024;
@@ -93,7 +93,7 @@ fn make_child_cmdline() -> CString {
     child_cmdline.push(b'\0');
 
     // Helpful when debugging trampoline issues
-    // eprintln!(
+    // warn!(
     //     "executable_name: '{}'\nnew_cmdline: {}",
     //     &*executable_name.to_string_lossy(),
     //     std::str::from_utf8(child_cmdline.as_slice()).unwrap()
@@ -316,16 +316,16 @@ fn make_job_object() -> HANDLE {
     job
 }
 
-fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString, is_gui: bool) -> HANDLE {
+fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
     // See distlib/PC/launcher.c::run_child
     if (si.dwFlags & STARTF_USESTDHANDLES).0 != 0 {
         // ignore errors, if the handles are not inheritable/valid, then nothing we can do
         unsafe { SetHandleInformation(si.hStdInput, HANDLE_FLAG_INHERIT.0, HANDLE_FLAG_INHERIT) }
-            .unwrap_or_else(|_| warn("Making stdin inheritable failed", is_gui));
+            .unwrap_or_else(|_| warn!("Making stdin inheritable failed"));
         unsafe { SetHandleInformation(si.hStdOutput, HANDLE_FLAG_INHERIT.0, HANDLE_FLAG_INHERIT) }
-            .unwrap_or_else(|_| warn("Making stdout inheritable failed", is_gui));
+            .unwrap_or_else(|_| warn!("Making stdout inheritable failed"));
         unsafe { SetHandleInformation(si.hStdError, HANDLE_FLAG_INHERIT.0, HANDLE_FLAG_INHERIT) }
-            .unwrap_or_else(|_| warn("Making stderr inheritable failed", is_gui));
+            .unwrap_or_else(|_| warn!("Making stderr inheritable failed"));
     }
     let mut child_process_info = PROCESS_INFORMATION::default();
     unsafe {
@@ -358,22 +358,16 @@ fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString, is_gui: bool) -> HANDL
 // processes, by using the .lpReserved2 field. We want to close those file descriptors too.
 // The UCRT source code has details on the memory layout (see also initialize_inherited_file_handles_nolock):
 // https://github.com/huangqinjin/ucrt/blob/10.0.19041.0/lowio/ioinit.cpp#L190-L223
-fn close_handles(si: &STARTUPINFOA, is_gui: bool) {
+fn close_handles(si: &STARTUPINFOA) {
     // See distlib/PC/launcher.c::cleanup_standard_io()
-    // Unlike cleanup_standard_io(), we don't close STD_ERROR_HANDLE to retain eprintln!
+    // Unlike cleanup_standard_io(), we don't close STD_ERROR_HANDLE to retain warn!
     for std_handle in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE] {
         if let Ok(handle) = unsafe { GetStdHandle(std_handle) } {
             unsafe { CloseHandle(handle) }.unwrap_or_else(|_| {
-                warn(
-                    &format!("Failed to close standard device handle {}", handle.0 as u32),
-                    is_gui,
-                );
+                warn!("Failed to close standard device handle {}", handle.0 as u32);
             });
             unsafe { SetStdHandle(std_handle, INVALID_HANDLE_VALUE) }.unwrap_or_else(|_| {
-                warn(
-                    &format!("Failed to modify standard device handle {}", std_handle.0),
-                    is_gui,
-                );
+                warn!("Failed to modify standard device handle {}", std_handle.0);
             });
         }
     }
@@ -397,10 +391,7 @@ fn close_handles(si: &STARTUPINFOA, is_gui: bool) {
             continue;
         }
         unsafe { CloseHandle(handle) }.unwrap_or_else(|_| {
-            warn(
-                &format!("Failed to close child file descriptors at {}", i),
-                is_gui,
-            );
+            warn!("Failed to close child file descriptors at {}", i);
         });
     }
 }
@@ -424,19 +415,19 @@ fn close_handles(si: &STARTUPINFOA, is_gui: bool) {
     child? (Looking at the bpo issue above, this was originally the *whole* fix.)
     Is creating a window and calling PeekMessage the best way to do this? idk.
 */
-fn clear_app_starting_state(child_handle: HANDLE, is_gui: bool) {
+fn clear_app_starting_state(child_handle: HANDLE) {
     let mut msg = MSG::default();
     unsafe {
         // End the launcher's "app starting" cursor state.
         PostMessageA(None, 0, WPARAM(0), LPARAM(0)).unwrap_or_else(|_| {
-            warn("Failed to post a message to specified window", is_gui);
+            warn!("Failed to post a message to specified window");
         });
         if GetMessageA(&mut msg, None, 0, 0) != TRUE {
-            warn("Failed to retrieve posted window message", is_gui);
+            warn!("Failed to retrieve posted window message");
         }
         // Proxy the child's input idle event.
         if WaitForInputIdle(child_handle, INFINITE) != 0 {
-            warn("Failed to wait for input from window", is_gui);
+            warn!("Failed to wait for input from window");
         }
         // Signal the process input idle event by creating a window and pumping
         // sent messages. The window class isn't important, so just use the
@@ -470,7 +461,7 @@ pub fn bounce(is_gui: bool) -> ! {
     let mut si = STARTUPINFOA::default();
     unsafe { GetStartupInfoA(&mut si) }
 
-    let child_handle = spawn_child(&si, child_cmdline, is_gui);
+    let child_handle = spawn_child(&si, child_cmdline);
     let job = make_job_object();
 
     if unsafe { AssignProcessToJobObject(job, child_handle) }.is_err() {
@@ -478,12 +469,12 @@ pub fn bounce(is_gui: bool) -> ! {
     }
 
     // (best effort) Close all the handles that we can
-    close_handles(&si, is_gui);
+    close_handles(&si);
 
     // (best effort) Switch to some innocuous directory, so we don't hold the original cwd open.
     // See distlib/PC/launcher.c::switch_working_directory
     if std::env::set_current_dir(std::env::temp_dir()).is_err() {
-        warn("Failed to set cwd to temp dir", is_gui);
+        warn!("Failed to set cwd to temp dir");
     }
 
     // We want to ignore control-C/control-Break/logout/etc.; the same event will
@@ -497,7 +488,7 @@ pub fn bounce(is_gui: bool) -> ! {
     });
 
     if is_gui {
-        clear_app_starting_state(child_handle, is_gui);
+        clear_app_starting_state(child_handle);
     }
 
     let _ = unsafe { WaitForSingleObject(child_handle, INFINITE) };
@@ -509,16 +500,8 @@ pub fn bounce(is_gui: bool) -> ! {
 }
 
 #[cold]
-fn warn(message: &str, is_gui: bool) {
-    // Don't emit warnings in GUI mode, as our version of eprintln turns into a popup!
-    if !is_gui {
-        eprintln!("{}", message);
-    }
-}
-
-#[cold]
 fn error_and_exit(message: &str) -> ! {
-    eprintln!("{}", message);
+    error!("{}", message);
     exit_with_status(1);
 }
 
