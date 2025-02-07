@@ -2798,7 +2798,7 @@ pub struct RunArgs {
     #[arg(long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
-    /// Run with the given packages installed as editables.
+    /// Run with the given packages installed in editable mode.
     ///
     /// When used in a project, these dependencies will be layered on top of the project environment
     /// in a separate, ephemeral environment. These dependencies are allowed to conflict with those
@@ -3901,7 +3901,7 @@ pub struct ToolRunArgs {
     #[arg(long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
-    /// Run with the given packages installed as editables
+    /// Run with the given packages installed in editable mode
     ///
     /// When used in a project, these dependencies will be layered on top of the uv tool's
     /// environment in a separate, ephemeral environment. These dependencies are allowed to conflict
@@ -3969,12 +3969,12 @@ pub struct ToolInstallArgs {
     #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
-    /// Install the requirements as editable, so changes in the source directory are reflected in
-    /// the tool.
+    /// Install the target package in editable mode, such that changes in the package's source
+    /// directory are reflected without reinstallation.
     #[arg(short, long)]
     pub editable: bool,
 
-    /// Include the given packages as editables.
+    /// Include the given packages in editable mode.
     #[arg(long)]
     pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
