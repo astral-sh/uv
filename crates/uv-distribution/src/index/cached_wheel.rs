@@ -26,17 +26,15 @@ pub struct CachedWheel {
 
 impl CachedWheel {
     /// Try to parse a distribution from a cached directory name (like `typing-extensions-4.8.0-py3-none-any`).
-    pub fn from_built_source(path: impl AsRef<Path>) -> Option<Self> {
+    pub fn from_built_source(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
         let path = path.as_ref();
 
         // Determine the wheel filename.
         let filename = path.file_name()?.to_str()?;
         let filename = WheelFilename::from_stem(filename).ok()?;
 
-        println!("filename: {:?}", filename);
-
         // Convert to a cached wheel.
-        let archive = uv_fs::resolve_symlink(path).ok()?;
+        let archive = cache.resolve_link(path).ok()?;
         let entry = CacheEntry::from_path(archive);
         let hashes = Vec::new();
         let cache_info = CacheInfo::default();

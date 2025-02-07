@@ -206,7 +206,7 @@ impl<'a> RegistryWheelIndex<'a> {
                     };
 
                     for wheel_dir in uv_fs::entries(cache_shard) {
-                        if let Some(wheel) = CachedWheel::from_built_source(wheel_dir) {
+                        if let Some(wheel) = CachedWheel::from_built_source(wheel_dir, cache) {
                             if wheel.filename.compatibility(tags).is_compatible() {
                                 // Enforce hash-checking based on the source distribution.
                                 if revision.satisfies(

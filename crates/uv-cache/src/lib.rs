@@ -31,7 +31,11 @@ mod by_timestamp;
 mod cli;
 mod removal;
 mod wheel;
-mod link;
+
+/// The version of the archive bucket.
+///
+/// Must be kept in-sync with the version in [`CacheBucket::to_str`].
+pub const ARCHIVE_VERSION: u8 = 0;
 
 /// A [`CacheEntry`] which may or may not exist yet.
 #[derive(Debug, Clone)]
@@ -275,7 +279,7 @@ impl Cache {
 
         // Create a symlink to the directory store.
         fs_err::create_dir_all(path.as_ref().parent().expect("Cache entry to have parent"))?;
-        uv_fs::replace_symlink(archive_entry.path(), path.as_ref())?;
+        self.create_link(&id, path.as_ref())?;
 
         Ok(id)
     }
@@ -369,7 +373,7 @@ impl Cache {
                         if WheelFilename::from_stem(filename).is_err() {
                             continue;
                         }
-                        if let Ok(target) = uv_fs::resolve_symlink(entry.path()) {
+                        if let Ok(target) = self.resolve_link(entry.path()) {
                             references.insert(target);
                         }
                     }
@@ -404,7 +408,7 @@ impl Cache {
                         if WheelFilename::from_stem(filename).is_err() {
                             continue;
                         }
-                        if let Ok(target) = uv_fs::resolve_symlink(entry.path()) {
+                        if let Ok(target) = self.resolve_link(entry.path()) {
                             references.insert(target);
                         }
                     }
@@ -552,7 +556,7 @@ impl Cache {
                     if WheelFilename::from_stem(filename).is_err() {
                         continue;
                     }
-                    if let Ok(target) = uv_fs::resolve_symlink(entry.path()) {
+                    if let Ok(target) = self.resolve_link(entry.path()) {
                         references.insert(target);
                     }
                 }
@@ -575,6 +579,121 @@ impl Cache {
         }
 
         Ok(summary)
+    }
+
+    /// Create a link to a directory in the archive bucket.
+    ///
+    /// On Windows, we write structured data ([`Link`]) to a file containing the archive ID and
+    /// version. On Unix, we create a symlink to the target directory.
+    #[cfg(windows)]
+    pub fn create_link(&self, id: &ArchiveId, dst: impl AsRef<Path>) -> io::Result<()> {
+        // Serialize the link.
+        let link = Link::new(id.clone());
+        let contents = rmp_serde::encode::to_vec(&link).unwrap();
+
+        // First, attempt to create a file at the location, but fail if it already exists.
+        match fs_err::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(dst.as_ref())
+        {
+            Ok(mut file) => {
+                // Write the target path to the file.
+                file.write_all(contents.as_slice())?;
+                Ok(())
+            }
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+                // Write to a temporary file, then move it into place.
+                let temp_dir = tempfile::tempdir_in(dst.as_ref().parent().unwrap())?;
+                let temp_file = temp_dir.path().join("link");
+                fs_err::write(&temp_file, contents)?;
+
+                // Move the symlink into the target location.
+                fs_err::rename(&temp_file, dst.as_ref())?;
+
+                Ok(())
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Resolve an archive link, returning the fully-resolved path.
+    ///
+    /// Returns an error if the link target does not exist.
+    #[cfg(windows)]
+    pub fn resolve_link(&self, path: impl AsRef<Path>) -> io::Result<PathBuf> {
+        // Deserialize the link.
+        let contents = fs_err::read_to_string(path.as_ref())?;
+        let link = rmp_serde::decode::from_slice::<Link>(contents.as_bytes()).unwrap();
+
+        // Ignore stale links.
+        if link.version != ARCHIVE_VERSION {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "The link target does not exist.",
+            ));
+        }
+
+        // Reconstruct the path.
+        let path = self.archive(&link.id);
+        path.canonicalize()
+    }
+
+    /// Create a link to a directory in the archive bucket.
+    ///
+    /// On Windows, we write structured data ([`Link`]) to a file containing the archive ID and
+    /// version. On Unix, we create a symlink to the target directory.
+    #[cfg(unix)]
+    pub fn create_link(&self, id: &ArchiveId, dst: impl AsRef<Path>) -> io::Result<()> {
+        // Construct the link target.
+        let src = self.archive(id);
+        let dst = dst.as_ref();
+
+        // Attempt to create the symlink directly.
+        match std::os::unix::fs::symlink(&src, dst) {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+                // Create a symlink, using a temporary file to ensure atomicity.
+                let temp_dir = tempfile::tempdir_in(dst.parent().unwrap())?;
+                let temp_file = temp_dir.path().join("link");
+                std::os::unix::fs::symlink(&src, &temp_file)?;
+
+                // Move the symlink into the target location.
+                fs_err::rename(&temp_file, dst)?;
+
+                Ok(())
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Resolve an archive link, returning the fully-resolved path.
+    ///
+    /// Returns an error if the link target does not exist.
+    #[cfg(unix)]
+    pub fn resolve_link(&self, path: impl AsRef<Path>) -> io::Result<PathBuf> {
+        path.as_ref().canonicalize()
+    }
+}
+
+/// An archive (unzipped wheel) that exists in the local cache.
+#[cfg(windows)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct Link {
+    /// The unique ID of the entry in the archive bucket.
+    pub id: ArchiveId,
+    /// The version of the archive bucket.
+    pub version: u8,
+}
+
+#[cfg(windows)]
+impl Link {
+    /// Create a new [`Archive`] with the given ID and hashes.
+    fn new(id: ArchiveId) -> Self {
+        Self {
+            id,
+            version: ARCHIVE_VERSION,
+        }
     }
 }
 
@@ -845,8 +964,8 @@ impl CacheBucket {
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/it/cache_prune.rs`.
             Self::Wheels => "wheels-v4",
-            // Note that when bumping this, you'll also need to bump it
-            // in `crates/uv-distribution/src/archive.rs`.
+            // Note that when bumping this, you'll also need to bump
+            // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
             Self::Archive => "archive-v0",
             Self::Builds => "builds-v0",
             Self::Environments => "environments-v2",

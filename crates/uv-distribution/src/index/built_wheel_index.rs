@@ -204,7 +204,7 @@ impl<'a> BuiltWheelIndex<'a> {
 
         // Unzipped wheels are stored as symlinks into the archive directory.
         for wheel_dir in uv_fs::entries(shard) {
-            match CachedWheel::from_built_source(&wheel_dir) {
+            match CachedWheel::from_built_source(&wheel_dir, self.cache) {
                 None => {}
                 Some(dist_info) => {
                     // Pick the wheel with the highest priority

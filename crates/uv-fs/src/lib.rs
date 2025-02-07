@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 
@@ -43,6 +42,29 @@ pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> std::io::Result
             std::io::Error::other(format!("failed to decode file {path}: {err}"))
         })?;
     Ok(buf)
+}
+
+/// Create a symlink at `dst` pointing to `src`, replacing any existing symlink if necessary.
+///
+/// On Unix, this method creates a temporary file, then moves it into place.
+#[cfg(unix)]
+pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    // Attempt to create the symlink directly.
+    match std::os::unix::fs::symlink(src.as_ref(), dst.as_ref()) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+            // Create a symlink, using a temporary file to ensure atomicity.
+            let temp_dir = tempfile::tempdir_in(dst.as_ref().parent().unwrap())?;
+            let temp_file = temp_dir.path().join("link");
+            std::os::unix::fs::symlink(src, &temp_file)?;
+
+            // Move the symlink into the target location.
+            fs_err::rename(&temp_file, dst.as_ref())?;
+
+            Ok(())
+        }
+        Err(err) => Err(err),
+    }
 }
 
 /// Create a symlink at `dst` pointing to `src` on Unix or copy `src` to `dst` on Windows

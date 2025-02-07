@@ -32,7 +32,6 @@ itertools = { workspace = true }
 pathdiff = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-tempfile = "3.16.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 self-replace = { workspace = true }
