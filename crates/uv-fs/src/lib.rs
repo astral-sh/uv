@@ -44,9 +44,49 @@ pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> std::io::Result
     Ok(buf)
 }
 
+/// Create a symlink at `dst` pointing to `src`, replacing any existing symlink.
+///
+/// On Windows, this uses the `junction` crate to create a junction point. The
+/// operation is _not_ atomic, as we first delete the junction, then create a
+/// junction at the same path.
+///
+/// Note that because junctions are used, the source must be a directory.
+#[cfg(windows)]
+pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    // If the source is a file, we can't create a junction
+    if src.as_ref().is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "Cannot create a junction for {}: is not a directory",
+                src.as_ref().display()
+            ),
+        ));
+    }
+
+    // Remove the existing symlink, if any.
+    match junction::delete(dunce::simplified(dst.as_ref())) {
+        Ok(()) => match fs_err::remove_dir_all(dst.as_ref()) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err),
+        },
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err),
+    };
+
+    // Replace it with a new symlink.
+    junction::create(
+        dunce::simplified(src.as_ref()),
+        dunce::simplified(dst.as_ref()),
+    )
+}
+
 /// Create a symlink at `dst` pointing to `src`, replacing any existing symlink if necessary.
 ///
 /// On Unix, this method creates a temporary file, then moves it into place.
+///
+/// TODO(charlie): Consider using the `rust-atomicwrites` crate.
 #[cfg(unix)]
 pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
     // Attempt to create the symlink directly.
@@ -65,6 +105,11 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
         }
         Err(err) => Err(err),
     }
+}
+
+#[cfg(unix)]
+pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
+    fs_err::remove_file(path.as_ref())
 }
 
 /// Create a symlink at `dst` pointing to `src` on Unix or copy `src` to `dst` on Windows
@@ -86,6 +131,19 @@ pub fn symlink_or_copy_file(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std
     }
 
     Ok(())
+}
+
+#[cfg(windows)]
+pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
+    match junction::delete(dunce::simplified(path.as_ref())) {
+        Ok(()) => match fs_err::remove_dir_all(path.as_ref()) {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(err) => Err(err),
+        },
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err),
+    }
 }
 
 /// Return a [`NamedTempFile`] in the specified directory.

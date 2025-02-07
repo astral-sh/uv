@@ -4,6 +4,7 @@ use std::io;
 use std::io::Write;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Arc;
 
 use rustc_hash::FxHashSet;
@@ -362,6 +363,15 @@ impl Cache {
                     for entry in walkdir::WalkDir::new(bucket) {
                         let entry = entry?;
 
+                        // Ignore any `.lock` files.
+                        if entry
+                            .path()
+                            .extension()
+                            .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
+                        {
+                            continue;
+                        }
+
                         // Identify entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
                         let Some(filename) = entry
                             .path()
@@ -370,6 +380,7 @@ impl Cache {
                         else {
                             continue;
                         };
+
                         if WheelFilename::from_stem(filename).is_err() {
                             continue;
                         }
@@ -396,6 +407,15 @@ impl Cache {
                 if bucket.is_dir() {
                     for entry in walkdir::WalkDir::new(bucket) {
                         let entry = entry?;
+
+                        // Ignore any `.lock` files.
+                        if entry
+                            .path()
+                            .extension()
+                            .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
+                        {
+                            continue;
+                        }
 
                         // Identify entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
                         let Some(filename) = entry
@@ -545,6 +565,15 @@ impl Cache {
                 for entry in walkdir::WalkDir::new(bucket) {
                     let entry = entry?;
 
+                    // Ignore any `.lock` files.
+                    if entry
+                        .path()
+                        .extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
+                    {
+                        continue;
+                    }
+
                     // Identify entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
                     let Some(filename) = entry
                         .path()
@@ -589,7 +618,7 @@ impl Cache {
     pub fn create_link(&self, id: &ArchiveId, dst: impl AsRef<Path>) -> io::Result<()> {
         // Serialize the link.
         let link = Link::new(id.clone());
-        let contents = rmp_serde::encode::to_vec(&link).unwrap();
+        let contents = link.to_string();
 
         // First, attempt to create a file at the location, but fail if it already exists.
         match fs_err::OpenOptions::new()
@@ -599,14 +628,14 @@ impl Cache {
         {
             Ok(mut file) => {
                 // Write the target path to the file.
-                file.write_all(contents.as_slice())?;
+                file.write_all(contents.as_bytes())?;
                 Ok(())
             }
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
                 // Write to a temporary file, then move it into place.
                 let temp_dir = tempfile::tempdir_in(dst.as_ref().parent().unwrap())?;
                 let temp_file = temp_dir.path().join("link");
-                fs_err::write(&temp_file, contents)?;
+                fs_err::write(&temp_file, contents.as_bytes())?;
 
                 // Move the symlink into the target location.
                 fs_err::rename(&temp_file, dst.as_ref())?;
@@ -624,12 +653,12 @@ impl Cache {
     pub fn resolve_link(&self, path: impl AsRef<Path>) -> io::Result<PathBuf> {
         // Deserialize the link.
         let contents = fs_err::read_to_string(path.as_ref())?;
-        let link = rmp_serde::decode::from_slice::<Link>(contents.as_bytes()).unwrap();
+        let link = Link::from_str(&contents)?;
 
         // Ignore stale links.
         if link.version != ARCHIVE_VERSION {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
                 "The link target does not exist.",
             ));
         }
@@ -677,16 +706,16 @@ impl Cache {
 }
 
 /// An archive (unzipped wheel) that exists in the local cache.
-#[cfg(windows)]
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
+#[allow(unused)]
 struct Link {
     /// The unique ID of the entry in the archive bucket.
-    pub id: ArchiveId,
+    id: ArchiveId,
     /// The version of the archive bucket.
-    pub version: u8,
+    version: u8,
 }
 
-#[cfg(windows)]
+#[allow(unused)]
 impl Link {
     /// Create a new [`Archive`] with the given ID and hashes.
     fn new(id: ArchiveId) -> Self {
@@ -694,6 +723,49 @@ impl Link {
             id,
             version: ARCHIVE_VERSION,
         }
+    }
+}
+
+impl Display for Link {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "archive-v{}/{}", self.version, self.id)
+    }
+}
+
+impl FromStr for Link {
+    type Err = io::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut parts = s.splitn(2, '/');
+        let version = parts
+            .next()
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing version"))?;
+        let id = parts
+            .next()
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing ID"))?;
+
+        // Parse the archive version from `archive-v{version}/{id}`.
+        let version = version
+            .strip_prefix("archive-v")
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing version prefix"))?;
+        let version = u8::from_str(version).map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("failed to parse version: {err}"),
+            )
+        })?;
+
+        // Parse the ID from `archive-v{version}/{id}`.
+        let id = ArchiveId::from_str(id).map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("failed to parse ID: {err}"),
+            )
+        })?;
+
+        Ok(Self { id, version })
     }
 }
 
@@ -1328,5 +1400,32 @@ impl Refresh {
                 max(t1, t2),
             ),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use crate::ArchiveId;
+
+    use super::Link;
+
+    #[test]
+    fn test_link_round_trip() {
+        let id = ArchiveId::new();
+        let link = Link::new(id);
+        let s = link.to_string();
+        let parsed = Link::from_str(&s).unwrap();
+        assert_eq!(link.id, parsed.id);
+        assert_eq!(link.version, parsed.version);
+    }
+
+    #[test]
+    fn test_link_deserialize() {
+        assert!(Link::from_str("archive-v0/foo").is_ok());
+        assert!(Link::from_str("archive/foo").is_err());
+        assert!(Link::from_str("v1/foo").is_err());
+        assert!(Link::from_str("archive-v0/").is_err());
     }
 }

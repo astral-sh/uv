@@ -206,6 +206,14 @@ impl<'a> RegistryWheelIndex<'a> {
                     };
 
                     for wheel_dir in uv_fs::entries(cache_shard) {
+                        // Ignore any `.lock` files.
+                        if wheel_dir
+                            .extension()
+                            .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
+                        {
+                            continue;
+                        }
+
                         if let Some(wheel) = CachedWheel::from_built_source(wheel_dir, cache) {
                             if wheel.filename.compatibility(tags).is_compatible() {
                                 // Enforce hash-checking based on the source distribution.

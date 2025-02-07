@@ -204,6 +204,14 @@ impl<'a> BuiltWheelIndex<'a> {
 
         // Unzipped wheels are stored as symlinks into the archive directory.
         for wheel_dir in uv_fs::entries(shard) {
+            // Ignore any `.lock` files.
+            if wheel_dir
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
+            {
+                continue;
+            }
+
             match CachedWheel::from_built_source(&wheel_dir, self.cache) {
                 None => {}
                 Some(dist_info) => {

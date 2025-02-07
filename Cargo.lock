@@ -1977,6 +1977,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "junction"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72bbdfd737a243da3dfc1f99ee8d6e166480f17ab4ac84d7c34aacd73fc7bd16"
+dependencies = [
+ "scopeguard",
+ "windows-sys 0.52.0",
+]
+
+[[package]]
 name = "kurbo"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5063,6 +5073,7 @@ dependencies = [
  "encoding_rs_io",
  "fs-err 3.1.0",
  "fs2",
+ "junction",
  "path-slash",
  "percent-encoding",
  "rustix",
