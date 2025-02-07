@@ -10,7 +10,7 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{
-    Concurrency, DevGroupsSpecification, EditableMode, ExtrasSpecification, InstallOptions,
+    Concurrency, DevGroupsSpecification, DryRun, EditableMode, ExtrasSpecification, InstallOptions,
     PreviewMode, TrustedHost,
 };
 use uv_fs::Simplified;
@@ -233,7 +233,7 @@ pub(crate) async fn remove(
                     no_config,
                     active,
                     cache,
-                    false,
+                    DryRun::Disabled,
                     printer,
                 )
                 .await?
@@ -349,7 +349,7 @@ pub(crate) async fn remove(
         native_tls,
         allow_insecure_host,
         cache,
-        false,
+        DryRun::Disabled,
         printer,
         preview,
     )

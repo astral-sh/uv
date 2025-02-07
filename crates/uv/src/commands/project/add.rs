@@ -16,8 +16,8 @@ use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevGroupsSpecification, DevMode, EditableMode, ExtrasSpecification,
-    InstallOptions, PreviewMode, SourceStrategy, TrustedHost,
+    Concurrency, Constraints, DevGroupsSpecification, DevMode, DryRun, EditableMode,
+    ExtrasSpecification, InstallOptions, PreviewMode, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -235,7 +235,7 @@ pub(crate) async fn add(
                 no_config,
                 active,
                 cache,
-                false,
+                DryRun::Disabled,
                 printer,
             )
             .await?
@@ -882,7 +882,7 @@ async fn lock_and_sync(
         native_tls,
         allow_insecure_host,
         cache,
-        false,
+        DryRun::Disabled,
         printer,
         preview,
     )

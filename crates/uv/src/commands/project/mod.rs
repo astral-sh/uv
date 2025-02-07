@@ -11,8 +11,8 @@ use uv_cache::Cache;
 use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, ExtrasSpecification,
-    PreviewMode, Reinstall, TrustedHost, Upgrade,
+    Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, DryRun,
+    ExtrasSpecification, PreviewMode, Reinstall, TrustedHost, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::DistributionDatabase;
@@ -962,7 +962,7 @@ impl ProjectEnvironment {
         no_config: bool,
         active: Option<bool>,
         cache: &Cache,
-        dry_run: bool,
+        dry_run: DryRun,
         printer: Printer,
     ) -> Result<Self, ProjectError> {
         // Lock the project environment to avoid synchronization issues.
@@ -1020,7 +1020,7 @@ impl ProjectEnvironment {
                 };
 
                 // Under `--dry-run`, avoid modifying the environment.
-                if dry_run {
+                if dry_run.enabled() {
                     let environment = PythonEnvironment::from_interpreter(interpreter);
                     return Ok(if replace {
                         Self::Replaced(environment, venv)
@@ -1508,7 +1508,7 @@ pub(crate) async fn sync_environment(
     // optional on the downstream APIs.
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
-    let dry_run = false;
+    let dry_run = DryRun::default();
     let hasher = HashStrategy::default();
 
     // Resolve the flat indexes from `--find-links`.
@@ -1715,7 +1715,7 @@ pub(crate) async fn update_environment(
     // optional on the downstream APIs.
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
-    let dry_run = false;
+    let dry_run = DryRun::default();
     let extras = ExtrasSpecification::default();
     let groups = DevGroupsSpecification::default();
     let hasher = HashStrategy::default();
