@@ -324,13 +324,13 @@ uv run [OPTIONS] [COMMAND]
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
-</dd><dt><code>--no-default-groups</code></dt><dd><p>Exclude dependencies from default groups.</p>
+</dd><dt><code>--no-default-groups</code></dt><dd><p>Ignore the the default dependency groups.</p>
 
-<p><code>--group</code> can be used to include specific groups.</p>
+<p>uv includes the groups defined in <code>tool.uv.default-groups</code> by default. This disables that option, however, specific groups can still be included with <code>--group</code>.</p>
 
-</dd><dt><code>--no-dev</code></dt><dd><p>Omit the development dependency group.</p>
+</dd><dt><code>--no-dev</code></dt><dd><p>Disable the development dependency group.</p>
 
-<p>This option is an alias of <code>--no-group dev</code>.</p>
+<p>This option is an alias of <code>--no-group dev</code>. See <code>--no-default-groups</code> to disable all default groups instead.</p>
 
 <p>This option is only available when running in a project.</p>
 
@@ -343,7 +343,9 @@ uv run [OPTIONS] [COMMAND]
 
 <p>May be provided multiple times.</p>
 
-</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified dependency group.</p>
+</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
+
+<p>This options always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 
 <p>May be provided multiple times.</p>
 
@@ -376,15 +378,15 @@ uv run [OPTIONS] [COMMAND]
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--only-dev</code></dt><dd><p>Only include the development dependency group.</p>
 
-<p>Omit other dependencies. The project itself will also be omitted.</p>
+<p>The project and its dependencies will be omitted.</p>
 
-<p>This option is an alias for <code>--only-group dev</code>.</p>
+<p>This option is an alias for <code>--only-group dev</code>. Implies <code>--no-default-groups</code>.</p>
 
 </dd><dt><code>--only-group</code> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 
-<p>The project itself will also be omitted.</p>
+<p>The project and its dependencies will be omitted.</p>
 
-<p>May be provided multiple times.</p>
+<p>May be provided multiple times. Implies <code>--no-default-groups</code>.</p>
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Run the command in a specific package in the workspace.</p>
 
@@ -1715,13 +1717,13 @@ uv sync [OPTIONS]
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
-</dd><dt><code>--no-default-groups</code></dt><dd><p>Exclude dependencies from default groups.</p>
+</dd><dt><code>--no-default-groups</code></dt><dd><p>Ignore the the default dependency groups.</p>
 
-<p><code>--group</code> can be used to include specific groups.</p>
+<p>uv includes the groups defined in <code>tool.uv.default-groups</code> by default. This disables that option, however, specific groups can still be included with <code>--group</code>.</p>
 
-</dd><dt><code>--no-dev</code></dt><dd><p>Omit the development dependency group.</p>
+</dd><dt><code>--no-dev</code></dt><dd><p>Disable the development dependency group.</p>
 
-<p>This option is an alias for <code>--no-group dev</code>.</p>
+<p>This option is an alias of <code>--no-group dev</code>. See <code>--no-default-groups</code> to disable all default groups instead.</p>
 
 </dd><dt><code>--no-editable</code></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
 
@@ -1729,7 +1731,9 @@ uv sync [OPTIONS]
 
 <p>May be provided multiple times.</p>
 
-</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified dependency group.</p>
+</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
+
+<p>This options always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 
 <p>May be provided multiple times.</p>
 
@@ -1763,15 +1767,15 @@ uv sync [OPTIONS]
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--only-dev</code></dt><dd><p>Only include the development dependency group.</p>
 
-<p>Omit other dependencies. The project itself will also be omitted.</p>
+<p>The project and its dependencies will be omitted.</p>
 
-<p>This option is an alias for <code>--only-group dev</code>.</p>
+<p>This option is an alias for <code>--only-group dev</code>. Implies <code>--no-default-groups</code>.</p>
 
 </dd><dt><code>--only-group</code> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 
-<p>The project itself will also be omitted.</p>
+<p>The project and its dependencies will be omitted.</p>
 
-<p>May be provided multiple times.</p>
+<p>May be provided multiple times. Implies <code>--no-default-groups</code>.</p>
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Sync for a specific package in the workspace.</p>
 
@@ -2425,13 +2429,13 @@ uv export [OPTIONS]
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
-</dd><dt><code>--no-default-groups</code></dt><dd><p>Exclude dependencies from default groups.</p>
+</dd><dt><code>--no-default-groups</code></dt><dd><p>Ignore the the default dependency groups.</p>
 
-<p><code>--group</code> can be used to include specific groups.</p>
+<p>uv includes the groups defined in <code>tool.uv.default-groups</code> by default. This disables that option, however, specific groups can still be included with <code>--group</code>.</p>
 
-</dd><dt><code>--no-dev</code></dt><dd><p>Omit the development dependency group.</p>
+</dd><dt><code>--no-dev</code></dt><dd><p>Disable the development dependency group.</p>
 
-<p>This option is an alias for <code>--no-group dev</code>.</p>
+<p>This option is an alias of <code>--no-group dev</code>. See <code>--no-default-groups</code> to disable all default groups instead.</p>
 
 </dd><dt><code>--no-editable</code></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
 
@@ -2451,7 +2455,9 @@ uv export [OPTIONS]
 
 <p>May be provided multiple times.</p>
 
-</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified dependency group.</p>
+</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
+
+<p>This options always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 
 <p>May be provided multiple times.</p>
 
@@ -2477,15 +2483,15 @@ uv export [OPTIONS]
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--only-dev</code></dt><dd><p>Only include the development dependency group.</p>
 
-<p>Omit other dependencies. The project itself will also be omitted.</p>
+<p>The project and its dependencies will be omitted.</p>
 
-<p>This option is an alias for <code>--only-group dev</code>.</p>
+<p>This option is an alias for <code>--only-group dev</code>. Implies <code>--no-default-groups</code>.</p>
 
 </dd><dt><code>--only-group</code> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 
-<p>The project itself will also be omitted.</p>
+<p>The project and its dependencies will be omitted.</p>
 
-<p>May be provided multiple times.</p>
+<p>May be provided multiple times. Implies <code>--no-default-groups</code>.</p>
 
 </dd><dt><code>--output-file</code>, <code>-o</code> <i>output-file</i></dt><dd><p>Write the exported requirements to the given file</p>
 
@@ -2803,15 +2809,17 @@ uv tree [OPTIONS]
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
 </dd><dt><code>--no-dedupe</code></dt><dd><p>Do not de-duplicate repeated dependencies. Usually, when a package has already displayed its dependencies, further occurrences will not re-display its dependencies, and will include a (*) to indicate it has already been shown. This flag will cause those duplicates to be repeated</p>
 
-</dd><dt><code>--no-default-groups</code></dt><dd><p>Exclude dependencies from default groups.</p>
+</dd><dt><code>--no-default-groups</code></dt><dd><p>Ignore the the default dependency groups.</p>
 
-<p><code>--group</code> can be used to include specific groups.</p>
+<p>uv includes the groups defined in <code>tool.uv.default-groups</code> by default. This disables that option, however, specific groups can still be included with <code>--group</code>.</p>
 
-</dd><dt><code>--no-dev</code></dt><dd><p>Omit the development dependency group.</p>
+</dd><dt><code>--no-dev</code></dt><dd><p>Disable the development dependency group.</p>
 
-<p>This option is an alias for <code>--no-group dev</code>.</p>
+<p>This option is an alias of <code>--no-group dev</code>. See <code>--no-default-groups</code> to disable all default groups instead.</p>
 
-</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified dependency group.</p>
+</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
+
+<p>This options always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 
 <p>May be provided multiple times.</p>
 
@@ -2833,15 +2841,15 @@ uv tree [OPTIONS]
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--only-dev</code></dt><dd><p>Only include the development dependency group.</p>
 
-<p>Omit other dependencies. The project itself will also be omitted.</p>
+<p>The project and its dependencies will be omitted.</p>
 
-<p>This option is an alias for <code>--only-group dev</code>.</p>
+<p>This option is an alias for <code>--only-group dev</code>. Implies <code>--no-default-groups</code>.</p>
 
 </dd><dt><code>--only-group</code> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 
-<p>The project itself will also be omitted.</p>
+<p>The project and its dependencies will be omitted.</p>
 
-<p>May be provided multiple times.</p>
+<p>May be provided multiple times. Implies <code>--no-default-groups</code>.</p>
 
 </dd><dt><code>--outdated</code></dt><dd><p>Show the latest available version of each package in the tree</p>
 
