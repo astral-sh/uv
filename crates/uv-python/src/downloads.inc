@@ -19559,6 +19559,222 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
     ManagedPythonDownload {
         key: PythonInstallationKey {
             major: 3,
+            minor: 11,
+            patch: 11,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch{
+                family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+        },
+        url: "https://downloads.python.org/pypy/pypy3.11-v7.3.18-macos_arm64.tar.bz2",
+        sha256: Some("cc4d6dd621dffd474eb9a2d01e5844d1b6a6f88b404aac2c48a9c267b5370df4")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 11,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch{
+                family: target_lexicon::Architecture::X86_64,
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+        },
+        url: "https://downloads.python.org/pypy/pypy3.11-v7.3.18-macos_x86_64.tar.bz2",
+        sha256: Some("4f2274ffb4b787fd5b5f15cd61f7fef5a3710bf0ecbd4293bf0251035b468865")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 11,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch{
+                family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+        },
+        url: "https://downloads.python.org/pypy/pypy3.11-v7.3.18-aarch64.tar.bz2",
+        sha256: Some("95bc3021cb9be2aa766ecb776c215e97ae8c0dda99dd48840b40b5b87d90bc45")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 11,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch{
+                family: target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+        },
+        url: "https://downloads.python.org/pypy/pypy3.11-v7.3.18-linux32.tar.bz2",
+        sha256: Some("70357a69cdbf4ce449b5743901fcd36208e0a89eadcfb4d2ebdc9b4711a0612c")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 11,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch{
+                family: target_lexicon::Architecture::X86_64,
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+        },
+        url: "https://downloads.python.org/pypy/pypy3.11-v7.3.18-linux64.tar.bz2",
+        sha256: Some("df5fa534800ff09d990e50ca4fdb02d8a06b9ed948dbcb3a09bea0739ef42de7")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 11,
+            patch: 11,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch{
+                family: target_lexicon::Architecture::X86_64,
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+        },
+        url: "https://downloads.python.org/pypy/pypy3.11-v7.3.18-win64.zip",
+        sha256: Some("ccbea242f623700027e713d845dff5c7f7a5806413bbce229d3dcb88715970fd")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 19,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch{
+                family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+        },
+        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.18-macos_arm64.tar.bz2",
+        sha256: Some("1d47da22bc9f7b5329f97c9c7b3ee0b051252ff1e82ca76999ad2d44758be41f")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 19,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch{
+                family: target_lexicon::Architecture::X86_64,
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+        },
+        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.18-macos_x86_64.tar.bz2",
+        sha256: Some("b7031cbf815b7ba26ed2503b76ee3e73d7322b55f3671219019e8385042e212f")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 19,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch{
+                family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+        },
+        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.18-aarch64.tar.bz2",
+        sha256: Some("e843aecd48eb06b625af67891b99e3440313cfb64c6851fc37df1e5572c8ef9e")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 19,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch{
+                family: target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+        },
+        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.18-linux32.tar.bz2",
+        sha256: Some("34ef09a481254aad0f22bf09fd7c99efb65ffef4f79f5b4222505f55f8d9c22e")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 19,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch{
+                family: target_lexicon::Architecture::X86_64,
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+        },
+        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.18-linux64.tar.bz2",
+        sha256: Some("834ccd4544bb47112a66977add7e47f30619f74061ae990876bcba95d98c27c5")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 19,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::PyPy),
+            arch: Arch{
+                family: target_lexicon::Architecture::X86_64,
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+        },
+        url: "https://downloads.python.org/pypy/pypy3.10-v7.3.18-win64.zip",
+        sha256: Some("e7ae89c5d45efcc927425281c870d0ce62cd624628f869cb0a25a0647e39a7be")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
             minor: 10,
             patch: 14,
             prerelease: None,
