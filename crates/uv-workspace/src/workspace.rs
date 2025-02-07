@@ -49,8 +49,8 @@ pub enum WorkspaceError {
     #[error("Failed to find directories for glob: `{0}`")]
     Pattern(String, #[source] PatternError),
     // Syntax and other errors.
-    #[error("Invalid glob in `tool.uv.workspace.members`: `{0}`")]
-    Glob(String, #[source] GlobError),
+    #[error("Directory walking failed for `tool.uv.workspace.members` glob: `{0}`")]
+    GlobWalk(String, #[source] GlobError),
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("Failed to parse: `{}`", _0.user_display())]
@@ -761,7 +761,7 @@ impl Workspace {
                 .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?
             {
                 let member_root = member_root
-                    .map_err(|err| WorkspaceError::Glob(absolute_glob.to_string(), err))?;
+                    .map_err(|err| WorkspaceError::GlobWalk(absolute_glob.to_string(), err))?;
                 if !seen.insert(member_root.clone()) {
                     continue;
                 }
