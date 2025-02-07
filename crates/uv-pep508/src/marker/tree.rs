@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::fmt::{self, Display, Formatter};
 use std::ops::{Bound, Deref};
@@ -772,7 +773,7 @@ impl MarkerTree {
     }
 
     /// Returns the underlying [`MarkerTreeKind`] of the root node.
-    pub fn kind(&self) -> MarkerTreeKind<'_> {
+    pub fn kind(self) -> MarkerTreeKind<'static> {
         if self.is_true() {
             return MarkerTreeKind::True;
         }
@@ -1002,11 +1003,19 @@ impl MarkerTree {
     ///
     /// ASSUMPTION: There is one `extra = "..."`, and it's either the only marker or part of the
     /// main conjunction.
-    pub fn top_level_extra_name(self) -> Option<ExtraName> {
+    pub fn top_level_extra_name(self) -> Option<Cow<'static, ExtraName>> {
+        // Fast path: The marker is only a `extra == "..."`.
+        if let MarkerTreeKind::Extra(marker) = self.kind() {
+            if marker.edge(true).is_true() {
+                let CanonicalMarkerValueExtra::Extra(extra) = marker.name;
+                return Some(Cow::Borrowed(extra));
+            }
+        }
+
         let extra_expression = self.top_level_extra()?;
 
         match extra_expression {
-            MarkerExpression::Extra { name, .. } => name.into_extra(),
+            MarkerExpression::Extra { name, .. } => name.into_extra().map(Cow::Owned),
             _ => unreachable!(),
         }
     }

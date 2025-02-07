@@ -362,7 +362,7 @@ impl LoweredRequirement {
                     requirement
                         .marker
                         .top_level_extra_name()
-                        .is_some_and(|extra| extra == *target)
+                        .is_some_and(|extra| &*extra == target)
                 })
             })
             .cloned()
