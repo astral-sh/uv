@@ -18,15 +18,15 @@ pub(crate) mod upgrade;
 pub(crate) enum Target<'a> {
     /// e.g., `ruff`
     Unspecified(&'a str),
-    /// e.g., `ruff@0.6.0`
+    /// e.g., `ruff[extra]@0.6.0`
     Version(&'a str, Vec<ExtraName>, Version),
-    /// e.g., `ruff@latest`
+    /// e.g., `ruff[extra]@latest`
     Latest(&'a str, Vec<ExtraName>),
-    /// e.g., `ruff --from ruff>=0.6.0`
+    /// e.g., `ruff --from ruff[extra]>=0.6.0`
     From(&'a str, &'a str),
-    /// e.g., `ruff --from ruff@0.6.0`
+    /// e.g., `ruff --from ruff[extra]@0.6.0`
     FromVersion(&'a str, &'a str, Vec<ExtraName>, Version),
-    /// e.g., `ruff --from ruff@latest`
+    /// e.g., `ruff --from ruff[extra]@latest`
     FromLatest(&'a str, &'a str, Vec<ExtraName>),
 }
 
@@ -152,7 +152,15 @@ impl<'a> Target<'a> {
     /// Returns the name of the executable.
     pub(crate) fn executable(&self) -> &str {
         match self {
-            Self::Unspecified(name) => name,
+            Self::Unspecified(name) => {
+                // Identify the package name from the PEP 508 specifier.
+                //
+                // For example, given `ruff>=0.6.0`, extract `ruff`, to use as the executable name.
+                let index = name
+                    .find(|c| !matches!(c, 'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.'))
+                    .unwrap_or(name.len());
+                &name[..index]
+            }
             Self::Version(name, _, _) => name,
             Self::Latest(name, _) => name,
             Self::FromVersion(name, _, _, _) => name,
@@ -164,7 +172,15 @@ impl<'a> Target<'a> {
     /// Returns whether the target package is Python.
     pub(crate) fn is_python(&self) -> bool {
         let name = match self {
-            Self::Unspecified(name) => name,
+            Self::Unspecified(name) => {
+                // Identify the package name from the PEP 508 specifier.
+                //
+                // For example, given `ruff>=0.6.0`, extract `ruff`, to use as the executable name.
+                let index = name
+                    .find(|c| !matches!(c, 'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.'))
+                    .unwrap_or(name.len());
+                &name[..index]
+            }
             Self::Version(name, _, _) => name,
             Self::Latest(name, _) => name,
             Self::FromVersion(_, name, _, _) => name,
