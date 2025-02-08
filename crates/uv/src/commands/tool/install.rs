@@ -133,14 +133,15 @@ pub(crate) async fn install(
             .unwrap()
         }
         // Ex) `ruff@0.6.0`
-        Target::Version(name, ref version) | Target::FromVersion(_, name, ref version) => {
+        Target::Version(name, ref extras, ref version)
+        | Target::FromVersion(_, name, ref extras, ref version) => {
             if editable {
                 bail!("`--editable` is only supported for local packages");
             }
 
             Requirement {
                 name: PackageName::from_str(name)?,
-                extras: vec![],
+                extras: extras.clone(),
                 groups: vec![],
                 marker: MarkerTree::default(),
                 source: RequirementSource::Registry {
@@ -154,14 +155,14 @@ pub(crate) async fn install(
             }
         }
         // Ex) `ruff@latest`
-        Target::Latest(name) | Target::FromLatest(_, name) => {
+        Target::Latest(name, ref extras) | Target::FromLatest(_, name, ref extras) => {
             if editable {
                 bail!("`--editable` is only supported for local packages");
             }
 
             Requirement {
                 name: PackageName::from_str(name)?,
-                extras: vec![],
+                extras: extras.clone(),
                 groups: vec![],
                 marker: MarkerTree::default(),
                 source: RequirementSource::Registry {
