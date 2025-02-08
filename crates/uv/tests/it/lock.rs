@@ -8358,6 +8358,53 @@ fn lock_multiple_indexes_same_realm_different_credentials() -> Result<()> {
     Ok(())
 }
 
+// Same as [`lock_multiple_indexes_same_realm_different_credentials`], but with trailing slashes
+// on the index URL
+#[test]
+fn lock_multiple_indexes_same_realm_different_credentials_trailing_slash() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig", "anyio"]
+
+        [tool.uv.sources]
+        iniconfig = { index = "internal-proxy-heron" }
+        anyio = { index = "internal-proxy-eagle" }
+
+        [[tool.uv.index]]
+        name = "internal-proxy-heron"
+        url = "https://pypi-proxy.fly.dev/basic-auth-heron/simple/"
+
+        [[tool.uv.index]]
+        name = "internal-proxy-eagle"
+        url = "https://pypi-proxy.fly.dev/basic-auth-eagle/simple/"
+        "#,
+    )?;
+
+    // Provide credentials via environment variables.
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::index_username("INTERNAL_PROXY_HERON"), "public")
+        .env(EnvVars::index_password("INTERNAL_PROXY_HERON"), "heron")
+        .env(EnvVars::index_username("INTERNAL_PROXY_EAGLE"), "public")
+        .env(EnvVars::index_password("INTERNAL_PROXY_EAGLE"), "eagle"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth-heron/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl.metadata`
+      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth-heron/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl.metadata)
+    "###);
+
+    Ok(())
+}
+
 /// Resolve against an index that uses relative links.
 #[test]
 fn lock_relative_index() -> Result<()> {
