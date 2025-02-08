@@ -19,12 +19,12 @@ An extremely fast Python package and project manager, written in Rust.
 - 🚀 A single tool to replace `pip`, `pip-tools`, `pipx`, `poetry`, `pyenv`, `twine`, `virtualenv`,
   and more.
 - ⚡️ [10-100x faster](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md) than `pip`.
-- 🗂️ Provides [comprehensive project management](#project), with a
+- 🗂️ Provides [comprehensive project management](#projects), with a
   [universal lockfile](./concepts/projects/layout.md#the-lockfile).
-- ❇️ [Runs scripts](#script-support), with support for
+- ❇️ [Runs scripts](#scripts), with support for
   [inline dependency metadata](./guides/scripts.md#declaring-script-dependencies).
 - 🐍 [Installs and manages](#python-versions) Python versions.
-- 🛠️ [Runs and installs](#tool) tools published as Python packages.
+- 🛠️ [Runs and installs](#tools) tools published as Python packages.
 - 🔩 Includes a [pip-compatible interface](#the-pip-interface) for a performance boost with a
   familiar CLI.
 - 🏢 Supports Cargo-style [workspaces](./concepts/projects/workspaces.md) for scalable projects.
