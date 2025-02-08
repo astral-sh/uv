@@ -1,11 +1,6 @@
-use uv_cache::{ArchiveId, Cache};
+use uv_cache::{ArchiveId, Cache, ARCHIVE_VERSION};
 use uv_distribution_types::Hashed;
 use uv_pypi_types::HashDigest;
-
-/// The version of the archive bucket.
-///
-/// Must be kept in-sync with the version in [`uv_cache::CacheBucket::to_str`].
-const ARCHIVE_VERSION: u8 = 0;
 
 /// An archive (unzipped wheel) that exists in the local cache.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
