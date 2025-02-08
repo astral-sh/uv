@@ -27,16 +27,16 @@ An extremely fast Python package and project manager, written in Rust.
   and more.
 - ⚡️ [10-100x faster](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md) than `pip`.
 - 🗂️ Provides [comprehensive project management](#project), with a
-  [universal lockfile](https://docs.astral.sh/uv/concepts/projects/layout.md#the-lockfile).
+  [universal lockfile](https://docs.astral.sh/uv/concepts/projects/layout#the-lockfile).
 - ❇️ [Runs scripts](#script-support), with support for
-  [inline dependency metadata](https://docs.astral.sh/uv/guides/scripts.md#declaring-script-dependencies).
+  [inline dependency metadata](https://docs.astral.sh/uv/guides/scripts#declaring-script-dependencies).
 - 🐍 [Installs and manages](#python-versions) Python versions.
 - 🛠️ [Runs and installs](#tool) tools published as Python packages.
 - 🔩 Includes a [pip-compatible interface](#the-pip-interface) for a performance boost with a
   familiar CLI.
-- 🏢 Supports Cargo-style [workspaces](https://docs.astral.sh/uv/concepts/projects/workspaces.md)
+- 🏢 Supports Cargo-style [workspaces](https://docs.astral.sh/uv/concepts/projects/workspaces)
   for scalable projects.
-- 💾 Disk-space efficient, with a [global cache](https://docs.astral.sh/uv/concepts/cache.md) for
+- 💾 Disk-space efficient, with a [global cache](https://docs.astral.sh/uv/concepts/cache) for
   dependency deduplication.
 - ⏬ Installable without Rust or Python via `curl` or `pip`.
 - 🖥️ Supports macOS, Linux, and Windows.
