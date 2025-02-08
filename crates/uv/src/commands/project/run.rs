@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::env::VarError;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::Read;
@@ -92,7 +93,18 @@ pub(crate) async fn run(
     env_file: Vec<PathBuf>,
     no_env_file: bool,
     preview: PreviewMode,
+    max_recursion_depth: u32,
 ) -> anyhow::Result<ExitStatus> {
+    // Check if max recursion depth was exceeded. This most commonly happens
+    // for scripts with a shebang line like `#!/usr/bin/env -S uv run`, so try
+    // to provide guidance for that case.
+    let recursion_depth = read_recursion_depth_from_environment_variable()?;
+    if recursion_depth > max_recursion_depth {
+        bail!(
+            "Exiting because `uv run` invoked itself recursively {max_recursion_depth} times. If you are running a script with `uv run` as the shebang line, you may need to include --script in the arguments to uv.",
+        );
+    }
+
     // These cases seem quite complex because (in theory) they should change the "current package".
     // Let's ban them entirely for now.
     let mut requirements_from_stdin: bool = false;
@@ -1080,6 +1092,12 @@ pub(crate) async fn run(
     )?;
     process.env(EnvVars::PATH, new_path);
 
+    // Increment recursion depth counter.
+    process.env(
+        EnvVars::UV_RUN_RECURSION_DEPTH,
+        (recursion_depth + 1).to_string(),
+    );
+
     // Ensure `VIRTUAL_ENV` is set.
     if interpreter.is_virtualenv() {
         process.env(EnvVars::VIRTUAL_ENV, interpreter.sys_prefix().as_os_str());
@@ -1482,4 +1500,25 @@ fn is_python_zipapp(target: &Path) -> bool {
         }
     }
     false
+}
+
+/// Read and parse recursion depth from the environment.
+///
+/// Returns Ok(0) if `EnvVars::UV_RUN_RECURSION_DEPTH` is not set.
+///
+/// Returns an error if `EnvVars::UV_RUN_RECURSION_DEPTH` is set to a value
+/// that cannot ber parsed as an integer.
+fn read_recursion_depth_from_environment_variable() -> anyhow::Result<u32> {
+    let envvar = match std::env::var(EnvVars::UV_RUN_RECURSION_DEPTH) {
+        Ok(val) => val,
+        Err(VarError::NotPresent) => return Ok(0),
+        Err(e) => {
+            return Err(e)
+                .with_context(|| format!("invalid value for {}", EnvVars::UV_RUN_RECURSION_DEPTH))
+        }
+    };
+
+    envvar
+        .parse::<u32>()
+        .with_context(|| format!("invalid value for {}", EnvVars::UV_RUN_RECURSION_DEPTH))
 }

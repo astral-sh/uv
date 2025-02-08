@@ -2932,6 +2932,11 @@ pub struct RunArgs {
     /// By default, environment modifications are omitted, but enabled under `--verbose`.
     #[arg(long, env = EnvVars::UV_SHOW_RESOLUTION, value_parser = clap::builder::BoolishValueParser::new(), hide = true)]
     pub show_resolution: bool,
+
+    /// Number of times that uv run will recursively invoke itself before
+    /// giving up.
+    #[arg(long, hide = true, env = EnvVars::UV_RUN_MAX_RECURSION_DEPTH)]
+    pub max_recursion_depth: Option<u32>,
 }
 
 #[derive(Args)]

@@ -299,9 +299,16 @@ pub(crate) struct RunSettings {
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) env_file: Vec<PathBuf>,
     pub(crate) no_env_file: bool,
+    pub(crate) max_recursion_depth: u32,
 }
 
 impl RunSettings {
+    // Default value for UV_RUN_MAX_RECURSION_DEPTH if unset. This is large
+    // enough that it's unlikely a user actually needs this recursion depth,
+    // but short enough that we detect recursion quickly enough to avoid OOMing
+    // or hanging for a long time.
+    const DEFAULT_MAX_RECURSION_DEPTH: u32 = 100;
+
     /// Resolve the [`RunSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: RunArgs, filesystem: Option<FilesystemOptions>) -> Self {
@@ -344,6 +351,7 @@ impl RunSettings {
             show_resolution,
             env_file,
             no_env_file,
+            max_recursion_depth,
         } = args;
 
         let install_mirrors = filesystem
@@ -403,6 +411,7 @@ impl RunSettings {
             env_file,
             no_env_file,
             install_mirrors,
+            max_recursion_depth: max_recursion_depth.unwrap_or(Self::DEFAULT_MAX_RECURSION_DEPTH),
         }
     }
 }
