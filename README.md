@@ -34,8 +34,8 @@ An extremely fast Python package and project manager, written in Rust.
 - 🛠️ [Runs and installs](#tools) tools published as Python packages.
 - 🔩 Includes a [pip-compatible interface](#the-pip-interface) for a performance boost with a
   familiar CLI.
-- 🏢 Supports Cargo-style [workspaces](https://docs.astral.sh/uv/concepts/projects/workspaces)
-  for scalable projects.
+- 🏢 Supports Cargo-style [workspaces](https://docs.astral.sh/uv/concepts/projects/workspaces) for
+  scalable projects.
 - 💾 Disk-space efficient, with a [global cache](https://docs.astral.sh/uv/concepts/cache) for
   dependency deduplication.
 - ⏬ Installable without Rust or Python via `curl` or `pip`.
