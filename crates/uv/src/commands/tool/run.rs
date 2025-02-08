@@ -460,13 +460,13 @@ async fn get_or_create_environment(
     let python_request = if target.is_python() {
         let target_request = match target {
             Target::Unspecified(_) => None,
-            Target::Version(_, version) | Target::FromVersion(_, _, version) => {
+            Target::Version(_, _, version) | Target::FromVersion(_, _, _, version) => {
                 Some(PythonRequest::Version(
                     VersionRequest::from_str(&version.to_string()).map_err(anyhow::Error::from)?,
                 ))
             }
             // TODO(zanieb): Add `PythonRequest::Latest`
-            Target::Latest(_) | Target::FromLatest(_, _) => {
+            Target::Latest(_, _) | Target::FromLatest(_, _, _) => {
                 return Err(anyhow::anyhow!(
                     "Requesting the 'latest' Python version is not yet supported"
                 )
@@ -531,9 +531,10 @@ async fn get_or_create_environment(
                 origin: None,
             },
             // Ex) `ruff@0.6.0`
-            Target::Version(name, version) | Target::FromVersion(_, name, version) => Requirement {
+            Target::Version(name, extras, version)
+            | Target::FromVersion(_, name, extras, version) => Requirement {
                 name: PackageName::from_str(name)?,
-                extras: vec![],
+                extras: extras.clone(),
                 groups: vec![],
                 marker: MarkerTree::default(),
                 source: RequirementSource::Registry {
@@ -546,9 +547,9 @@ async fn get_or_create_environment(
                 origin: None,
             },
             // Ex) `ruff@latest`
-            Target::Latest(name) | Target::FromLatest(_, name) => Requirement {
+            Target::Latest(name, extras) | Target::FromLatest(_, name, extras) => Requirement {
                 name: PackageName::from_str(name)?,
-                extras: vec![],
+                extras: extras.clone(),
                 groups: vec![],
                 marker: MarkerTree::default(),
                 source: RequirementSource::Registry {
