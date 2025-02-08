@@ -22,6 +22,7 @@ env:
 
 jobs:
   docker-build:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     name: Build Docker image (ghcr.io/astral-sh/uv) for ${{ matrix.platform }}
     runs-on: ubuntu-latest
     environment:
