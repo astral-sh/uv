@@ -39,7 +39,7 @@ use uv_resolver::{
     FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolverEnvironment,
     ResolverOutput,
 };
-use uv_scripts::{Pep723ItemRef, Pep723Script};
+use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -530,17 +530,26 @@ pub(crate) enum ScriptInterpreter {
 
 impl ScriptInterpreter {
     /// Return the expected virtual environment path for the [`Pep723Script`].
-    pub(crate) fn root(script: &Pep723Script, cache: &Cache) -> PathBuf {
-        let digest = cache_digest(&script.path);
-        let entry = if let Some(name) = script
-            .path
-            .file_stem()
-            .and_then(|name| name.to_str())
-            .and_then(cache_name)
-        {
-            format!("{name}-{digest}")
-        } else {
-            digest
+    pub(crate) fn root(script: Pep723ItemRef<'_>, cache: &Cache) -> PathBuf {
+        let entry = match script {
+            // For local scripts, use a hash of the path to the script.
+            Pep723ItemRef::Script(script) => {
+                let digest = cache_digest(&script.path);
+                if let Some(file_name) = script
+                    .path
+                    .file_stem()
+                    .and_then(|name| name.to_str())
+                    .and_then(cache_name)
+                {
+                    format!("{file_name}-{digest}")
+                } else {
+                    digest
+                }
+            }
+            // For remote scripts, use a hash of the URL.
+            Pep723ItemRef::Remote(.., url) => cache_digest(url),
+            // Otherwise, use a hash of the metadata.
+            Pep723ItemRef::Stdin(metadata) => cache_digest(&metadata.raw),
         };
         cache
             .shard(CacheBucket::Environments, entry)
@@ -570,42 +579,39 @@ impl ScriptInterpreter {
             requires_python,
         } = ScriptPython::from_request(python_request, workspace, script, no_config).await?;
 
-        // If this is a local script, use a stable virtual environment.
-        if let Pep723ItemRef::Script(script) = script {
-            let root = Self::root(script, cache);
-            match PythonEnvironment::from_root(&root, cache) {
-                Ok(venv) => {
-                    if python_request.as_ref().map_or(true, |request| {
-                        if request.satisfied(venv.interpreter(), cache) {
-                            debug!(
-                                "The script environment's Python version satisfies `{}`",
-                                request.to_canonical_string()
-                            );
-                            true
-                        } else {
-                            debug!(
-                                "The script environment's Python version does not satisfy `{}`",
-                                request.to_canonical_string()
-                            );
-                            false
-                        }
-                    }) {
-                        if let Some((requires_python, ..)) = requires_python.as_ref() {
-                            if requires_python.contains(venv.interpreter().python_version()) {
-                                return Ok(Self::Environment(venv));
-                            }
-                            debug!(
-                                "The script environment's Python version does not meet the script's Python requirement: `{requires_python}`"
-                            );
-                        } else {
+        let root = Self::root(script, cache);
+        match PythonEnvironment::from_root(&root, cache) {
+            Ok(venv) => {
+                if python_request.as_ref().map_or(true, |request| {
+                    if request.satisfied(venv.interpreter(), cache) {
+                        debug!(
+                            "The script environment's Python version satisfies `{}`",
+                            request.to_canonical_string()
+                        );
+                        true
+                    } else {
+                        debug!(
+                            "The script environment's Python version does not satisfy `{}`",
+                            request.to_canonical_string()
+                        );
+                        false
+                    }
+                }) {
+                    if let Some((requires_python, ..)) = requires_python.as_ref() {
+                        if requires_python.contains(venv.interpreter().python_version()) {
                             return Ok(Self::Environment(venv));
                         }
+                        debug!(
+                            "The script environment's Python version does not meet the script's Python requirement: `{requires_python}`"
+                        );
+                    } else {
+                        return Ok(Self::Environment(venv));
                     }
                 }
-                Err(uv_python::Error::MissingEnvironment(_)) => {}
-                Err(err) => warn!("Ignoring existing script environment: {err}"),
-            };
-        }
+            }
+            Err(uv_python::Error::MissingEnvironment(_)) => {}
+            Err(err) => warn!("Ignoring existing script environment: {err}"),
+        };
 
         let client_builder = BaseClientBuilder::new()
             .connectivity(connectivity)
@@ -652,12 +658,30 @@ impl ScriptInterpreter {
     }
 
     /// Grab a file lock for the script to prevent concurrent writes across processes.
-    pub(crate) async fn lock(script: &Pep723Script) -> Result<LockedFile, std::io::Error> {
-        LockedFile::acquire(
-            std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&script.path))),
-            script.path.simplified_display(),
-        )
-        .await
+    pub(crate) async fn lock(script: Pep723ItemRef<'_>) -> Result<LockedFile, std::io::Error> {
+        match script {
+            Pep723ItemRef::Script(script) => {
+                LockedFile::acquire(
+                    std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&script.path))),
+                    script.path.simplified_display(),
+                )
+                .await
+            }
+            Pep723ItemRef::Remote(.., url) => {
+                LockedFile::acquire(
+                    std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(url))),
+                    url.to_string(),
+                )
+                .await
+            }
+            Pep723ItemRef::Stdin(metadata) => {
+                LockedFile::acquire(
+                    std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&metadata.raw))),
+                    "stdin".to_string(),
+                )
+                .await
+            }
+        }
     }
 }
 
@@ -1221,7 +1245,7 @@ struct ScriptEnvironment(PythonEnvironment);
 impl ScriptEnvironment {
     /// Initialize a virtual environment for a PEP 723 script.
     pub(crate) async fn get_or_init(
-        script: &Pep723Script,
+        script: Pep723ItemRef<'_>,
         python_request: Option<PythonRequest>,
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
@@ -1237,7 +1261,7 @@ impl ScriptEnvironment {
         let _lock = ScriptInterpreter::lock(script).await?;
 
         match ScriptInterpreter::discover(
-            Pep723ItemRef::Script(script),
+            script,
             python_request,
             python_preference,
             python_downloads,
@@ -1280,8 +1304,8 @@ impl ScriptEnvironment {
                 // 1) The name of the script
                 // 2) No prompt
                 let prompt = script
-                    .path
-                    .file_name()
+                    .path()
+                    .and_then(|path| path.file_name())
                     .map(|f| f.to_string_lossy().to_string())
                     .map(uv_virtualenv::Prompt::Static)
                     .unwrap_or(uv_virtualenv::Prompt::None);

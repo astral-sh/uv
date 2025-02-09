@@ -5604,6 +5604,7 @@ dependencies = [
  "serde",
  "thiserror 2.0.11",
  "toml",
+ "url",
  "uv-pep440",
  "uv-pep508",
  "uv-pypi-types",
