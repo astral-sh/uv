@@ -3135,6 +3135,21 @@ pub struct SyncArgs {
     #[arg(long, conflicts_with = "all_packages")]
     pub package: Option<PackageName>,
 
+    /// Sync the virtual environment for the specified PEP 723 Python script, rather than the current
+    /// project.
+    ///
+    /// If provided, uv will sync the dependencies based on the script's inline metadata table, in
+    /// adherence with PEP 723.
+    #[arg(
+        long,
+        conflicts_with = "active",
+        conflicts_with = "all_packages",
+        conflicts_with = "package",
+        conflicts_with = "no_install_project",
+        conflicts_with = "no_install_workspace"
+    )]
+    pub script: Option<PathBuf>,
+
     /// The Python interpreter to use for the project environment.
     ///
     /// By default, the first interpreter that meets the project's `requires-python` constraint is

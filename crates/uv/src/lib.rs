@@ -201,6 +201,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 script: Some(script),
                 ..
             })
+            | ProjectCommand::Sync(uv_cli::SyncArgs {
+                script: Some(script),
+                ..
+            })
             | ProjectCommand::Tree(uv_cli::TreeArgs {
                 script: Some(script),
                 ..
@@ -1527,7 +1531,14 @@ async fn run_project(
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
-            commands::sync(
+            // Unwrap the script.
+            let script = script.map(|script| match script {
+                Pep723Item::Script(script) => script,
+                Pep723Item::Stdin(..) => unreachable!("`uv lock` does not support stdin"),
+                Pep723Item::Remote(..) => unreachable!("`uv lock` does not support remote files"),
+            });
+
+            Box::pin(commands::sync(
                 project_dir,
                 args.locked,
                 args.frozen,
@@ -1545,6 +1556,7 @@ async fn run_project(
                 globals.python_preference,
                 globals.python_downloads,
                 args.settings,
+                script,
                 globals.installer_metadata,
                 globals.connectivity,
                 globals.concurrency,
@@ -1554,7 +1566,7 @@ async fn run_project(
                 &cache,
                 printer,
                 globals.preview,
-            )
+            ))
             .await
         }
         ProjectCommand::Lock(args) => {

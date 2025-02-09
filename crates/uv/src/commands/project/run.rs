@@ -211,10 +211,11 @@ pub(crate) async fn run(
                 &install_mirrors,
                 no_config,
                 cache,
+                DryRun::Disabled,
                 printer,
             )
             .await?
-            .into_environment();
+            .into_environment()?;
 
             // Determine the lock mode.
             let mode = if frozen {
@@ -420,10 +421,11 @@ pub(crate) async fn run(
                     &install_mirrors,
                     no_config,
                     cache,
+                    DryRun::Disabled,
                     printer,
                 )
                 .await?
-                .into_environment();
+                .into_environment()?;
 
                 match update_environment(
                     environment,

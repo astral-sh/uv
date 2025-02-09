@@ -1240,7 +1240,30 @@ impl Deref for ProjectEnvironment {
 
 /// The Python environment for a script.
 #[derive(Debug)]
-struct ScriptEnvironment(PythonEnvironment);
+enum ScriptEnvironment {
+    /// An existing [`PythonEnvironment`] was discovered, which satisfies the script's requirements.
+    Existing(PythonEnvironment),
+    /// An existing [`PythonEnvironment`] was discovered, but did not satisfy the script's
+    /// requirements, and so was replaced.
+    Replaced(PythonEnvironment),
+    /// A new [`PythonEnvironment`] was created for the script.
+    Created(PythonEnvironment),
+    /// An existing [`PythonEnvironment`] was discovered, but did not satisfy the script's
+    /// requirements. A new environment would've been created, but `--dry-run` mode is enabled; as
+    /// such, a temporary environment was created instead.
+    WouldReplace(
+        PathBuf,
+        PythonEnvironment,
+        #[allow(unused)] tempfile::TempDir,
+    ),
+    /// A new [`PythonEnvironment`] would've been created, but `--dry-run` mode is enabled; as such,
+    /// a temporary environment was created instead.
+    WouldCreate(
+        PathBuf,
+        PythonEnvironment,
+        #[allow(unused)] tempfile::TempDir,
+    ),
+}
 
 impl ScriptEnvironment {
     /// Initialize a virtual environment for a PEP 723 script.
@@ -1255,6 +1278,7 @@ impl ScriptEnvironment {
         install_mirrors: &PythonInstallMirrors,
         no_config: bool,
         cache: &Cache,
+        dry_run: DryRun,
         printer: Printer,
     ) -> Result<Self, ProjectError> {
         // Lock the script environment to avoid synchronization issues.
@@ -1276,28 +1300,11 @@ impl ScriptEnvironment {
         .await?
         {
             // If we found an existing, compatible environment, use it.
-            ScriptInterpreter::Environment(environment) => Ok(Self(environment)),
+            ScriptInterpreter::Environment(environment) => Ok(Self::Existing(environment)),
 
             // Otherwise, create a virtual environment with the discovered interpreter.
             ScriptInterpreter::Interpreter(interpreter) => {
                 let root = ScriptInterpreter::root(script, cache);
-
-                // Remove the existing virtual environment.
-                match fs_err::remove_dir_all(&root) {
-                    Ok(()) => {
-                        debug!(
-                            "Removed virtual environment at: {}",
-                            root.user_display().cyan()
-                        );
-                    }
-                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(err) => return Err(err.into()),
-                };
-
-                debug!(
-                    "Creating script environment at: {}",
-                    root.user_display().cyan()
-                );
 
                 // Determine a prompt for the environment, in order of preference:
                 //
@@ -1310,6 +1317,43 @@ impl ScriptEnvironment {
                     .map(uv_virtualenv::Prompt::Static)
                     .unwrap_or(uv_virtualenv::Prompt::None);
 
+                // Under `--dry-run`, avoid modifying the environment.
+                if dry_run.enabled() {
+                    let temp_dir = cache.venv_dir()?;
+                    let environment = uv_virtualenv::create_venv(
+                        temp_dir.path(),
+                        interpreter,
+                        prompt,
+                        false,
+                        false,
+                        false,
+                        false,
+                    )?;
+                    return Ok(if root.exists() {
+                        Self::WouldReplace(root, environment, temp_dir)
+                    } else {
+                        Self::WouldCreate(root, environment, temp_dir)
+                    });
+                }
+
+                // Remove the existing virtual environment.
+                let replaced = match fs_err::remove_dir_all(&root) {
+                    Ok(()) => {
+                        debug!(
+                            "Removed virtual environment at: {}",
+                            root.user_display().cyan()
+                        );
+                        true
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
+                    Err(err) => return Err(err.into()),
+                };
+
+                debug!(
+                    "Creating script environment at: {}",
+                    root.user_display().cyan()
+                );
+
                 let environment = uv_virtualenv::create_venv(
                     &root,
                     interpreter,
@@ -1320,14 +1364,42 @@ impl ScriptEnvironment {
                     false,
                 )?;
 
-                Ok(Self(environment))
+                Ok(if replaced {
+                    Self::Replaced(environment)
+                } else {
+                    Self::Created(environment)
+                })
             }
         }
     }
 
     /// Convert the [`ScriptEnvironment`] into a [`PythonEnvironment`].
-    pub(crate) fn into_environment(self) -> PythonEnvironment {
-        self.0
+    ///
+    /// Returns an error if the environment was created in `--dry-run` mode, as dropping the
+    /// associated temporary directory could lead to errors downstream.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn into_environment(self) -> Result<PythonEnvironment, ProjectError> {
+        match self {
+            Self::Existing(environment) => Ok(environment),
+            Self::Replaced(environment) => Ok(environment),
+            Self::Created(environment) => Ok(environment),
+            Self::WouldReplace(..) => Err(ProjectError::DroppedEnvironment),
+            Self::WouldCreate(..) => Err(ProjectError::DroppedEnvironment),
+        }
+    }
+}
+
+impl Deref for ScriptEnvironment {
+    type Target = PythonEnvironment;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Existing(environment) => environment,
+            Self::Replaced(environment) => environment,
+            Self::Created(environment) => environment,
+            Self::WouldReplace(_, environment, _) => environment,
+            Self::WouldCreate(_, environment, _) => environment,
+        }
     }
 }
 
