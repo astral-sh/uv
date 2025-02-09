@@ -30,7 +30,7 @@ use crate::commands::project::{
     EnvironmentSpecification, PlatformState, ProjectError,
 };
 use crate::commands::tool::common::{install_executables, refine_interpreter, remove_entrypoints};
-use crate::commands::tool::Target;
+use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::ExitStatus;
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
@@ -95,105 +95,40 @@ pub(crate) async fn install(
         .allow_insecure_host(allow_insecure_host.to_vec());
 
     // Parse the input requirement.
-    let target = Target::parse(&package, from.as_deref());
+    let request = ToolRequest::parse(&package, from.as_deref());
 
     // If the user passed, e.g., `ruff@latest`, refresh the cache.
-    let cache = if target.is_latest() {
+    let cache = if request.is_latest() {
         cache.with_refresh(Refresh::All(Timestamp::now()))
     } else {
         cache
     };
 
     // Resolve the `--from` requirement.
-    let from = match target {
+    let from = match &request.target {
         // Ex) `ruff`
-        Target::Unspecified(name) => {
+        Target::Unspecified(from) => {
             let source = if editable {
-                RequirementsSource::Editable(name.to_string())
+                RequirementsSource::Editable((*from).to_string())
             } else {
-                RequirementsSource::Package(name.to_string())
+                RequirementsSource::Package((*from).to_string())
             };
-            let requirements = RequirementsSpecification::from_source(&source, &client_builder)
-                .await?
-                .requirements;
-            resolve_names(
-                requirements,
-                &interpreter,
-                &settings,
-                &state,
-                connectivity,
-                concurrency,
-                native_tls,
-                allow_insecure_host,
-                &cache,
-                printer,
-                preview,
-            )
-            .await?
-            .pop()
-            .unwrap()
-        }
-        // Ex) `ruff@0.6.0`
-        Target::Version(name, ref extras, ref version)
-        | Target::FromVersion(_, name, ref extras, ref version) => {
-            if editable {
-                bail!("`--editable` is only supported for local packages");
-            }
-
-            Requirement {
-                name: PackageName::from_str(name)?,
-                extras: extras.clone(),
-                groups: vec![],
-                marker: MarkerTree::default(),
-                source: RequirementSource::Registry {
-                    specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
-                        version.clone(),
-                    )),
-                    index: None,
-                    conflict: None,
-                },
-                origin: None,
-            }
-        }
-        // Ex) `ruff@latest`
-        Target::Latest(name, ref extras) | Target::FromLatest(_, name, ref extras) => {
-            if editable {
-                bail!("`--editable` is only supported for local packages");
-            }
-
-            Requirement {
-                name: PackageName::from_str(name)?,
-                extras: extras.clone(),
-                groups: vec![],
-                marker: MarkerTree::default(),
-                source: RequirementSource::Registry {
-                    specifier: VersionSpecifiers::empty(),
-                    index: None,
-                    conflict: None,
-                },
-                origin: None,
-            }
-        }
-        // Ex) `ruff>=0.6.0`
-        Target::From(package, from) => {
-            // Parse the positional name. If the user provided more than a package name, it's an error
-            // (e.g., `uv install foo==1.0 --from foo`).
-            let Ok(package) = PackageName::from_str(package) else {
-                bail!("Package requirement (`{from}`) provided with `--from` conflicts with install request (`{package}`)", from = from.cyan(), package = package.cyan())
-            };
-
-            let source = if editable {
-                RequirementsSource::Editable(from.to_string())
-            } else {
-                RequirementsSource::Package(from.to_string())
-            };
-            let requirements = RequirementsSpecification::from_source(&source, &client_builder)
+            let requirement = RequirementsSpecification::from_source(&source, &client_builder)
                 .await?
                 .requirements;
 
-            // Parse the `--from` requirement.
-            let from_requirement = resolve_names(
-                requirements,
+            // If the user provided an executable name, verify that it matches the `--from` requirement.
+            let executable = if let Some(executable) = request.executable {
+                let Ok(executable) = PackageName::from_str(executable) else {
+                    bail!("Package requirement (`{from}`) provided with `--from` conflicts with install request (`{executable}`)", from = from.cyan(), executable = executable.cyan())
+                };
+                Some(executable)
+            } else {
+                None
+            };
+
+            let requirement = resolve_names(
+                requirement,
                 &interpreter,
                 &settings,
                 &state,
@@ -209,17 +144,58 @@ pub(crate) async fn install(
             .pop()
             .unwrap();
 
-            // Check if the positional name conflicts with `--from`.
-            if from_requirement.name != package {
-                // Determine if it's an entirely different package (e.g., `uv install foo --from bar`).
-                bail!(
-                    "Package name (`{}`) provided with `--from` does not match install request (`{}`)",
-                    from_requirement.name.cyan(),
-                    package.cyan()
-                );
+            // Determine if it's an entirely different package (e.g., `uv install foo --from bar`).
+            if let Some(executable) = executable {
+                if requirement.name != executable {
+                    bail!(
+                        "Package name (`{}`) provided with `--from` does not match install request (`{}`)",
+                        requirement.name.cyan(),
+                        executable.cyan()
+                    );
+                }
             }
 
-            from_requirement
+            requirement
+        }
+        // Ex) `ruff@0.6.0`
+        Target::Version(.., name, ref extras, ref version) => {
+            if editable {
+                bail!("`--editable` is only supported for local packages");
+            }
+
+            Requirement {
+                name: name.clone(),
+                extras: extras.clone(),
+                groups: vec![],
+                marker: MarkerTree::default(),
+                source: RequirementSource::Registry {
+                    specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
+                        version.clone(),
+                    )),
+                    index: None,
+                    conflict: None,
+                },
+                origin: None,
+            }
+        }
+        // Ex) `ruff@latest`
+        Target::Latest(.., name, ref extras) => {
+            if editable {
+                bail!("`--editable` is only supported for local packages");
+            }
+
+            Requirement {
+                name: name.clone(),
+                extras: extras.clone(),
+                groups: vec![],
+                marker: MarkerTree::default(),
+                source: RequirementSource::Registry {
+                    specifier: VersionSpecifiers::empty(),
+                    index: None,
+                    conflict: None,
+                },
+                origin: None,
+            }
         }
     };
 
@@ -232,7 +208,7 @@ pub(crate) async fn install(
     }
 
     // If the user passed, e.g., `ruff@latest`, we need to mark it as upgradable.
-    let settings = if target.is_latest() {
+    let settings = if request.is_latest() {
         ResolverInstallerSettings {
             upgrade: settings
                 .upgrade
@@ -368,7 +344,7 @@ pub(crate) async fn install(
         .as_ref()
         .filter(|_| {
             // And the user didn't request a reinstall or upgrade...
-            !target.is_latest() && settings.reinstall.is_none() && settings.upgrade.is_none()
+            !request.is_latest() && settings.reinstall.is_none() && settings.upgrade.is_none()
         })
         .is_some()
     {
