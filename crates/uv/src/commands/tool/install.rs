@@ -24,6 +24,7 @@ use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 
+use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{
     resolve_environment, resolve_names, sync_environment, update_environment,
     EnvironmentSpecification, PlatformState, ProjectError,
@@ -422,6 +423,7 @@ pub(crate) async fn install(
         let environment = match update_environment(
             environment,
             spec,
+            Modifications::Exact,
             &settings,
             &state,
             Box::new(DefaultResolveLogger),
@@ -551,6 +553,7 @@ pub(crate) async fn install(
         match sync_environment(
             environment,
             &resolution.into(),
+            Modifications::Exact,
             settings.as_ref().into(),
             &state,
             Box::new(DefaultInstallLogger),

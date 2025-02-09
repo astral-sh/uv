@@ -22,6 +22,7 @@ use uv_tool::InstalledTools;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, SummaryResolveLogger, UpgradeInstallLogger,
 };
+use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{
     resolve_environment, sync_environment, update_environment, EnvironmentUpdate, PlatformState,
 };
@@ -314,6 +315,7 @@ async fn upgrade_tool(
         let environment = sync_environment(
             environment,
             &resolution.into(),
+            Modifications::Exact,
             settings.as_ref().into(),
             &state,
             Box::new(DefaultInstallLogger),
@@ -339,6 +341,7 @@ async fn upgrade_tool(
         } = update_environment(
             environment,
             spec,
+            Modifications::Exact,
             &settings,
             &state,
             Box::new(SummaryResolveLogger),
