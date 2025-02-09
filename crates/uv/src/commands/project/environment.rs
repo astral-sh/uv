@@ -11,6 +11,7 @@ use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::Installable;
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
+use crate::commands::pip::operations::Modifications;
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::{
     resolve_environment, sync_environment, EnvironmentSpecification, PlatformState, ProjectError,
@@ -193,6 +194,7 @@ impl CachedEnvironment {
         sync_environment(
             venv,
             &resolution,
+            Modifications::Exact,
             settings.as_ref().into(),
             state,
             install,

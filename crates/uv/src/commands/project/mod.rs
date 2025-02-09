@@ -1438,6 +1438,7 @@ pub(crate) async fn resolve_environment(
 pub(crate) async fn sync_environment(
     venv: PythonEnvironment,
     resolution: &Resolution,
+    modifications: Modifications,
     settings: InstallerSettingsRef<'_>,
     state: &PlatformState,
     logger: Box<dyn InstallLogger>,
@@ -1546,7 +1547,7 @@ pub(crate) async fn sync_environment(
     pip::operations::install(
         resolution,
         site_packages,
-        Modifications::Exact,
+        modifications,
         reinstall,
         build_options,
         link_mode,
@@ -1594,6 +1595,7 @@ impl EnvironmentUpdate {
 pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     spec: RequirementsSpecification,
+    modifications: Modifications,
     settings: &ResolverInstallerSettings,
     state: &SharedState,
     resolve: Box<dyn ResolveLogger>,
@@ -1794,7 +1796,7 @@ pub(crate) async fn update_environment(
     let changelog = pip::operations::install(
         &resolution,
         site_packages,
-        Modifications::Exact,
+        modifications,
         reinstall,
         build_options,
         *link_mode,
