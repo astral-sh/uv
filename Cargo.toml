@@ -325,6 +325,8 @@ pr-run-mode = "skip"
 dispatch-releases = true
 # Which phase dist should use to create the GitHub release
 github-release = "announce"
+# Whether to enable GitHub Attestations
+github-attestations = true
 # Whether CI should include auto-generated code to build local artifacts
 build-local-artifacts = false
 # Local artifacts jobs to run in CI
