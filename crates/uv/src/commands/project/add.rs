@@ -255,6 +255,41 @@ pub(crate) async fn add(
     let RequirementsSpecification { requirements, .. } =
         RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
 
+    // TODO(charlie): These are all default values. We should consider whether we want to make them
+    // optional on the downstream APIs.
+    let bounds = LowerBound::default();
+    let build_constraints = Constraints::default();
+    let build_hasher = HashStrategy::default();
+    let hasher = HashStrategy::default();
+    let sources = SourceStrategy::Enabled;
+
+    // Add all authenticated sources to the cache.
+    for index in settings.index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials.into());
+        }
+    }
+
+    // Initialize the registry client.
+    let client = RegistryClientBuilder::try_from(client_builder.clone())?
+        .index_urls(settings.index_locations.index_urls())
+        .index_strategy(settings.index_strategy)
+        .markers(target.interpreter().markers())
+        .platform(target.interpreter().platform())
+        .build();
+
+    // Determine whether to enable build isolation.
+    let environment;
+    let build_isolation = if settings.no_build_isolation {
+        environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
+        BuildIsolation::Shared(&environment)
+    } else if settings.no_build_isolation_package.is_empty() {
+        BuildIsolation::Isolated
+    } else {
+        environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
+        BuildIsolation::SharedPackage(&environment, &settings.no_build_isolation_package)
+    };
+
     // Initialize any shared state.
     let state = PlatformState::default();
 
@@ -299,7 +334,7 @@ pub(crate) async fn add(
             }
 
             // Initialize the registry client.
-            let client = RegistryClientBuilder::try_from(client_builder)?
+            let client = RegistryClientBuilder::try_from(client_builder.clone())?
                 .index_urls(settings.index_locations.index_urls())
                 .index_strategy(settings.index_strategy)
                 .markers(target.interpreter().markers())

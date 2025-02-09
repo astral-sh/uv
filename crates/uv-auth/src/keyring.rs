@@ -1,6 +1,6 @@
 use std::process::Stdio;
-use tokio::process::Command;
-use tracing::{instrument, trace, warn};
+use tokio::{io::AsyncWriteExt, process::Command};
+use tracing::{debug, instrument, trace, warn};
 use url::Url;
 
 use crate::credentials::Credentials;
@@ -114,6 +114,163 @@ impl KeyringProvider {
         }
     }
 
+    /// Set credentials for the given [`Url`] from the keyring.
+    #[instrument(skip_all, fields(url = % url.to_string(), username))]
+    pub async fn set(&mut self, url: &Url, username: &str, password: &str) {
+        // Validate the request
+        debug_assert!(
+            url.host_str().is_some(),
+            "Should only use keyring for urls with host"
+        );
+        debug_assert!(
+            url.password().is_none(),
+            "Should only use keyring for urls without a password"
+        );
+        debug_assert!(
+            !username.is_empty(),
+            "Should only use keyring with a username"
+        );
+
+        let host = if let Some(port) = url.port() {
+            format!(
+                "{}:{}",
+                url.host_str().expect("Url should have a host"),
+                port
+            )
+        } else {
+            url.host_str().expect("Url should have a host").to_string()
+        };
+        trace!(
+            "Creating entry in keyring for host {host} (from url {url}) and username {username}"
+        );
+
+        match &mut self.backend {
+            KeyringProviderBackend::Subprocess => {
+                self.set_subprocess(&host.to_string(), username, password)
+                    .await
+            }
+            #[cfg(test)]
+            KeyringProviderBackend::Dummy(ref mut store) => {
+                let username_static: &'static str = Box::leak(username.to_owned().into_boxed_str());
+                let password_static: &'static str = Box::leak(password.to_owned().into_boxed_str());
+
+                Self::set_dummy(store, &host.to_string(), username_static, password_static)
+            }
+        };
+    }
+
+    #[instrument(skip(self))]
+    async fn set_subprocess(
+        &self,
+        service_name: &str,
+        username: &str,
+        password: &str,
+    ) -> Option<()> {
+        let mut child = Command::new("keyring")
+            .arg("set")
+            .arg(service_name)
+            .arg(username)
+            .stdin(Stdio::piped()) // Allow writing to stdin
+            .stdout(Stdio::piped()) // Optionally capture stdout for debugging
+            .stderr(Stdio::piped()) // Capture stderr for debugging
+            .spawn()
+            .inspect_err(|err| warn!("Failure running `keyring` command: {err}"))
+            .ok()?;
+
+        // If we successfully spawn the process, we can write to its stdin
+        if let Some(mut stdin) = child.stdin.take() {
+            // Write the password to the stdin of the keyring process
+            stdin
+                .write(password.as_bytes())
+                .await
+                .inspect_err(|_| warn!("Failure providing the password to keyring!"))
+                .ok()?;
+            stdin
+                .flush()
+                .await
+                .inspect_err(|_| warn!("Failure flushing the password input to keyring"))
+                .ok()?;
+        }
+
+        let output = child
+            .wait_with_output()
+            .await
+            .inspect_err(|err| warn!("Failed to wait for `keyring` output: {err}"))
+            .ok()?;
+
+        if output.status.success() {
+            // On success, parse the newline terminated password
+            debug!("Password successfully saved");
+        } else {
+            // On failure, no password was available
+            debug!("Could not save password in keyring");
+        };
+
+        None
+    }
+
+    /// Set credentials for the given [`Url`] from the keyring.
+    #[instrument(skip_all, fields(url = % url.to_string(), username))]
+    pub async fn unset(&mut self, url: &Url, username: &str) {
+        debug_assert!(
+            url.host_str().is_some(),
+            "Should only use keyring for urls with host"
+        );
+        debug_assert!(
+            url.password().is_none(),
+            "Should only use keyring for urls without a password"
+        );
+        debug_assert!(
+            !username.is_empty(),
+            "Should only use keyring with a username"
+        );
+
+        let host = url.host().expect("Url should contain a host!");
+        trace!(
+            "Deleting entry in keyring for host {host} (from url {url}) and username {username}"
+        );
+
+        match &mut self.backend {
+            KeyringProviderBackend::Subprocess => {
+                self.unset_subprocess(&host.to_string(), username).await
+            }
+            #[cfg(test)]
+            KeyringProviderBackend::Dummy(ref mut store) => {
+                let username_static: &'static str = Box::leak(username.to_owned().into_boxed_str());
+
+                Self::unset_dummy(store, &host.to_string(), username_static)
+            }
+        };
+    }
+
+    #[instrument(skip(self))]
+    async fn unset_subprocess(&self, service_name: &str, username: &str) -> Option<()> {
+        let child = Command::new("keyring")
+            .arg("del")
+            .arg(service_name)
+            .arg(username)
+            .stdin(Stdio::piped()) // Allow writing to stdin
+            .stdout(Stdio::piped()) // Optionally capture stdout for debugging
+            .stderr(Stdio::piped()) // Capture stderr for debugging
+            .spawn()
+            .inspect_err(|err| warn!("Failure running `keyring` command: {err}"))
+            .ok()?;
+
+        let output = child
+            .wait_with_output()
+            .await
+            .inspect_err(|err| warn!("Failed to wait for `keyring` output: {err}"))
+            .ok()?;
+
+        if output.status.success() {
+            debug!("Keyring entry successfully removed");
+        } else {
+            debug!("Could not remove entry in keyring");
+        };
+
+        None
+    }
+
     #[cfg(test)]
     fn fetch_dummy(
         store: &std::collections::HashMap<(String, &'static str), &'static str>,
@@ -123,6 +280,27 @@ impl KeyringProvider {
         store
             .get(&(service_name.to_string(), username))
             .map(|password| (*password).to_string())
+    }
+
+    #[cfg(test)]
+    fn set_dummy(
+        store: &mut std::collections::HashMap<(String, &'static str), &'static str>,
+        service_name: &str,
+        username: &'static str,
+        password: &'static str,
+    ) -> Option<()> {
+        store.insert((service_name.to_string(), username), password);
+        None
+    }
+
+    #[cfg(test)]
+    fn unset_dummy(
+        store: &mut std::collections::HashMap<(String, &'static str), &'static str>,
+        service_name: &str,
+        username: &'static str,
+    ) -> Option<()> {
+        store.remove(&(service_name.to_string(), username));
+        None
     }
 
     /// Create a new provider with [`KeyringProviderBackend::Dummy`].
@@ -152,6 +330,7 @@ impl KeyringProvider {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use futures::FutureExt;
 
@@ -279,5 +458,41 @@ mod tests {
         let url = Url::parse("https://foo@example.com").unwrap();
         let credentials = keyring.fetch(&url, "bar").await;
         assert_eq!(credentials, None);
+    }
+
+    #[tokio::test]
+    async fn set_url() {
+        let url = Url::parse("https://example.com").unwrap();
+        let mut keyring = KeyringProvider::dummy([((url.host_str().unwrap(), "user"), "password")]);
+
+        keyring.set(&url, "foo", "password").await;
+
+        let credentials = keyring.fetch(&url, "foo").await;
+        assert_eq!(
+            credentials,
+            Some(Credentials::new(
+                Some("foo".to_string()),
+                Some("password".to_string())
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn set_url_with_path() {
+        let url = Url::parse("https://example.com").unwrap();
+        let mut keyring = KeyringProvider::dummy([((url.host_str().unwrap(), "user"), "password")]);
+
+        keyring
+            .set(&url.join("test").unwrap(), "foo", "password")
+            .await;
+
+        let credentials = keyring.fetch(&url, "foo").await;
+        assert_eq!(
+            credentials,
+            Some(Credentials::new(
+                Some("foo".to_string()),
+                Some("password".to_string())
+            ))
+        );
     }
 }
