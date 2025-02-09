@@ -240,10 +240,11 @@ pub(super) async fn do_safe_lock(
     match mode {
         LockMode::Frozen => {
             // Read the existing lockfile, but don't attempt to lock the project.
-            let existing = target
+            let mut existing = target
                 .read()
                 .await?
                 .ok_or_else(|| ProjectError::MissingLockfile)?;
+            existing.add_metadata("uv", env!("CARGO_PKG_VERSION"));
             Ok(LockResult::Unchanged(existing))
         }
         LockMode::Locked(interpreter) => {
@@ -602,10 +603,10 @@ async fn do_lock(
 
     match existing_lock {
         // Resolution from the lockfile succeeded.
-        Some(ValidatedLock::Satisfies(lock)) => {
-            // Print the success message after completing resolution.
+        Some(ValidatedLock::Satisfies(mut lock)) => {
+            // Add uv version to the lock
+            lock.add_metadata("uv", env!("CARGO_PKG_VERSION"));
             logger.on_complete(lock.len(), start, printer)?;
-
             Ok(LockResult::Unchanged(lock))
         }
 
@@ -732,7 +733,7 @@ async fn do_lock(
             .relative_to(target.install_path())?;
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
-            let lock = Lock::from_resolution(&resolution, target.install_path())?
+            let mut lock = Lock::from_resolution(&resolution, target.install_path())?
                 .with_manifest(manifest)
                 .with_conflicts(target.conflicts())
                 .with_supported_environments(
@@ -741,6 +742,9 @@ async fn do_lock(
                         .map(SupportedEnvironments::into_markers)
                         .unwrap_or_default(),
                 );
+
+            // Add uv version to the lock
+            lock.add_metadata("uv", env!("CARGO_PKG_VERSION"));
 
             Ok(LockResult::Changed(previous, lock))
         }
@@ -934,6 +938,8 @@ impl ValidatedLock {
         {
             SatisfiesResult::Satisfied => {
                 debug!("Existing `uv.lock` satisfies workspace requirements");
+                let mut lock = lock;
+                lock.add_metadata("uv", env!("CARGO_PKG_VERSION")); // Add version here
                 Ok(Self::Satisfies(lock))
             }
             SatisfiesResult::MismatchedMembers(expected, actual) => {
