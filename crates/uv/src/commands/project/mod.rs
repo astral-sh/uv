@@ -1653,14 +1653,18 @@ pub(crate) async fn update_environment(
             SatisfiesResult::Fresh {
                 recursive_requirements,
             } => {
-                debug!(
-                    "All requirements satisfied: {}",
-                    recursive_requirements
-                        .iter()
-                        .map(|entry| entry.requirement.to_string())
-                        .sorted()
-                        .join(" | ")
-                );
+                if recursive_requirements.is_empty() {
+                    debug!("No requirements to install");
+                } else {
+                    debug!(
+                        "All requirements satisfied: {}",
+                        recursive_requirements
+                            .iter()
+                            .map(|entry| entry.requirement.to_string())
+                            .sorted()
+                            .join(" | ")
+                    );
+                }
                 return Ok(EnvironmentUpdate {
                     environment: venv,
                     changelog: Changelog::default(),
