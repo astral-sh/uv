@@ -1771,7 +1771,6 @@ jobs:
         with:
           python-version: "3.13"
           allow-prereleases: true
-          cache: pip
 
       - name: "Download binary"
         uses: actions/download-artifact@v4
