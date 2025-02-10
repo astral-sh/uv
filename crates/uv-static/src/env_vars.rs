@@ -142,6 +142,15 @@ impl EnvVars {
     /// will compile Python source files to bytecode after installation.
     pub const UV_COMPILE_BYTECODE: &'static str = "UV_COMPILE_BYTECODE";
 
+    /// Equivalent to the `--no-binary` command-line argument. If set, uv will install
+    /// all packages from source. The resolver will still use pre-built wheels to
+    /// extract package metadata, if available.
+    pub const UV_NO_BINARY: &'static str = "UV_NO_BINARY";
+
+    /// Equivalent to the `--no-binary-package` command line argument. If set, uv will
+    /// not use pre-built wheels for the given space-delimited list of packages.
+    pub const UV_NO_BINARY_PACKAGE: &'static str = "UV_NO_BINARY_PACKAGE";
+
     /// Equivalent to the `--publish-url` command-line argument. The URL of the upload
     /// endpoint of the index to use with `uv publish`.
     pub const UV_PUBLISH_URL: &'static str = "UV_PUBLISH_URL";

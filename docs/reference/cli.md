@@ -299,8 +299,10 @@ uv run [OPTIONS] [COMMAND]
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -958,8 +960,10 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -1319,8 +1323,10 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -1692,8 +1698,10 @@ uv sync [OPTIONS]
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -2059,8 +2067,10 @@ uv lock [OPTIONS]
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -2404,8 +2414,10 @@ uv export [OPTIONS]
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -2782,8 +2794,10 @@ uv tree [OPTIONS]
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -3255,8 +3269,10 @@ uv tool run [OPTIONS] [COMMAND]
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -3584,8 +3600,10 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -3907,8 +3925,10 @@ uv tool upgrade [OPTIONS] <NAME>...
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -8349,8 +8369,10 @@ uv build [OPTIONS] [SRC]
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
