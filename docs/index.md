@@ -48,7 +48,7 @@ Install uv with our official standalone installer:
 === "Windows"
 
     ```console
-    $ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
     ```
 
 Then, check out the [first steps](./getting-started/first-steps.md) or read on for a brief overview.
