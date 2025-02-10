@@ -3963,6 +3963,43 @@ fn no_binary() -> Result<()> {
 
     assert!(context.temp_dir.child("uv.lock").exists());
 
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BINARY_PACKAGE", "iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ iniconfig==2.0.0
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BINARY", "1"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value '1' for '--no-binary'
+      [possible values: true, false]
+
+    For more information, try '--help'.
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BINARY", "iniconfig"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value 'iniconfig' for '--no-binary'
+      [possible values: true, false]
+
+    For more information, try '--help'.
+    "###);
+
     Ok(())
 }
 
