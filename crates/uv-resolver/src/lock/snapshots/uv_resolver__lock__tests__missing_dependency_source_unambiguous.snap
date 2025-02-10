@@ -156,21 +156,6 @@ Ok(
         by_id: {
             PackageId {
                 name: PackageName(
-                    "b",
-                ),
-                version: Some(
-                    "0.1.0",
-                ),
-                source: Registry(
-                    Url(
-                        UrlString(
-                            "https://pypi.org/simple",
-                        ),
-                    ),
-                ),
-            }: 1,
-            PackageId {
-                name: PackageName(
                     "a",
                 ),
                 version: Some(
@@ -184,6 +169,21 @@ Ok(
                     ),
                 ),
             }: 0,
+            PackageId {
+                name: PackageName(
+                    "b",
+                ),
+                version: Some(
+                    "0.1.0",
+                ),
+                source: Registry(
+                    Url(
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
+                    ),
+                ),
+            }: 1,
         },
         manifest: ResolverManifest {
             members: {},
