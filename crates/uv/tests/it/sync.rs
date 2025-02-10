@@ -3963,6 +3963,19 @@ fn no_binary() -> Result<()> {
 
     assert!(context.temp_dir.child("uv.lock").exists());
 
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--no-binary"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ iniconfig==2.0.0
+    "###);
+
     uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BINARY_PACKAGE", "iniconfig"), @r###"
     success: true
     exit_code: 0
