@@ -6,8 +6,8 @@
 
 The managed PyPy distributions have been updated for PyPy v7.3.18, which includes:
 
-- PyPy3.10, which updates from Python 3.10.14 standard library to 3.10.19
-- PyPy3.11, which adds new, beta support for Python 3.11.11
+- PyPy3.10, which updates the standard library from Python 3.10.14 to 3.10.19
+- PyPy3.11, which adds beta support for Python 3.11.11
 
 See the [PyPy release](https://pypy.org/posts/2025/02/pypy-v7318-release.html) for more details.
 
