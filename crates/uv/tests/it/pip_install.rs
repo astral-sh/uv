@@ -2279,6 +2279,82 @@ fn install_no_binary_overrides_only_binary_all() {
     context.assert_command("import anyio").success();
 }
 
+/// Set `--no-binary` with an environment variable
+#[test]
+fn install_no_binary_env() {
+    let context = TestContext::new("3.12");
+
+    let mut command = context.pip_install();
+    command.arg("anyio").env("UV_NO_BINARY", "1");
+    uv_snapshot!(
+        command,
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    let mut command = context.pip_install();
+    command
+        .arg("anyio")
+        .arg("--reinstall")
+        .env("UV_NO_BINARY", "anyio");
+    uv_snapshot!(
+        command,
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     ~ anyio==4.3.0
+     ~ idna==3.6
+     ~ sniffio==1.3.1
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+
+    let mut command = context.pip_install();
+    command
+        .arg("anyio")
+        .arg("--reinstall")
+        .arg("idna")
+        .env("UV_NO_BINARY_PACKAGE", "idna");
+    uv_snapshot!(
+        command,
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     ~ anyio==4.3.0
+     ~ idna==3.6
+     ~ sniffio==1.3.1
+    "###
+    );
+
+    context.assert_command("import idna").success();
+}
+
 /// Overlapping usage of `--no-binary` and `--only-binary`
 #[test]
 fn install_only_binary_overrides_no_binary_all() {
