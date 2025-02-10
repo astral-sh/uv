@@ -26,6 +26,7 @@ use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{debug, info_span, instrument, Instrument};
 
+pub use crate::error::{Error, MissingHeaderCause};
 use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
 use uv_distribution::BuildRequires;
 use uv_distribution_types::{IndexLocations, Resolution};
@@ -36,8 +37,6 @@ use uv_pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, SourceBuildTrait};
-
-pub use crate::error::{Error, MissingHeaderCause};
 
 /// The default backend to use when PEP 517 is used without a `build-system` section.
 static DEFAULT_BACKEND: LazyLock<Pep517Backend> = LazyLock::new(|| Pep517Backend {
@@ -56,6 +55,10 @@ struct PyProjectToml {
     build_system: Option<BuildSystem>,
     /// Project metadata
     project: Option<Project>,
+    /// Tool configuration
+    ///
+    /// Only read for diagnostics.
+    tool: Option<serde_json::Value>,
 }
 
 /// The `[project]` section of a pyproject.toml as specified in PEP 621.
@@ -514,8 +517,34 @@ impl SourceBuild {
                         requirements,
                     }
                 } else {
-                    // If a `pyproject.toml` is present, but `[build-system]` is missing, proceed with
-                    // a PEP 517 build using the default backend, to match `pip` and `build`.
+                    // If a `pyproject.toml` and a `setup.py` are present, but `[build-system]` is
+                    // missing, proceed with a PEP 517 build using the default backend (setuptools),
+                    // to match `pip` and `build`. If there is no build system defined and there is
+                    // no metadata source for setuptools, fail the build instead of building a
+                    // wheel with UNKNOWN package name through setuptools.
+                    // Assumption: Setuptools can be configured through `setup.py`, `setup.cfg` or
+                    // `pyproject.toml`'s project table, otherwise it builds invalid wheels with
+                    // an UNKNOWN name.
+                    if pyproject_toml.project.is_none()
+                        && !source_tree.join("setup.py").is_file()
+                        && !source_tree.join("setup.py").is_file()
+                    {
+                        // Give a specific hint for `uv pip install .` in a workspace root.
+                        let looks_like_workspace_root = pyproject_toml
+                            .tool
+                            .as_ref()
+                            .and_then(|tool| tool.as_object())
+                            .and_then(|tool| tool.get("uv"))
+                            .and_then(|uv| uv.as_object())
+                            .and_then(|uv| uv.get("workspace"))
+                            .is_some();
+                        let err = if looks_like_workspace_root {
+                            Error::WorkspaceRoot(source_tree.to_path_buf())
+                        } else {
+                            Error::NotBuildable(source_tree.to_path_buf())
+                        };
+                        return Err(Box::new(err));
+                    }
                     default_backend.clone()
                 };
                 Ok((backend, pyproject_toml.project))

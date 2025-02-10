@@ -60,6 +60,10 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error(transparent)]
     Lowering(#[from] uv_distribution::MetadataError),
+    #[error("{} appears to be a workspace root without a Python project, consider using `uv sync` or installing workspace members individually", _0.simplified_display())]
+    WorkspaceRoot(PathBuf),
+    #[error("{} does not appear to be a Python project, as neither a `pyproject.toml` with a `[build-system]` table, nor a `setup.py`, nor a `setup.cfg` are present in the directory", _0.simplified_display())]
+    NotBuildable(PathBuf),
     #[error("{} does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory", _0.simplified_display())]
     InvalidSourceDist(PathBuf),
     #[error("Invalid `pyproject.toml`")]
@@ -97,6 +101,8 @@ impl IsBuildBackendError for Error {
         match self {
             Self::Io(_)
             | Self::Lowering(_)
+            | Self::WorkspaceRoot(_)
+            | Self::NotBuildable(_)
             | Self::InvalidSourceDist(_)
             | Self::InvalidPyprojectTomlSyntax(_)
             | Self::InvalidPyprojectTomlSchema(_)
