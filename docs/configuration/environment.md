@@ -178,6 +178,17 @@ Equivalent to the `--locked` command-line argument. If set, uv will assert that 
 Equivalent to the `--native-tls` command-line argument. If set to `true`, uv will
 use the system's trust store instead of the bundled `webpki-roots` crate.
 
+### `UV_NO_BINARY`
+
+Equivalent to the `--no-binary` command-line argument. If set, uv will install
+all packages from source. The resolver will still use pre-built wheels to
+extract package metadata, if available.
+
+### `UV_NO_BINARY_PACKAGE`
+
+Equivalent to the `--no-binary-package` command line argument. If set, uv will
+not use pre-built wheels for the given space-delimited list of packages.
+
 ### `UV_NO_BUILD_ISOLATION`
 
 Equivalent to the `--no-build-isolation` command-line argument. If set, uv will
