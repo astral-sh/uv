@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.5.30
+
+### Enhancements
+
+- Add `uv sync --dry-run` ([#11299](https://github.com/astral-sh/uv/pull/11299))
+- Ignore `#egg` fragment in HTML Simple API response ([#11340](https://github.com/astral-sh/uv/pull/11340))
+- Add latest PyPI releases to `uv python install` ([#11318](https://github.com/astral-sh/uv/pull/11318))
+
+### Performance
+
+- Avoid re-cloning name when populating ambiguous set ([#11401](https://github.com/astral-sh/uv/pull/11401))
+- Optimize flattening in large workspaces ([#11313](https://github.com/astral-sh/uv/pull/11313))
+
+### Bug fixes
+
+- Allow dynamic packages to be overloaded ([#11400](https://github.com/astral-sh/uv/pull/11400))
+- Fix credential caching for index roots when URL ends in `simple/` ([#11336](https://github.com/astral-sh/uv/pull/11336))
+- Fix marker merging for requirements.txt for psycopg ([#11298](https://github.com/astral-sh/uv/pull/11298))
+- Set 777 permissions on locked files ([#11328](https://github.com/astral-sh/uv/pull/11328))
+- Support extras in `@` requests for tools ([#11335](https://github.com/astral-sh/uv/pull/11335))
+- Upgrade `astral-tokio-tar` to v0.5.1 ([#11359](https://github.com/astral-sh/uv/pull/11359))
+- Avoid missing logging for no-op upgrade events ([#11301](https://github.com/astral-sh/uv/pull/11301))
+- Use refined specifiers when logging narrowed Python range ([#11334](https://github.com/astral-sh/uv/pull/11334))
+- Don't use popup-generating `eprintln` in trampoline warnings ([#11295](https://github.com/astral-sh/uv/pull/11295))
+- Patch pkg-config files to be relocatable ([#11291](https://github.com/astral-sh/uv/pull/11291))
+- Fix a case of duplicate `torch` packages when using conflicting extras ([#11323](https://github.com/astral-sh/uv/pull/11323))
+
+### Documentation
+
+- Add docs for `uv tool install --editable` ([#11280](https://github.com/astral-sh/uv/pull/11280))
+- Fix broken anchors in README and docs index ([#11338](https://github.com/astral-sh/uv/pull/11338))
+
 ## 0.5.29
 
 ### Enhancements
