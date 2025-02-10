@@ -484,6 +484,7 @@ def get_operating_system_and_architecture():
 
         if not version or not architecture:
             print(json.dumps({"result": "error", "kind": "broken_mac_ver"}))
+            sys.exit(0)
 
         # https://github.com/pypa/packaging/blob/cc938f984bbbe43c5734b9656c9837ab3a28191f/src/packaging/tags.py#L356-L363
         is_32bit = struct.calcsize("P") == 4
