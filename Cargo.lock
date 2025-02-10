@@ -4512,7 +4512,7 @@ checksum = "b3758f5e68192bb96cc8f9b7e2c2cfdabb435499a28499a42f8f984092adad4b"
 
 [[package]]
 name = "uv"
-version = "0.5.29"
+version = "0.5.30"
 dependencies = [
  "anstream",
  "anyhow",
@@ -5746,7 +5746,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.5.29"
+version = "0.5.30"
 
 [[package]]
 name = "uv-virtualenv"
