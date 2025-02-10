@@ -2,11 +2,23 @@
 
 ## 0.5.30
 
+### Python
+
+The managed PyPy distributions have been updated for PyPy v7.3.18, which includes:
+
+- PyPy3.10, which updates from Python 3.10.14 standard library to 3.10.19
+- PyPy3.11, which adds new, beta support for Python 3.11.11
+
+See the [PyPy release](https://pypy.org/posts/2025/02/pypy-v7318-release.html) for more details.
+
 ### Enhancements
 
 - Add `uv sync --dry-run` ([#11299](https://github.com/astral-sh/uv/pull/11299))
 - Ignore `#egg` fragment in HTML Simple API response ([#11340](https://github.com/astral-sh/uv/pull/11340))
-- Add latest PyPI releases to `uv python install` ([#11318](https://github.com/astral-sh/uv/pull/11318))
+
+### Configuration
+
+- Add `NO_BINARY` and `NO_BINARY_PACKAGE` environment variables ([#11399](https://github.com/astral-sh/uv/pull/11399))
 
 ### Performance
 
