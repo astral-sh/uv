@@ -2751,17 +2751,6 @@ impl PackageIdForDependency {
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<PackageId, LockError> {
         let unambiguous_package_id = unambiguous_package_ids.get(&self.name);
-        let version = if let Some(version) = self.version {
-            Some(version)
-        } else {
-            let Some(dist_id) = unambiguous_package_id else {
-                return Err(LockErrorKind::MissingDependencyVersion {
-                    name: self.name.clone(),
-                }
-                .into());
-            };
-            dist_id.version.clone()
-        };
         let source = self.source.map(Ok::<_, LockError>).unwrap_or_else(|| {
             let Some(package_id) = unambiguous_package_id else {
                 return Err(LockErrorKind::MissingDependencySource {
@@ -2771,6 +2760,24 @@ impl PackageIdForDependency {
             };
             Ok(package_id.source.clone())
         })?;
+        let version = if let Some(version) = self.version {
+            Some(version)
+        } else {
+            if let Some(package_id) = unambiguous_package_id {
+                package_id.version.clone()
+            } else {
+                // If the package is a source tree, assume that the missing `self.version` field is
+                // indicative of a dynamic version.
+                if source.is_source_tree() {
+                    None
+                } else {
+                    return Err(LockErrorKind::MissingDependencyVersion {
+                        name: self.name.clone(),
+                    }
+                    .into());
+                }
+            }
+        };
         Ok(PackageId {
             name: self.name,
             version,
@@ -5040,13 +5047,13 @@ requires-python = ">=3.12"
 [[package]]
 name = "a"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "b"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package.dependencies]]
@@ -5066,18 +5073,18 @@ requires-python = ">=3.12"
 [[package]]
 name = "a"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "b"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package.dependencies]]
 name = "a"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
         insta::assert_debug_snapshot!(result);
@@ -5092,13 +5099,13 @@ requires-python = ">=3.12"
 [[package]]
 name = "a"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "b"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package.dependencies]]
@@ -5117,19 +5124,19 @@ requires-python = ">=3.12"
 [[package]]
 name = "a"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "a"
 version = "0.1.1"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "b"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package.dependencies]]
@@ -5149,24 +5156,24 @@ requires-python = ">=3.12"
 [[package]]
 name = "a"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "a"
 version = "0.1.1"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "b"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package.dependencies]]
 name = "a"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 "#;
         let result = toml::from_str::<Lock>(data).unwrap_err();
         assert_stripped_snapshot!(result, @"Dependency `a` has missing `version` field but has more than one matching package");
@@ -5181,7 +5188,7 @@ requires-python = ">=3.12"
 [[package]]
 name = "a"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
@@ -5193,14 +5200,44 @@ sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d
 [[package]]
 name = "b"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package.dependencies]]
 name = "a"
 "#;
         let result = toml::from_str::<Lock>(data).unwrap_err();
-        assert_stripped_snapshot!(result, @"Dependency `a` has missing `version` field but has more than one matching package");
+        assert_stripped_snapshot!(result, @"Dependency `a` has missing `source` field but has more than one matching package");
+    }
+
+    #[test]
+    fn missing_dependency_version_dynamic() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+source = { editable = "path/to/a" }
+
+[[package]]
+name = "a"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package.dependencies]]
+name = "a"
+source = { editable = "path/to/a" }
+"#;
+        let result = toml::from_str::<Lock>(data);
+        insta::assert_debug_snapshot!(result);
     }
 
     #[test]
