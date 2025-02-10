@@ -2279,7 +2279,8 @@ fn install_no_binary_overrides_only_binary_all() {
     context.assert_command("import anyio").success();
 }
 
-/// Set `--no-binary` with an environment variable
+/// Disable binaries with an environment variable
+/// TODO(zanieb): This is not yet implemented
 #[test]
 fn install_no_binary_env() {
     let context = TestContext::new("3.12");
