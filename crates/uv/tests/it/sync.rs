@@ -6586,8 +6586,20 @@ fn sync_dry_run() -> Result<()> {
      + iniconfig==2.0.0
     "###);
 
-    // Update the environment.
-    context.sync().assert().success();
+    // Perform a full sync.
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
 
     // Update the requirements.
     pyproject_toml.write_str(
@@ -6641,8 +6653,20 @@ fn sync_dry_run() -> Result<()> {
      + iniconfig==2.0.0
     "###);
 
-    // Update the environment.
-    context.sync().assert().success();
+    // Perform a full sync.
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
 
     uv_snapshot!(context.filters(), context.sync().arg("--dry-run"), @r###"
     success: true
