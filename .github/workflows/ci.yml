@@ -1720,7 +1720,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5.3.0
         with:
           python-version: "3.10"
 
@@ -1743,7 +1743,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5.3.0
         with:
           python-version: "3.10"
           architecture: "x86"
@@ -1767,7 +1767,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5.3.0
         with:
           python-version: "3.13"
           allow-prereleases: true
