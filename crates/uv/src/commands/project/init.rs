@@ -620,7 +620,7 @@ async fn init_project(
             pyproject.add_workspace_source(name)?;
 
             // Add the project as a dependency
-            let req = Requirement::from_str(&name.to_string())?;
+            let req = Requirement::from_str(name.as_ref())?;
             pyproject.add_dependency(&req, None)?;
 
             // Save the modified `pyproject.toml`.
