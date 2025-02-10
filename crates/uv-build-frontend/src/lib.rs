@@ -527,7 +527,7 @@ impl SourceBuild {
                     // an UNKNOWN name.
                     if pyproject_toml.project.is_none()
                         && !source_tree.join("setup.py").is_file()
-                        && !source_tree.join("setup.py").is_file()
+                        && !source_tree.join("setup.cfg").is_file()
                     {
                         // Give a specific hint for `uv pip install .` in a workspace root.
                         let looks_like_workspace_root = pyproject_toml
