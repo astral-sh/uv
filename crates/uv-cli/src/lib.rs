@@ -4770,7 +4770,13 @@ pub struct BuildOptionsArgs {
     ///
     /// The given packages will be built and installed from source. The resolver will still use
     /// pre-built wheels to extract package metadata, if available.
-    #[arg(long, env = EnvVars::UV_NO_BINARY, overrides_with("binary"), help_heading = "Build options")]
+    #[arg(
+        long,
+        env = EnvVars::UV_NO_BINARY,
+        overrides_with("binary"),
+        value_parser = clap::builder::BoolishValueParser::new(),
+        help_heading = "Build options"
+    )]
     pub no_binary: bool,
 
     #[arg(

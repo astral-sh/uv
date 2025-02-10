@@ -3977,15 +3977,16 @@ fn no_binary() -> Result<()> {
     "###);
 
     uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BINARY", "1"), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value '1' for '--no-binary'
-      [possible values: true, false]
-
-    For more information, try '--help'.
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ iniconfig==2.0.0
     "###);
 
     uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BINARY", "iniconfig"), @r###"
@@ -3994,8 +3995,7 @@ fn no_binary() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value 'iniconfig' for '--no-binary'
-      [possible values: true, false]
+    error: invalid value 'iniconfig' for '--no-binary': value was not a boolean
 
     For more information, try '--help'.
     "###);
