@@ -4019,7 +4019,7 @@ fn run_repeated() -> Result<()> {
 
     // Re-running shouldn't require reinstalling `typing-extensions`, since the environment is cached.
     uv_snapshot!(
-        context.filters(),
+context.filters(),
         context.run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r###"
     success: true
     exit_code: 0
@@ -4033,7 +4033,7 @@ fn run_repeated() -> Result<()> {
 
     // Re-running as a tool shouldn't require reinstalling `typing-extensions`, since the environment is cached.
     uv_snapshot!(
-        context.filters(),
+context.filters(),
         context.tool_run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r###"
     success: false
     exit_code: 1
