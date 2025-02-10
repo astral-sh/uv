@@ -36,6 +36,7 @@ use uv_pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, SourceBuildTrait};
+use uv_warnings::warn_user_once;
 
 pub use crate::error::{Error, MissingHeaderCause};
 
@@ -56,6 +57,10 @@ struct PyProjectToml {
     build_system: Option<BuildSystem>,
     /// Project metadata
     project: Option<Project>,
+    /// Tool configuration
+    ///
+    /// Only read for diagnostics.
+    tool: Option<serde_json::Value>,
 }
 
 /// The `[project]` section of a pyproject.toml as specified in PEP 621.
@@ -514,8 +519,40 @@ impl SourceBuild {
                         requirements,
                     }
                 } else {
-                    // If a `pyproject.toml` is present, but `[build-system]` is missing, proceed with
-                    // a PEP 517 build using the default backend, to match `pip` and `build`.
+                    // If a `pyproject.toml` and a `setup.py` are present, but `[build-system]` is
+                    // missing, proceed with a PEP 517 build using the default backend (setuptools),
+                    // to match `pip` and `build`. If there is no build system defined and there is
+                    // no metadata source for setuptools, fail the build instead of building a
+                    // wheel with UNKNOWN package name through setuptools.
+                    if pyproject_toml.project.is_none()
+                        && !source_tree.join("setup.py").is_file()
+                        && !source_tree.join("setup.cfg").is_file()
+                    {
+                        // Give a specific hint for `uv pip install .` in a workspace root.
+                        let looks_like_workspace_root = pyproject_toml
+                            .tool
+                            .as_ref()
+                            .and_then(|tool| tool.as_object())
+                            .and_then(|tool| tool.get("uv"))
+                            .and_then(|uv| uv.as_object())
+                            .and_then(|uv| uv.get("workspace"))
+                            .is_some();
+                        if looks_like_workspace_root {
+                            warn_user_once!(
+                                "`{}` appears to be a workspace root without a Python project, \
+                                consider using `uv sync` or installing workspace members \
+                                individually, or add a `[build-system]` table to `pyproject.toml`.",
+                                source_tree.to_path_buf().simplified_display(),
+                            );
+                        } else {
+                            warn_user_once!(
+                                "`{}` does not appear to be a Python project, as neither \
+                                `pyproject.toml` with a `[build-system]` table, \
+                                nor `setup.py`, nor `setup.cfg` are present in the directory",
+                                source_tree.to_path_buf().simplified_display(),
+                            );
+                        };
+                    }
                     default_backend.clone()
                 };
                 Ok((backend, pyproject_toml.project))

@@ -28,6 +28,7 @@ uv-python = { workspace = true }
 uv-static = { workspace = true }
 uv-types = { workspace = true }
 uv-virtualenv = { workspace = true }
+uv-warnings = { workspace = true }
 
 anstream = { workspace = true }
 fs-err = { workspace = true }

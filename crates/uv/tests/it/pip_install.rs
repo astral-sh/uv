@@ -214,6 +214,10 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
     pyproject_toml.write_str(indoc! {r#"
         [tool.uv]
         unknown = "field"
+
+        [build-system]
+        requires = ["setuptools"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     let mut filters = context.filters();

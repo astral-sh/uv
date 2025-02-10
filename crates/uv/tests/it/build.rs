@@ -7,6 +7,7 @@ use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use std::env::current_dir;
+use std::process::Command;
 use zip::ZipArchive;
 
 #[test]
@@ -1820,6 +1821,106 @@ fn build_with_hardlink() -> Result<()> {
     Building wheel from source distribution...
     Successfully built dist/hardlinked-0.1.0.tar.gz
     Successfully built dist/hardlinked-0.1.0-py3-none-any.whl
+    "###);
+    Ok(())
+}
+
+/// This is bad project layout that is allowed: A project that defines PEP 621 metadata, but no
+/// PEP 517 build system not a setup.py, so we fall back to setuptools implicitly.
+#[test]
+fn build_unconfigured_setuptools() -> Result<()> {
+    let context = TestContext::new("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "greet"
+            version = "0.1.0"
+    "#})?;
+    context
+        .temp_dir
+        .child("src/greet/__init__.py")
+        .write_str("print('Greetings!')")?;
+
+    // This is not technically a `uv build` test, we use it to contrast this passing case with the
+    // failing cases later.
+    uv_snapshot!(context.filters(), context.pip_install().arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + greet==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    uv_snapshot!(context.filters(), Command::new(context.interpreter()).arg("-c").arg("import greet"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Greetings!
+
+    ----- stderr -----
+    "###);
+    Ok(())
+}
+
+/// In a project layout with a virtual root, an easy mistake to make is running `uv pip install .`
+/// in the root.
+#[test]
+fn build_workspace_virtual_root() -> Result<()> {
+    let context = TestContext::new("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["packages/*"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--no-build-logs"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    warning: `[TEMP_DIR]/` appears to be a workspace root without a Python project, consider using `uv sync` or installing workspace members individually, or add a `[build-system]` table to `pyproject.toml`.
+    Building wheel from source distribution...
+    Successfully built dist/cache-0.0.0.tar.gz
+    Successfully built dist/unknown-0.0.0-py3-none-any.whl
+    "###);
+    Ok(())
+}
+
+/// There is a `pyproject.toml`, but it does not define any build information nor is there a
+/// `setup.{py,cfg}`.
+#[test]
+fn build_pyproject_toml_not_a_project() -> Result<()> {
+    let context = TestContext::new("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {"
+            # Some other content we don't know about
+            [tool.black]
+            line-length = 88
+    "})?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--no-build-logs"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    warning: `[TEMP_DIR]/` does not appear to be a Python project, as neither `pyproject.toml` with a `[build-system]` table, nor `setup.py`, nor `setup.cfg` are present in the directory
+    Building wheel from source distribution...
+    Successfully built dist/cache-0.0.0.tar.gz
+    Successfully built dist/unknown-0.0.0-py3-none-any.whl
     "###);
     Ok(())
 }
