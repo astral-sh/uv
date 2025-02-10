@@ -1207,10 +1207,16 @@ fn init_workspace() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["anyio==3.7.0"]
+        dependencies = [
+            "anyio==3.7.0",
+            "foo",
+        ]
 
         [tool.uv.workspace]
         members = ["foo"]
+
+        [tool.uv.sources]
+        foo = { workspace = true }
         "###
         );
     });
@@ -1301,10 +1307,16 @@ fn init_workspace_relative_sub_package() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["anyio==3.7.0"]
+        dependencies = [
+            "anyio==3.7.0",
+            "foo",
+        ]
 
         [tool.uv.workspace]
         members = ["foo"]
+
+        [tool.uv.sources]
+        foo = { workspace = true }
         "###
         );
     });
@@ -1396,10 +1408,16 @@ fn init_workspace_outside() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["anyio==3.7.0"]
+        dependencies = [
+            "anyio==3.7.0",
+            "foo",
+        ]
 
         [tool.uv.workspace]
         members = ["foo"]
+
+        [tool.uv.sources]
+        foo = { workspace = true }
         "###
         );
     });
@@ -1785,9 +1803,15 @@ fn init_explicit_workspace() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
+        dependencies = [
+            "foo",
+        ]
 
         [tool.uv.workspace]
         members = ["foo"]
+
+        [tool.uv.sources]
+        foo = { workspace = true }
         "###
         );
     });
@@ -1899,6 +1923,14 @@ fn init_virtual_workspace() -> Result<()> {
             pyproject, @r###"
         [tool.uv.workspace]
         members = ["bar"]
+
+        [tool.uv.sources]
+        bar = { workspace = true }
+
+        [project]
+        dependencies = [
+            "bar",
+        ]
         "###
         );
     });
@@ -1954,6 +1986,14 @@ fn init_nested_virtual_workspace() -> Result<()> {
             workspace, @r###"
         [tool.uv.workspace]
         members = ["foo"]
+
+        [tool.uv.sources]
+        foo = { workspace = true }
+
+        [project]
+        dependencies = [
+            "foo",
+        ]
         "###
         );
     });
