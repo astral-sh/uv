@@ -1693,8 +1693,8 @@ impl TryFrom<LockWire> for Lock {
             if ambiguous.contains(&dist.id.name) {
                 continue;
             }
-            if unambiguous_package_ids.remove(&dist.id.name).is_some() {
-                ambiguous.insert(dist.id.name.clone());
+            if let Some(id) = unambiguous_package_ids.remove(&dist.id.name) {
+                ambiguous.insert(id.name);
                 continue;
             }
             unambiguous_package_ids.insert(dist.id.name.clone(), dist.id.clone());
