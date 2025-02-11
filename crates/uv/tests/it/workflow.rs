@@ -57,8 +57,8 @@ fn packse_add_remove_one_package() {
              { name = "pypiserver" },
              { name = "watchfiles" },
          ]
-        @@ -334,20 +335,21 @@
-         [package.metadata]
+        @@ -335,20 +336,21 @@
+         provides-extras = ["index", "serve"]
          requires-dist = [
              { name = "chevron-blue", specifier = ">=0.2.1" },
              { name = "hatchling", specifier = ">=1.20.0" },
@@ -79,7 +79,7 @@ fn packse_add_remove_one_package() {
              { name = "syrupy", specifier = ">=4.6.0" },
          ]
 
-        @@ -599,20 +601,29 @@
+        @@ -600,20 +602,29 @@
              { name = "rfc3986" },
              { name = "rich" },
              { name = "urllib3" },
@@ -145,8 +145,8 @@ fn packse_add_remove_one_package() {
              { name = "pypiserver" },
              { name = "watchfiles" },
          ]
-        @@ -335,21 +334,20 @@
-         [package.metadata]
+        @@ -336,21 +335,20 @@
+         provides-extras = ["index", "serve"]
          requires-dist = [
              { name = "chevron-blue", specifier = ">=0.2.1" },
              { name = "hatchling", specifier = ">=1.20.0" },
@@ -167,7 +167,7 @@ fn packse_add_remove_one_package() {
              { name = "syrupy", specifier = ">=4.6.0" },
          ]
 
-        @@ -598,29 +596,20 @@
+        @@ -599,29 +597,20 @@
              { name = "readme-renderer" },
              { name = "requests" },
              { name = "requests-toolbelt" },
@@ -299,9 +299,9 @@ fn packse_promote_transitive_to_direct_then_remove() {
          serve = [
              { name = "pypiserver" },
              { name = "watchfiles" },
-        @@ -333,20 +334,21 @@
-
+        @@ -334,20 +335,21 @@
          [package.metadata]
+         provides-extras = ["index", "serve"]
          requires-dist = [
              { name = "chevron-blue", specifier = ">=0.2.1" },
              { name = "hatchling", specifier = ">=1.20.0" },
@@ -357,9 +357,9 @@ fn packse_promote_transitive_to_direct_then_remove() {
          serve = [
              { name = "pypiserver" },
              { name = "watchfiles" },
-        @@ -334,21 +333,20 @@
-
+        @@ -335,21 +334,20 @@
          [package.metadata]
+         provides-extras = ["index", "serve"]
          requires-dist = [
              { name = "chevron-blue", specifier = ">=0.2.1" },
              { name = "hatchling", specifier = ">=1.20.0" },
@@ -431,7 +431,7 @@ fn jax_instability() -> Result<()> {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(diff, @r###"
+        assert_snapshot!(diff, @r#"
         --- old
         +++ new
         @@ -8,21 +8,21 @@
@@ -457,7 +457,7 @@ fn jax_instability() -> Result<()> {
          name = "jax"
          version = "0.4.17"
          source = { registry = "https://pypi.org/simple" }
-        @@ -149,28 +149,41 @@
+        @@ -149,29 +149,42 @@
              { url = "https://files.pythonhosted.org/packages/f3/31/91a2a3c5eb85d2bfa86d7c98f2df5d77dcdefb3d80ca9f9037ad04393acf/scipy-1.12.0-cp312-cp312-win_amd64.whl", hash = "sha256:e646d8571804a304e1da01040d21577685ce8e2db08ac58e543eaca063453e1c", size = 45816713 },
              { url = "https://files.pythonhosted.org/packages/ed/be/49a3f999dc91f1a653847f38c34763dcdeaa8a327f3665bdfe9bf5555109/scipy-1.12.0-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:913d6e7956c3a671de3b05ccb66b11bc293f56bfdef040583a7221d9e22a2e35", size = 38929252 },
              { url = "https://files.pythonhosted.org/packages/32/48/f605bad3e610efe05a51b56698578f7a98f900513a4bad2c9f12df845cd6/scipy-1.12.0-cp39-cp39-macosx_12_0_arm64.whl", hash = "sha256:bba1b0c7256ad75401c73e4b3cf09d1f176e9bd4248f0d3112170fb2ec4db067", size = 31356374 },
@@ -486,6 +486,7 @@ fn jax_instability() -> Result<()> {
          ]
 
          [package.metadata]
+         provides-extras = []
         -requires-dist = [{ name = "jax", specifier = "==0.4.17" }]
         +requires-dist = [
         +    { name = "jax", specifier = "==0.4.17" },
@@ -500,7 +501,7 @@ fn jax_instability() -> Result<()> {
          wheels = [
              { url = "https://files.pythonhosted.org/packages/c2/0a/ba9d0ee9536d3ef73a3448e931776e658b36f128d344e175bc32b092a8bf/zipp-3.18.1-py3-none-any.whl", hash = "sha256:206f5a15f2af3dbaee80769fb7dc6f249695e940acca08dfb2a4769fe61e538b", size = 8247 },
          ]
-        "###);
+        "#);
     });
 
     let diff = context.diff_lock(|context| {
@@ -511,10 +512,10 @@ fn jax_instability() -> Result<()> {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(diff, @r###"
+        assert_snapshot!(diff, @r#"
         --- old
         +++ new
-        @@ -149,41 +149,28 @@
+        @@ -149,42 +149,29 @@
              { url = "https://files.pythonhosted.org/packages/f3/31/91a2a3c5eb85d2bfa86d7c98f2df5d77dcdefb3d80ca9f9037ad04393acf/scipy-1.12.0-cp312-cp312-win_amd64.whl", hash = "sha256:e646d8571804a304e1da01040d21577685ce8e2db08ac58e543eaca063453e1c", size = 45816713 },
              { url = "https://files.pythonhosted.org/packages/ed/be/49a3f999dc91f1a653847f38c34763dcdeaa8a327f3665bdfe9bf5555109/scipy-1.12.0-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:913d6e7956c3a671de3b05ccb66b11bc293f56bfdef040583a7221d9e22a2e35", size = 38929252 },
              { url = "https://files.pythonhosted.org/packages/32/48/f605bad3e610efe05a51b56698578f7a98f900513a4bad2c9f12df845cd6/scipy-1.12.0-cp39-cp39-macosx_12_0_arm64.whl", hash = "sha256:bba1b0c7256ad75401c73e4b3cf09d1f176e9bd4248f0d3112170fb2ec4db067", size = 31356374 },
@@ -543,6 +544,7 @@ fn jax_instability() -> Result<()> {
          ]
 
          [package.metadata]
+         provides-extras = []
         -requires-dist = [
         -    { name = "jax", specifier = "==0.4.17" },
         -    { name = "tzdata", specifier = ">=2024.1" },
@@ -557,7 +559,7 @@ fn jax_instability() -> Result<()> {
          wheels = [
              { url = "https://files.pythonhosted.org/packages/c2/0a/ba9d0ee9536d3ef73a3448e931776e658b36f128d344e175bc32b092a8bf/zipp-3.18.1-py3-none-any.whl", hash = "sha256:206f5a15f2af3dbaee80769fb7dc6f249695e940acca08dfb2a4769fe61e538b", size = 8247 },
          ]
-        "###);
+        "#);
     });
 
     // Back to where we started.

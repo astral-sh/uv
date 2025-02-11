@@ -126,6 +126,7 @@ dev = [
 ]
 
 [package.metadata]
+provides-extras = []
 requires-dist = [
     { name = "cachecontrol", extras = ["filecache"], specifier = ">=0.14,<0.15" },
     { name = "mwparserfromhell", specifier = ">=0.6.4,<0.7" },
