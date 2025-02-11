@@ -262,11 +262,22 @@ impl<'lock> InstallTarget<'lock> {
                     .filter(|package| self.roots().contains(package.name()))
                     .collect();
 
+                // If `provides-extra` is not set in any package, do not perform the check, as this
+                // means that the lock file was generated on a version of uv that predates when the
+                // feature was added.
+                if !member_packages
+                    .iter()
+                    .any(|package| package.provides_extras().is_some())
+                {
+                    return Ok(());
+                }
+
                 for extra in extras {
-                    if !member_packages
-                        .iter()
-                        .any(|package| package.contains_extra(extra))
-                    {
+                    if !member_packages.iter().any(|package| {
+                        package
+                            .provides_extras()
+                            .is_some_and(|provides_extras| provides_extras.contains(extra))
+                    }) {
                         return match self {
                             Self::Project { .. } => {
                                 Err(ProjectError::MissingExtraProject(extra.clone()))

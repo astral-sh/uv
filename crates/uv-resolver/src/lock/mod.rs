@@ -2618,12 +2618,9 @@ impl Package {
         self.id.version.is_none()
     }
 
-    /// Returns `true` if the package contains the [`ExtraName`].
-    pub fn contains_extra(&self, name: &ExtraName) -> bool {
-        self.metadata
-            .provides_extras
-            .as_ref()
-            .is_some_and(|provides_extras| provides_extras.contains(name))
+    /// Returns the extras the package provides, if any.
+    pub fn provides_extras(&self) -> Option<&Vec<ExtraName>> {
+        self.metadata.provides_extras.as_ref()
     }
 }
 
