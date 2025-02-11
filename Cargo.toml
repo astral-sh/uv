@@ -278,6 +278,12 @@ inherits = "dev"
 debug = 0
 strip = "debuginfo"
 
+# Profile for uv-build
+[profile.minimal-size]
+inherits = "release"
+opt-level = "z"
+panic = "abort"
+
 # The profile that 'cargo dist' will build with.
 [profile.dist]
 inherits = "release"

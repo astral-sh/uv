@@ -3465,7 +3465,7 @@ fn init_application_package_uv() -> Result<()> {
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
     let mut filters = context.filters();
-    filters.push((r#"\["uv>=.*,<.*"\]"#, r#"["uv[SPECIFIERS]"]"#));
+    filters.push((r#"\["uv_build>=.*,<.*"\]"#, r#"["uv_build[SPECIFIERS]"]"#));
     insta::with_settings!({
         filters => filters,
     }, {
@@ -3483,8 +3483,8 @@ fn init_application_package_uv() -> Result<()> {
         foo = "foo:main"
 
         [build-system]
-        requires = ["uv[SPECIFIERS]"]
-        build-backend = "uv"
+        requires = ["uv_build[SPECIFIERS]"]
+        build-backend = "uv_build"
         "###
         );
     });
