@@ -803,13 +803,13 @@ impl InitProjectKind {
                 generate_package_scripts(name, path, build_backend, false)?;
             }
         } else {
-            // Create `app.py` if it doesn't exist
+            // Create `main.py` if it doesn't exist
             // (This isn't intended to be a particularly special or magical filename, just nice)
-            // TODO(zanieb): Only create `app.py` if there are no other Python files?
-            let app_py = path.join("app.py");
-            if !app_py.try_exists()? && !bare {
+            // TODO(zanieb): Only create `main.py` if there are no other Python files?
+            let main_py = path.join("main.py");
+            if !main_py.try_exists()? && !bare {
                 fs_err::write(
-                    path.join("app.py"),
+                    path.join("main.py"),
                     indoc::formatdoc! {r#"
                     def main():
                         print("Hello from {name}!")

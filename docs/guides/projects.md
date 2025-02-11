@@ -32,14 +32,14 @@ uv will create the following files:
 .
 ├── .python-version
 ├── README.md
-├── app.py
+├── main.py
 └── pyproject.toml
 ```
 
-The `app.py` file contains a simple "Hello world" program. Try it out with `uv run`:
+The `main.py` file contains a simple "Hello world" program. Try it out with `uv run`:
 
 ```console
-$ uv run app.py
+$ uv run main.py
 Hello from hello-world!
 ```
 
@@ -60,7 +60,7 @@ A complete listing would look like:
 │   └── pyvenv.cfg
 ├── .python-version
 ├── README.md
-├── app.py
+├── main.py
 ├── pyproject.toml
 └── uv.lock
 ```
