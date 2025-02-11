@@ -161,14 +161,14 @@ impl PyProjectToml {
     ///
     /// ```toml
     /// [build-system]
-    /// requires = ["uv>=0.4.15,<5"]
-    /// build-backend = "uv"
+    /// requires = ["uv_build>=0.4.15,<5"]
+    /// build-backend = "uv_build"
     /// ```
     pub fn check_build_system(&self, uv_version: &str) -> Vec<String> {
         let mut warnings = Vec::new();
-        if self.build_system.build_backend.as_deref() != Some("uv") {
+        if self.build_system.build_backend.as_deref() != Some("uv_build") {
             warnings.push(format!(
-                r#"The value for `build_system.build-backend` should be `"uv"`, not `"{}"`"#,
+                r#"The value for `build_system.build-backend` should be `"uv_build"`, not `"{}"`"#,
                 self.build_system.build_backend.clone().unwrap_or_default()
             ));
         }
@@ -189,7 +189,7 @@ impl PyProjectToml {
             warnings.push(expected());
             return warnings;
         };
-        if uv_requirement.name.as_str() != "uv" {
+        if uv_requirement.name.as_str() != "uv-build" {
             warnings.push(expected());
             return warnings;
         }
@@ -221,10 +221,13 @@ impl PyProjectToml {
 
         if !bounded {
             warnings.push(format!(
-                "`build_system.requires = [\"{uv_requirement}\"]` is missing an \
-                upper bound on the uv version such as `<{next_breaking}`. \
-                Without bounding the uv version, the source distribution will break \
-                when a future, breaking version of uv is released.",
+                "`build_system.requires = [\"{}\"]` is missing an \
+                upper bound on the uv_build version such as `<{next_breaking}`. \
+                Without bounding the uv_build version, the source distribution will break \
+                when a future, breaking version of uv_build is released.",
+                // Use an underscore consistently, to avoid confusing users between a package name with dash and a
+                // module name with underscore
+                uv_requirement.to_string().replace("uv-build", "uv_build")
             ));
         }
 
@@ -940,8 +943,8 @@ mod tests {
             {payload}
 
             [build-system]
-            requires = ["uv>=0.4.15,<5"]
-            build-backend = "uv"
+            requires = ["uv_build>=0.4.15,<5"]
+            build-backend = "uv_build"
         "#
         }
     }
@@ -1023,8 +1026,8 @@ mod tests {
             foo-bar = "foo:bar"
 
             [build-system]
-            requires = ["uv>=0.4.15,<5"]
-            build-backend = "uv"
+            requires = ["uv_build>=0.4.15,<5"]
+            build-backend = "uv_build"
         "#
         };
 
@@ -1150,8 +1153,8 @@ mod tests {
             foo-bar = "foo:bar"
 
             [build-system]
-            requires = ["uv>=0.4.15,<5"]
-            build-backend = "uv"
+            requires = ["uv_build>=0.4.15,<5"]
+            build-backend = "uv_build"
         "#
         };
 
@@ -1231,13 +1234,13 @@ mod tests {
             version = "0.1.0"
 
             [build-system]
-            requires = ["uv"]
-            build-backend = "uv"
+            requires = ["uv_build"]
+            build-backend = "uv_build"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
-            @r###"`build_system.requires = ["uv"]` is missing an upper bound on the uv version such as `<0.5`. Without bounding the uv version, the source distribution will break when a future, breaking version of uv is released."###
+            @r###"`build_system.requires = ["uv_build"]` is missing an upper bound on the uv_build version such as `<0.5`. Without bounding the uv_build version, the source distribution will break when a future, breaking version of uv_build is released."###
         );
     }
 
@@ -1249,8 +1252,8 @@ mod tests {
             version = "0.1.0"
 
             [build-system]
-            requires = ["uv>=0.4.15,<5", "wheel"]
-            build-backend = "uv"
+            requires = ["uv_build>=0.4.15,<5", "wheel"]
+            build-backend = "uv_build"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
         assert_snapshot!(
@@ -1268,7 +1271,7 @@ mod tests {
 
             [build-system]
             requires = ["setuptools"]
-            build-backend = "uv"
+            build-backend = "uv_build"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
         assert_snapshot!(
@@ -1285,13 +1288,13 @@ mod tests {
             version = "0.1.0"
 
             [build-system]
-            requires = ["uv>=0.4.15,<5"]
+            requires = ["uv_build>=0.4.15,<5"]
             build-backend = "setuptools"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
-            @r###"The value for `build_system.build-backend` should be `"uv"`, not `"setuptools"`"###
+            @r###"The value for `build_system.build-backend` should be `"uv_build"`, not `"setuptools"`"###
         );
     }
 
