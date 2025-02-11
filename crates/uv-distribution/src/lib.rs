@@ -14,7 +14,6 @@ mod distribution_database;
 mod download;
 mod error;
 mod index;
-mod locks;
 mod metadata;
 mod reporter;
 mod source;
