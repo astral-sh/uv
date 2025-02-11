@@ -6556,6 +6556,7 @@ fn find_links_relative_in_config_works_from_subdir() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "python-managed")]
 fn sync_dry_run() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.8", "3.12"]);
 
