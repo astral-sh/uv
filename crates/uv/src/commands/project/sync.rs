@@ -121,7 +121,7 @@ pub(crate) async fn sync(
     }
 
     // Discover or create the virtual environment.
-    let environment = match ProjectEnvironment::get_or_init(
+    let environment = ProjectEnvironment::get_or_init(
         project.workspace(),
         python.as_deref().map(PythonRequest::parse),
         &install_mirrors,
@@ -136,10 +136,12 @@ pub(crate) async fn sync(
         dry_run,
         printer,
     )
-    .await?
-    {
-        ProjectEnvironment::Existing(environment) => {
-            if dry_run.enabled() {
+    .await?;
+
+    // In `--dry-run` mode, print the environment discovery or creation.
+    if dry_run.enabled() {
+        match &environment {
+            ProjectEnvironment::Existing(environment) => {
                 writeln!(
                     printer.stderr(),
                     "{}",
@@ -150,10 +152,29 @@ pub(crate) async fn sync(
                     .dimmed()
                 )?;
             }
-            environment
-        }
-        ProjectEnvironment::Replaced(environment, root) => {
-            if dry_run.enabled() {
+            ProjectEnvironment::Replaced(environment) => {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format!(
+                        "Replaced existing environment at: {}",
+                        environment.root().user_display().bold()
+                    )
+                    .dimmed()
+                )?;
+            }
+            ProjectEnvironment::Created(environment) => {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format!(
+                        "Created new environment at: {}",
+                        environment.root().user_display().bold()
+                    )
+                    .dimmed()
+                )?;
+            }
+            ProjectEnvironment::WouldReplace(root, ..) => {
                 writeln!(
                     printer.stderr(),
                     "{}",
@@ -164,10 +185,7 @@ pub(crate) async fn sync(
                     .dimmed()
                 )?;
             }
-            environment
-        }
-        ProjectEnvironment::New(environment, root) => {
-            if dry_run.enabled() {
+            ProjectEnvironment::WouldCreate(root, ..) => {
                 writeln!(
                     printer.stderr(),
                     "{}",
@@ -178,9 +196,8 @@ pub(crate) async fn sync(
                     .dimmed()
                 )?;
             }
-            environment
         }
-    };
+    }
 
     // Initialize any shared state.
     let state = UniversalState::default();

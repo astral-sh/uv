@@ -656,7 +656,7 @@ pub(crate) async fn run(
                     printer,
                 )
                 .await?
-                .into_environment()
+                .into_environment()?
             };
 
             if no_sync {

@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -182,6 +183,9 @@ pub(crate) enum ProjectError {
 
     #[error("Failed to find `site-packages` directory for environment")]
     NoSitePackages,
+
+    #[error("Attempted to drop a temporary virtual environment while still in-use")]
+    DroppedEnvironment,
 
     #[error(transparent)]
     DependencyGroup(#[from] DependencyGroupError),
@@ -937,15 +941,24 @@ enum ProjectEnvironment {
     Existing(PythonEnvironment),
     /// An existing [`PythonEnvironment`] was discovered, but did not satisfy the project's
     /// requirements, and so was replaced.
-    ///
-    /// In `--dry-run` mode, the environment will not be replaced, but this variant will still be
-    /// returned.
-    Replaced(PythonEnvironment, PathBuf),
+    Replaced(PythonEnvironment),
     /// A new [`PythonEnvironment`] was created.
-    ///
-    /// In `--dry-run` mode, the environment will not be created, but this variant will still be
-    /// returned.
-    New(PythonEnvironment, PathBuf),
+    Created(PythonEnvironment),
+    /// An existing [`PythonEnvironment`] was discovered, but did not satisfy the project's
+    /// requirements. A new environment would've been created, but `--dry-run` mode is enabled; as
+    /// such, a temporary environment was created instead.
+    WouldReplace(
+        PathBuf,
+        PythonEnvironment,
+        #[allow(unused)] tempfile::TempDir,
+    ),
+    /// A new [`PythonEnvironment`] would've been created, but `--dry-run` mode is enabled; as such,
+    /// a temporary environment was created instead.
+    WouldCreate(
+        PathBuf,
+        PythonEnvironment,
+        #[allow(unused)] tempfile::TempDir,
+    ),
 }
 
 impl ProjectEnvironment {
@@ -990,10 +1003,10 @@ impl ProjectEnvironment {
 
             // Otherwise, create a virtual environment with the discovered interpreter.
             ProjectInterpreter::Interpreter(interpreter) => {
-                let venv = workspace.venv(active);
+                let root = workspace.venv(active);
 
                 // Avoid removing things that are not virtual environments
-                let replace = match (venv.try_exists(), venv.join("pyvenv.cfg").try_exists()) {
+                let replace = match (root.try_exists(), root.join("pyvenv.cfg").try_exists()) {
                     // It's a virtual environment we can remove it
                     (_, Ok(true)) => true,
                     // It doesn't exist at all, we should use it without deleting it to avoid TOCTOU bugs
@@ -1001,11 +1014,11 @@ impl ProjectEnvironment {
                     // If it's not a virtual environment, bail
                     (Ok(true), Ok(false)) => {
                         // Unless it's empty, in which case we just ignore it
-                        if venv.read_dir().is_ok_and(|mut dir| dir.next().is_none()) {
+                        if root.read_dir().is_ok_and(|mut dir| dir.next().is_none()) {
                             false
                         } else {
                             return Err(ProjectError::InvalidProjectEnvironmentDir(
-                                venv,
+                                root,
                                 "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
                             ));
                         }
@@ -1013,42 +1026,11 @@ impl ProjectEnvironment {
                     // Similarly, if we can't _tell_ if it exists we should bail
                     (_, Err(err)) | (Err(err), _) => {
                         return Err(ProjectError::InvalidProjectEnvironmentDir(
-                            venv,
+                            root,
                             format!("it is not a compatible environment but cannot be recreated because uv cannot determine if it is a virtual environment: {err}"),
                         ));
                     }
                 };
-
-                // Under `--dry-run`, avoid modifying the environment.
-                if dry_run.enabled() {
-                    let environment = PythonEnvironment::from_interpreter(interpreter);
-                    return Ok(if replace {
-                        Self::Replaced(environment, venv)
-                    } else {
-                        Self::New(environment, venv)
-                    });
-                }
-
-                // Remove the existing virtual environment if it doesn't meet the requirements.
-                if replace {
-                    match fs_err::remove_dir_all(&venv) {
-                        Ok(()) => {
-                            writeln!(
-                                printer.stderr(),
-                                "Removed virtual environment at: {}",
-                                venv.user_display().cyan()
-                            )?;
-                        }
-                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                        Err(e) => return Err(e.into()),
-                    }
-                }
-
-                writeln!(
-                    printer.stderr(),
-                    "Creating virtual environment at: {}",
-                    venv.user_display().cyan()
-                )?;
 
                 // Determine a prompt for the environment, in order of preference:
                 //
@@ -1069,8 +1051,48 @@ impl ProjectEnvironment {
                     .map(uv_virtualenv::Prompt::Static)
                     .unwrap_or(uv_virtualenv::Prompt::None);
 
+                // Under `--dry-run`, avoid modifying the environment.
+                if dry_run.enabled() {
+                    let temp_dir = cache.venv_dir()?;
+                    let environment = uv_virtualenv::create_venv(
+                        temp_dir.path(),
+                        interpreter,
+                        prompt,
+                        false,
+                        false,
+                        false,
+                        false,
+                    )?;
+                    return Ok(if replace {
+                        Self::WouldReplace(root, environment, temp_dir)
+                    } else {
+                        Self::WouldCreate(root, environment, temp_dir)
+                    });
+                }
+
+                // Remove the existing virtual environment if it doesn't meet the requirements.
+                if replace {
+                    match fs_err::remove_dir_all(&root) {
+                        Ok(()) => {
+                            writeln!(
+                                printer.stderr(),
+                                "Removed virtual environment at: {}",
+                                root.user_display().cyan()
+                            )?;
+                        }
+                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(e) => return Err(e.into()),
+                    }
+                }
+
+                writeln!(
+                    printer.stderr(),
+                    "Creating virtual environment at: {}",
+                    root.user_display().cyan()
+                )?;
+
                 let environment = uv_virtualenv::create_venv(
-                    &venv,
+                    &root,
                     interpreter,
                     prompt,
                     false,
@@ -1080,20 +1102,40 @@ impl ProjectEnvironment {
                 )?;
 
                 if replace {
-                    Ok(Self::Replaced(environment, venv))
+                    Ok(Self::Replaced(environment))
                 } else {
-                    Ok(Self::New(environment, venv))
+                    Ok(Self::Created(environment))
                 }
             }
         }
     }
 
     /// Convert the [`ProjectEnvironment`] into a [`PythonEnvironment`].
-    pub(crate) fn into_environment(self) -> PythonEnvironment {
+    ///
+    /// Returns an error if the environment was created in `--dry-run` mode, as dropping the
+    /// associated temporary directory could lead to errors downstream.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn into_environment(self) -> Result<PythonEnvironment, ProjectError> {
+        match self {
+            Self::Existing(environment) => Ok(environment),
+            Self::Replaced(environment) => Ok(environment),
+            Self::Created(environment) => Ok(environment),
+            Self::WouldReplace(..) => Err(ProjectError::DroppedEnvironment),
+            Self::WouldCreate(..) => Err(ProjectError::DroppedEnvironment),
+        }
+    }
+}
+
+impl Deref for ProjectEnvironment {
+    type Target = PythonEnvironment;
+
+    fn deref(&self) -> &Self::Target {
         match self {
             Self::Existing(environment) => environment,
-            Self::Replaced(environment, ..) => environment,
-            Self::New(environment, ..) => environment,
+            Self::Replaced(environment) => environment,
+            Self::Created(environment) => environment,
+            Self::WouldReplace(_, environment, _) => environment,
+            Self::WouldCreate(_, environment, _) => environment,
         }
     }
 }
