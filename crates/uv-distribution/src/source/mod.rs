@@ -2576,7 +2576,7 @@ fn validate_metadata(
     }
 
     if let Some(version) = source.version() {
-        if metadata.version != *version {
+        if *version != metadata.version && *version != metadata.version.clone().without_local() {
             return Err(Error::WheelMetadataVersionMismatch {
                 metadata: metadata.version.clone(),
                 given: version.clone(),
