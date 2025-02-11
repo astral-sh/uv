@@ -3211,12 +3211,11 @@ fn run_script_module_conflict() -> Result<()> {
     "###);
 
     // Even if the working directory is `src`
-    // TODO(zanieb): This behavior is currently incorrect
     uv_snapshot!(context.filters(), context.run().arg("--directory").arg("src").arg("foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
-    Hello from `__main__`
+    Hello from `__init__`
 
     ----- stderr -----
     Resolved 1 package in [TIME]

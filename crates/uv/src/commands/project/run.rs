@@ -1153,7 +1153,8 @@ pub(crate) enum RunCommand {
     /// Execute a `pythonw` GUI script.
     PythonGuiScript(PathBuf, Vec<OsString>),
     /// Execute a Python package containing a `__main__.py` file.
-    PythonPackage(PathBuf, Vec<OsString>),
+    /// If an entrypoint with the target name is installed in the environment, it is preferred.
+    PythonPackage(OsString, PathBuf, Vec<OsString>),
     /// Execute a Python [zipapp].
     /// [zipapp]: <https://docs.python.org/3/library/zipapp.html>
     PythonZipapp(PathBuf, Vec<OsString>),
@@ -1175,10 +1176,12 @@ impl RunCommand {
         match self {
             Self::Python(_)
             | Self::PythonScript(..)
-            | Self::PythonPackage(..)
             | Self::PythonZipapp(..)
             | Self::PythonRemote(..)
             | Self::Empty => Cow::Borrowed("python"),
+            // N.B. We can't know if we'll invoke `<target>` or `python <target>` without checking
+            // the available scripts in the interpreter — we could improve this message
+            Self::PythonPackage(target, ..) => target.to_string_lossy(),
             Self::PythonModule(..) => Cow::Borrowed("python -m"),
             Self::PythonGuiScript(..) => {
                 if cfg!(windows) {
@@ -1207,9 +1210,24 @@ impl RunCommand {
                 process.args(args);
                 process
             }
-            Self::PythonScript(target, args)
-            | Self::PythonPackage(target, args)
-            | Self::PythonZipapp(target, args) => {
+            Self::PythonPackage(target, path, args) => {
+                let name = PathBuf::from(target).with_extension(std::env::consts::EXE_EXTENSION);
+                let entrypoint = interpreter.scripts().join(name);
+
+                // If the target is an installed, executable script — prefer that
+                if uv_fs::which::is_executable(&entrypoint) {
+                    let mut process = Command::new(entrypoint);
+                    process.args(args);
+                    process
+                // Otherwise, invoke `python <module>`
+                } else {
+                    let mut process = Command::new(interpreter.sys_executable());
+                    process.arg(path);
+                    process.args(args);
+                    process
+                }
+            }
+            Self::PythonScript(target, args) | Self::PythonZipapp(target, args) => {
                 let mut process = Command::new(interpreter.sys_executable());
                 process.arg(target);
                 process.args(args);
@@ -1318,9 +1336,14 @@ impl std::fmt::Display for RunCommand {
                 }
                 Ok(())
             }
-            Self::PythonScript(target, args)
-            | Self::PythonPackage(target, args)
-            | Self::PythonZipapp(target, args) => {
+            Self::PythonPackage(target, _path, args) => {
+                write!(f, "{}", target.to_string_lossy())?;
+                for arg in args {
+                    write!(f, " {}", arg.to_string_lossy())?;
+                }
+                Ok(())
+            }
+            Self::PythonScript(target, args) | Self::PythonZipapp(target, args) => {
                 write!(f, "python {}", target.display())?;
                 for arg in args {
                     write!(f, " {}", arg.to_string_lossy())?;
@@ -1462,7 +1485,11 @@ impl RunCommand {
         {
             Ok(Self::PythonGuiScript(target_path, args.to_vec()))
         } else if is_dir && target_path.join("__main__.py").is_file() {
-            Ok(Self::PythonPackage(target_path, args.to_vec()))
+            Ok(Self::PythonPackage(
+                target.clone(),
+                target_path,
+                args.to_vec(),
+            ))
         } else if is_file && is_python_zipapp(&target_path) {
             Ok(Self::PythonZipapp(target_path, args.to_vec()))
         } else {
