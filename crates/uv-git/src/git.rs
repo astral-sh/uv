@@ -437,6 +437,7 @@ impl GitCheckout {
 
             ProcessBuilder::new(GIT.as_ref()?)
                 .arg("clone")
+                .arg("--no-hard-links")
                 .arg(database.repo.path.simplified_display().to_string())
                 .arg(into.simplified_display().to_string())
                 .exec_with_output()?;
