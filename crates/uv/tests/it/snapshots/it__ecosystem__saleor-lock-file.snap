@@ -1864,6 +1864,7 @@ dependencies = [
 ]
 
 [package.metadata]
+provides-extras = []
 requires-dist = [
     { name = "adyen", specifier = ">=4.0.0,<5.0.0" },
     { name = "aniso8601", specifier = ">=7.0.0,<8.0.0" },

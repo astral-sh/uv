@@ -340,6 +340,7 @@ dev = [
 ]
 
 [package.metadata]
+provides-extras = ["index", "serve"]
 requires-dist = [
     { name = "chevron-blue", specifier = ">=0.2.1" },
     { name = "hatchling", specifier = ">=1.20.0" },

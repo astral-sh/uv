@@ -3957,6 +3957,7 @@ dev = [
 ]
 
 [package.metadata]
+provides-extras = ["deploy"]
 requires-dist = [
     { name = "alembic", specifier = ">=0.7.0" },
     { name = "alembic-postgresql-enum" },
