@@ -1202,22 +1202,19 @@ fn init_workspace() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            workspace, @r###"
+            workspace, @r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = [
-            "anyio==3.7.0",
-            "foo",
-        ]
+        dependencies = ["anyio==3.7.0"]
 
         [tool.uv.workspace]
         members = ["foo"]
 
         [tool.uv.sources]
         foo = { workspace = true }
-        "###
+        "#
         );
     });
 
@@ -1302,22 +1299,19 @@ fn init_workspace_relative_sub_package() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            workspace, @r###"
+            workspace, @r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = [
-            "anyio==3.7.0",
-            "foo",
-        ]
+        dependencies = ["anyio==3.7.0"]
 
         [tool.uv.workspace]
         members = ["foo"]
 
         [tool.uv.sources]
         foo = { workspace = true }
-        "###
+        "#
         );
     });
 
@@ -1403,22 +1397,19 @@ fn init_workspace_outside() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            workspace, @r###"
+            workspace, @r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = [
-            "anyio==3.7.0",
-            "foo",
-        ]
+        dependencies = ["anyio==3.7.0"]
 
         [tool.uv.workspace]
         members = ["foo"]
 
         [tool.uv.sources]
         foo = { workspace = true }
-        "###
+        "#
         );
     });
 
@@ -1568,7 +1559,7 @@ fn init_isolated() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            workspace, @r###"
+            workspace, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -1576,7 +1567,10 @@ fn init_isolated() -> Result<()> {
 
         [tool.uv.workspace]
         members = ["foo"]
-        "###
+
+        [tool.uv.sources]
+        foo = { workspace = true }
+        "#
         );
     });
 
@@ -1732,7 +1726,7 @@ fn init_project_inside_project() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            workspace, @r###"
+            workspace, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -1740,7 +1734,11 @@ fn init_project_inside_project() -> Result<()> {
 
         [tool.uv.workspace]
         members = ["foo", "foo/bar"]
-        "###
+
+        [tool.uv.sources]
+        foo = { workspace = true }
+        bar = { workspace = true }
+        "#
         );
     });
 
@@ -1798,21 +1796,18 @@ fn init_explicit_workspace() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            workspace, @r###"
+            workspace, @r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = [
-            "foo",
-        ]
 
         [tool.uv.workspace]
         members = ["foo"]
 
         [tool.uv.sources]
         foo = { workspace = true }
-        "###
+        "#
         );
     });
 
@@ -1881,6 +1876,9 @@ fn init_virtual_project() -> Result<()> {
 
         [tool.uv.workspace]
         members = ["bar"]
+
+        [tool.uv.sources]
+        bar = { workspace = true }
         "#
         );
     });
@@ -1920,18 +1918,13 @@ fn init_virtual_workspace() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject, @r###"
+            pyproject, @r#"
         [tool.uv.workspace]
         members = ["bar"]
 
         [tool.uv.sources]
         bar = { workspace = true }
-
-        [project]
-        dependencies = [
-            "bar",
-        ]
-        "###
+        "#
         );
     });
 
@@ -1983,18 +1976,13 @@ fn init_nested_virtual_workspace() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            workspace, @r###"
+            workspace, @r#"
         [tool.uv.workspace]
         members = ["foo"]
 
         [tool.uv.sources]
         foo = { workspace = true }
-
-        [project]
-        dependencies = [
-            "foo",
-        ]
-        "###
+        "#
         );
     });
 

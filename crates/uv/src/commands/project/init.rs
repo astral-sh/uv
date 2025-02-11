@@ -15,7 +15,7 @@ use uv_configuration::{
 use uv_fs::{Simplified, CWD};
 use uv_git::GIT;
 use uv_pep440::Version;
-use uv_pep508::{PackageName, Requirement};
+use uv_pep508::PackageName;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
@@ -618,10 +618,6 @@ async fn init_project(
 
             // Add as workspace source
             pyproject.add_workspace_source(name)?;
-
-            // Add the project as a dependency
-            let req = Requirement::from_str(name.as_ref())?;
-            pyproject.add_dependency(&req, None)?;
 
             // Save the modified `pyproject.toml`.
             fs_err::write(
