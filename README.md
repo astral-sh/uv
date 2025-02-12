@@ -53,10 +53,12 @@ Install uv with our standalone installers:
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-```bash
+```powershell
 # On Windows.
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+winget install --id=astral-sh.uv  -e
 ```
+
+If your Windows installation does not support `winget`, you can explore [alternative ways to install](https://docs.astral.sh/uv/getting-started/installation/#__tabbed_1_2).
 
 Or, from [PyPI](https://pypi.org/project/uv/):
 
