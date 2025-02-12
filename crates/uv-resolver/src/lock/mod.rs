@@ -2617,6 +2617,11 @@ impl Package {
     fn is_dynamic(&self) -> bool {
         self.id.version.is_none()
     }
+
+    /// Returns the extras the package provides, if any.
+    pub fn provides_extras(&self) -> Option<&Vec<ExtraName>> {
+        self.metadata.provides_extras.as_ref()
+    }
 }
 
 /// Attempts to construct a `VerbatimUrl` from the given normalized `Path`.
