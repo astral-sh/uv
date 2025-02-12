@@ -101,7 +101,12 @@ pub(crate) async fn run(
     let recursion_depth = read_recursion_depth_from_environment_variable()?;
     if recursion_depth > max_recursion_depth {
         bail!(
-            "Exiting because `uv run` invoked itself recursively {max_recursion_depth} times. If you are running a script with `uv run` as the shebang line, you may need to include --script in the arguments to uv.",
+            r#"
+`uv run` was recursively invoked {recursion_depth} times which exceeds the limit of {max_recursion_depth}.
+
+hint: If you are running a script with `{}` in the shebang, you may need to include the `{}` flag."#,
+            "uv run".green(),
+            "--script".green(),
         );
     }
 

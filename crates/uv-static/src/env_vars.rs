@@ -615,14 +615,13 @@ impl EnvVars {
     /// Enables fetching files stored in Git LFS when installing a package from a Git repository.
     pub const UV_GIT_LFS: &'static str = "UV_GIT_LFS";
 
-    /// Number of times that uv run has recursively invoked itself. Used to
-    /// guard against infinite recursion when uv run is in a script shebang
-    /// line.
+    /// Number of times that `uv run` has been recursively invoked. Used to guard against infinite
+    /// recursion, e.g., when `uv run`` is used in a script shebang.
     #[attr_hidden]
     pub const UV_RUN_RECURSION_DEPTH: &'static str = "UV_RUN_RECURSION_DEPTH";
 
-    /// Maximum number of times that uv run will invoke itself before giving
-    /// up.
+    /// Number of times that `uv run` will allow recursive invocations, before exiting with an
+    /// error.
     #[attr_hidden]
     pub const UV_RUN_MAX_RECURSION_DEPTH: &'static str = "UV_RUN_MAX_RECURSION_DEPTH";
 }

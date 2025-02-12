@@ -2933,8 +2933,12 @@ pub struct RunArgs {
     #[arg(long, env = EnvVars::UV_SHOW_RESOLUTION, value_parser = clap::builder::BoolishValueParser::new(), hide = true)]
     pub show_resolution: bool,
 
-    /// Number of times that uv run will recursively invoke itself before
-    /// giving up.
+    /// Number of times that `uv run` will allow recursive invocations.
+    ///
+    /// The current recursion depth is tracked by environment variable. If environment variables are
+    /// cleared, uv will fail to detect the recursion depth.
+    ///
+    /// If uv reaches the maximum recursion depth, it will exit with an error.
     #[arg(long, hide = true, env = EnvVars::UV_RUN_MAX_RECURSION_DEPTH)]
     pub max_recursion_depth: Option<u32>,
 }
