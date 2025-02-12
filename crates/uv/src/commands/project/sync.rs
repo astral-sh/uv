@@ -587,6 +587,7 @@ pub(super) async fn do_sync(
     }
 
     // Validate that the set of requested extras and development groups are compatible.
+    target.validate_extras(extras)?;
     detect_conflicts(target.lock(), extras, dev)?;
 
     // Determine the markers to use for resolution.

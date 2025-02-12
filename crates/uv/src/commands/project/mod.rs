@@ -23,7 +23,7 @@ use uv_distribution_types::{
 use uv_fs::{LockedFile, Simplified, CWD};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{SatisfiesResult, SitePackages};
-use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
 use uv_pypi_types::{ConflictPackage, ConflictSet, Conflicts, Requirement};
@@ -151,6 +151,15 @@ pub(crate) enum ProjectError {
 
     #[error("Default group `{0}` (from `tool.uv.default-groups`) is not defined in the project's `dependency-groups` table")]
     MissingDefaultGroup(GroupName),
+
+    #[error("Extra `{0}` is not defined in the project's `optional-dependencies` table")]
+    MissingExtraProject(ExtraName),
+
+    #[error("Extra `{0}` is not defined in any project's `optional-dependencies` table")]
+    MissingExtraWorkspace(ExtraName),
+
+    #[error("PEP 723 scripts do not support optional dependencies, but extra `{0}` was specified")]
+    MissingExtraScript(ExtraName),
 
     #[error("Supported environments must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
     OverlappingMarkers(String, String, String),
