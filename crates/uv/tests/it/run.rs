@@ -4202,3 +4202,41 @@ fn run_without_overlay() -> Result<()> {
 
     Ok(())
 }
+
+/// See: <https://github.com/astral-sh/uv/issues/11220>
+#[cfg(unix)]
+#[test]
+fn detect_infinite_recursion() -> Result<()> {
+    use crate::common::get_bin;
+    use indoc::formatdoc;
+    use std::os::unix::fs::PermissionsExt;
+
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("main");
+    test_script.write_str(&formatdoc! { r#"
+        #!{uv} run
+
+        print("Hello, world!")
+    "#, uv = get_bin().display()})?;
+
+    fs_err::set_permissions(test_script.path(), PermissionsExt::from_mode(0o0744))?;
+
+    let mut cmd = std::process::Command::new(test_script.as_os_str());
+
+    // Set the max recursion depth to a lower amount to speed up testing.
+    cmd.env("UV_RUN_MAX_RECURSION_DEPTH", "5");
+
+    uv_snapshot!(context.filters(), cmd, @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `uv run` was recursively invoked 6 times which exceeds the limit of 5.
+
+    hint: If you are running a script with `uv run` in the shebang, you may need to include the `--script` flag.
+    "###);
+
+    Ok(())
+}
