@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use std::env;
 use std::io::Write;
 use std::path::Path;
+use uv_configuration::PreviewMode;
 
 /// PEP 517 hook to build a source distribution.
 pub(crate) fn build_sdist(sdist_directory: &Path) -> Result<ExitStatus> {
@@ -38,12 +39,14 @@ pub(crate) fn build_wheel(
 pub(crate) fn build_editable(
     wheel_directory: &Path,
     metadata_directory: Option<&Path>,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     let filename = uv_build_backend::build_editable(
         &env::current_dir()?,
         wheel_directory,
         metadata_directory,
         uv_version::version(),
+        preview,
     )?;
     // Tell the build frontend about the name of the artifact we built
     writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;

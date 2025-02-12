@@ -61,6 +61,8 @@ pub enum Error {
     Csv(#[from] csv::Error),
     #[error("Expected a Python module with an `__init__.py` at: `{}`", _0.user_display())]
     MissingModule(PathBuf),
+    #[error("Expected a direct src directory with `__init__.py` at: `{}`", _0.user_display())]
+    MissingDirectSrcModule(PathBuf),
     #[error("Absolute module root is not allowed: `{}`", _0.display())]
     AbsoluteModuleRoot(PathBuf),
     #[error("Inconsistent metadata between prepare and build step: `{0}`")]

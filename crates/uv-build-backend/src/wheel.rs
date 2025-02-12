@@ -10,6 +10,7 @@ use tracing::{debug, trace};
 use walkdir::WalkDir;
 use zip::{CompressionMethod, ZipWriter};
 
+use uv_configuration::PreviewMode;
 use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
 use uv_globfilter::{parse_portable_glob, GlobDirFilter};
@@ -18,6 +19,9 @@ use uv_warnings::warn_user_once;
 
 use crate::metadata::{BuildBackendSettings, DEFAULT_EXCLUDES};
 use crate::{DirectoryWriter, Error, FileList, ListWriter, PyProjectToml};
+
+/// A meta path finder to add support for `src/__init__.py` layouts, which we copy into the venv.
+static UV_DIRECT_SRC_FINDER: &str = include_str!("uv_direct_src_finder.py");
 
 /// Build a wheel from the source tree and place it in the output directory.
 pub fn build_wheel(
@@ -238,6 +242,7 @@ pub fn build_editable(
     wheel_dir: &Path,
     metadata_directory: Option<&Path>,
     uv_version: &str,
+    preview: PreviewMode,
 ) -> Result<WheelFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
@@ -266,19 +271,66 @@ pub fn build_editable(
     debug!("Writing wheel at {}", wheel_path.user_display());
     let mut wheel_writer = ZipDirectoryWriter::new_wheel(File::create(&wheel_path)?);
 
-    debug!("Adding pth file to {}", wheel_path.user_display());
     if settings.module_root.is_absolute() {
         return Err(Error::AbsoluteModuleRoot(settings.module_root.clone()));
     }
     let src_root = source_tree.join(settings.module_root);
-    let module_root = src_root.join(pyproject_toml.name().as_dist_info_name().as_ref());
-    if !module_root.join("__init__.py").is_file() {
-        return Err(Error::MissingModule(module_root));
+    if settings.direct_src {
+        if preview.is_disabled() {
+            warn_user_once!(
+                "The direct src layout is experimental and may be removed without warning"
+            );
+        }
+        debug!(
+            "Adding direct src pth file to {}",
+            wheel_path.user_display()
+        );
+        if !src_root.join("__init__.py").is_file() {
+            return Err(Error::MissingDirectSrcModule(src_root));
+        }
+
+        // Lines in pth files starting with `import ` are executed, so we have to cram all our code
+        // into the same line. Example unfolded code:
+        // ```python
+        // import sys
+        // from _foo_bar_direct_src_support import UvFlatEditableFinder
+        // sys.meta_path.append(UvFlatEditableFinder("foo_bar", "/home/ferris/projects/foo_bar/src"))
+        // ```
+        let load_finder = [
+            "import sys",
+            &format!(
+                "from _{}_direct_src_support import UvDirectSrcFinder",
+                pyproject_toml.name().as_dist_info_name()
+            ),
+            &format!(
+                r#"sys.meta_path.insert(0, UvDirectSrcFinder("{}", "{}"))"#,
+                pyproject_toml.name().as_dist_info_name(),
+                src_root.display()
+            ),
+        ]
+        .join("; ");
+        wheel_writer.write_bytes(
+            &format!("{}.pth", pyproject_toml.name().as_dist_info_name()),
+            load_finder.as_bytes(),
+        )?;
+        wheel_writer.write_bytes(
+            &format!(
+                "_{}_direct_src_support.py",
+                pyproject_toml.name().as_dist_info_name()
+            ),
+            UV_DIRECT_SRC_FINDER.as_bytes(),
+        )?;
+    } else {
+        debug!("Adding pth file to {}", wheel_path.user_display());
+        let module_root = src_root.join(pyproject_toml.name().as_dist_info_name().as_ref());
+        if !module_root.join("__init__.py").is_file() {
+            return Err(Error::MissingModule(module_root));
+        }
+        wheel_writer.write_bytes(
+            &format!("{}.pth", pyproject_toml.name().as_dist_info_name()),
+            src_root.as_os_str().as_encoded_bytes(),
+        )?;
     }
-    wheel_writer.write_bytes(
-        &format!("{}.pth", pyproject_toml.name().as_dist_info_name()),
-        src_root.as_os_str().as_encoded_bytes(),
-    )?;
 
     debug!("Adding metadata files to: `{}`", wheel_path.user_display());
     let dist_info_dir = write_dist_info(

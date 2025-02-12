@@ -838,9 +838,21 @@ pub(crate) struct ToolUv {
 #[derive(Deserialize, Debug, Clone)]
 #[serde(default, rename_all = "kebab-case")]
 pub(crate) struct BuildBackendSettings {
-    /// The directory that contains the module directory, usually `src`, or an empty path when
-    /// using the flat layout over the src layout.
+    /// The directory that contains the module directory relative to the project root.
+    ///
+    /// The default value is `src`, for the `src/<package_name>/__init__.py` layout. It is an empty
+    /// path when using the flat layout `<package_name>/__init__.py` over the src layout.
     pub(crate) module_root: PathBuf,
+
+    /// Enable to direct src layout to enable `src/__init__.py` as sources root.
+    ///
+    /// The direct src layout is a custom uv extension that avoids nesting in the `src` directory,
+    /// instead of `src/<package_name>/__init__.py` or `<package_name>/__init__.py`, it uses
+    /// `src/__init__.py`. The module root still needs to be set to `src`.
+    ///
+    /// Note that this layout always has to go through an installation process, otherwise Python
+    /// consider the module name `src`, not `<package_name>`
+    pub(crate) direct_src: bool,
 
     /// Glob expressions which files and directories to additionally include in the source
     /// distribution.
@@ -873,6 +885,7 @@ impl Default for BuildBackendSettings {
     fn default() -> Self {
         Self {
             module_root: PathBuf::from("src"),
+            direct_src: false,
             source_include: Vec::new(),
             default_excludes: true,
             source_exclude: Vec::new(),
