@@ -246,10 +246,14 @@ pub async fn rename_with_retry(
     }
 }
 
-/// Rename a file, retrying (on Windows) if it fails due to transient operating system errors, in a synchronous context.
-pub fn rename_with_retry_sync(
+/// Rename or copy a file, retrying (on Windows) if it fails due to transient operating system
+/// errors, in a synchronous context.
+#[cfg_attr(not(windows), allow(unused_variables))]
+pub fn with_retry_sync(
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
+    operation_name: &str,
+    operation: impl Fn() -> Result<(), std::io::Error>,
 ) -> Result<(), std::io::Error> {
     #[cfg(windows)]
     {
@@ -261,15 +265,15 @@ pub fn rename_with_retry_sync(
         // See: <https://github.com/astral-sh/uv/issues/1491> & <https://github.com/astral-sh/uv/issues/9531>
         let from = from.as_ref();
         let to = to.as_ref();
-        let rename = || fs_err::rename(from, to);
 
-        rename
+        operation
             .retry(backoff_file_move())
             .sleep(std::thread::sleep)
             .when(|err| err.kind() == std::io::ErrorKind::PermissionDenied)
             .notify(|err, _dur| {
                 warn!(
-                    "Retrying rename from {} to {} due to transient error: {}",
+                    "Retrying {} from {} to {} due to transient error: {}",
+                    operation_name,
                     from.display(),
                     to.display(),
                     err
@@ -280,7 +284,8 @@ pub fn rename_with_retry_sync(
                 std::io::Error::new(
                     std::io::ErrorKind::Other,
                     format!(
-                        "Failed to rename {} to {}: {}",
+                        "Failed {} {} to {}: {}",
+                        operation_name,
                         from.display(),
                         to.display(),
                         err
@@ -290,7 +295,7 @@ pub fn rename_with_retry_sync(
     }
     #[cfg(not(windows))]
     {
-        fs_err::rename(from, to)
+        operation()
     }
 }
 
