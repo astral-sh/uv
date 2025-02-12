@@ -38,8 +38,9 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{do_safe_lock, LockMode, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, detect_conflicts, DependencyGroupsTarget, PlatformState,
-    ProjectEnvironment, ProjectError, ScriptEnvironment, UniversalState,
+    default_dependency_groups, detect_conflicts, script_specification, update_environment,
+    DependencyGroupsTarget, PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment,
+    UniversalState,
 };
 use crate::commands::{diagnostics, ExitStatus};
 use crate::printer::Printer;
@@ -276,6 +277,59 @@ pub(crate) async fn sync(
             )?;
         }
         _ => {}
+    }
+
+    // Special-case: we're syncing a script that doesn't have an associated lockfile. In that case,
+    // we don't create a lockfile, so the resolve-and-install semantics are different.
+    if let SyncTarget::Script(script) = &target {
+        let lockfile = LockTarget::from(script).lock_path();
+        if !lockfile.is_file() {
+            if frozen {
+                return Err(anyhow::anyhow!(
+                    "`uv sync --frozen` requires a script lockfile; run `{}` to lock the script",
+                    format!("uv lock --script {}", script.path.user_display()).green(),
+                ));
+            }
+
+            if locked {
+                return Err(anyhow::anyhow!(
+                    "`uv sync --locked` requires a script lockfile; run `{}` to lock the script",
+                    format!("uv lock --script {}", script.path.user_display()).green(),
+                ));
+            }
+
+            let spec =
+                script_specification(Pep723ItemRef::Script(script), settings.as_ref().into())?
+                    .unwrap_or_default();
+            match update_environment(
+                Deref::deref(&environment).clone(),
+                spec,
+                modifications,
+                &settings,
+                &PlatformState::default(),
+                Box::new(DefaultResolveLogger),
+                Box::new(DefaultInstallLogger),
+                installer_metadata,
+                connectivity,
+                concurrency,
+                native_tls,
+                allow_insecure_host,
+                cache,
+                dry_run,
+                printer,
+                preview,
+            )
+            .await
+            {
+                Ok(..) => return Ok(ExitStatus::Success),
+                Err(ProjectError::Operation(err)) => {
+                    return diagnostics::OperationDiagnostic::native_tls(native_tls)
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                }
+                Err(err) => return Err(err.into()),
+            }
+        }
     }
 
     // Initialize any shared state.

@@ -1868,7 +1868,7 @@ uv sync [OPTIONS]
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--script</code> <i>script</i></dt><dd><p>Sync the virtual environment for the specified PEP 723 Python script, rather than the current project.</p>
+</dd><dt><code>--script</code> <i>script</i></dt><dd><p>Sync the environment for a Python script, rather than the current project.</p>
 
 <p>If provided, uv will sync the dependencies based on the script&#8217;s inline metadata table, in adherence with PEP 723.</p>
 

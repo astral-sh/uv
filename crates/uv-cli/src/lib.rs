@@ -3135,8 +3135,7 @@ pub struct SyncArgs {
     #[arg(long, conflicts_with = "all_packages")]
     pub package: Option<PackageName>,
 
-    /// Sync the virtual environment for the specified PEP 723 Python script, rather than the current
-    /// project.
+    /// Sync the environment for a Python script, rather than the current project.
     ///
     /// If provided, uv will sync the dependencies based on the script's inline metadata table, in
     /// adherence with PEP 723.
@@ -3146,7 +3145,19 @@ pub struct SyncArgs {
         conflicts_with = "all_packages",
         conflicts_with = "package",
         conflicts_with = "no_install_project",
-        conflicts_with = "no_install_workspace"
+        conflicts_with = "no_install_workspace",
+        conflicts_with = "extra",
+        conflicts_with = "all_extras",
+        conflicts_with = "no_extra",
+        conflicts_with = "no_all_extras",
+        conflicts_with = "dev",
+        conflicts_with = "no_dev",
+        conflicts_with = "only_dev",
+        conflicts_with = "group",
+        conflicts_with = "no_group",
+        conflicts_with = "no_default_groups",
+        conflicts_with = "only_group",
+        conflicts_with = "all_groups"
     )]
     pub script: Option<PathBuf>,
 
