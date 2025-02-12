@@ -1705,8 +1705,10 @@ impl<'a> Parser<'a> {
 
     /// Create a new `Parser` for parsing the version in the given byte string.
     fn new(version: &'a [u8]) -> Parser<'a> {
+        static NON_PEP440_COMPAT: LazyLock<bool> =
+            LazyLock::new(|| std::env::var("UV_NON_PEP440_COMPAT").is_ok());
         Parser {
-            compat: std::env::var("UV_NON_PEP440_COMPAT").is_ok(),
+            compat: *NON_PEP440_COMPAT,
             v: version,
             i: 0,
             epoch: 0,
@@ -1724,7 +1726,7 @@ impl<'a> Parser<'a> {
     /// If a version pattern is found, then an error is returned.
     fn parse(self) -> Result<Version, VersionParseError> {
         let compat = self.compat;
-        let version = self.v;
+        let _version = self.v;
         match self.parse_pattern() {
             Ok(vpat) => {
                 if vpat.is_wildcard() {
@@ -1733,13 +1735,13 @@ impl<'a> Parser<'a> {
                     Ok(vpat.into_version())
                 }
             }
-            Err(err) if compat => {
+            Err(_err) if compat => {
                 #[cfg(feature = "tracing")]
                 {
                     tracing::warn!(
                         "Accepted non-PEP 440 version: {} {}",
-                        String::from_utf8_lossy(version),
-                        err
+                        String::from_utf8_lossy(_version),
+                        _err
                     );
                 }
                 Ok(MIN_VERSION.clone())
