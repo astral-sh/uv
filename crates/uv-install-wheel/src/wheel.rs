@@ -490,11 +490,16 @@ fn install_script(
             // Here, two wrappers over rename are clashing: We want to retry for security software
             // blocking the file, but we also need the copy fallback is the problem was trying to
             // move a file cross-drive.
-            match uv_fs::rename_with_retry_sync(&path, &script_absolute) {
+            match uv_fs::with_retry_sync(&path, &script_absolute, "renaming", || {
+                fs_err::rename(&path, &script_absolute)
+            }) {
                 Ok(()) => (),
                 Err(err) => {
                     debug!("Failed to rename, falling back to copy: {err}");
-                    fs_err::copy(&path, &script_absolute)?;
+                    uv_fs::with_retry_sync(&path, &script_absolute, "copying", || {
+                        fs_err::copy(&path, &script_absolute)?;
+                        Ok(())
+                    })?;
                 }
             }
         }
