@@ -253,6 +253,7 @@ pub(crate) async fn remove(
                 allow_insecure_host,
                 &install_mirrors,
                 no_config,
+                active,
                 cache,
                 printer,
             )

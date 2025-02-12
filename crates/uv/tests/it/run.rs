@@ -3514,7 +3514,7 @@ fn run_linked_environment_path() -> Result<()> {
 }
 
 #[test]
-fn run_active_environment() -> Result<()> {
+fn run_active_project_environment() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.11", "3.12"])
         .with_filtered_virtualenv_bin()
         .with_filtered_python_names();
@@ -3613,6 +3613,115 @@ fn run_active_environment() -> Result<()> {
     Removed virtual environment at: foo
     Creating virtual environment at: foo
     Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_active_script_environment() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+
+        import iniconfig
+
+        print("Hello, world!")
+       "#
+    })?;
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(
+            r"environments-v1/main-\w+",
+            "environments-v1/main-[HASH]",
+        )])
+        .collect::<Vec<_>>();
+
+    // Running `uv run --script` with `VIRTUAL_ENV` should _not_ warn.
+    uv_snapshot!(&filters, context.run()
+        .arg("--script")
+        .arg("main.py")
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    // Using `--no-active` should also _not_ warn.
+    uv_snapshot!(&filters, context.run()
+        .arg("--no-active")
+        .arg("--script")
+        .arg("main.py")
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    "###);
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::missing());
+
+    // Using `--active` should create the environment
+    uv_snapshot!(&filters, context.run()
+        .arg("--active")
+        .arg("--script")
+        .arg("main.py")
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::is_dir());
+
+    // Requesting a different Python version should invalidate the environment
+    uv_snapshot!(&filters, context.run()
+        .arg("--active")
+        .arg("-p").arg("3.12")
+        .arg("--script")
+        .arg("main.py")
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);

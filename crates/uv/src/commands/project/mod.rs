@@ -40,6 +40,7 @@ use uv_resolver::{
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
+use uv_static::EnvVars;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
@@ -532,30 +533,88 @@ pub(crate) enum ScriptInterpreter {
 
 impl ScriptInterpreter {
     /// Return the expected virtual environment path for the [`Pep723Script`].
-    pub(crate) fn root(script: Pep723ItemRef<'_>, cache: &Cache) -> PathBuf {
-        let entry = match script {
-            // For local scripts, use a hash of the path to the script.
-            Pep723ItemRef::Script(script) => {
-                let digest = cache_digest(&script.path);
-                if let Some(file_name) = script
-                    .path
-                    .file_stem()
-                    .and_then(|name| name.to_str())
-                    .and_then(cache_name)
-                {
-                    format!("{file_name}-{digest}")
-                } else {
-                    digest
+    ///
+    /// If `--active` is set, the active virtual environment will be preferred.
+    ///
+    /// See: [`Workspace::venv`].
+    pub(crate) fn root(script: Pep723ItemRef<'_>, active: Option<bool>, cache: &Cache) -> PathBuf {
+        /// Resolve the `VIRTUAL_ENV` variable, if any.
+        fn from_virtual_env_variable() -> Option<PathBuf> {
+            let value = std::env::var_os(EnvVars::VIRTUAL_ENV)?;
+
+            if value.is_empty() {
+                return None;
+            };
+
+            let path = PathBuf::from(value);
+            if path.is_absolute() {
+                return Some(path);
+            };
+
+            // Resolve the path relative to current directory.
+            Some(CWD.join(path))
+        }
+
+        // Determine the stable path to the script environment in the cache.
+        let cache_env = {
+            let entry = match script {
+                // For local scripts, use a hash of the path to the script.
+                Pep723ItemRef::Script(script) => {
+                    let digest = cache_digest(&script.path);
+                    if let Some(file_name) = script
+                        .path
+                        .file_stem()
+                        .and_then(|name| name.to_str())
+                        .and_then(cache_name)
+                    {
+                        format!("{file_name}-{digest}")
+                    } else {
+                        digest
+                    }
+                }
+                // For remote scripts, use a hash of the URL.
+                Pep723ItemRef::Remote(.., url) => cache_digest(url),
+                // Otherwise, use a hash of the metadata.
+                Pep723ItemRef::Stdin(metadata) => cache_digest(&metadata.raw),
+            };
+
+            cache
+                .shard(CacheBucket::Environments, entry)
+                .into_path_buf()
+        };
+
+        // If `--active` is set, prefer the active virtual environment.
+        if let Some(from_virtual_env) = from_virtual_env_variable() {
+            if !uv_fs::is_same_file_allow_missing(&from_virtual_env, &cache_env).unwrap_or(false) {
+                match active {
+                    Some(true) => {
+                        debug!(
+                            "Using active virtual environment `{}` instead of script environment `{}`",
+                            from_virtual_env.user_display(),
+                            cache_env.user_display()
+                        );
+                        return from_virtual_env;
+                    }
+                    Some(false) => {}
+                    None => {
+                        warn_user_once!(
+                            "`VIRTUAL_ENV={}` does not match the script environment path `{}` and will be ignored; use `--active` to target the active environment instead",
+                            from_virtual_env.user_display(),
+                            cache_env.user_display()
+                        );
+                    }
                 }
             }
-            // For remote scripts, use a hash of the URL.
-            Pep723ItemRef::Remote(.., url) => cache_digest(url),
-            // Otherwise, use a hash of the metadata.
-            Pep723ItemRef::Stdin(metadata) => cache_digest(&metadata.raw),
-        };
-        cache
-            .shard(CacheBucket::Environments, entry)
-            .into_path_buf()
+        } else {
+            if active.unwrap_or_default() {
+                debug!(
+                    "Use of the active virtual environment was requested, but `VIRTUAL_ENV` is not set"
+                );
+            }
+        }
+
+        // Otherwise, use the cache root.
+        cache_env
     }
 
     /// Discover the interpreter to use for the current [`Pep723Item`].
@@ -569,6 +628,7 @@ impl ScriptInterpreter {
         allow_insecure_host: &[TrustedHost],
         install_mirrors: &PythonInstallMirrors,
         no_config: bool,
+        active: Option<bool>,
         cache: &Cache,
         printer: Printer,
     ) -> Result<Self, ProjectError> {
@@ -581,7 +641,8 @@ impl ScriptInterpreter {
             requires_python,
         } = ScriptPython::from_request(python_request, workspace, script, no_config).await?;
 
-        let root = Self::root(script, cache);
+        let root = Self::root(script, active, cache);
+
         match PythonEnvironment::from_root(&root, cache) {
             Ok(venv) => {
                 if python_request.as_ref().map_or(true, |request| {
@@ -1279,6 +1340,7 @@ impl ScriptEnvironment {
         allow_insecure_host: &[TrustedHost],
         install_mirrors: &PythonInstallMirrors,
         no_config: bool,
+        active: Option<bool>,
         cache: &Cache,
         dry_run: DryRun,
         printer: Printer,
@@ -1296,6 +1358,7 @@ impl ScriptEnvironment {
             allow_insecure_host,
             install_mirrors,
             no_config,
+            active,
             cache,
             printer,
         )
@@ -1306,7 +1369,7 @@ impl ScriptEnvironment {
 
             // Otherwise, create a virtual environment with the discovered interpreter.
             ScriptInterpreter::Interpreter(interpreter) => {
-                let root = ScriptInterpreter::root(script, cache);
+                let root = ScriptInterpreter::root(script, active, cache);
 
                 // Determine a prompt for the environment, in order of preference:
                 //

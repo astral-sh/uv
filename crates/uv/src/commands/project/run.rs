@@ -226,6 +226,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 allow_insecure_host,
                 &install_mirrors,
                 no_config,
+                active.map_or(Some(false), Some),
                 cache,
                 DryRun::Disabled,
                 printer,
@@ -346,6 +347,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     allow_insecure_host,
                     &install_mirrors,
                     no_config,
+                    active.map_or(Some(false), Some),
                     cache,
                     DryRun::Disabled,
                     printer,
@@ -402,6 +404,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     allow_insecure_host,
                     &install_mirrors,
                     no_config,
+                    active.map_or(Some(false), Some),
                     cache,
                     printer,
                 )
