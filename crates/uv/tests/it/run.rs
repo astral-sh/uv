@@ -319,7 +319,6 @@ fn run_pep723_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
     "###);
 
     // But neither invocation should create a lockfile.
@@ -847,8 +846,7 @@ fn run_pep723_script_lock() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + iniconfig==2.0.0
+    Audited 1 package in [TIME]
     "###);
 
     // With a lockfile, running with `--locked` should not warn.
@@ -860,6 +858,7 @@ fn run_pep723_script_lock() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
     "###);
 
     // Modify the metadata.
@@ -895,6 +894,7 @@ fn run_pep723_script_lock() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Audited 1 package in [TIME]
     Traceback (most recent call last):
       File "[TEMP_DIR]/main.py", line 8, in <module>
         import anyio
@@ -3276,8 +3276,6 @@ fn run_gui_script_explicit_windows() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved in [TIME]
-    Audited in [TIME]
     Using executable: pythonw.exe
     "###);
 
@@ -3341,9 +3339,7 @@ fn run_gui_script_explicit_unix() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved in [TIME]
-    Audited in [TIME]
-    Using executable: python3
+    Using executable: python
     "###);
 
     Ok(())

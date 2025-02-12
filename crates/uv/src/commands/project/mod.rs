@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::ops::Deref;
@@ -6,9 +7,9 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tracing::debug;
+use tracing::{debug, warn};
 
-use uv_cache::Cache;
+use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -38,7 +39,7 @@ use uv_resolver::{
     FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolverEnvironment,
     ResolverOutput,
 };
-use uv_scripts::Pep723ItemRef;
+use uv_scripts::{Pep723ItemRef, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -519,9 +520,33 @@ fn validate_script_requires_python(
 
 /// An interpreter suitable for a PEP 723 script.
 #[derive(Debug, Clone)]
-pub(crate) struct ScriptInterpreter(Interpreter);
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum ScriptInterpreter {
+    /// An interpreter to use to create a new script environment.
+    Interpreter(Interpreter),
+    /// An interpreter from an existing script environment.
+    Environment(PythonEnvironment),
+}
 
 impl ScriptInterpreter {
+    /// Return the expected virtual environment path for the [`Pep723Script`].
+    pub(crate) fn root(script: &Pep723Script, cache: &Cache) -> PathBuf {
+        let digest = cache_digest(&script.path);
+        let entry = if let Some(name) = script
+            .path
+            .file_stem()
+            .and_then(|name| name.to_str())
+            .and_then(cache_name)
+        {
+            format!("{name}-{digest}")
+        } else {
+            digest
+        };
+        cache
+            .shard(CacheBucket::Environments, entry)
+            .into_path_buf()
+    }
+
     /// Discover the interpreter to use for the current [`Pep723Item`].
     pub(crate) async fn discover(
         script: Pep723ItemRef<'_>,
@@ -544,6 +569,43 @@ impl ScriptInterpreter {
             python_request,
             requires_python,
         } = ScriptPython::from_request(python_request, workspace, script, no_config).await?;
+
+        // If this is a local script, use a stable virtual environment.
+        if let Pep723ItemRef::Script(script) = script {
+            let root = Self::root(script, cache);
+            match PythonEnvironment::from_root(&root, cache) {
+                Ok(venv) => {
+                    if python_request.as_ref().map_or(true, |request| {
+                        if request.satisfied(venv.interpreter(), cache) {
+                            debug!(
+                                "The script environment's Python version satisfies `{}`",
+                                request.to_canonical_string()
+                            );
+                            true
+                        } else {
+                            debug!(
+                                "The script environment's Python version does not satisfy `{}`",
+                                request.to_canonical_string()
+                            );
+                            false
+                        }
+                    }) {
+                        if let Some((requires_python, ..)) = requires_python.as_ref() {
+                            if requires_python.contains(venv.interpreter().python_version()) {
+                                return Ok(Self::Environment(venv));
+                            }
+                            debug!(
+                                "The script environment's Python version does not meet the script's Python requirement: `{requires_python}`"
+                            );
+                        } else {
+                            return Ok(Self::Environment(venv));
+                        }
+                    }
+                }
+                Err(uv_python::Error::MissingEnvironment(_)) => {}
+                Err(err) => warn!("Ignoring existing script environment: {err}"),
+            };
+        }
 
         let client_builder = BaseClientBuilder::new()
             .connectivity(connectivity)
@@ -578,12 +640,24 @@ impl ScriptInterpreter {
             warn_user!("{err}");
         }
 
-        Ok(Self(interpreter))
+        Ok(Self::Interpreter(interpreter))
     }
 
     /// Consume the [`PythonInstallation`] and return the [`Interpreter`].
     pub(crate) fn into_interpreter(self) -> Interpreter {
-        self.0
+        match self {
+            ScriptInterpreter::Interpreter(interpreter) => interpreter,
+            ScriptInterpreter::Environment(venv) => venv.into_interpreter(),
+        }
+    }
+
+    /// Grab a file lock for the script to prevent concurrent writes across processes.
+    pub(crate) async fn lock(script: &Pep723Script) -> Result<LockedFile, std::io::Error> {
+        LockedFile::acquire(
+            std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&script.path))),
+            script.path.simplified_display(),
+        )
+        .await
     }
 }
 
@@ -1137,6 +1211,99 @@ impl Deref for ProjectEnvironment {
             Self::WouldReplace(_, environment, _) => environment,
             Self::WouldCreate(_, environment, _) => environment,
         }
+    }
+}
+
+/// The Python environment for a script.
+#[derive(Debug)]
+struct ScriptEnvironment(PythonEnvironment);
+
+impl ScriptEnvironment {
+    /// Initialize a virtual environment for a PEP 723 script.
+    pub(crate) async fn get_or_init(
+        script: &Pep723Script,
+        python_request: Option<PythonRequest>,
+        python_preference: PythonPreference,
+        python_downloads: PythonDownloads,
+        connectivity: Connectivity,
+        native_tls: bool,
+        allow_insecure_host: &[TrustedHost],
+        install_mirrors: &PythonInstallMirrors,
+        no_config: bool,
+        cache: &Cache,
+        printer: Printer,
+    ) -> Result<Self, ProjectError> {
+        // Lock the script environment to avoid synchronization issues.
+        let _lock = ScriptInterpreter::lock(script).await?;
+
+        match ScriptInterpreter::discover(
+            Pep723ItemRef::Script(script),
+            python_request,
+            python_preference,
+            python_downloads,
+            connectivity,
+            native_tls,
+            allow_insecure_host,
+            install_mirrors,
+            no_config,
+            cache,
+            printer,
+        )
+        .await?
+        {
+            // If we found an existing, compatible environment, use it.
+            ScriptInterpreter::Environment(environment) => Ok(Self(environment)),
+
+            // Otherwise, create a virtual environment with the discovered interpreter.
+            ScriptInterpreter::Interpreter(interpreter) => {
+                let root = ScriptInterpreter::root(script, cache);
+
+                // Remove the existing virtual environment.
+                match fs_err::remove_dir_all(&root) {
+                    Ok(()) => {
+                        debug!(
+                            "Removed virtual environment at: {}",
+                            root.user_display().cyan()
+                        );
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(err) => return Err(err.into()),
+                };
+
+                debug!(
+                    "Creating script environment at: {}",
+                    root.user_display().cyan()
+                );
+
+                // Determine a prompt for the environment, in order of preference:
+                //
+                // 1) The name of the script
+                // 2) No prompt
+                let prompt = script
+                    .path
+                    .file_name()
+                    .map(|f| f.to_string_lossy().to_string())
+                    .map(uv_virtualenv::Prompt::Static)
+                    .unwrap_or(uv_virtualenv::Prompt::None);
+
+                let environment = uv_virtualenv::create_venv(
+                    &root,
+                    interpreter,
+                    prompt,
+                    false,
+                    false,
+                    false,
+                    false,
+                )?;
+
+                Ok(Self(environment))
+            }
+        }
+    }
+
+    /// Convert the [`ScriptEnvironment`] into a [`PythonEnvironment`].
+    pub(crate) fn into_environment(self) -> PythonEnvironment {
+        self.0
     }
 }
 
@@ -2092,5 +2259,58 @@ fn warn_on_requirements_txt_setting(
 
     if !no_build.is_none() && settings.build_options.no_build() != no_build {
         warn_user_once!("Ignoring `--no-binary` setting from requirements file. Instead, use the `--no-build` command-line argument, or set `no-build` in a `uv.toml` or `pyproject.toml` file.");
+    }
+}
+
+/// Normalize a filename for use in a cache entry.
+///
+/// Replaces non-alphanumeric characters with dashes, and lowercases the filename.
+fn cache_name(name: &str) -> Option<Cow<'_, str>> {
+    if name.bytes().all(|c| matches!(c, b'0'..=b'9' | b'a'..=b'f')) {
+        return if name.is_empty() {
+            None
+        } else {
+            Some(Cow::Borrowed(name))
+        };
+    }
+    let mut normalized = String::with_capacity(name.len());
+    let mut dash = false;
+    for char in name.bytes() {
+        match char {
+            b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z' => {
+                dash = false;
+                normalized.push(char.to_ascii_lowercase() as char);
+            }
+            _ => {
+                if !dash {
+                    normalized.push('-');
+                    dash = true;
+                }
+            }
+        }
+    }
+    if normalized.ends_with('-') {
+        normalized.pop();
+    }
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(Cow::Owned(normalized))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cache_name() {
+        assert_eq!(cache_name("foo"), Some("foo".into()));
+        assert_eq!(cache_name("foo-bar"), Some("foo-bar".into()));
+        assert_eq!(cache_name("foo_bar"), Some("foo-bar".into()));
+        assert_eq!(cache_name("foo-bar_baz"), Some("foo-bar-baz".into()));
+        assert_eq!(cache_name("foo-bar_baz_"), Some("foo-bar-baz".into()));
+        assert_eq!(cache_name("foo-_bar_baz"), Some("foo-bar-baz".into()));
+        assert_eq!(cache_name("_+-_"), None);
     }
 }
