@@ -21,7 +21,7 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_distribution_types::{Index, IndexName, UnresolvedRequirement, VersionId};
+use uv_distribution_types::{Index, IndexName, IndexUrls, UnresolvedRequirement, VersionId};
 use uv_fs::Simplified;
 use uv_git::{GitReference, GIT_STORE};
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
@@ -561,10 +561,11 @@ pub(crate) async fn add(
         });
     }
 
-    // Add any indexes that were provided on the command-line.
+    // Add any indexes that were provided on the command-line, in priority order.
     if !raw_sources {
-        for index in indexes {
-            toml.add_index(&index)?;
+        let urls = IndexUrls::from_indexes(indexes);
+        for index in urls.defined_indexes() {
+            toml.add_index(index)?;
         }
     }
 

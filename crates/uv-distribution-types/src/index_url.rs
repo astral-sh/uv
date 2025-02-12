@@ -385,6 +385,13 @@ pub struct IndexUrls {
 }
 
 impl<'a> IndexUrls {
+    pub fn from_indexes(indexes: Vec<Index>) -> Self {
+        Self {
+            indexes,
+            no_index: false,
+        }
+    }
+
     /// Return the default [`Index`] entry.
     ///
     /// If `--no-index` is set, return `None`.
@@ -431,6 +438,44 @@ impl<'a> IndexUrls {
         self.implicit_indexes()
             .chain(self.default_index())
             .filter(|index| !index.explicit)
+    }
+
+    /// Return an iterator over all user-defined [`Index`] entries in order.
+    ///
+    /// Prioritizes the `[tool.uv.index]` definitions over the `--extra-index-url` definitions
+    /// over the `--index-url` definition.
+    ///
+    /// Unlike [`IndexUrl::indexes`], this includes explicit indexes and does _not_ insert PyPI
+    /// as a fallback default.
+    ///
+    /// If `no_index` was enabled, then this always returns an empty
+    /// iterator.
+    pub fn defined_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
+        if self.no_index {
+            Either::Left(std::iter::empty())
+        } else {
+            Either::Right(
+                {
+                    let mut seen = FxHashSet::default();
+                    self.indexes
+                        .iter()
+                        .filter(move |index| {
+                            index.name.as_ref().map_or(true, |name| seen.insert(name))
+                        })
+                        .filter(|index| !index.default)
+                }
+                .chain({
+                    let mut seen = FxHashSet::default();
+                    self.indexes
+                        .iter()
+                        .filter(move |index| {
+                            index.name.as_ref().map_or(true, |name| seen.insert(name))
+                        })
+                        .find(|index| index.default)
+                        .into_iter()
+                }),
+            )
+        }
     }
 }
 
