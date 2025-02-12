@@ -2,8 +2,8 @@ use std::borrow::Cow;
 use std::path::Path;
 use std::str::FromStr;
 
-use crate::commands::project::ProjectError;
 use itertools::{Either, Itertools};
+
 use uv_configuration::ExtrasSpecification;
 use uv_distribution_types::Index;
 use uv_normalize::PackageName;
@@ -12,6 +12,8 @@ use uv_resolver::{Installable, Lock, Package};
 use uv_scripts::Pep723Script;
 use uv_workspace::pyproject::{DependencyGroupSpecifier, Source, Sources, ToolUvSources};
 use uv_workspace::Workspace;
+
+use crate::commands::project::ProjectError;
 
 /// A target that can be installed from a lockfile.
 #[derive(Debug, Copy, Clone)]
@@ -241,13 +243,13 @@ impl<'lock> InstallTarget<'lock> {
                 if extras.is_empty() {
                     return Ok(());
                 }
-                extras
+                Either::Left(extras.iter())
             }
             ExtrasSpecification::Exclude(extras) => {
                 if extras.is_empty() {
                     return Ok(());
                 }
-                &Vec::from_iter(extras.clone())
+                Either::Right(extras.iter())
             }
             _ => return Ok(()),
         };
@@ -287,7 +289,11 @@ impl<'lock> InstallTarget<'lock> {
                     }
                 }
             }
-            Self::Script { .. } => return Err(ProjectError::MissingExtraScript(extras[0].clone())),
+            Self::Script { .. } => {
+                // We shouldn't get here if the list is empty so we can assume it isn't
+                let extra = extras.into_iter().next().expect("non-empty extras").clone();
+                return Err(ProjectError::MissingExtraScript(extra));
+            }
         }
 
         Ok(())

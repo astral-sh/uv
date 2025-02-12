@@ -368,8 +368,6 @@ pub(super) async fn do_sync(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<(), ProjectError> {
-    target.validate_extras(extras)?;
-
     // Extract the project settings.
     let InstallerSettingsRef {
         index_locations,
@@ -400,6 +398,7 @@ pub(super) async fn do_sync(
     }
 
     // Validate that the set of requested extras and development groups are compatible.
+    target.validate_extras(extras)?;
     detect_conflicts(target.lock(), extras, dev)?;
 
     // Determine the markers to use for resolution.
