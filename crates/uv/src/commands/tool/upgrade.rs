@@ -7,7 +7,7 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, PreviewMode, TrustedHost};
+use uv_configuration::{Concurrency, DryRun, PreviewMode, TrustedHost};
 use uv_fs::CWD;
 use uv_normalize::PackageName;
 use uv_pypi_types::Requirement;
@@ -22,6 +22,7 @@ use uv_tool::InstalledTools;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, SummaryResolveLogger, UpgradeInstallLogger,
 };
+use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{
     resolve_environment, sync_environment, update_environment, EnvironmentUpdate, PlatformState,
 };
@@ -314,6 +315,7 @@ async fn upgrade_tool(
         let environment = sync_environment(
             environment,
             &resolution.into(),
+            Modifications::Exact,
             settings.as_ref().into(),
             &state,
             Box::new(DefaultInstallLogger),
@@ -339,6 +341,7 @@ async fn upgrade_tool(
         } = update_environment(
             environment,
             spec,
+            Modifications::Exact,
             &settings,
             &state,
             Box::new(SummaryResolveLogger),
@@ -349,6 +352,7 @@ async fn upgrade_tool(
             native_tls,
             allow_insecure_host,
             cache,
+            DryRun::Disabled,
             printer,
             preview,
         )

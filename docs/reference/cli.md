@@ -299,8 +299,10 @@ uv run [OPTIONS] [COMMAND]
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -485,7 +487,7 @@ uv run [OPTIONS] [COMMAND]
 
 <p>When used in a project, these dependencies will be layered on top of the project environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified by the project.</p>
 
-</dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Run with the given packages installed as editables.</p>
+</dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Run with the given packages installed in editable mode.</p>
 
 <p>When used in a project, these dependencies will be layered on top of the project environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified by the project.</p>
 
@@ -958,8 +960,10 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -1319,8 +1323,10 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -1692,8 +1698,10 @@ uv sync [OPTIONS]
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -1860,6 +1868,10 @@ uv sync [OPTIONS]
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
+</dd><dt><code>--script</code> <i>script</i></dt><dd><p>Sync the environment for a Python script, rather than the current project.</p>
+
+<p>If provided, uv will sync the dependencies based on the script&#8217;s inline metadata table, in adherence with PEP 723.</p>
+
 </dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
 </dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
@@ -2059,8 +2071,10 @@ uv lock [OPTIONS]
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -2404,8 +2418,10 @@ uv export [OPTIONS]
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -2782,8 +2798,10 @@ uv tree [OPTIONS]
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -3255,8 +3273,10 @@ uv tool run [OPTIONS] [COMMAND]
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -3381,7 +3401,7 @@ uv tool run [OPTIONS] [COMMAND]
 
 </dd><dt><code>--with</code> <i>with</i></dt><dd><p>Run with the given packages installed</p>
 
-</dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Run with the given packages installed as editables</p>
+</dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Run with the given packages installed in editable mode</p>
 
 <p>When used in a project, these dependencies will be layered on top of the uv tool&#8217;s environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified.</p>
 
@@ -3474,7 +3494,9 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
-</dd><dt><code>--editable</code>, <code>-e</code></dt><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
+</dd><dt><code>--editable</code>, <code>-e</code></dt><dd><p>Install the target package in editable mode, such that changes in the package&#8217;s source directory are reflected without reinstallation</p>
+
+</dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
 
@@ -3582,8 +3604,10 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -3715,7 +3739,7 @@ uv tool install [OPTIONS] <PACKAGE>
 
 </dd><dt><code>--with</code> <i>with</i></dt><dd><p>Include the following extra requirements</p>
 
-</dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Include the given packages as editables</p>
+</dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Include the given packages in editable mode</p>
 
 </dd><dt><code>--with-requirements</code> <i>with-requirements</i></dt><dd><p>Run all requirements listed in the given <code>requirements.txt</code> files</p>
 
@@ -3905,8 +3929,10 @@ uv tool upgrade [OPTIONS] <NAME>...
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -4742,13 +4768,13 @@ uv python list [OPTIONS]
 
 Download and install Python versions.
 
-Multiple Python versions may be requested.
-
-Supports CPython and PyPy. CPython distributions are downloaded from the Astral `python-build-standalone` project. PyPy distributions are downloaded from `python.org`.
+Supports CPython and PyPy. CPython distributions are downloaded from the Astral `python-build-standalone` project. PyPy distributions are downloaded from `python.org`. The available Python versions are bundled with each uv release. To install new Python versions, you may need upgrade uv.
 
 Python versions are installed into the uv Python directory, which can be retrieved with `uv python dir`.
 
 A `python` executable is not made globally available, managed Python versions are only used in uv commands or in active virtual environments. There is experimental support for adding Python executables to the `PATH` — use the `--preview` flag to enable this behavior.
+
+Multiple Python versions may be requested.
 
 See `uv help python` to view supported request formats.
 
@@ -8347,8 +8373,10 @@ uv build [OPTIONS] [SRC]
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>

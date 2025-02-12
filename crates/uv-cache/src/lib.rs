@@ -109,6 +109,11 @@ impl CacheShard {
         fs_err::create_dir_all(self.as_ref())?;
         LockedFile::acquire(self.join(".lock"), self.display()).await
     }
+
+    /// Return the [`CacheShard`] as a [`PathBuf`].
+    pub fn into_path_buf(self) -> PathBuf {
+        self.0
+    }
 }
 
 impl AsRef<Path> for CacheShard {

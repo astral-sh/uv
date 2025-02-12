@@ -160,14 +160,19 @@ impl Index {
     /// For indexes with a `/simple` endpoint, this is simply the URL with the final segment
     /// removed. This is useful, e.g., for credential propagation to other endpoints on the index.
     pub fn root_url(&self) -> Option<Url> {
-        let segments = self.raw_url().path_segments()?;
-        let last = segments.last()?;
+        let mut segments = self.raw_url().path_segments()?;
+        let last = match segments.next_back()? {
+            // If the last segment is empty due to a trailing `/`, skip it (as in `pop_if_empty`)
+            "" => segments.next_back()?,
+            segment => segment,
+        };
+
         if !last.eq_ignore_ascii_case("simple") {
             return None;
         }
 
         let mut url = self.raw_url().clone();
-        url.path_segments_mut().ok()?.pop();
+        url.path_segments_mut().ok()?.pop_if_empty().pop();
         Some(url)
     }
 

@@ -8358,6 +8358,52 @@ fn lock_multiple_indexes_same_realm_different_credentials() -> Result<()> {
     Ok(())
 }
 
+// Same as [`lock_multiple_indexes_same_realm_different_credentials`], but with trailing slashes
+// on the index URL
+#[test]
+fn lock_multiple_indexes_same_realm_different_credentials_trailing_slash() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig", "anyio"]
+
+        [tool.uv.sources]
+        iniconfig = { index = "internal-proxy-heron" }
+        anyio = { index = "internal-proxy-eagle" }
+
+        [[tool.uv.index]]
+        name = "internal-proxy-heron"
+        url = "https://pypi-proxy.fly.dev/basic-auth-heron/simple/"
+
+        [[tool.uv.index]]
+        name = "internal-proxy-eagle"
+        url = "https://pypi-proxy.fly.dev/basic-auth-eagle/simple/"
+        "#,
+    )?;
+
+    // Provide credentials via environment variables.
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::index_username("INTERNAL_PROXY_HERON"), "public")
+        .env(EnvVars::index_password("INTERNAL_PROXY_HERON"), "heron")
+        .env(EnvVars::index_username("INTERNAL_PROXY_EAGLE"), "public")
+        .env(EnvVars::index_password("INTERNAL_PROXY_EAGLE"), "eagle"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
 /// Resolve against an index that uses relative links.
 #[test]
 fn lock_relative_index() -> Result<()> {
@@ -17174,7 +17220,7 @@ fn lock_unsupported_version() -> Result<()> {
 
     ----- stderr -----
     error: Failed to parse `uv.lock`, which uses an unsupported schema version (v2, but only v1 is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.
-      Caused by: Dependency `iniconfig` has missing `version` field but has more than one matching package
+      Caused by: Dependency `iniconfig` has missing `source` field but has more than one matching package
     "###);
 
     Ok(())

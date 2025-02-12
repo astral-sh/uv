@@ -1,10 +1,12 @@
-use owo_colors::OwoColorize;
 use std::borrow::Cow;
 use std::env;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+use owo_colors::OwoColorize;
 use tracing::debug;
+
 use uv_cache::Cache;
 use uv_cache_key::cache_digest;
 use uv_fs::{LockedFile, Simplified};

@@ -217,6 +217,25 @@ print(Point)
 is not installed — see the documentation on [Python versions](../concepts/python-versions.md) for
 more details.
 
+## Using alternative package indexes
+
+If you wish to use an alternative [package index](../configuration/indexes.md) to resolve
+dependencies, you can provide the index with the `--index` option:
+
+```console
+$ uv add --index "https://example.com/simple" --script example.py 'requests<3' 'rich'
+```
+
+This will include the package data in the inline metadata:
+
+```python
+# [[tool.uv.index]]
+# url = "https://example.com/simple"
+```
+
+If you require authentication to access the package index, then please refer to the
+[package index](../configuration/indexes.md) documentation.
+
 ## Locking dependencies
 
 uv supports locking dependencies for PEP 723 scripts using the `uv.lock` file format. Unlike with

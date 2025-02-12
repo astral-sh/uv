@@ -192,7 +192,9 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                         return Err(Error::from_dist(dist, err, resolution));
                     }
                     if let Some(version) = dist.version() {
-                        if *version != cached.filename().version {
+                        if *version != cached.filename().version
+                            && *version != cached.filename().version.clone().without_local()
+                        {
                             let err = uv_distribution::Error::WheelMetadataVersionMismatch {
                                 given: version.clone(),
                                 metadata: cached.filename().version.clone(),

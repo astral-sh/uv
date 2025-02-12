@@ -968,6 +968,7 @@ pub(crate) struct SyncSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) dry_run: DryRun,
+    pub(crate) script: Option<PathBuf>,
     pub(crate) active: Option<bool>,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: DevGroupsSpecification,
@@ -1015,6 +1016,7 @@ impl SyncSettings {
             refresh,
             all_packages,
             package,
+            script,
             python,
         } = args;
         let install_mirrors = filesystem
@@ -1031,6 +1033,7 @@ impl SyncSettings {
             locked,
             frozen,
             dry_run: DryRun::from_args(dry_run),
+            script,
             active: flag(active, no_active),
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),

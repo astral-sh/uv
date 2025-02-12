@@ -172,16 +172,16 @@ pub(crate) fn update_sysconfig(
 
         // Update the `pkgconfig` file in-memory.
         let contents = fs_err::read_to_string(&pkgconfig)?;
-        let contents = patch_pkgconfig(&contents, &real_prefix);
-
-        // Write the updated `pkgconfig` file.
-        let mut file = fs_err::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .create(true)
-            .open(&pkgconfig)?;
-        file.write_all(contents.as_bytes())?;
-        file.sync_data()?;
+        if let Some(new_contents) = patch_pkgconfig(&contents) {
+            // Write the updated `pkgconfig` file.
+            let mut file = fs_err::OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .create(true)
+                .open(&pkgconfig)?;
+            file.write_all(new_contents.as_bytes())?;
+            file.sync_data()?;
+        }
     }
 
     Ok(())
@@ -327,12 +327,17 @@ fn find_pkgconfigs(
 
 /// Patch the given `pkgconfig` contents.
 ///
-/// Returns the updated contents.
-fn patch_pkgconfig(contents: &str, real_prefix: &Path) -> String {
-    contents
+/// Returns the updated contents, if an update is needed.
+fn patch_pkgconfig(contents: &str) -> Option<String> {
+    let mut changed = false;
+    let new_contents = contents
         .lines()
         .map(|line| {
-            // Given, e.g., `prefix=/install`, replace with `prefix=/real/prefix`.
+            // python-build-standalone is compiled with a prefix of
+            // /install. Replace lines like `prefix=/install` with
+            // `prefix=${pcfiledir}/../..` (since the .pc file is in
+            // lib/pkgconfig/). Newer versions of python-build-standalone
+            // already have this change.
             let Some((prefix, suffix)) = line.split_once('=') else {
                 return Cow::Borrowed(line);
             };
@@ -347,9 +352,15 @@ fn patch_pkgconfig(contents: &str, real_prefix: &Path) -> String {
                 return Cow::Borrowed(line);
             }
 
-            Cow::Owned(format!("{}={}", prefix, real_prefix.display()))
+            changed = true;
+            Cow::Owned(format!("{prefix}=${{pcfiledir}}/../.."))
         })
-        .join("\n")
+        .join("\n");
+    if changed {
+        Some(new_contents)
+    } else {
+        None
+    }
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -479,12 +490,11 @@ mod tests {
             "
         };
 
-        let real_prefix = Path::new("/real/prefix");
-        let pkgconfig = patch_pkgconfig(pkgconfig, real_prefix);
+        let pkgconfig = patch_pkgconfig(pkgconfig).unwrap();
 
         insta::assert_snapshot!(pkgconfig, @r###"
         # See: man pkg-config
-        prefix=/real/prefix
+        prefix=${pcfiledir}/../..
         exec_prefix=${prefix}
         libdir=${exec_prefix}/lib
         includedir=${prefix}/include

@@ -35,7 +35,7 @@ password field of the URL. A username must be included as well, but can be any s
 For example, with the token stored in the `$ADO_PAT` environment variable, set the index URL with:
 
 ```console
-$ export UV_EXTRA_INDEX_URL=https://dummy:$ADO_PAT@pkgs.dev.azure.com/{organisation}/{project}/_packaging/{feedName}/pypi/simple/
+$ export UV_INDEX=https://dummy:$ADO_PAT@pkgs.dev.azure.com/{organisation}/{project}/_packaging/{feedName}/pypi/simple/
 ```
 
 ### Using `keyring`
@@ -66,7 +66,7 @@ $ # Enable keyring authentication
 $ export UV_KEYRING_PROVIDER=subprocess
 
 $ # Configure the index URL with the username
-$ export UV_EXTRA_INDEX_URL=https://VssSessionToken@pkgs.dev.azure.com/{organisation}/{project}/_packaging/{feedName}/pypi/simple/
+$ export UV_INDEX=https://VssSessionToken@pkgs.dev.azure.com/{organisation}/{project}/_packaging/{feedName}/pypi/simple/
 ```
 
 ## Google Artifact Registry
@@ -90,7 +90,7 @@ index URL with:
 
 ```bash
 export ARTIFACT_REGISTRY_TOKEN=$(gcloud auth application-default print-access-token)
-export UV_EXTRA_INDEX_URL=https://oauth2accesstoken:$ARTIFACT_REGISTRY_TOKEN@{region}-python.pkg.dev/{projectId}/{repositoryName}/simple
+export UV_INDEX=https://oauth2accesstoken:$ARTIFACT_REGISTRY_TOKEN@{region}-python.pkg.dev/{projectId}/{repositoryName}/simple
 ```
 
 ### Using `keyring`
@@ -118,7 +118,7 @@ uv tool install keyring --with keyrings.google-artifactregistry-auth
 export UV_KEYRING_PROVIDER=subprocess
 
 # Configure the index URL with the username
-export UV_EXTRA_INDEX_URL=https://oauth2accesstoken@{region}-python.pkg.dev/{projectId}/{repositoryName}/simple
+export UV_INDEX=https://oauth2accesstoken@{region}-python.pkg.dev/{projectId}/{repositoryName}/simple
 ```
 
 ## AWS CodeArtifact
@@ -156,7 +156,7 @@ export AWS_CODEARTIFACT_TOKEN="$(
 And configure the index URL:
 
 ```bash
-export UV_EXTRA_INDEX_URL="https://aws:${AWS_CODEARTIFACT_TOKEN}@${AWS_DOMAIN}-${AWS_ACCOUNT_ID}.d.codeartifact.${AWS_REGION}.amazonaws.com/pypi/${AWS_CODEARTIFACT_REPOSITORY}/simple/"
+export UV_INDEX="https://aws:${AWS_CODEARTIFACT_TOKEN}@${AWS_DOMAIN}-${AWS_ACCOUNT_ID}.d.codeartifact.${AWS_REGION}.amazonaws.com/pypi/${AWS_CODEARTIFACT_REPOSITORY}/simple/"
 ```
 
 ### Publishing packages

@@ -160,7 +160,10 @@ pub(crate) fn simplify_conflict_markers(
                 set.insert(ConflictItem::from((package.clone(), group.clone())));
             }
         }
-        let sets = activated.get(&parent_index).cloned().unwrap_or_default();
+        let sets = activated
+            .get(&parent_index)
+            .cloned()
+            .unwrap_or_else(|| vec![FxHashSet::default()]);
         for child_edge in graph.edges_directed(parent_index, Direction::Outgoing) {
             let mut change = false;
             for set in sets.clone() {

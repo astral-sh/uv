@@ -221,7 +221,7 @@ pub(crate) async fn remove(
                 AddTarget::Project(project, Box::new(PythonTarget::Interpreter(interpreter)))
             } else {
                 // Discover or create the virtual environment.
-                let venv = ProjectEnvironment::get_or_init(
+                let environment = ProjectEnvironment::get_or_init(
                     project.workspace(),
                     python.as_deref().map(PythonRequest::parse),
                     &install_mirrors,
@@ -237,9 +237,9 @@ pub(crate) async fn remove(
                     printer,
                 )
                 .await?
-                .into_environment();
+                .into_environment()?;
 
-                AddTarget::Project(project, Box::new(PythonTarget::Environment(venv)))
+                AddTarget::Project(project, Box::new(PythonTarget::Environment(environment)))
             }
         }
         RemoveTarget::Script(script) => {

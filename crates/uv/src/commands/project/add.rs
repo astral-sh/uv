@@ -21,7 +21,7 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_distribution_types::{Index, IndexName, UnresolvedRequirement, VersionId};
+use uv_distribution_types::{Index, IndexName, IndexUrls, UnresolvedRequirement, VersionId};
 use uv_fs::Simplified;
 use uv_git::{GitReference, GIT_STORE};
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
@@ -223,7 +223,7 @@ pub(crate) async fn add(
             AddTarget::Project(project, Box::new(PythonTarget::Interpreter(interpreter)))
         } else {
             // Discover or create the virtual environment.
-            let venv = ProjectEnvironment::get_or_init(
+            let environment = ProjectEnvironment::get_or_init(
                 project.workspace(),
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
@@ -239,9 +239,9 @@ pub(crate) async fn add(
                 printer,
             )
             .await?
-            .into_environment();
+            .into_environment()?;
 
-            AddTarget::Project(project, Box::new(PythonTarget::Environment(venv)))
+            AddTarget::Project(project, Box::new(PythonTarget::Environment(environment)))
         }
     };
 
@@ -561,10 +561,11 @@ pub(crate) async fn add(
         });
     }
 
-    // Add any indexes that were provided on the command-line.
+    // Add any indexes that were provided on the command-line, in priority order.
     if !raw_sources {
-        for index in indexes {
-            toml.add_index(&index)?;
+        let urls = IndexUrls::from_indexes(indexes);
+        for index in urls.defined_indexes() {
+            toml.add_index(index)?;
         }
     }
 
