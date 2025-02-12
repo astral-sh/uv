@@ -7002,25 +7002,25 @@ fn sync_script() -> Result<()> {
         .filters()
         .into_iter()
         .chain(vec![(
-            r"environments-v1/script-\w+",
-            "environments-v1/script-[HASH]",
+            r"environments-v2/script-\w+",
+            "environments-v2/script-[HASH]",
         )])
         .collect::<Vec<_>>();
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Creating script environment at: [CACHE_DIR]/environments-v1/script-[HASH]
+    Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     // If a lockfile didn't exist already, `uv sync --script` shouldn't create one.
     assert!(!context.temp_dir.child("uv.lock").exists());
@@ -7039,18 +7039,18 @@ fn sync_script() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using script environment at: [CACHE_DIR]/environments-v1/script-[HASH]
+    Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Modify the `requires-python`.
     script.write_str(indoc! { r#"
@@ -7066,13 +7066,13 @@ fn sync_script() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Recreating script environment at: [CACHE_DIR]/environments-v1/script-[HASH]
+    Recreating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved 6 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 6 packages in [TIME]
@@ -7082,28 +7082,28 @@ fn sync_script() -> Result<()> {
      + iniconfig==2.0.0
      + sniffio==1.3.1
      + typing-extensions==4.10.0
-    "###);
+    ");
 
     // `--locked` and `--frozen` should fail with helpful error messages.
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").arg("--locked"), @r###"
+    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").arg("--locked"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Using script environment at: [CACHE_DIR]/environments-v1/script-[HASH]
+    Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     error: `uv sync --locked` requires a script lockfile; run `uv lock --script script.py` to lock the script
-    "###);
+    ");
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").arg("--frozen"), @r###"
+    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").arg("--frozen"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Using script environment at: [CACHE_DIR]/environments-v1/script-[HASH]
+    Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     error: `uv sync --frozen` requires a script lockfile; run `uv lock --script script.py` to lock the script
-    "###);
+    ");
 
     Ok(())
 }
@@ -7129,8 +7129,8 @@ fn sync_locked_script() -> Result<()> {
         .filters()
         .into_iter()
         .chain(vec![(
-            r"environments-v1/script-\w+",
-            "environments-v1/script-[HASH]",
+            r"environments-v2/script-\w+",
+            "environments-v2/script-[HASH]",
         )])
         .collect::<Vec<_>>();
 
@@ -7194,20 +7194,20 @@ fn sync_locked_script() -> Result<()> {
         );
     });
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Creating script environment at: [CACHE_DIR]/environments-v1/script-[HASH]
+    Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     // Modify the script's dependencies.
     script.write_str(indoc! { r#"
@@ -7224,29 +7224,29 @@ fn sync_locked_script() -> Result<()> {
     })?;
 
     // Re-run with `--locked`.
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").arg("--locked"), @r###"
+    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").arg("--locked"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Using script environment at: [CACHE_DIR]/environments-v1/script-[HASH]
+    Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    ");
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using script environment at: [CACHE_DIR]/environments-v1/script-[HASH]
+    Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     let lock = context.read("script.py.lock");
 
@@ -7325,24 +7325,24 @@ fn sync_locked_script() -> Result<()> {
     })?;
 
     // Re-run with `--locked`.
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").arg("--locked"), @r###"
+    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").arg("--locked"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Recreating script environment at: [CACHE_DIR]/environments-v1/script-[HASH]
+    Recreating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved 6 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    ");
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using script environment at: [CACHE_DIR]/environments-v1/script-[HASH]
+    Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved 6 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 6 packages in [TIME]
@@ -7352,7 +7352,7 @@ fn sync_locked_script() -> Result<()> {
      + iniconfig==2.0.0
      + sniffio==1.3.1
      + typing-extensions==4.10.0
-    "###);
+    ");
 
     Ok(())
 }
