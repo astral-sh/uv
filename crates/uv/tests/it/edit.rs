@@ -9480,7 +9480,7 @@ fn repeated_index_cli_environment_variable() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -9505,8 +9505,9 @@ fn repeated_index_cli_environment_variable() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0" }]
-        "###
+        "#
         );
     });
 
@@ -9589,7 +9590,7 @@ fn repeated_index_cli() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -9614,8 +9615,9 @@ fn repeated_index_cli() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0" }]
-        "###
+        "#
         );
     });
 
@@ -9698,7 +9700,7 @@ fn repeated_index_cli_reversed() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -9723,8 +9725,9 @@ fn repeated_index_cli_reversed() -> Result<()> {
         ]
 
         [package.metadata]
+        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0" }]
-        "###
+        "#
         );
     });
 

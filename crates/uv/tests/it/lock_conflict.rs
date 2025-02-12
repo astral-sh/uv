@@ -7392,7 +7392,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
     }, {
         assert_snapshot!(
             lock,
-            @r###"
+            @r#"
         version = 1
         requires-python = ">=3.10"
         resolution-markers = [
@@ -9734,6 +9734,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
         ]
 
         [package.metadata]
+        provides-extras = ["chgnet", "m3gnet"]
         requires-dist = [
             { name = "chgnet", marker = "extra == 'chgnet'", specifier = "==0.4.0" },
             { name = "mace-torch", specifier = "==0.3.9" },
@@ -10067,7 +10068,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
             { url = "https://files.pythonhosted.org/packages/f5/d5/688db678e987c3e0fb17867970700b92603cadf36c56e5fb08f23e822a0c/yarl-1.18.3-cp313-cp313-win_amd64.whl", hash = "sha256:578e281c393af575879990861823ef19d66e2b1d0098414855dd367e234f5b3c", size = 315723 },
             { url = "https://files.pythonhosted.org/packages/f5/4b/a06e0ec3d155924f77835ed2d167ebd3b211a7b0853da1cf8d8414d784ef/yarl-1.18.3-py3-none-any.whl", hash = "sha256:b57f4f58099328dfb26c6a771d09fb20dbbae81d20cfb66141251ea063bd101b", size = 45109 },
         ]
-        "###
+        "#
         );
     });
 
