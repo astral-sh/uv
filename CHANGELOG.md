@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.5.31
+
+### Enhancements
+
+- Add `uv sync --script` ([#11361](https://github.com/astral-sh/uv/pull/11361))
+- Allow PEP 508 requirements in tool requests ([#11337](https://github.com/astral-sh/uv/pull/11337))
+- Allow source distributions to produce wheels with `+local` suffixes ([#11429](https://github.com/astral-sh/uv/pull/11429))
+- Bring parity to `uvx` and `uv tool install` requests ([#11345](https://github.com/astral-sh/uv/pull/11345))
+- Use a stable directory for local, remote, and stdin script virtual environments ([#11347](https://github.com/astral-sh/uv/pull/11347), [#11364](https://github.com/astral-sh/uv/pull/11364))
+- Detect infinite recursion in `uv run` ([#11386](https://github.com/astral-sh/uv/pull/11386))
+
+### Python
+
+The managed Python distributions have been updated, including:
+
+- CPython 3.14.0a5, which includes a new [tail calling interpreter](https://docs.python.org/3.14/whatsnew/3.14.html#whatsnew314-tail-call) for a significant performance improvement
+- The bundled OpenSSL version was updated from 3.0.15 to 3.0.16 which fixes a [security advisory](https://openssl-library.org/news/secadv/20241016.txt)
+
+See the [`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250212) for more details.
+
+### Bug fixes
+
+- Fix cross-drive script installation ([#11167](https://github.com/astral-sh/uv/pull/11167))
+- Add indexes in priority order ([#11451](https://github.com/astral-sh/uv/pull/11451))
+- Allow `--python <dir>` requests to match existing environments if `sys.executable` is the same file ([#11290](https://github.com/astral-sh/uv/pull/11290))
+- Avoid comparing to system site packages in `--dry-run` mode ([#11427](https://github.com/astral-sh/uv/pull/11427))
+- Prefer running executables in the environment with `<name>` over `<name>/__main__.py` ([#11431](https://github.com/astral-sh/uv/pull/11431))
+- Retry local clones without hardlinks if they fail ([#11421](https://github.com/astral-sh/uv/pull/11421))
+
+### Documentation
+
+- Update alternative-indexes.md to use `UV_INDEX` instead of `UV_EXTRA_INDEX_URL` ([#11381](https://github.com/astral-sh/uv/pull/11381))
+- Update scripts guide to include using package indexes ([#11443](https://github.com/astral-sh/uv/pull/11443))
+
 ## 0.5.30
 
 ### Python
