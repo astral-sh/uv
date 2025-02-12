@@ -1763,3 +1763,50 @@ fn tool_run_python_from() {
     error: Using `--from python<specifier>` is not supported. Use `python@<version>` instead.
     "###);
 }
+
+#[test]
+fn tool_run_from_at() {
+    let context = TestContext::new("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("executable-application@latest")
+        .arg("app")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    app 0.3.0
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + executable-application==0.3.0
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("executable-application@0.2.0")
+        .arg("app")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    app 0.2.0
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + executable-application==0.2.0
+    "###);
+}

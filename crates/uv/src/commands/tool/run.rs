@@ -413,6 +413,7 @@ fn warn_executable_not_provided_by_package(
 
 // Clippy isn't happy about the difference in size between these variants, but
 // [`ToolRequirement::Package`] is the more common case and it seems annoying to box it.
+#[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum ToolRequirement {
     Python,
@@ -528,7 +529,6 @@ async fn get_or_create_environment(
             // Ex) `ruff>=0.6.0`
             Target::Unspecified(requirement) => {
                 let spec = RequirementsSpecification::parse_package(requirement)?;
-                debug!("{:?}", spec);
                 if let UnresolvedRequirement::Named(requirement) = &spec.requirement {
                     if requirement.name.as_str() == "python" {
                         return Err(anyhow::anyhow!(
@@ -567,9 +567,12 @@ async fn get_or_create_environment(
                 (executable, requirement)
             }
             // Ex) `ruff@0.6.0`
-            Target::Version(executable, name, extras, version) => (
-                (*executable).to_string(),
-                Requirement {
+            Target::Version(executable, name, extras, version) => {
+                let executable = request
+                    .executable
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| (*executable).to_string());
+                let requirement = Requirement {
                     name: name.clone(),
                     extras: extras.clone(),
                     groups: vec![],
@@ -582,12 +585,17 @@ async fn get_or_create_environment(
                         conflict: None,
                     },
                     origin: None,
-                },
-            ),
+                };
+
+                (executable, requirement)
+            }
             // Ex) `ruff@latest`
-            Target::Latest(executable, name, extras) => (
-                (*executable).to_string(),
-                Requirement {
+            Target::Latest(executable, name, extras) => {
+                let executable = request
+                    .executable
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| (*executable).to_string());
+                let requirement = Requirement {
                     name: name.clone(),
                     extras: extras.clone(),
                     groups: vec![],
@@ -598,8 +606,10 @@ async fn get_or_create_environment(
                         conflict: None,
                     },
                     origin: None,
-                },
-            ),
+                };
+
+                (executable, requirement)
+            }
         };
 
         ToolRequirement::Package {
