@@ -41,3 +41,6 @@ url = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+
+[features]
+schemars = ["dep:schemars", "uv-normalize/schemars"]
