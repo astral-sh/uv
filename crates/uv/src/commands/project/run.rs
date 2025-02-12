@@ -180,14 +180,14 @@ pub(crate) async fn run(
                     script.path.user_display()
                 );
             }
-            Pep723Item::Stdin(_) => {
+            Pep723Item::Stdin(..) => {
                 if requirements_from_stdin {
                     bail!("Cannot read both requirements file and script from stdin");
                 }
-                debug!("Reading inline script metadata from `{}`", "stdin");
+                debug!("Reading inline script metadata from stdin");
             }
-            Pep723Item::Remote(_) => {
-                debug!("Reading inline script metadata from `{}`", "remote URL");
+            Pep723Item::Remote(..) => {
+                debug!("Reading inline script metadata from remote URL");
             }
         }
 
@@ -201,7 +201,7 @@ pub(crate) async fn run(
 
             // Discover the interpreter for the script.
             let environment = ScriptEnvironment::get_or_init(
-                script.as_script().unwrap(),
+                (&script).into(),
                 python.as_deref().map(PythonRequest::parse),
                 python_preference,
                 python_downloads,
@@ -409,119 +409,57 @@ pub(crate) async fn run(
                 let spec =
                     RequirementsSpecification::from_overrides(requirements, constraints, overrides);
 
-                if let Some(script) = script.as_script() {
-                    // If the script is a local file, use a persistent environment.
-                    let environment = ScriptEnvironment::get_or_init(
-                        script,
-                        python.as_deref().map(PythonRequest::parse),
-                        python_preference,
-                        python_downloads,
-                        connectivity,
-                        native_tls,
-                        allow_insecure_host,
-                        &install_mirrors,
-                        no_config,
-                        cache,
-                        printer,
-                    )
-                    .await?
-                    .into_environment();
+                let environment = ScriptEnvironment::get_or_init(
+                    (&script).into(),
+                    python.as_deref().map(PythonRequest::parse),
+                    python_preference,
+                    python_downloads,
+                    connectivity,
+                    native_tls,
+                    allow_insecure_host,
+                    &install_mirrors,
+                    no_config,
+                    cache,
+                    printer,
+                )
+                .await?
+                .into_environment();
 
-                    match update_environment(
-                        environment,
-                        spec,
-                        modifications,
-                        &settings,
-                        &sync_state,
-                        if show_resolution {
-                            Box::new(DefaultResolveLogger)
-                        } else {
-                            Box::new(SummaryResolveLogger)
-                        },
-                        if show_resolution {
-                            Box::new(DefaultInstallLogger)
-                        } else {
-                            Box::new(SummaryInstallLogger)
-                        },
-                        installer_metadata,
-                        connectivity,
-                        concurrency,
-                        native_tls,
-                        allow_insecure_host,
-                        cache,
-                        printer,
-                        preview,
-                    )
-                    .await
-                    {
-                        Ok(update) => Some(update.into_environment().into_interpreter()),
-                        Err(ProjectError::Operation(err)) => {
-                            return diagnostics::OperationDiagnostic::native_tls(native_tls)
-                                .with_context("script")
-                                .report(err)
-                                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
-                        }
-                        Err(err) => return Err(err.into()),
+                match update_environment(
+                    environment,
+                    spec,
+                    modifications,
+                    &settings,
+                    &sync_state,
+                    if show_resolution {
+                        Box::new(DefaultResolveLogger)
+                    } else {
+                        Box::new(SummaryResolveLogger)
+                    },
+                    if show_resolution {
+                        Box::new(DefaultInstallLogger)
+                    } else {
+                        Box::new(SummaryInstallLogger)
+                    },
+                    installer_metadata,
+                    connectivity,
+                    concurrency,
+                    native_tls,
+                    allow_insecure_host,
+                    cache,
+                    printer,
+                    preview,
+                )
+                .await
+                {
+                    Ok(update) => Some(update.into_environment().into_interpreter()),
+                    Err(ProjectError::Operation(err)) => {
+                        return diagnostics::OperationDiagnostic::native_tls(native_tls)
+                            .with_context("script")
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                     }
-                } else {
-                    // Otherwise, use an ephemeral environment.
-                    let interpreter = ScriptInterpreter::discover(
-                        (&script).into(),
-                        python.as_deref().map(PythonRequest::parse),
-                        python_preference,
-                        python_downloads,
-                        connectivity,
-                        native_tls,
-                        allow_insecure_host,
-                        &install_mirrors,
-                        no_config,
-                        cache,
-                        printer,
-                    )
-                    .await?
-                    .into_interpreter();
-
-                    let result = CachedEnvironment::from_spec(
-                        EnvironmentSpecification::from(spec),
-                        &interpreter,
-                        &settings,
-                        &sync_state,
-                        if show_resolution {
-                            Box::new(DefaultResolveLogger)
-                        } else {
-                            Box::new(SummaryResolveLogger)
-                        },
-                        if show_resolution {
-                            Box::new(DefaultInstallLogger)
-                        } else {
-                            Box::new(SummaryInstallLogger)
-                        },
-                        installer_metadata,
-                        connectivity,
-                        concurrency,
-                        native_tls,
-                        allow_insecure_host,
-                        cache,
-                        printer,
-                        preview,
-                    )
-                    .await;
-
-                    let environment = match result {
-                        Ok(resolution) => resolution,
-                        Err(ProjectError::Operation(err)) => {
-                            return diagnostics::OperationDiagnostic::native_tls(native_tls)
-                                .with_context("script")
-                                .report(err)
-                                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
-                        }
-                        Err(err) => return Err(err.into()),
-                    };
-
-                    // Clear any existing overlay.
-                    environment.clear_overlay()?;
-
-                    Some(environment.into_interpreter())
+                    Err(err) => return Err(err.into()),
                 }
             } else {
                 // Create a virtual environment.
@@ -1266,7 +1204,7 @@ pub(crate) enum RunCommand {
     /// Execute a `pythonw` script provided via `stdin`.
     PythonGuiStdin(Vec<u8>, Vec<OsString>),
     /// Execute a Python script provided via a remote URL.
-    PythonRemote(tempfile::NamedTempFile, Vec<OsString>),
+    PythonRemote(Url, tempfile::NamedTempFile, Vec<OsString>),
     /// Execute an external command.
     External(OsString, Vec<OsString>),
     /// Execute an empty command (in practice, `python` with no arguments).
@@ -1319,7 +1257,7 @@ impl RunCommand {
                 process.args(args);
                 process
             }
-            Self::PythonRemote(target, args) => {
+            Self::PythonRemote(.., target, args) => {
                 let mut process = Command::new(interpreter.sys_executable());
                 process.arg(target.path());
                 process.args(args);
@@ -1535,7 +1473,7 @@ impl RunCommand {
                     writer.write_all(&chunk?)?;
                 }
 
-                return Ok(Self::PythonRemote(file, args.to_vec()));
+                return Ok(Self::PythonRemote(url, file, args.to_vec()));
             }
         }
 

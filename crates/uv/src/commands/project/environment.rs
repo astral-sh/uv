@@ -157,11 +157,6 @@ impl CachedEnvironment {
         Ok(())
     }
 
-    /// Convert the [`CachedEnvironment`] into an [`Interpreter`].
-    pub(crate) fn into_interpreter(self) -> Interpreter {
-        self.0.into_interpreter()
-    }
-
     /// Return the [`Interpreter`] to use for the cached environment, based on a given
     /// [`Interpreter`].
     ///
