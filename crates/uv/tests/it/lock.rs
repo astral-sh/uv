@@ -20071,6 +20071,10 @@ fn lock_dynamic_version_dependencies() -> Result<()> {
         [[package]]
         name = "project"
         source = { editable = "." }
+
+        [package.metadata]
+        provides-extras = []
+        requires-dist = []
         "###
         );
     });
@@ -20109,6 +20113,10 @@ fn lock_dynamic_version_dependencies() -> Result<()> {
         [[package]]
         name = "project"
         source = { editable = "." }
+
+        [package.metadata]
+        provides-extras = []
+        requires-dist = []
         "###
         );
     });
