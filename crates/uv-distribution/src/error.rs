@@ -92,10 +92,6 @@ pub enum Error {
     Extract(#[from] uv_extract::Error),
     #[error("The source distribution is missing a `PKG-INFO` file")]
     MissingPkgInfo,
-    #[error("The source distribution is missing an `egg-info` directory")]
-    MissingEggInfo,
-    #[error("The source distribution is missing a `requires.txt` file")]
-    MissingRequiresTxt,
     #[error("The source distribution `{}` has no subdirectory `{}`", _0, _1.display())]
     MissingSubdirectory(Url, PathBuf),
     #[error("Failed to extract static metadata from `PKG-INFO`")]

@@ -1,6 +1,5 @@
 mod build_requires;
 mod metadata10;
-mod metadata12;
 mod metadata23;
 mod metadata_resolver;
 mod pyproject_toml;
@@ -20,7 +19,6 @@ use crate::VerbatimParsedUrl;
 
 pub use build_requires::BuildRequires;
 pub use metadata10::Metadata10;
-pub use metadata12::Metadata12;
 pub use metadata23::Metadata23;
 pub use metadata_resolver::ResolutionMetadata;
 pub use requires_dist::RequiresDist;

@@ -168,6 +168,7 @@ dependencies = [
 ]
 
 [package.metadata]
+provides-extras = []
 requires-dist = [{ name = "jax", specifier = "==0.4.17" }]
 
 [[package]]

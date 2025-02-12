@@ -545,6 +545,18 @@ Path to system-level configuration directory on Windows systems.
 
 Use to create the tracing durations file via the `tracing-durations-export` feature.
 
+### `UV`
+
+The path to the binary that was used to invoke uv.
+
+This is propagated to all subprocesses spawned by uv.
+
+If the executable was invoked through a symbolic link, some platforms will return the path
+of the symbolic link and other platforms will return the path of the symbolic link’s target.
+
+See <https://doc.rust-lang.org/std/env/fn.current_exe.html#security> for security
+considerations.
+
 ### `VIRTUAL_ENV`
 
 Used to detect an activated virtual environment.

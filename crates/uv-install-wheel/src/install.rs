@@ -2,6 +2,16 @@
 //! reading from a zip file.
 
 use std::path::Path;
+use std::str::FromStr;
+
+use fs_err as fs;
+use fs_err::File;
+use tracing::{instrument, trace};
+
+use uv_cache_info::CacheInfo;
+use uv_distribution_filename::WheelFilename;
+use uv_pep440::Version;
+use uv_pypi_types::{DirectUrl, Metadata10};
 
 use crate::linker::{LinkMode, Locks};
 use crate::wheel::{
@@ -9,12 +19,6 @@ use crate::wheel::{
     read_record_file, write_installer_metadata, write_script_entrypoints, LibKind,
 };
 use crate::{Error, Layout};
-use fs_err as fs;
-use fs_err::File;
-use tracing::{instrument, trace};
-use uv_cache_info::CacheInfo;
-use uv_distribution_filename::WheelFilename;
-use uv_pypi_types::{DirectUrl, Metadata12};
 
 /// Install the given wheel to the given venv
 ///
@@ -38,8 +42,10 @@ pub fn install_wheel(
 ) -> Result<(), Error> {
     let dist_info_prefix = find_dist_info(&wheel)?;
     let metadata = dist_info_metadata(&dist_info_prefix, &wheel)?;
-    let Metadata12 { name, version, .. } = Metadata12::parse_metadata(&metadata)
+    let Metadata10 { name, version } = Metadata10::parse_pkg_info(&metadata)
         .map_err(|err| Error::InvalidWheel(err.to_string()))?;
+
+    let version = Version::from_str(&version)?;
 
     // Validate the wheel name and version.
     {

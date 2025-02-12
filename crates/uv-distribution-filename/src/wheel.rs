@@ -138,6 +138,13 @@ impl WheelFilename {
 
     /// Parse a wheel filename from the stem (e.g., `foo-1.2.3-py3-none-any`).
     pub fn from_stem(stem: &str) -> Result<Self, WheelFilenameError> {
+        // The wheel stem should not contain the `.whl` extension.
+        if std::path::Path::new(stem)
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
+        {
+            return Err(WheelFilenameError::UnexpectedExtension(stem.to_string()));
+        }
         Self::parse(stem, stem)
     }
 
@@ -328,6 +335,8 @@ pub enum WheelFilenameError {
     MissingAbiTag(String),
     #[error("The wheel filename \"{0}\" is missing a platform tag")]
     MissingPlatformTag(String),
+    #[error("The wheel stem \"{0}\" has an unexpected extension")]
+    UnexpectedExtension(String),
 }
 
 #[cfg(test)]

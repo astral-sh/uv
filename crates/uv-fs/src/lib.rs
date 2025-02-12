@@ -503,10 +503,10 @@ pub fn directories(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
         .map(|entry| entry.path())
 }
 
-/// Iterate over the symlinks in a directory.
+/// Iterate over the entries in a directory.
 ///
 /// If the directory does not exist, returns an empty iterator.
-pub fn symlinks(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
+pub fn entries(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
     path.as_ref()
         .read_dir()
         .ok()
@@ -518,11 +518,6 @@ pub fn symlinks(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
                 warn!("Failed to read entry: {}", err);
                 None
             }
-        })
-        .filter(|entry| {
-            entry
-                .file_type()
-                .is_ok_and(|file_type| file_type.is_symlink())
         })
         .map(|entry| entry.path())
 }

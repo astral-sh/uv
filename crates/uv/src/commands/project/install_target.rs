@@ -2,7 +2,9 @@ use std::borrow::Cow;
 use std::path::Path;
 use std::str::FromStr;
 
-use itertools::Either;
+use itertools::{Either, Itertools};
+
+use uv_configuration::ExtrasSpecification;
 use uv_distribution_types::Index;
 use uv_normalize::PackageName;
 use uv_pypi_types::{LenientRequirement, VerbatimParsedUrl};
@@ -10,6 +12,8 @@ use uv_resolver::{Installable, Lock, Package};
 use uv_scripts::Pep723Script;
 use uv_workspace::pyproject::{DependencyGroupSpecifier, Source, Sources, ToolUvSources};
 use uv_workspace::Workspace;
+
+use crate::commands::project::ProjectError;
 
 /// A target that can be installed from a lockfile.
 #[derive(Debug, Copy, Clone)]
@@ -229,5 +233,69 @@ impl<'lock> InstallTarget<'lock> {
                     .map(Cow::Borrowed),
             ),
         }
+    }
+
+    /// Validate the extras requested by the [`ExtrasSpecification`].
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn validate_extras(self, extras: &ExtrasSpecification) -> Result<(), ProjectError> {
+        let extras = match extras {
+            ExtrasSpecification::Some(extras) => {
+                if extras.is_empty() {
+                    return Ok(());
+                }
+                Either::Left(extras.iter())
+            }
+            ExtrasSpecification::Exclude(extras) => {
+                if extras.is_empty() {
+                    return Ok(());
+                }
+                Either::Right(extras.iter())
+            }
+            _ => return Ok(()),
+        };
+
+        match self {
+            Self::Project { lock, .. }
+            | Self::Workspace { lock, .. }
+            | Self::NonProjectWorkspace { lock, .. } => {
+                let member_packages: Vec<&Package> = lock
+                    .packages()
+                    .iter()
+                    .filter(|package| self.roots().contains(package.name()))
+                    .collect();
+
+                // If `provides-extra` is not set in any package, do not perform the check, as this
+                // means that the lock file was generated on a version of uv that predates when the
+                // feature was added.
+                if !member_packages
+                    .iter()
+                    .any(|package| package.provides_extras().is_some())
+                {
+                    return Ok(());
+                }
+
+                for extra in extras {
+                    if !member_packages.iter().any(|package| {
+                        package
+                            .provides_extras()
+                            .is_some_and(|provides_extras| provides_extras.contains(extra))
+                    }) {
+                        return match self {
+                            Self::Project { .. } => {
+                                Err(ProjectError::MissingExtraProject(extra.clone()))
+                            }
+                            _ => Err(ProjectError::MissingExtraWorkspace(extra.clone())),
+                        };
+                    }
+                }
+            }
+            Self::Script { .. } => {
+                // We shouldn't get here if the list is empty so we can assume it isn't
+                let extra = extras.into_iter().next().expect("non-empty extras").clone();
+                return Err(ProjectError::MissingExtraScript(extra));
+            }
+        }
+
+        Ok(())
     }
 }
