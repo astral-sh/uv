@@ -518,18 +518,28 @@ async fn get_or_create_environment(
     } else {
         ToolRequirement::Package(match target {
             // Ex) `ruff`
-            Target::Unspecified(name) => Requirement {
-                name: PackageName::from_str(name)?,
-                extras: vec![],
-                groups: vec![],
-                marker: MarkerTree::default(),
-                source: RequirementSource::Registry {
-                    specifier: VersionSpecifiers::empty(),
-                    index: None,
-                    conflict: None,
-                },
-                origin: None,
-            },
+            Target::Unspecified(name) => {
+                let source = RequirementsSource::Package((*name).to_string());
+                let requirements = RequirementsSpecification::from_source(&source, &client_builder)
+                    .await?
+                    .requirements;
+                resolve_names(
+                    requirements,
+                    &interpreter,
+                    settings,
+                    &state,
+                    connectivity,
+                    concurrency,
+                    native_tls,
+                    allow_insecure_host,
+                    cache,
+                    printer,
+                    preview,
+                )
+                .await?
+                .pop()
+                .unwrap()
+            }
             // Ex) `ruff@0.6.0`
             Target::Version(name, extras, version)
             | Target::FromVersion(_, name, extras, version) => Requirement {
