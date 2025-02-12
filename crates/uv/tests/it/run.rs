@@ -3152,6 +3152,92 @@ fn run_script_without_build_system() -> Result<()> {
 }
 
 #[test]
+fn run_script_module_conflict() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo:app"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#
+    })?;
+
+    let init = context.temp_dir.child("src/foo/__init__.py");
+    init.write_str(indoc! { r#"
+        def app():
+            print("Hello from `__init__`")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from `__init__`
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    // Creating `__main__` should not change the behavior, the entrypoint should take precedence
+    let main = context.temp_dir.child("src/foo/__main__.py");
+    main.write_str(indoc! { r#"
+        print("Hello from `__main__`")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from `__init__`
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    // Even if the working directory is `src`
+    uv_snapshot!(context.filters(), context.run().arg("--directory").arg("src").arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from `__init__`
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    // Unless the user opts-in to module running with `-m`
+    uv_snapshot!(context.filters(), context.run().arg("-m").arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from `__main__`
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn run_script_explicit() -> Result<()> {
     let context = TestContext::new("3.12");
 
