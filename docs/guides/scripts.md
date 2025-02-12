@@ -217,9 +217,10 @@ print(Point)
 is not installed — see the documentation on [Python versions](../concepts/python-versions.md) for
 more details.
 
-## Using Alternative Package Indexes
+## Using alternative package indexes
 
-If you wish to use an additional [package index](../configuration/indexes.md) to resolve dependencies, you can pass in the index with the `--index` option.
+If you wish to use an alternative [package index](../configuration/indexes.md) to resolve
+dependencies, you can provide the index with the `--index` option:
 
 ```console
 $ uv add --index "https://example.com/simple" --script example.py 'requests<3' 'rich'
@@ -232,7 +233,8 @@ This will include the package data in the inline metadata:
 # url = "https://example.com/simple"
 ```
 
-If you require authentication to access the package index, then please refer to [package index](../configuration/indexes.md).
+If you require authentication to access the package index, then please refer to the
+[package index](../configuration/indexes.md) documentation.
 
 ## Locking dependencies
 
