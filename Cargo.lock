@@ -4580,6 +4580,7 @@ dependencies = [
  "uv-extract",
  "uv-fs",
  "uv-git",
+ "uv-git-types",
  "uv-install-wheel",
  "uv-installer",
  "uv-normalize",
@@ -5009,6 +5010,7 @@ dependencies = [
  "uv-extract",
  "uv-fs",
  "uv-git",
+ "uv-git-types",
  "uv-metadata",
  "uv-normalize",
  "uv-pep440",
@@ -5063,7 +5065,7 @@ dependencies = [
  "uv-cache-key",
  "uv-distribution-filename",
  "uv-fs",
- "uv-git",
+ "uv-git-types",
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
@@ -5129,7 +5131,6 @@ dependencies = [
  "fs-err 3.1.0",
  "reqwest",
  "reqwest-middleware",
- "serde",
  "thiserror 2.0.11",
  "tokio",
  "tracing",
@@ -5137,9 +5138,20 @@ dependencies = [
  "uv-auth",
  "uv-cache-key",
  "uv-fs",
+ "uv-git-types",
  "uv-static",
  "uv-version",
  "which",
+]
+
+[[package]]
+name = "uv-git-types"
+version = "0.0.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.11",
+ "tracing",
+ "url",
 ]
 
 [[package]]
@@ -5221,7 +5233,7 @@ dependencies = [
  "uv-distribution",
  "uv-distribution-types",
  "uv-fs",
- "uv-git",
+ "uv-git-types",
  "uv-install-wheel",
  "uv-normalize",
  "uv-pep440",
@@ -5413,7 +5425,7 @@ dependencies = [
  "url",
  "uv-distribution-filename",
  "uv-fs",
- "uv-git",
+ "uv-git-types",
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
@@ -5500,6 +5512,7 @@ dependencies = [
  "uv-distribution-types",
  "uv-fs",
  "uv-git",
+ "uv-git-types",
  "uv-normalize",
  "uv-pep508",
  "uv-pypi-types",
@@ -5579,6 +5592,7 @@ dependencies = [
  "uv-distribution-types",
  "uv-fs",
  "uv-git",
+ "uv-git-types",
  "uv-metadata",
  "uv-normalize",
  "uv-once-map",
@@ -5802,7 +5816,7 @@ dependencies = [
  "uv-cache-key",
  "uv-distribution-types",
  "uv-fs",
- "uv-git",
+ "uv-git-types",
  "uv-macros",
  "uv-normalize",
  "uv-options-metadata",

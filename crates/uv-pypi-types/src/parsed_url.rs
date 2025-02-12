@@ -5,7 +5,7 @@ use thiserror::Error;
 use url::{ParseError, Url};
 
 use uv_distribution_filename::{DistExtension, ExtensionError};
-use uv_git::{GitOid, GitReference, GitUrl, OidParseError};
+use uv_git_types::{GitOid, GitReference, GitUrl, OidParseError};
 use uv_pep508::{
     looks_like_git_repository, Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError,
 };

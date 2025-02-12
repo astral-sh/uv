@@ -31,6 +31,7 @@ uv-distribution-types = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-git = { workspace = true }
+uv-git-types = { workspace = true }
 uv-install-wheel = { workspace = true, default-features = false }
 uv-installer = { workspace = true }
 uv-normalize = { workspace = true }

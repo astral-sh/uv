@@ -40,7 +40,7 @@ use uv_distribution_types::{
 };
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic};
-use uv_git::{GitHubRepository, GitOid};
+use uv_git_types::{GitHubRepository, GitOid};
 use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
 use uv_pep440::{release_specifiers_to_ranges, Version};

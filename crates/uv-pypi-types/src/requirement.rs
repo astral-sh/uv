@@ -8,7 +8,7 @@ use url::Url;
 use uv_distribution_filename::DistExtension;
 
 use uv_fs::{relative_to, PortablePath, PortablePathBuf, CWD};
-use uv_git::{GitOid, GitReference, GitUrl};
+use uv_git_types::{GitOid, GitReference, GitUrl, OidParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{
@@ -29,7 +29,7 @@ pub enum RequirementError {
     #[error(transparent)]
     UrlParseError(#[from] url::ParseError),
     #[error(transparent)]
-    OidParseError(#[from] uv_git::OidParseError),
+    OidParseError(#[from] OidParseError),
 }
 
 /// A representation of dependency on a package, an extension over a PEP 508's requirement.

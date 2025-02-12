@@ -39,6 +39,7 @@ uv-distribution-types = { path = "crates/uv-distribution-types" }
 uv-extract = { path = "crates/uv-extract" }
 uv-fs = { path = "crates/uv-fs", features = ["serde", "tokio"] }
 uv-git = { path = "crates/uv-git" }
+uv-git-types = { path = "crates/uv-git-types" }
 uv-globfilter = { path = "crates/uv-globfilter" }
 uv-install-wheel = { path = "crates/uv-install-wheel", default-features = false }
 uv-installer = { path = "crates/uv-installer" }

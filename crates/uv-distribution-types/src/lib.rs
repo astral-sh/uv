@@ -43,7 +43,7 @@ use uv_distribution_filename::{
     DistExtension, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
 use uv_fs::normalize_absolute_path;
-use uv_git::GitUrl;
+use uv_git_types::GitUrl;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::{Pep508Url, VerbatimUrl};

@@ -25,6 +25,7 @@ uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true }
 uv-git = { workspace = true }
+uv-git-types = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }
