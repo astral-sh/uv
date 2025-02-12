@@ -316,6 +316,7 @@ jobs:
           run: |
             pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             ${{ env.MODULE_NAME }} --help
+            python -m ${{ env.MODULE_NAME }} --help
             uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
@@ -382,6 +383,7 @@ jobs:
           run: |
             pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             ${{ env.MODULE_NAME }} --help
+            python -m ${{ env.MODULE_NAME }} --help
             uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
