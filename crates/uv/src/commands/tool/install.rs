@@ -8,7 +8,7 @@ use tracing::{debug, trace};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, PreviewMode, Reinstall, TrustedHost, Upgrade};
+use uv_configuration::{Concurrency, DryRun, PreviewMode, Reinstall, TrustedHost, Upgrade};
 use uv_distribution_types::{NameRequirementSpecification, UnresolvedRequirementSpecification};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
@@ -410,6 +410,7 @@ pub(crate) async fn install(
             native_tls,
             allow_insecure_host,
             &cache,
+            DryRun::Disabled,
             printer,
             preview,
         )

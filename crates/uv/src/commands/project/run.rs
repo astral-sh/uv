@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::Read;
@@ -18,9 +17,8 @@ use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{
     Concurrency, DevGroupsSpecification, DryRun, EditableMode, ExtrasSpecification, InstallOptions,
-    PreviewMode, SourceStrategy, TrustedHost,
+    PreviewMode, TrustedHost,
 };
-use uv_distribution::LoweredRequirement;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified};
 use uv_installer::{SatisfiesResult, SitePackages};
@@ -46,9 +44,10 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, update_environment, validate_project_requires_python,
-    DependencyGroupsTarget, EnvironmentSpecification, ProjectEnvironment, ProjectError,
-    ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
+    default_dependency_groups, script_specification, update_environment,
+    validate_project_requires_python, DependencyGroupsTarget, EnvironmentSpecification,
+    ProjectEnvironment, ProjectError, ScriptEnvironment, ScriptInterpreter, UniversalState,
+    WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::run::run_to_completion;
@@ -211,10 +210,11 @@ pub(crate) async fn run(
                 &install_mirrors,
                 no_config,
                 cache,
+                DryRun::Disabled,
                 printer,
             )
             .await?
-            .into_environment();
+            .into_environment()?;
 
             // Determine the lock mode.
             let mode = if frozen {
@@ -317,98 +317,8 @@ pub(crate) async fn run(
                 );
             }
 
-            // Determine the working directory for the script.
-            let script_dir = match &script {
-                Pep723Item::Script(script) => std::path::absolute(&script.path)?
-                    .parent()
-                    .expect("script path has no parent")
-                    .to_owned(),
-                Pep723Item::Stdin(..) | Pep723Item::Remote(..) => std::env::current_dir()?,
-            };
-            let metadata = script.metadata();
-
             // Install the script requirements, if necessary. Otherwise, use an isolated environment.
-            if let Some(dependencies) = metadata.dependencies.as_ref() {
-                // Collect any `tool.uv.index` from the script.
-                let empty = Vec::default();
-                let script_indexes = match settings.sources {
-                    SourceStrategy::Enabled => metadata
-                        .tool
-                        .as_ref()
-                        .and_then(|tool| tool.uv.as_ref())
-                        .and_then(|uv| uv.top_level.index.as_deref())
-                        .unwrap_or(&empty),
-                    SourceStrategy::Disabled => &empty,
-                };
-
-                // Collect any `tool.uv.sources` from the script.
-                let empty = BTreeMap::default();
-                let script_sources = match settings.sources {
-                    SourceStrategy::Enabled => metadata
-                        .tool
-                        .as_ref()
-                        .and_then(|tool| tool.uv.as_ref())
-                        .and_then(|uv| uv.sources.as_ref())
-                        .unwrap_or(&empty),
-                    SourceStrategy::Disabled => &empty,
-                };
-
-                let requirements = dependencies
-                    .iter()
-                    .cloned()
-                    .flat_map(|requirement| {
-                        LoweredRequirement::from_non_workspace_requirement(
-                            requirement,
-                            script_dir.as_ref(),
-                            script_sources,
-                            script_indexes,
-                            &settings.index_locations,
-                        )
-                        .map_ok(LoweredRequirement::into_inner)
-                    })
-                    .collect::<Result<_, _>>()?;
-                let constraints = metadata
-                    .tool
-                    .as_ref()
-                    .and_then(|tool| tool.uv.as_ref())
-                    .and_then(|uv| uv.constraint_dependencies.as_ref())
-                    .into_iter()
-                    .flatten()
-                    .cloned()
-                    .flat_map(|requirement| {
-                        LoweredRequirement::from_non_workspace_requirement(
-                            requirement,
-                            script_dir.as_ref(),
-                            script_sources,
-                            script_indexes,
-                            &settings.index_locations,
-                        )
-                        .map_ok(LoweredRequirement::into_inner)
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                let overrides = metadata
-                    .tool
-                    .as_ref()
-                    .and_then(|tool| tool.uv.as_ref())
-                    .and_then(|uv| uv.override_dependencies.as_ref())
-                    .into_iter()
-                    .flatten()
-                    .cloned()
-                    .flat_map(|requirement| {
-                        LoweredRequirement::from_non_workspace_requirement(
-                            requirement,
-                            script_dir.as_ref(),
-                            script_sources,
-                            script_indexes,
-                            &settings.index_locations,
-                        )
-                        .map_ok(LoweredRequirement::into_inner)
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                let spec =
-                    RequirementsSpecification::from_overrides(requirements, constraints, overrides);
-
+            if let Some(spec) = script_specification((&script).into(), settings.as_ref().into())? {
                 let environment = ScriptEnvironment::get_or_init(
                     (&script).into(),
                     python.as_deref().map(PythonRequest::parse),
@@ -420,10 +330,11 @@ pub(crate) async fn run(
                     &install_mirrors,
                     no_config,
                     cache,
+                    DryRun::Disabled,
                     printer,
                 )
                 .await?
-                .into_environment();
+                .into_environment()?;
 
                 match update_environment(
                     environment,
@@ -447,6 +358,7 @@ pub(crate) async fn run(
                     native_tls,
                     allow_insecure_host,
                     cache,
+                    DryRun::Disabled,
                     printer,
                     preview,
                 )
