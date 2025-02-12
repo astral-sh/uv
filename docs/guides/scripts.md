@@ -217,15 +217,16 @@ print(Point)
 is not installed — see the documentation on [Python versions](../concepts/python-versions.md) for
 more details.
 
-
 ## Using Alternative Package Indexes
 
 If you wish to use an additional [package index](../configuration/indexes.md) to resolve dependencies, you can pass in the index with the `--index` option.
+
 ```console
 $ uv add --index "https://example.com/simple" --script example.py 'requests<3' 'rich'
 ```
 
 This will include the package data in the inline metadata:
+
 ```python
 # [[tool.uv.index]]
 # url = "https://example.com/simple"
