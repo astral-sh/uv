@@ -5824,7 +5824,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt><code>--python</code> <i>python</i></dt><dd><p>The Python interpreter to use during resolution.</p>
+</dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use during resolution.</p>
 
 <p>A Python interpreter is required for building source distributions to determine package metadata when there are not wheels.</p>
 
@@ -5832,6 +5832,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
+<p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
 </dd><dt><code>--python-platform</code> <i>python-platform</i></dt><dd><p>The platform for which requirements should be resolved.</p>
 
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
@@ -5931,7 +5932,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
 </ul>
-</dd><dt><code>--python-version</code>, <code>-p</code> <i>python-version</i></dt><dd><p>The Python version to use for resolution.</p>
+</dd><dt><code>--python-version</code> <i>python-version</i></dt><dd><p>The Python version to use for resolution.</p>
 
 <p>For example, <code>3.8</code> or <code>3.8.17</code>.</p>
 
