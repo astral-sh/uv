@@ -1088,27 +1088,28 @@ fn python_install_default_from_env() {
     "###);
 
     // Install again so we can test interaction with `uninstall --all`
-    uv_snapshot!(context.filters(), context.python_install().arg("3.12"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.12.9 in [TIME]
-     + cpython-3.12.9-[PLATFORM]
-    ");
+    "###);
 
     // We should ignore `UV_PYTHON` here and complain there is not a target
-    uv_snapshot!(context.filters(), context.python_uninstall().env(EnvVars::UV_PYTHON, "3.12"), @r"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), context.python_uninstall().env(EnvVars::UV_PYTHON, "3.12"), @r###"
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Searching for Python versions matching: Python 3.12
-    Uninstalled Python 3.12.9 in [TIME]
-     - cpython-3.12.9-[PLATFORM]
-    ");
+    error: the following required arguments were not provided:
+      <TARGETS>...
+
+    Usage: uv python uninstall --install-dir <INSTALL_DIR> <TARGETS>...
+
+    For more information, try '--help'.
+    "###);
 
     // We should ignore `UV_PYTHON` here and respect `--all`
     uv_snapshot!(context.filters(), context.python_uninstall().arg("--all").env(EnvVars::UV_PYTHON, "3.11"), @r###"
@@ -1118,28 +1119,38 @@ fn python_install_default_from_env() {
 
     ----- stderr -----
     Searching for Python installations
-    Uninstalled Python 3.12.9 in [TIME]
+    Uninstalled 2 versions in [TIME]
+     - cpython-3.11.11-[PLATFORM]
      - cpython-3.12.9-[PLATFORM]
     "###);
 
     // Uninstall with no targets should error
     uv_snapshot!(context.filters(), context.python_uninstall(), @r###"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    No Python versions specified for uninstallation; provide versions to uninstall or use `--all` to uninstall all versions
+    error: the following required arguments were not provided:
+      <TARGETS>...
+
+    Usage: uv python uninstall --install-dir <INSTALL_DIR> <TARGETS>...
+
+    For more information, try '--help'.
     "###);
 
     // Uninstall with conflicting options should error
     uv_snapshot!(context.filters(), context.python_uninstall().arg("--all").arg("3.12"), @r###"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Recieved specific versions to uninstall and `--all`; these requests are conflicting
+    error: the argument '--all' cannot be used with '<TARGETS>...'
+
+    Usage: uv python uninstall --all --install-dir <INSTALL_DIR> <TARGETS>...
+
+    For more information, try '--help'.
     "###);
 }
 
