@@ -306,7 +306,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
           manylinux: auto
-          args: --profile minimal-size --locked --out dist --features self-update
+          args: --release --locked --out dist --features self-update
           # See: https://github.com/sfackler/rust-openssl/issues/2036#issuecomment-1724324145
           before-script-linux: |
             # If we're running on rhel centos, install needed packages.

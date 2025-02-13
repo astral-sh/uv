@@ -107,6 +107,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: "Check uv_build dependencies"
+        uses: EmbarkStudios/cargo-deny-action@v1
+        with:
+          command: check bans
+          manifest-path: crates/uv-build/Cargo.toml
       - name: "Install Rust toolchain"
         run: rustup component add clippy
       - name: "Clippy"
