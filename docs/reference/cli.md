@@ -4788,7 +4788,7 @@ uv python install [OPTIONS] [TARGETS]...
 
 <dl class="cli-reference"><dt><code>TARGETS</code></dt><dd><p>The Python version(s) to install.</p>
 
-<p>If not provided, the requested Python version(s) will be read from the <code>.python-versions</code> or <code>.python-version</code> files. If neither file is present, uv will check if it has installed any Python versions. If not, it will install the latest stable version of Python.</p>
+<p>If not provided, the requested Python version(s) will be read from the <code>UV_PYTHON</code> environment variable then <code>.python-versions</code> or <code>.python-version</code> files. If none of the above are present, uv will check if it has installed any Python versions. If not, it will install the latest stable version of Python.</p>
 
 <p>See <a href="#uv-python">uv python</a> to view supported request formats.</p>
 

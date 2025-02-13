@@ -480,11 +480,14 @@ fn help_subsubcommand() {
       [TARGETS]...
               The Python version(s) to install.
               
-              If not provided, the requested Python version(s) will be read from the `.python-versions`
-              or `.python-version` files. If neither file is present, uv will check if it has installed
-              any Python versions. If not, it will install the latest stable version of Python.
+              If not provided, the requested Python version(s) will be read from the `UV_PYTHON`
+              environment variable then `.python-versions` or `.python-version` files. If none of the
+              above are present, uv will check if it has installed any Python versions. If not, it will
+              install the latest stable version of Python.
               
               See `uv help python` to view supported request formats.
+              
+              [env: UV_PYTHON=]
 
     Options:
       -i, --install-dir <INSTALL_DIR>
@@ -772,7 +775,7 @@ fn help_flag_subsubcommand() {
     Usage: uv python install [OPTIONS] [TARGETS]...
 
     Arguments:
-      [TARGETS]...  The Python version(s) to install
+      [TARGETS]...  The Python version(s) to install [env: UV_PYTHON=]
 
     Options:
       -i, --install-dir <INSTALL_DIR>  The directory to store the Python installation in [env:
