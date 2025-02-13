@@ -1087,7 +1087,14 @@ pub struct PipCompileArgs {
     ///
     /// See `uv help python` for details on Python discovery and supported
     /// request formats.
-    #[arg(long, verbatim_doc_comment, help_heading = "Python options", value_parser = parse_maybe_string)]
+    #[arg(
+        long = "python",
+        short = 'p',
+        env = EnvVars::UV_PYTHON,
+        verbatim_doc_comment,
+        help_heading = "Python options",
+        value_parser = parse_maybe_string
+    )]
     pub python: Option<Maybe<String>>,
 
     /// Install packages into the system Python environment.
@@ -1170,7 +1177,7 @@ pub struct PipCompileArgs {
     ///
     /// If a patch version is omitted, the minimum patch version is assumed. For
     /// example, `3.8` is mapped to `3.8.0`.
-    #[arg(long, short, help_heading = "Python options")]
+    #[arg(long = "python-version", help_heading = "Python options")]
     pub python_version: Option<PythonVersion>,
 
     /// The platform for which requirements should be resolved.
