@@ -6,11 +6,11 @@
 
 - **Create `main.py` instead of `hello.py` in `uv init`** ([#10369](https://github.com/astral-sh/uv/pull/10369))
 
-  Previously, `uv init` created a `hello.py` sample file. Now, `uv init` will create a `main.py` instead — which from user feedback aligns with common expectations. The `--bare` option can be used to avoid creating the file. 
+  Previously, `uv init` created a `hello.py` sample file. Now, `uv init` will create `main.py` instead — which aligns with expectations from user feedback. The `--bare` option can be used to avoid creating the file. 
 
 - **Respect `UV_PYTHON` in `uv python install`** ([#11487](https://github.com/astral-sh/uv/pull/11487))
 
-  Previously, `uv python install` did not read this environment variable. Now it does. We believe this matches user expectations, however, this will take priority over `.python-version` files which could be considered breaking.
+  Previously, `uv python install` did not read this environment variable; now it does. We believe this matches user expectations, however, this will take priority over `.python-version` files which could be considered breaking.
 
 - **Set `UV` to the uv executable path** ([#11326](https://github.com/astral-sh/uv/pull/11326))
 
