@@ -2,6 +2,8 @@
 
 ## 0.6.0
 
+There have been 31 releases and 1135 pull requests since [0.5.0](https://github.com/astral-sh/uv/releases/tag/0.5.0), our last release with breaking changes. As before, we've accumulated various changes that improve correctness and user experience, but could break some workflows. This release contains those changes; many have been marked as breaking out of an abundance of caution. We expect most users to be able to upgrade without making changes.
+
 ### Breaking changes
 
 - **Create `main.py` instead of `hello.py` in `uv init`** ([#10369](https://github.com/astral-sh/uv/pull/10369))
