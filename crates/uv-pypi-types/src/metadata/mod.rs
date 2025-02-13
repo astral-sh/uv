@@ -23,6 +23,7 @@ pub use metadata10::Metadata10;
 pub use metadata12::Metadata12;
 pub use metadata23::Metadata23;
 pub use metadata_resolver::ResolutionMetadata;
+pub use pyproject_toml::PyProjectToml;
 pub use requires_dist::RequiresDist;
 pub use requires_txt::RequiresTxt;
 

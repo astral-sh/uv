@@ -165,11 +165,9 @@ impl ResolutionMetadata {
     /// If we're coming from a source distribution, we may already know the version (unlike for a
     /// source tree), so we can tolerate dynamic versions.
     pub fn parse_pyproject_toml(
-        content: &str,
+        pyproject_toml: PyProjectToml,
         sdist_version: Option<&Version>,
     ) -> Result<Self, MetadataError> {
-        let pyproject_toml = PyProjectToml::from_toml(content)?;
-
         let project = pyproject_toml
             .project
             .ok_or(MetadataError::FieldNotFound("project"))?;
@@ -333,7 +331,8 @@ mod tests {
         [project]
         name = "asdf"
     "#;
-        let meta = ResolutionMetadata::parse_pyproject_toml(s, None);
+        let pyproject = PyProjectToml::from_toml(s).unwrap();
+        let meta = ResolutionMetadata::parse_pyproject_toml(pyproject, None);
         assert!(matches!(meta, Err(MetadataError::FieldNotFound("version"))));
 
         let s = r#"
@@ -341,7 +340,8 @@ mod tests {
         name = "asdf"
         dynamic = ["version"]
     "#;
-        let meta = ResolutionMetadata::parse_pyproject_toml(s, None);
+        let pyproject = PyProjectToml::from_toml(s).unwrap();
+        let meta = ResolutionMetadata::parse_pyproject_toml(pyproject, None);
         assert!(matches!(meta, Err(MetadataError::DynamicField("version"))));
 
         let s = r#"
@@ -349,7 +349,8 @@ mod tests {
         name = "asdf"
         version = "1.0"
     "#;
-        let meta = ResolutionMetadata::parse_pyproject_toml(s, None).unwrap();
+        let pyproject = PyProjectToml::from_toml(s).unwrap();
+        let meta = ResolutionMetadata::parse_pyproject_toml(pyproject, None).unwrap();
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
         assert!(meta.requires_python.is_none());
@@ -362,7 +363,8 @@ mod tests {
         version = "1.0"
         requires-python = ">=3.6"
     "#;
-        let meta = ResolutionMetadata::parse_pyproject_toml(s, None).unwrap();
+        let pyproject = PyProjectToml::from_toml(s).unwrap();
+        let meta = ResolutionMetadata::parse_pyproject_toml(pyproject, None).unwrap();
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
         assert_eq!(meta.requires_python, Some(">=3.6".parse().unwrap()));
@@ -376,7 +378,8 @@ mod tests {
         requires-python = ">=3.6"
         dependencies = ["foo"]
     "#;
-        let meta = ResolutionMetadata::parse_pyproject_toml(s, None).unwrap();
+        let pyproject = PyProjectToml::from_toml(s).unwrap();
+        let meta = ResolutionMetadata::parse_pyproject_toml(pyproject, None).unwrap();
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
         assert_eq!(meta.requires_python, Some(">=3.6".parse().unwrap()));
@@ -393,7 +396,8 @@ mod tests {
         [project.optional-dependencies]
         dotenv = ["bar"]
     "#;
-        let meta = ResolutionMetadata::parse_pyproject_toml(s, None).unwrap();
+        let pyproject = PyProjectToml::from_toml(s).unwrap();
+        let meta = ResolutionMetadata::parse_pyproject_toml(pyproject, None).unwrap();
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
         assert_eq!(meta.requires_python, Some(">=3.6".parse().unwrap()));

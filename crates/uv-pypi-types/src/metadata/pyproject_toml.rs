@@ -12,13 +12,13 @@ use crate::MetadataError;
 /// A `pyproject.toml` as specified in PEP 517.
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
-pub(super) struct PyProjectToml {
-    pub(super) project: Option<Project>,
+pub struct PyProjectToml {
+    pub project: Option<Project>,
     pub(super) tool: Option<Tool>,
 }
 
 impl PyProjectToml {
-    pub(super) fn from_toml(toml: &str) -> Result<Self, MetadataError> {
+    pub fn from_toml(toml: &str) -> Result<Self, MetadataError> {
         let pyproject_toml: toml_edit::ImDocument<_> = toml_edit::ImDocument::from_str(toml)
             .map_err(MetadataError::InvalidPyprojectTomlSyntax)?;
         let pyproject_toml: Self = PyProjectToml::deserialize(pyproject_toml.into_deserializer())
@@ -35,20 +35,20 @@ impl PyProjectToml {
 /// See <https://packaging.python.org/en/latest/specifications/pyproject-toml>.
 #[derive(Deserialize, Debug)]
 #[serde(try_from = "PyprojectTomlWire")]
-pub(super) struct Project {
+pub struct Project {
     /// The name of the project
-    pub(super) name: PackageName,
+    pub name: PackageName,
     /// The version of the project as supported by PEP 440
-    pub(super) version: Option<Version>,
+    pub version: Option<Version>,
     /// The Python version requirements of the project
-    pub(super) requires_python: Option<String>,
+    pub requires_python: Option<String>,
     /// Project dependencies
-    pub(super) dependencies: Option<Vec<String>>,
+    pub dependencies: Option<Vec<String>>,
     /// Optional dependencies
-    pub(super) optional_dependencies: Option<IndexMap<ExtraName, Vec<String>>>,
+    pub optional_dependencies: Option<IndexMap<ExtraName, Vec<String>>>,
     /// Specifies which fields listed by PEP 621 were intentionally unspecified
     /// so another tool can/will provide such metadata dynamically.
-    pub(super) dynamic: Option<Vec<String>>,
+    pub dynamic: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Debug)]
