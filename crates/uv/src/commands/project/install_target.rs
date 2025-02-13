@@ -2,7 +2,8 @@ use std::borrow::Cow;
 use std::path::Path;
 use std::str::FromStr;
 
-use itertools::{Either, Itertools};
+use itertools::Either;
+use rustc_hash::FxHashSet;
 
 use uv_configuration::ExtrasSpecification;
 use uv_distribution_types::Index;
@@ -258,10 +259,11 @@ impl<'lock> InstallTarget<'lock> {
             Self::Project { lock, .. }
             | Self::Workspace { lock, .. }
             | Self::NonProjectWorkspace { lock, .. } => {
+                let roots = self.roots().collect::<FxHashSet<_>>();
                 let member_packages: Vec<&Package> = lock
                     .packages()
                     .iter()
-                    .filter(|package| self.roots().contains(package.name()))
+                    .filter(|package| roots.contains(package.name()))
                     .collect();
 
                 // If `provides-extra` is not set in any package, do not perform the check, as this
@@ -274,12 +276,14 @@ impl<'lock> InstallTarget<'lock> {
                     return Ok(());
                 }
 
+                // Collect all known extras from the member packages.
+                let known_extras = member_packages
+                    .iter()
+                    .flat_map(|package| package.provides_extras().into_iter().flatten())
+                    .collect::<FxHashSet<_>>();
+
                 for extra in extras {
-                    if !member_packages.iter().any(|package| {
-                        package
-                            .provides_extras()
-                            .is_some_and(|provides_extras| provides_extras.contains(extra))
-                    }) {
+                    if !known_extras.contains(extra) {
                         return match self {
                             Self::Project { .. } => {
                                 Err(ProjectError::MissingExtraProject(extra.clone()))
