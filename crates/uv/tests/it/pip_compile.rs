@@ -1697,7 +1697,8 @@ fn compile_python_conflicts() -> Result<()> {
 
 #[test]
 fn compile_python_build_version_different_than_target() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.12", "3.10", "3.11"]);
+    let context =
+        TestContext::new_with_versions(&["3.12", "3.10", "3.11"]).with_filtered_python_sources();
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("black==23.10.1")?;
 
@@ -1804,7 +1805,7 @@ fn compile_python_build_version_different_than_target() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for PyPy 3.11 in virtual environments, managed installations, or search path
+    error: No interpreter found for PyPy 3.11 in [PYTHON SOURCES]
     "###
     );
 
@@ -1820,7 +1821,7 @@ fn compile_python_build_version_different_than_target() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for Python 3.13 in virtual environments, managed installations, or search path
+    error: No interpreter found for Python 3.13 in [PYTHON SOURCES]
     "###
     );
 

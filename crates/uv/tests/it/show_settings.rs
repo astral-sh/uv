@@ -101,7 +101,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [
@@ -273,7 +272,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [
@@ -446,7 +444,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [
@@ -651,7 +648,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [
@@ -825,7 +821,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
@@ -978,7 +973,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [
@@ -1175,7 +1169,6 @@ fn resolve_index_url() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [
@@ -1378,7 +1371,6 @@ fn resolve_index_url() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [
@@ -1635,7 +1627,6 @@ fn resolve_find_links() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
@@ -1831,7 +1822,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
@@ -1990,7 +1980,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [
@@ -2191,7 +2180,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [
@@ -2416,7 +2404,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
@@ -2565,7 +2552,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
@@ -2714,7 +2700,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
@@ -2865,7 +2850,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
@@ -3194,7 +3178,6 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
@@ -3371,7 +3354,6 @@ fn resolve_both() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [
@@ -3666,7 +3648,6 @@ fn resolve_config_file() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [
@@ -3939,7 +3920,6 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
@@ -4091,7 +4071,6 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
@@ -4262,7 +4241,6 @@ fn allow_insecure_host() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [],
@@ -4425,7 +4403,6 @@ fn index_priority() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [
@@ -4628,7 +4605,6 @@ fn index_priority() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [
@@ -4837,7 +4813,6 @@ fn index_priority() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [
@@ -5041,7 +5016,6 @@ fn index_priority() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [
@@ -5252,7 +5226,6 @@ fn index_priority() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [
@@ -5456,7 +5429,6 @@ fn index_priority() -> anyhow::Result<()> {
                 },
             ),
         ),
-        python_legacy: None,
         settings: PipSettings {
             index_locations: IndexLocations {
                 indexes: [
