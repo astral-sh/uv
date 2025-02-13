@@ -2,7 +2,6 @@ use std::future::Future;
 use std::io;
 use std::path::Path;
 use std::pin::Pin;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
@@ -31,7 +30,6 @@ use uv_pypi_types::HashDigest;
 use uv_types::{BuildContext, BuildStack};
 
 use crate::archive::Archive;
-use crate::locks::Locks;
 use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::source::SourceDistributionBuilder;
 use crate::{Error, LocalWheel, Reporter, RequiresDist};
@@ -51,7 +49,6 @@ use crate::{Error, LocalWheel, Reporter, RequiresDist};
 pub struct DistributionDatabase<'a, Context: BuildContext> {
     build_context: &'a Context,
     builder: SourceDistributionBuilder<'a, Context>,
-    locks: Rc<Locks>,
     client: ManagedClient<'a>,
     reporter: Option<Arc<dyn Reporter>>,
 }
@@ -65,7 +62,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         Self {
             build_context,
             builder: SourceDistributionBuilder::new(build_context),
-            locks: Rc::new(Locks::default()),
             client: ManagedClient::new(client, concurrent_downloads),
             reporter: None,
         }
@@ -347,9 +343,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         tags: &Tags,
         hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
-        let lock = self.locks.acquire(dist).await;
-        let _guard = lock.lock().await;
-
         let built_wheel = self
             .builder
             .download_and_build(&BuildableSource::Dist(dist), tags, hashes, &self.client)
@@ -495,9 +488,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
             }
         }
-
-        let lock = self.locks.acquire(source).await;
-        let _guard = lock.lock().await;
 
         let metadata = self
             .builder
