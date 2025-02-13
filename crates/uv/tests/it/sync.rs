@@ -3703,8 +3703,8 @@ fn sync_active_script_environment() -> Result<()> {
         .filters()
         .into_iter()
         .chain(vec![(
-            r"environments-v1/script-\w+",
-            "environments-v1/script-[HASH]",
+            r"environments-v2/script-[a-z0-9]+",
+            "environments-v2/script-[HASH]",
         )])
         .collect::<Vec<_>>();
 
@@ -3715,8 +3715,8 @@ fn sync_active_script_environment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=foo` does not match the script environment path `[CACHE_DIR]/environments-v1/script-[HASH]` and will be ignored; use `--active` to target the active environment instead
-    Creating script environment at: [CACHE_DIR]/environments-v1/script-[HASH]
+    warning: `VIRTUAL_ENV=foo` does not match the script environment path `[CACHE_DIR]/environments-v2/script-[HASH]` and will be ignored; use `--active` to target the active environment instead
+    Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
