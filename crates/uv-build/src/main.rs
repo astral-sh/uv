@@ -1,5 +1,3 @@
-#![allow(clippy::print_stdout)]
-
 use anyhow::{bail, Context, Result};
 use std::env;
 use std::io::Write;
