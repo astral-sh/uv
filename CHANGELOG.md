@@ -1,5 +1,62 @@
 # Changelog
 
+## 0.6.0
+
+### Breaking changes
+
+- **Create `main.py` instead of `hello.py` in `uv init`** ([#10369](https://github.com/astral-sh/uv/pull/10369))
+
+  Previously, `uv init` created a `hello.py` sample file. Now, `uv init` will create a `main.py` instead — which from user feedback aligns with common expectations. The `--bare` option can be used to avoid creating the file. 
+
+- **Respect `UV_PYTHON` in `uv python install`** ([#11487](https://github.com/astral-sh/uv/pull/11487))
+
+  Previously, `uv python install` did not read this environment variable. Now it does. We believe this matches user expectations, however, this will take priority over `.python-version` files which could be considered breaking.
+
+- **Set `UV` to the uv executable path** ([#11326](https://github.com/astral-sh/uv/pull/11326))
+
+  When uv spawns a subprocess, it will now have the `UV` environment variable set to the `uv` binary path. This change is breaking if you are setting the `UV` environment variable yourself, as we will overwrite its value.
+
+- **Error on non-existent extras, e.g., in `uv sync`** ([#11426](https://github.com/astral-sh/uv/pull/11426))
+
+  Previously, requesting extras (e.g., via `uv sync --extra foo`) that did not exist, would not fail. This is _generally_ correct behavior when resolving requests for package extras, because an extra may be present on one compatible version of a package but not another. However, this flexibility doesn't need to apply to the local project and it's less surprising to error here.
+
+- **Change `-p` to a `--python` alias in `uv pip compile`** ([#11486](https://github.com/astral-sh/uv/pull/11486))
+
+  In `uv pip compile`, `-p` was an alias for `--python-version` while everywhere else in uv's interface it is an alias for `--python`. Additionally, `uv pip compile` did not respect the `UV_PYTHON` environment variable. Now, the semantics of this flag have been updated for parity with the rest of the CLI. 
+  
+  However, `--python-version` is unique: if we cannot find an interpreter with the given version, we will not fail. Instead, we'll use an alternative interpreter and override its version tags with the requested version during package resolution. This behavior is retained here for backwards compatibility, `--python <version>` / `-p <version>` will not fail if the version cannot be found. However, if a specific interpreter is requested, e.g., with `--python <path>` or `--python pypy`, and cannot be found — uv will exit with an error.
+  
+  The breaking changes here are that `UV_PYTHON` is respected and `--python <version>` will no longer fail if the version cannot be found.
+
+- **Bump `alpine` default tag to 3.21 for derived Docker images** ([#11157](https://github.com/astral-sh/uv/pull/11157))
+
+  Alpine 3.21 was released in Dec 2024 and is used in the official Alpine-based Python images. Our `uv:python3.x-alpine` images have been using 3.21 since uv v0.5.8. However, now the the `uv:alpine` image will use 3.21 instead of 3.20 and `uv:alpine3.20` will no longer be updated.
+
+- **Use files instead of junctions on Windows** ([#11269](https://github.com/astral-sh/uv/pull/11269))
+
+  Previously, we used junctions for atomic replacement of cache entries on Windows. Now, we use a file with a pointer to the cache entry instead. This resolves various edge-case behaviors with junctions. These files are only intended to be consumed by uv and the cache version has been bumped. We do not think this change will affect workflows.
+
+- **Add `provides-extras` to lockfile** ([#11063](https://github.com/astral-sh/uv/pull/11063))
+
+  This field is used to track extras provided by local packages. This change is not breaking, but may add empty lists to existing lockfiles.
+
+### Stabilizations
+
+- **`uv publish` is no longer in preview** ([#11032](https://github.com/astral-sh/uv/pull/11032))
+
+  This does not come with any behavior changes. You will no longer see an experimental warning when using `uv publish`. See the linked pull request for a report on the stabilization.
+
+### Enhancements
+
+- Support `--active` for PEP 723 script environments ([#11433](https://github.com/astral-sh/uv/pull/11433))
+
+### Bug fixes
+
+- Avoid reading metadata from `.egg-info` files ([#11395](https://github.com/astral-sh/uv/pull/11395))
+- Include archive bucket version in archive pointers ([#11306](https://github.com/astral-sh/uv/pull/11306))
+- Omit lockfile version when additional fields are dynamic ([#11468](https://github.com/astral-sh/uv/pull/11468))
+- Respect executable name in `uvx --from tool@latest` ([#11465](https://github.com/astral-sh/uv/pull/11465))
+
 ## 0.5.31
 
 ### Enhancements
