@@ -57,6 +57,7 @@ use crate::{
     ExcludeNewer, InMemoryIndex, MetadataResponse, PrereleaseMode, RequiresPython, ResolutionMode,
     ResolverOutput,
 };
+use std::collections::HashMap;
 
 mod installable;
 mod map;
@@ -102,6 +103,7 @@ static X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
 #[serde(try_from = "LockWire")]
 pub struct Lock {
     version: u32,
+    metadata: HashMap<String, String>, // Add this field
     /// If this lockfile was built from a forking resolution with non-identical forks, store the
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
     fork_markers: Vec<UniversalMarker>,
@@ -500,6 +502,7 @@ impl Lock {
         }
         let lock = Self {
             version,
+            metadata: HashMap::new(),
             fork_markers,
             conflicts,
             supported_environments,
@@ -548,6 +551,10 @@ impl Lock {
     /// Returns the lockfile version.
     pub fn version(&self) -> u32 {
         self.version
+    }
+
+    pub fn add_metadata(&mut self, key: &str, value: &str) {
+        self.metadata.insert(key.to_string(), value.to_string());
     }
 
     /// Returns the number of packages in the lockfile.
@@ -660,6 +667,15 @@ impl Lock {
         // the use of inline tables.
         let mut doc = toml_edit::DocumentMut::new();
         doc.insert("version", value(i64::from(self.version)));
+
+        // Add uv metadata if present
+        if let Some(uv_version) = self.metadata.get("uv") {
+            let mut array = ArrayOfTables::new();
+            let mut table = Table::new();
+            table.insert("version", value(uv_version.trim_matches('"')));
+            array.push(table);
+            doc.insert("uv", Item::ArrayOfTables(array));
+        }
 
         doc.insert("requires-python", value(self.requires_python.to_string()));
 
