@@ -981,6 +981,7 @@ impl Lock {
             .metadata
             .requires_dist
             .iter()
+            .flatten()
             .cloned()
             .map(|requirement| normalize_requirement(requirement, root))
             .collect::<Result<_, _>>()?;
@@ -1777,18 +1778,32 @@ impl Package {
         let sdist = SourceDist::from_annotated_dist(&id, annotated_dist)?;
         let wheels = Wheel::from_annotated_dist(annotated_dist)?;
         let requires_dist = if id.source.is_immutable() {
-            BTreeSet::default()
+            None
         } else {
-            annotated_dist
-                .metadata
-                .as_ref()
-                .expect("metadata is present")
-                .requires_dist
-                .iter()
-                .cloned()
-                .map(|requirement| requirement.relative_to(root))
-                .collect::<Result<_, _>>()
-                .map_err(LockErrorKind::RequirementRelativePath)?
+            Some(
+                annotated_dist
+                    .metadata
+                    .as_ref()
+                    .expect("metadata is present")
+                    .requires_dist
+                    .iter()
+                    .cloned()
+                    .map(|requirement| requirement.relative_to(root))
+                    .collect::<Result<_, _>>()
+                    .map_err(LockErrorKind::RequirementRelativePath)?,
+            )
+        };
+        let provides_extras = if id.source.is_immutable() {
+            None
+        } else {
+            Some(
+                annotated_dist
+                    .metadata
+                    .as_ref()
+                    .expect("metadata is present")
+                    .provides_extras
+                    .clone(),
+            )
         };
         let dependency_groups = if id.source.is_immutable() {
             BTreeMap::default()
@@ -1820,6 +1835,7 @@ impl Package {
             dependency_groups: BTreeMap::default(),
             metadata: PackageMetadata {
                 requires_dist,
+                provides_extras,
                 dependency_groups,
             },
         })
@@ -2402,10 +2418,22 @@ impl Package {
         {
             let mut metadata_table = Table::new();
 
-            if !self.metadata.requires_dist.is_empty() {
-                let requires_dist = self
-                    .metadata
-                    .requires_dist
+            // Even output the empty list to signal it's *known* empty.
+            if let Some(provides_extras) = &self.metadata.provides_extras {
+                let provides_extras = provides_extras
+                    .iter()
+                    .map(|extra| {
+                        serde::Serialize::serialize(&extra, toml_edit::ser::ValueSerializer::new())
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                // This is just a list of names, so linebreaking it is excessive.
+                let provides_extras = Array::from_iter(provides_extras);
+                metadata_table.insert("provides-extras", value(provides_extras));
+            }
+
+            // Even output the empty set to signal it's *known* empty.
+            if let Some(requires_dist) = &self.metadata.requires_dist {
+                let requires_dist = requires_dist
                     .iter()
                     .map(|requirement| {
                         serde::Serialize::serialize(
@@ -2589,6 +2617,11 @@ impl Package {
     fn is_dynamic(&self) -> bool {
         self.id.version.is_none()
     }
+
+    /// Returns the extras the package provides, if any.
+    pub fn provides_extras(&self) -> Option<&Vec<ExtraName>> {
+        self.metadata.provides_extras.as_ref()
+    }
 }
 
 /// Attempts to construct a `VerbatimUrl` from the given normalized `Path`.
@@ -2632,8 +2665,12 @@ struct PackageWire {
 #[derive(Clone, Default, Debug, Eq, PartialEq, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct PackageMetadata {
+    // The Options here are so we can distinguish "no info available"
+    // from "known and empty".
     #[serde(default)]
-    requires_dist: BTreeSet<Requirement>,
+    requires_dist: Option<BTreeSet<Requirement>>,
+    #[serde(default)]
+    provides_extras: Option<Vec<ExtraName>>,
     #[serde(default, rename = "requires-dev", alias = "dependency-groups")]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
 }

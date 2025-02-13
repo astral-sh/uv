@@ -371,7 +371,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         // If the wheel was unzipped previously, respect it. Source distributions are
         // cached under a unique revision ID, so unzipped directories are never stale.
-        match built_wheel.target.canonicalize() {
+        match self.build_context.cache().resolve_link(&built_wheel.target) {
             Ok(archive) => {
                 return Ok(LocalWheel {
                     dist: Dist::Source(dist.clone()),

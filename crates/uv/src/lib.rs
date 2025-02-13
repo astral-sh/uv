@@ -1269,10 +1269,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Commands::Publish(args) => {
             show_settings!(args);
 
-            if globals.preview.is_disabled() {
-                warn_user_once!("`uv publish` is experimental and may change without warning");
-            }
-
             if args.skip_existing {
                 bail!(
                     "`uv publish` does not support `--skip-existing` because there is not a \
@@ -1813,16 +1809,35 @@ async fn run_project(
 
 /// The main entry point for a uv invocation.
 ///
-/// WARNING: This entry point is not recommended for external consumption, the
-/// uv binary interface is the official public API. When using this entry
-/// point, uv assumes it is running in a process it controls and that the
-/// entire process lifetime is managed by uv. Unexpected behavior may be
-/// encountered if this entry point is called multiple times in a single process.
-pub fn main<I, T>(args: I) -> ExitCode
+/// # Usage
+///
+/// This entry point is not recommended for external consumption, the uv binary interface is the
+/// official public API.
+///
+/// When using this entry point, uv assumes it is running in a process it controls and that the
+/// entire process lifetime is managed by uv. Unexpected behavior may be encountered if this entry
+/// point is called multiple times in a single process.
+///
+/// # Safety
+///
+/// It is only safe to call this routine when it is known that multiple threads are not running.
+#[allow(unsafe_code)]
+pub unsafe fn main<I, T>(args: I) -> ExitCode
 where
     I: IntoIterator<Item = T>,
     T: Into<OsString> + Clone,
 {
+    // Set the `UV` variable to the current executable so it is implicitly propagated to all child
+    // processes, e.g., in `uv run`.
+    if let Ok(current_exe) = std::env::current_exe() {
+        // SAFETY: The proof obligation must be satisfied by the caller.
+        unsafe {
+            // This will become unsafe in Rust 2024
+            // See https://doc.rust-lang.org/std/env/fn.set_var.html#safety
+            std::env::set_var(EnvVars::UV, current_exe);
+        }
+    }
+
     // `std::env::args` is not `Send` so we parse before passing to our runtime
     // https://github.com/rust-lang/rust/pull/48005
     let cli = match Cli::try_parse_from(args) {
