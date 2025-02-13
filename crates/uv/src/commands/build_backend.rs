@@ -1,5 +1,3 @@
-#![allow(clippy::print_stdout)]
-
 use crate::commands::ExitStatus;
 use anyhow::{Context, Result};
 use std::env;
