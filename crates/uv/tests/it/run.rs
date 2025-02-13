@@ -4218,11 +4218,12 @@ fn detect_infinite_recursion() -> Result<()> {
         #!{uv} run
 
         print("Hello, world!")
-    "#, uv = get_bin().display()})?;
+    "#, uv = get_bin().display() })?;
 
     fs_err::set_permissions(test_script.path(), PermissionsExt::from_mode(0o0744))?;
 
     let mut cmd = std::process::Command::new(test_script.as_os_str());
+    context.add_shared_env(&mut cmd, false);
 
     // Set the max recursion depth to a lower amount to speed up testing.
     cmd.env("UV_RUN_MAX_RECURSION_DEPTH", "5");
