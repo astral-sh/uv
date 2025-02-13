@@ -39,7 +39,6 @@ use uv_resolver::{
     InMemoryIndex, OptionsBuilder, PrereleaseMode, PythonRequirement, RequiresPython,
     ResolutionMode, ResolverEnvironment,
 };
-use uv_static::EnvVars;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::warn_user;
 
@@ -96,7 +95,6 @@ pub(crate) async fn pip_compile(
     annotation_style: AnnotationStyle,
     link_mode: LinkMode,
     mut python: Option<String>,
-    mut python_legacy: Option<String>,
     system: bool,
     python_preference: PythonPreference,
     concurrency: Concurrency,
@@ -106,26 +104,26 @@ pub(crate) async fn pip_compile(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
-    // Respect `UV_PYTHON` with legacy behavior
-    if python_legacy.is_none() && python_version.is_none() && python.is_none() {
-        if let Ok(python) = std::env::var(EnvVars::UV_PYTHON) {
-            if !python.is_empty() {
-                python_legacy = Some(python);
+    // Respect `UV_PYTHON`
+    if python.is_none() && python_version.is_none() {
+        if let Ok(request) = std::env::var("UV_PYTHON") {
+            if !request.is_empty() {
+                python = Some(request);
             }
         }
     }
 
-    // Resolve `-p` into `--python-version` or `--python`
-    if let Some(python_legacy) = python_legacy {
-        // `-p` is mutually exclusive with these options at the CLI level so it's safe to replace
-        // them
-        debug_assert!(python_version.is_none());
-        debug_assert!(python.is_none());
-
-        if let Ok(version) = PythonVersion::from_str(&python_legacy) {
-            python_version = Some(version);
-        } else {
-            python = Some(python_legacy);
+    // If `--python` / `-p` is a simple Python version request, we treat it as `--python-version`
+    // for backwards compatibility. `-p` was previously aliased to `--python-version` but changed to
+    // `--python` for consistency with the rest of the CLI in v0.6.0. Since we assume metadata is
+    // consistent across wheels, it's okay for us to build wheels (to determine metadata) with an
+    // alternative Python interpreter as long as we solve with the proper Python version tags.
+    if python_version.is_none() {
+        if let Some(request) = python.as_ref() {
+            if let Ok(version) = PythonVersion::from_str(request) {
+                python_version = Some(version);
+                python = None;
+            }
         }
     }
 
@@ -242,6 +240,7 @@ pub(crate) async fn pip_compile(
                 && python_version.minor() == interpreter.python_minor()
         };
         if no_build.is_none()
+            && python.is_none()
             && python_version.version() != interpreter.python_version()
             && (python_version.patch().is_some() || !matches_without_patch)
         {

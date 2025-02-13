@@ -5848,11 +5848,13 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt><code>--python</code> <i>python</i></dt><dd><p>The Python interpreter to use during resolution.</p>
+</dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use during resolution.</p>
 
 <p>A Python interpreter is required for building source distributions to determine package metadata when there are not wheels.</p>
 
 <p>The interpreter is also used to determine the default minimum Python version, unless <code>--python-version</code> is provided.</p>
+
+<p>This option respects <code>UV_PYTHON</code>, but when set via environment variable, it is overridden by <code>--python-version</code>.</p>
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 

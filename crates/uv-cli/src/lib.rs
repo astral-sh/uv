@@ -1079,15 +1079,23 @@ pub struct PipCompileArgs {
 
     /// The Python interpreter to use during resolution.
     ///
-    /// A Python interpreter is required for building source distributions to
-    /// determine package metadata when there are not wheels.
+    /// A Python interpreter is required for building source distributions to determine package
+    /// metadata when there are not wheels.
     ///
-    /// The interpreter is also used to determine the default minimum Python
-    /// version, unless `--python-version` is provided.
+    /// The interpreter is also used to determine the default minimum Python version, unless
+    /// `--python-version` is provided.
     ///
-    /// See `uv help python` for details on Python discovery and supported
-    /// request formats.
-    #[arg(long, verbatim_doc_comment, help_heading = "Python options", value_parser = parse_maybe_string)]
+    /// This option respects `UV_PYTHON`, but when set via environment variable, it is overridden
+    /// by `--python-version`.
+    ///
+    /// See `uv help python` for details on Python discovery and supported request formats.
+    #[arg(
+        long,
+        short,
+        verbatim_doc_comment,
+        help_heading = "Python options",
+        value_parser = parse_maybe_string
+    )]
     pub python: Option<Maybe<String>>,
 
     /// Install packages into the system Python environment.
@@ -1172,24 +1180,6 @@ pub struct PipCompileArgs {
     /// example, `3.8` is mapped to `3.8.0`.
     #[arg(long, help_heading = "Python options")]
     pub python_version: Option<PythonVersion>,
-
-    /// The Python interpreter or version to use for resolution.
-    ///
-    /// In previous versions of uv, `-p` was an alias for `--python-version` in `uv pip compile` but
-    /// an alias for `--python` in all other commands. This option is provided as a backwards
-    /// compatible shim, allowing `-p` to behave as `--python` without introducing a breaking
-    /// change.
-    ///
-    /// `UV_PYTHON` is respected, but overridden by `--python-version` or `--python`.
-    #[arg(
-        short,
-        hide = true,
-        conflicts_with_all = ["python",
-        "python_version"],
-        value_name = "PYTHON",
-        help_heading = "Python options"
-    )]
-    pub python_legacy: Option<String>,
 
     /// The platform for which requirements should be resolved.
     ///
