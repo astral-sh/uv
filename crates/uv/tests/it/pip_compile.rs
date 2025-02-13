@@ -1582,7 +1582,11 @@ fn compile_python_conflicts() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Cannot specify both `-p` (3.12) and `--python-version` (3.12).
+    error: the argument '--python-version <PYTHON_VERSION>' cannot be used with '-p <PYTHON>'
+
+    Usage: uv pip compile --cache-dir [CACHE_DIR] --python-version <PYTHON_VERSION> --exclude-newer <EXCLUDE_NEWER> <SRC_FILE>...
+
+    For more information, try '--help'.
     "###
     );
 
@@ -1597,7 +1601,11 @@ fn compile_python_conflicts() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Cannot specify both `-p` (3.12) and `--python` (3.12).
+    error: the argument '--python <PYTHON>' cannot be used with '-p <PYTHON>'
+
+    Usage: uv pip compile --cache-dir [CACHE_DIR] --python <PYTHON> --exclude-newer <EXCLUDE_NEWER> <SRC_FILE>...
+
+    For more information, try '--help'.
     "###
     );
 

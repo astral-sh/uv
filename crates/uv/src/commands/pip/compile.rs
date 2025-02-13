@@ -106,20 +106,6 @@ pub(crate) async fn pip_compile(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
-    // If the user requests both `-p` and `--python` or `--python-version`, error
-    if let Some(python_legacy) = python_legacy.as_ref() {
-        if let Some(python) = python.as_ref() {
-            return Err(anyhow!(
-                "Cannot specify both `-p` ({python_legacy}) and `--python` ({python}).",
-            ));
-        }
-        if let Some(python_version) = python_version.as_ref() {
-            return Err(anyhow!(
-                "Cannot specify both `-p` ({python_legacy}) and `--python-version` ({python_version}).",
-            ));
-        }
-    }
-
     // Respect `UV_PYTHON` with legacy behavior
     if python_legacy.is_none() && python_version.is_none() && python.is_none() {
         if let Ok(python) = std::env::var(EnvVars::UV_PYTHON) {
@@ -131,6 +117,11 @@ pub(crate) async fn pip_compile(
 
     // Resolve `-p` into `--python-version` or `--python`
     if let Some(python_legacy) = python_legacy {
+        // `-p` is mutually exclusive with these options at the CLI level so it's safe to replace
+        // them
+        debug_assert!(python_version.is_none());
+        debug_assert!(python.is_none());
+
         if let Ok(version) = PythonVersion::from_str(&python_legacy) {
             python_version = Some(version);
         } else {

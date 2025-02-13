@@ -1181,7 +1181,14 @@ pub struct PipCompileArgs {
     /// change.
     ///
     /// `UV_PYTHON` is respected, but overridden by `--python-version` or `--python`.
-    #[arg(short, hide = true, help_heading = "Python options")]
+    #[arg(
+        short,
+        hide = true,
+        conflicts_with_all = ["python",
+        "python_version"],
+        value_name = "PYTHON",
+        help_heading = "Python options"
+    )]
     pub python_legacy: Option<String>,
 
     /// The platform for which requirements should be resolved.
