@@ -1917,6 +1917,7 @@ fn export_group() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["typing-extensions"]
+
         [dependency-groups]
         foo = ["anyio ; sys_platform == 'darwin'"]
         bar = ["iniconfig"]
@@ -2053,6 +2054,16 @@ fn export_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.export().arg("--all-groups").arg("--no-group").arg("baz"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    error: Group `baz` is not defined in the project's `dependency-groups` table
     "###);
 
     Ok(())

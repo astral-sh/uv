@@ -46,9 +46,8 @@ use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     default_dependency_groups, script_specification, update_environment,
-    validate_project_requires_python, DependencyGroupsTarget, EnvironmentSpecification,
-    ProjectEnvironment, ProjectError, ScriptEnvironment, ScriptInterpreter, UniversalState,
-    WorkspacePython,
+    validate_project_requires_python, EnvironmentSpecification, ProjectEnvironment, ProjectError,
+    ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::run::run_to_completion;
@@ -648,21 +647,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 }
             } else {
                 // Validate that any referenced dependency groups are defined in the workspace.
-                if !frozen {
-                    let target = match &project {
-                        VirtualProject::Project(project) => {
-                            if all_packages {
-                                DependencyGroupsTarget::Workspace(project.workspace())
-                            } else {
-                                DependencyGroupsTarget::Project(project)
-                            }
-                        }
-                        VirtualProject::NonProject(workspace) => {
-                            DependencyGroupsTarget::Workspace(workspace)
-                        }
-                    };
-                    target.validate(&dev)?;
-                }
 
                 // Determine the default groups to include.
                 let defaults = default_dependency_groups(project.pyproject_toml())?;
@@ -751,12 +735,17 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 };
 
                 let install_options = InstallOptions::default();
+                let dev = dev.with_defaults(defaults);
+
+                // Validate that the set of requested extras and development groups are defined in the lockfile.
+                target.validate_extras(&extras)?;
+                target.validate_groups(&dev)?;
 
                 match project::sync::do_sync(
                     target,
                     &venv,
                     &extras,
-                    &dev.with_defaults(defaults),
+                    &dev,
                     editable,
                     install_options,
                     modifications,

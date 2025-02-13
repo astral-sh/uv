@@ -1,6 +1,6 @@
 //! Resolve the current [`ProjectWorkspace`] or [`Workspace`].
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use glob::{glob, GlobError, PatternError};
@@ -19,8 +19,7 @@ use uv_warnings::warn_user_once;
 
 use crate::dependency_groups::{DependencyGroupError, FlatDependencyGroups};
 use crate::pyproject::{
-    DependencyGroups, Project, PyProjectToml, PyprojectTomlError, Sources, ToolUvSources,
-    ToolUvWorkspace,
+    Project, PyProjectToml, PyprojectTomlError, Sources, ToolUvSources, ToolUvWorkspace,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -486,44 +485,6 @@ impl Workspace {
             return vec![];
         };
         constraints.clone()
-    }
-
-    /// Returns the set of all dependency group names defined in the workspace.
-    pub fn groups(&self) -> BTreeSet<&GroupName> {
-        self.pyproject_toml
-            .dependency_groups
-            .iter()
-            .flat_map(DependencyGroups::keys)
-            .chain(
-                self.packages
-                    .values()
-                    .filter_map(|member| member.pyproject_toml.dependency_groups.as_ref())
-                    .flat_map(DependencyGroups::keys),
-            )
-            .chain(
-                if self
-                    .pyproject_toml
-                    .tool
-                    .as_ref()
-                    .and_then(|tool| tool.uv.as_ref())
-                    .and_then(|uv| uv.dev_dependencies.as_ref())
-                    .is_some()
-                    || self.packages.values().any(|member| {
-                        member
-                            .pyproject_toml
-                            .tool
-                            .as_ref()
-                            .and_then(|tool| tool.uv.as_ref())
-                            .and_then(|uv| uv.dev_dependencies.as_ref())
-                            .is_some()
-                    })
-                {
-                    Some(&*DEV_DEPENDENCIES)
-                } else {
-                    None
-                },
-            )
-            .collect()
     }
 
     /// The path to the workspace root, the directory containing the top level `pyproject.toml` with

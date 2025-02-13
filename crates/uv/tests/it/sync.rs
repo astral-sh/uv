@@ -617,6 +617,7 @@ fn sync_legacy_non_project_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 6 packages in [TIME]
     error: Group `bop` is not defined in any project's `dependency-groups` table
     "###);
 
@@ -1759,6 +1760,7 @@ fn sync_non_existent_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 7 packages in [TIME]
     error: Group `baz` is not defined in the project's `dependency-groups` table
     "###);
 
@@ -1768,6 +1770,7 @@ fn sync_non_existent_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 7 packages in [TIME]
     error: Group `baz` is not defined in the project's `dependency-groups` table
     "###);
 
@@ -1782,6 +1785,55 @@ fn sync_non_existent_group() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + typing-extensions==4.10.0
+    "###);
+
+    // Requesting with `--frozen` should respect the groups in the lockfile, rather than the
+    // `pyproject.toml`.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group").arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + requests==2.31.0
+     + urllib3==2.2.1
+    "###);
+
+    // Replace `bar` with `baz`.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        baz = ["iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group").arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 6 packages in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group").arg("baz"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Group `baz` is not defined in the project's `dependency-groups` table
     "###);
 
     Ok(())
@@ -5862,6 +5914,7 @@ fn sync_all_groups() -> Result<()> {
         [dependency-groups]
         types = ["sniffio>=1"]
         async = ["anyio>=3"]
+        empty = []
 
         [tool.uv.workspace]
         members = ["child"]
@@ -5944,7 +5997,20 @@ fn sync_all_groups() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 8 packages in [TIME]
     error: Group `foo` is not defined in any project's `dependency-groups` table
+    "###);
+
+    // Sync an empty group.
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("empty"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - packaging==24.0
     "###);
 
     Ok(())
