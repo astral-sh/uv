@@ -4489,11 +4489,13 @@ pub struct PythonInstallArgs {
 
     /// The Python version(s) to install.
     ///
-    /// If not provided, the requested Python version(s) will be read from the `.python-versions` or
-    /// `.python-version` files. If neither file is present, uv will check if it has installed any
-    /// Python versions. If not, it will install the latest stable version of Python.
+    /// If not provided, the requested Python version(s) will be read from the `UV_PYTHON`
+    /// environment variable then the `.python-versions` or `.python-version` files. If none of the
+    /// above are present, uv will check if it has installed any Python versions. If not, it will
+    /// install the latest stable version of Python.
     ///
     /// See `uv help python` to view supported request formats.
+    #[arg(env = EnvVars::UV_PYTHON)]
     pub targets: Vec<String>,
 
     /// Set the URL to use as the source for downloading Python installations.
@@ -4544,7 +4546,6 @@ pub struct PythonInstallArgs {
     #[arg(long)]
     pub default: bool,
 }
-
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonUninstallArgs {
@@ -4554,12 +4555,13 @@ pub struct PythonUninstallArgs {
 
     /// The Python version(s) to uninstall.
     ///
+    /// If not provided, the target will be read from the `UV_PYTHON` environment variable.
+    ///
     /// See `uv help python` to view supported request formats.
-    #[arg(required = true)]
     pub targets: Vec<String>,
 
     /// Uninstall all managed Python versions.
-    #[arg(long, conflicts_with("targets"))]
+    #[arg(long)]
     pub all: bool,
 }
 

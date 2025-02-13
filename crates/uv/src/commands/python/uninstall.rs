@@ -15,6 +15,7 @@ use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
 use uv_python::managed::{python_executable_dir, ManagedPythonInstallations};
 use uv_python::{PythonInstallationKey, PythonRequest};
+use uv_static::EnvVars;
 
 use crate::commands::python::install::format_executables;
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
@@ -24,11 +25,40 @@ use crate::printer::Printer;
 /// Uninstall managed Python versions.
 pub(crate) async fn uninstall(
     install_dir: Option<PathBuf>,
-    targets: Vec<String>,
+    mut targets: Vec<String>,
     all: bool,
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
+    // Use `UV_PYTHON` by default
+    if targets.is_empty() && !all {
+        if let Ok(env_python) = std::env::var(EnvVars::UV_PYTHON) {
+            if !env_python.is_empty() {
+                targets = vec![env_python];
+            }
+        }
+    }
+
+    // Validate that `--all` and target do not conflict
+    // We cannot enforce this in the CLI because we want `--all` to be usable when `UV_PYTHON` is
+    // set.
+    if !targets.is_empty() && all {
+        writeln!(
+            printer.stderr(),
+            "Recieved specific versions to uninstall and `--all`; these requests are conflicting"
+        )?;
+        return Ok(ExitStatus::Failure);
+    }
+
+    // Validate that we have a target or `--all`
+    if targets.is_empty() && !all {
+        writeln!(
+            printer.stderr(),
+            "No Python versions specified for uninstallation; provide versions to uninstall or use `--all` to uninstall all versions"
+        )?;
+        return Ok(ExitStatus::Failure);
+    }
+
     let installations = ManagedPythonInstallations::from_settings(install_dir)?.init()?;
 
     let _lock = installations.lock().await?;
