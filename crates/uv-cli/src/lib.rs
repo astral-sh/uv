@@ -1170,8 +1170,19 @@ pub struct PipCompileArgs {
     ///
     /// If a patch version is omitted, the minimum patch version is assumed. For
     /// example, `3.8` is mapped to `3.8.0`.
-    #[arg(long, short, help_heading = "Python options")]
+    #[arg(long, help_heading = "Python options")]
     pub python_version: Option<PythonVersion>,
+
+    /// The Python interpreter or version to use for resolution.
+    ///
+    /// In previous versions of uv, `-p` was an alias for `--python-version` in `uv pip compile` but
+    /// an alias for `--python` in all other commands. This option is provided as a backwards
+    /// compatible shim, allowing `-p` to behave as `--python` without introducing a breaking
+    /// change.
+    ///
+    /// `UV_PYTHON` is respected, but overridden by `--python-version` or `--python`.
+    #[arg(short, hide = true, help_heading = "Python options")]
+    pub python_legacy: Option<String>,
 
     /// The platform for which requirements should be resolved.
     ///

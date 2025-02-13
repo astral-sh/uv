@@ -38,6 +38,7 @@ use uv_resolver::{
     InMemoryIndex, OptionsBuilder, PrereleaseMode, PythonRequirement, RequiresPython,
     ResolutionMode, ResolverEnvironment,
 };
+use uv_static::EnvVars;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::warn_user;
 
@@ -94,6 +95,7 @@ pub(crate) async fn pip_compile(
     annotation_style: AnnotationStyle,
     link_mode: LinkMode,
     python: Option<String>,
+    mut python_legacy: Option<String>,
     system: bool,
     python_preference: PythonPreference,
     concurrency: Concurrency,
@@ -103,6 +105,29 @@ pub(crate) async fn pip_compile(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
+    // If the user requests both `-p` and `--python` or `--python-version`, error
+    if let Some(python_legacy) = python_legacy.as_ref() {
+        if let Some(python) = python.as_ref() {
+            return Err(anyhow!(
+                "Cannot specify both `-p` ({python_legacy}) and `--python` ({python}).",
+            ));
+        }
+        if let Some(python_version) = python_version.as_ref() {
+            return Err(anyhow!(
+                "Cannot specify both `-p` ({python_legacy}) and `--python-version` ({python_version}).",
+            ));
+        }
+    }
+
+    // Respect `UV_PYTHON` with legacy behavior
+    if python_legacy.is_none() && python_version.is_none() && python.is_none() {
+        if let Ok(python) = std::env::var(EnvVars::UV_PYTHON) {
+            if !python.is_empty() {
+                python_legacy = Some(python);
+            }
+        }
+    }
+
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
     // return an error.
     if !extras.is_empty() && !requirements.iter().any(RequirementsSource::allows_extras) {
@@ -188,9 +213,30 @@ pub(crate) async fn pip_compile(
     let interpreter = if let Some(python) = python.as_ref() {
         let request = PythonRequest::parse(python);
         PythonInstallation::find(&request, environment_preference, python_preference, &cache)
+    } else if let Some(python_legacy) = python_legacy.as_ref() {
+        // `-p` uses backwards compatible behavior and does not fail if it cannot find the requested
+        // version; previously, this was short for `--python-version`
+        let request = PythonRequest::parse(python_legacy);
+        match request {
+            PythonRequest::Version(..) => PythonInstallation::find_best(
+                &request,
+                environment_preference,
+                python_preference,
+                &cache,
+            ),
+            // For queries _other_ than a version, we fail as we would if `--python` were used.
+            // There's no backwards compatibility concern here because `-p` / `--python-version`
+            // was restricted to Python versions.
+            _ => PythonInstallation::find(
+                &request,
+                environment_preference,
+                python_preference,
+                &cache,
+            ),
+        }
     } else {
-        // TODO(zanieb): The split here hints at a problem with the abstraction; we should be able to use
-        // `PythonInstallation::find(...)` here.
+        // TODO(zanieb): The split here hints at a problem with the request abstraction; we should
+        // be able to use `PythonInstallation::find(...)` here.
         let request = if let Some(version) = python_version.as_ref() {
             // TODO(zanieb): We should consolidate `VersionRequest` and `PythonVersion`
             PythonRequest::Version(VersionRequest::from(version))
@@ -224,6 +270,23 @@ pub(crate) async fn pip_compile(
                 python_version.version(),
                 interpreter.python_version(),
             );
+        }
+    }
+
+    if let Some(python_legacy) = python_legacy.as_ref() {
+        let request = PythonRequest::parse(&python_legacy);
+
+        // If the requested interpreter version does not match the interpreter we're using
+        if !no_build.is_none() && !request.satisfied(&interpreter, &cache) {
+            // Other cases should be unreachable, as we only use the legacy fallback for version
+            // requests
+            if let PythonRequest::Version(version) = request {
+                warn_user!(
+                    "The requested Python version {} is not available; {} will be used to build dependencies instead.",
+                    version,
+                    interpreter.python_version(),
+                );
+            }
         }
     }
 
