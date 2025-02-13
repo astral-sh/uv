@@ -189,7 +189,7 @@ impl PyProjectToml {
             warnings.push(expected());
             return warnings;
         };
-        if uv_requirement.name.as_str() != "uv" && uv_requirement.name.as_str() != "uv-build" {
+        if uv_requirement.name.as_str() != "uv-build" {
             warnings.push(expected());
             return warnings;
         }
