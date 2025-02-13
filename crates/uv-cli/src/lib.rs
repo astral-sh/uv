@@ -2709,7 +2709,7 @@ pub struct RunArgs {
     /// Include dependencies from the specified dependency group.
     ///
     /// May be provided multiple times.
-    #[arg(long, short = 'G', short = 'G', short = 'G', conflicts_with_all = ["only_group", "only_dev"])]
+    #[arg(long, short = 'G', conflicts_with_all = ["only_group", "only_dev"])]
     pub group: Vec<GroupName>,
 
     /// Disable the specified dependency group.
