@@ -1121,8 +1121,8 @@ fn python_install_default_from_env() {
      + cpython-3.12.9-[PLATFORM]
     ");
 
-    // We should ignore `UV_PYTHON` here
-    uv_snapshot!(context.filters(), context.python_uninstall().arg("--all").env(EnvVars::UV_PYTHON, "3.11"), @r"
+    // We should ignore `UV_PYTHON` here and respect `--all`
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--all").env(EnvVars::UV_PYTHON, "3.11"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1131,7 +1131,27 @@ fn python_install_default_from_env() {
     Searching for Python installations
     Uninstalled Python 3.12.9 in [TIME]
      - cpython-3.12.9-[PLATFORM]
-    ");
+    "###);
+
+    // Uninstall with no targets
+    uv_snapshot!(context.filters(), context.python_uninstall(), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    No Python versions specified for uninstallation; provide versions to uninstall or use `--all` to uninstall all versions
+    "###);
+
+    // Uninstall with conflicting options
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--all").arg("3.12"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Recieved specific versions to uninstall and `--all`; these requests are conflicting
+    "###);
 }
 
 #[cfg(target_os = "macos")]

@@ -6,10 +6,7 @@ use std::str::FromStr;
 use anyhow::{anyhow, Result};
 use clap::builder::styling::{AnsiColor, Effects, Style};
 use clap::builder::Styles;
-use clap::{
-    error::{Error, ErrorKind},
-    Args, Command, Parser, Subcommand,
-};
+use clap::{Args, Parser, Subcommand};
 
 use url::Url;
 use uv_cache::CacheArgs;
@@ -4435,9 +4432,10 @@ pub struct PythonInstallArgs {
 
     /// The Python version(s) to install.
     ///
-    /// If not provided, the requested Python version(s) will be read from the `.python-versions` or
-    /// `.python-version` files. If neither file is present, uv will check if it has installed any
-    /// Python versions. If not, it will install the latest stable version of Python.
+    /// If not provided, the requested Python version(s) will be read from the `UV_PYTHON`
+    /// environment variable then the `.python-versions` or `.python-version` files. If none of the
+    /// above are present, uv will check if it has installed any Python versions. If not, it will
+    /// install the latest stable version of Python.
     ///
     /// See `uv help python` to view supported request formats.
     #[arg(env = EnvVars::UV_PYTHON)]
@@ -4499,58 +4497,15 @@ pub struct PythonUninstallArgs {
     pub install_dir: Option<PathBuf>,
 
     /// The Python version(s) to uninstall.
-    /// targets can also be set through the `UV_PYTHON` env variable, however the clap env functionality is not used here to avoid conflicts with the `--all` flag if target set through env.
+    ///
+    /// If not provided, the target will be read from the `UV_PYTHON` environment variable.
+    ///
     /// See `uv help python` to view supported request formats.
-    pub targets: Option<Vec<String>>,
+    pub targets: Vec<String>,
 
     /// Uninstall all managed Python versions.
-    #[arg(long, conflicts_with("targets"))]
+    #[arg(long)]
     pub all: bool,
-}
-
-pub struct ValidatedPythonUninstallArgs {
-    pub install_dir: Option<PathBuf>,
-    pub targets: Vec<String>,
-    pub all: bool,
-}
-
-impl PythonUninstallArgs {
-    /// Update targets from the `UV_PYTHON` env variable if no targets supplied through cli.
-    pub fn get_env_targets(&mut self) {
-        if self.targets.is_none() {
-            if let Ok(env_python) = std::env::var(EnvVars::UV_PYTHON) {
-                if !env_python.is_empty() {
-                    self.targets = Some(vec![env_python]);
-                }
-            }
-        }
-    }
-
-    /// Validate the arguments before use. If there is no target provided through cli and none through env generates a clap Error.
-    /// Returns a validated version in which `targets` is no longer optional.
-    pub fn validate(mut self) -> Result<ValidatedPythonUninstallArgs, clap::Error> {
-        // Update targets from the environment if needed
-        self.get_env_targets();
-
-        if self.targets.is_none() && !self.all {
-            // Generate a clap Error if no targets are provided through cli or env and `--all` isn't set. A dummy command is instantiated to format the error
-            const ERRORMESSAGE: &str = "the following required arguments were not provided:\n  \x1b[36m<TARGETS>...\x1b[0m";
-            let override_usage_str =
-                "uv python uninstall \x1b[36m--install-dir <INSTALL_DIR> <TARGETS>...\x1b[0m";
-            let mut dummy_cmd = Command::new("dummy_for_styling")
-                .override_usage(override_usage_str)
-                .styles(STYLES);
-
-            let err: Error =
-                Error::raw(ErrorKind::MissingRequiredArgument, ERRORMESSAGE).format(&mut dummy_cmd);
-            err.exit();
-        }
-        Ok(ValidatedPythonUninstallArgs {
-            install_dir: self.install_dir,
-            targets: self.targets.unwrap_or_default(),
-            all: self.all,
-        })
-    }
 }
 
 #[derive(Args)]
