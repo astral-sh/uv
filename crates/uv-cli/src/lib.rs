@@ -3281,7 +3281,7 @@ pub struct AddArgs {
     /// Add the requirements to the specified dependency group.
     ///
     /// These requirements will not be included in the published metadata for the project.
-    #[arg(long, conflicts_with("dev"), conflicts_with("optional"))]
+    #[arg(long, short = 'G', conflicts_with("dev"), conflicts_with("optional"))]
     pub group: Option<GroupName>,
 
     /// Add the requirements as editable.
