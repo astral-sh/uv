@@ -32,7 +32,7 @@ use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{release_specifiers_to_ranges, Version, VersionSpecifiers, MIN_VERSION};
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
-use uv_platform_tags::Tags;
+use uv_platform_tags::{IncompatibleTag, Tags};
 use uv_pypi_types::{ConflictItem, ConflictItemRef, Conflicts, Requirement, VerbatimParsedUrl};
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 use uv_warnings::warn_user_once;
@@ -1270,6 +1270,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(Some(ResolverVersion::Unavailable(
                 candidate.version().clone(),
                 UnavailableVersion::IncompatibleDist(incompatibility),
+            )));
+        }
+
+        // If the available distributions are completely disjoint with the current environment,
+        // treat the version as incompatible.
+        if !env.included_by_marker(dist.implied_markers()) {
+            debug!(
+                "Skipping {}=={} due to implied markers: `{:?}`",
+                name,
+                candidate.version(),
+                dist.implied_markers()
+            );
+            return Ok(Some(ResolverVersion::Unavailable(
+                candidate.version().clone(),
+                UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
+                    IncompatibleWheel::Tag(IncompatibleTag::Platform),
+                )),
             )));
         }
 
