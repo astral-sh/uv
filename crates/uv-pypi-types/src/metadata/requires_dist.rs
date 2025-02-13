@@ -21,6 +21,7 @@ pub struct RequiresDist {
     pub name: PackageName,
     pub requires_dist: Vec<Requirement<VerbatimParsedUrl>>,
     pub provides_extras: Vec<ExtraName>,
+    #[serde(default)]
     pub dynamic: bool,
 }
 
