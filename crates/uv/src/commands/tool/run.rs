@@ -15,8 +15,7 @@ use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, PreviewMode, TrustedHost};
-use uv_distribution_types::UnresolvedRequirement;
-use uv_distribution_types::{Name, UnresolvedRequirementSpecification};
+use uv_distribution_types::{Name, UnresolvedRequirement, UnresolvedRequirementSpecification};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
@@ -42,7 +41,7 @@ use crate::commands::project::{
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::run::run_to_completion;
 use crate::commands::tool::common::{matching_packages, refine_interpreter};
-use crate::commands::tool::Target;
+use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::ExitStatus;
 use crate::commands::{diagnostics, project::environment::CachedEnvironment};
 use crate::printer::Printer;
@@ -105,10 +104,10 @@ pub(crate) async fn run(
         return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
     };
 
-    let target = Target::parse(target, from.as_deref());
+    let request = ToolRequest::parse(target, from.as_deref());
 
     // If the user passed, e.g., `ruff@latest`, refresh the cache.
-    let cache = if target.is_latest() {
+    let cache = if request.is_latest() {
         cache.with_refresh(Refresh::All(Timestamp::now()))
     } else {
         cache
@@ -116,7 +115,7 @@ pub(crate) async fn run(
 
     // Get or create a compatible environment in which to execute the tool.
     let result = get_or_create_environment(
-        &target,
+        &request,
         with,
         show_resolution,
         python.as_deref(),
@@ -154,7 +153,7 @@ pub(crate) async fn run(
     };
 
     // TODO(zanieb): Determine the executable command via the package entry points
-    let executable = target.executable();
+    let executable = from.executable();
 
     // Construct the command
     let mut process = Command::new(executable);
@@ -187,7 +186,9 @@ pub(crate) async fn run(
     // If the command is found in other packages, we warn the user about the correct package to use.
     match &from {
         ToolRequirement::Python => {}
-        ToolRequirement::Package(from) => {
+        ToolRequirement::Package {
+            requirement: from, ..
+        } => {
             warn_executable_not_provided_by_package(
                 executable,
                 &from.name,
@@ -230,7 +231,9 @@ fn hint_on_not_found(
 ) -> anyhow::Result<Option<ExitStatus>> {
     let from = match from {
         ToolRequirement::Python => return Ok(None),
-        ToolRequirement::Package(from) => from,
+        ToolRequirement::Package {
+            requirement: from, ..
+        } => from,
     };
     match get_entrypoints(&from.name, site_packages) {
         Ok(entrypoints) => {
@@ -410,17 +413,30 @@ fn warn_executable_not_provided_by_package(
 
 // Clippy isn't happy about the difference in size between these variants, but
 // [`ToolRequirement::Package`] is the more common case and it seems annoying to box it.
+#[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum ToolRequirement {
     Python,
-    Package(Requirement),
+    Package {
+        executable: String,
+        requirement: Requirement,
+    },
+}
+
+impl ToolRequirement {
+    fn executable(&self) -> &str {
+        match self {
+            ToolRequirement::Python => "python",
+            ToolRequirement::Package { executable, .. } => executable,
+        }
+    }
 }
 
 impl std::fmt::Display for ToolRequirement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ToolRequirement::Python => write!(f, "python"),
-            ToolRequirement::Package(requirement) => write!(f, "{requirement}"),
+            ToolRequirement::Package { requirement, .. } => write!(f, "{requirement}"),
         }
     }
 }
@@ -431,7 +447,7 @@ impl std::fmt::Display for ToolRequirement {
 /// [`PythonEnvironment`]. Otherwise, gets or creates a [`CachedEnvironment`].
 #[allow(clippy::fn_params_excessive_bools)]
 async fn get_or_create_environment(
-    target: &Target<'_>,
+    request: &ToolRequest<'_>,
     with: &[RequirementsSource],
     show_resolution: bool,
     python: Option<&str>,
@@ -457,25 +473,18 @@ async fn get_or_create_environment(
     let reporter = PythonDownloadReporter::single(printer);
 
     // Check if the target is `python`
-    let python_request = if target.is_python() {
-        let target_request = match target {
+    let python_request = if request.is_python() {
+        let target_request = match &request.target {
             Target::Unspecified(_) => None,
-            Target::Version(_, version) | Target::FromVersion(_, _, version) => {
-                Some(PythonRequest::Version(
-                    VersionRequest::from_str(&version.to_string()).map_err(anyhow::Error::from)?,
-                ))
-            }
+            Target::Version(_, _, _, version) => Some(PythonRequest::Version(
+                VersionRequest::from_str(&version.to_string()).map_err(anyhow::Error::from)?,
+            )),
             // TODO(zanieb): Add `PythonRequest::Latest`
-            Target::Latest(_) | Target::FromLatest(_, _) => {
+            Target::Latest(_, _, _) => {
                 return Err(anyhow::anyhow!(
                     "Requesting the 'latest' Python version is not yet supported"
                 )
                 .into())
-            }
-            // From the definition of `is_python`, this can only be a bare `python`
-            Target::From(_, from) => {
-                debug_assert_eq!(*from, "python");
-                None
             }
         };
 
@@ -513,54 +522,13 @@ async fn get_or_create_environment(
     // Initialize any shared state.
     let state = PlatformState::default();
 
-    let from = if target.is_python() {
+    let from = if request.is_python() {
         ToolRequirement::Python
     } else {
-        ToolRequirement::Package(match target {
-            // Ex) `ruff`
-            Target::Unspecified(name) => Requirement {
-                name: PackageName::from_str(name)?,
-                extras: vec![],
-                groups: vec![],
-                marker: MarkerTree::default(),
-                source: RequirementSource::Registry {
-                    specifier: VersionSpecifiers::empty(),
-                    index: None,
-                    conflict: None,
-                },
-                origin: None,
-            },
-            // Ex) `ruff@0.6.0`
-            Target::Version(name, version) | Target::FromVersion(_, name, version) => Requirement {
-                name: PackageName::from_str(name)?,
-                extras: vec![],
-                groups: vec![],
-                marker: MarkerTree::default(),
-                source: RequirementSource::Registry {
-                    specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
-                        version.clone(),
-                    )),
-                    index: None,
-                    conflict: None,
-                },
-                origin: None,
-            },
-            // Ex) `ruff@latest`
-            Target::Latest(name) | Target::FromLatest(_, name) => Requirement {
-                name: PackageName::from_str(name)?,
-                extras: vec![],
-                groups: vec![],
-                marker: MarkerTree::default(),
-                source: RequirementSource::Registry {
-                    specifier: VersionSpecifiers::empty(),
-                    index: None,
-                    conflict: None,
-                },
-                origin: None,
-            },
+        let (executable, requirement) = match &request.target {
             // Ex) `ruff>=0.6.0`
-            Target::From(_, from) => {
-                let spec = RequirementsSpecification::parse_package(from)?;
+            Target::Unspecified(requirement) => {
+                let spec = RequirementsSpecification::parse_package(requirement)?;
                 if let UnresolvedRequirement::Named(requirement) = &spec.requirement {
                     if requirement.name.as_str() == "python" {
                         return Err(anyhow::anyhow!(
@@ -571,7 +539,7 @@ async fn get_or_create_environment(
                         .into());
                     }
                 }
-                resolve_names(
+                let requirement = resolve_names(
                     vec![spec],
                     &interpreter,
                     settings,
@@ -586,9 +554,68 @@ async fn get_or_create_environment(
                 )
                 .await?
                 .pop()
-                .unwrap()
+                .unwrap();
+
+                // Use the executable provided by the user, if possible (as in: `uvx --from package executable`).
+                //
+                // If no such executable was provided, rely on the package name (as in: `uvx git+https://github.com/pallets/flask`).
+                let executable = request
+                    .executable
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| requirement.name.to_string());
+
+                (executable, requirement)
             }
-        })
+            // Ex) `ruff@0.6.0`
+            Target::Version(executable, name, extras, version) => {
+                let executable = request
+                    .executable
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| (*executable).to_string());
+                let requirement = Requirement {
+                    name: name.clone(),
+                    extras: extras.clone(),
+                    groups: vec![],
+                    marker: MarkerTree::default(),
+                    source: RequirementSource::Registry {
+                        specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
+                            version.clone(),
+                        )),
+                        index: None,
+                        conflict: None,
+                    },
+                    origin: None,
+                };
+
+                (executable, requirement)
+            }
+            // Ex) `ruff@latest`
+            Target::Latest(executable, name, extras) => {
+                let executable = request
+                    .executable
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| (*executable).to_string());
+                let requirement = Requirement {
+                    name: name.clone(),
+                    extras: extras.clone(),
+                    groups: vec![],
+                    marker: MarkerTree::default(),
+                    source: RequirementSource::Registry {
+                        specifier: VersionSpecifiers::empty(),
+                        index: None,
+                        conflict: None,
+                    },
+                    origin: None,
+                };
+
+                (executable, requirement)
+            }
+        };
+
+        ToolRequirement::Package {
+            executable,
+            requirement,
+        }
     };
 
     // Read the `--with` requirements.
@@ -605,7 +632,7 @@ async fn get_or_create_environment(
         let mut requirements = Vec::with_capacity(1 + with.len());
         match &from {
             ToolRequirement::Python => {}
-            ToolRequirement::Package(requirement) => requirements.push(requirement.clone()),
+            ToolRequirement::Package { requirement, .. } => requirements.push(requirement.clone()),
         }
         requirements.extend(
             resolve_names(
@@ -627,11 +654,11 @@ async fn get_or_create_environment(
     };
 
     // Check if the tool is already installed in a compatible environment.
-    if !isolated && !target.is_latest() {
+    if !isolated && !request.is_latest() {
         let installed_tools = InstalledTools::from_settings()?.init()?;
         let _lock = installed_tools.lock().await?;
 
-        if let ToolRequirement::Package(requirement) = &from {
+        if let ToolRequirement::Package { requirement, .. } = &from {
             let existing_environment = installed_tools
                 .get_environment(&requirement.name, cache)?
                 .filter(|environment| {

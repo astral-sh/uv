@@ -16,12 +16,12 @@ use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevGroupsSpecification, DevMode, EditableMode, ExtrasSpecification,
-    InstallOptions, PreviewMode, SourceStrategy, TrustedHost,
+    Concurrency, Constraints, DevGroupsSpecification, DevMode, DryRun, EditableMode,
+    ExtrasSpecification, InstallOptions, PreviewMode, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_distribution_types::{Index, IndexName, UnresolvedRequirement, VersionId};
+use uv_distribution_types::{Index, IndexName, IndexUrls, UnresolvedRequirement, VersionId};
 use uv_fs::Simplified;
 use uv_git::{GitReference, GIT_STORE};
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
@@ -46,8 +46,8 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    init_script_python_requirement, PlatformState, ProjectError, ProjectInterpreter,
-    ScriptInterpreter, UniversalState,
+    init_script_python_requirement, PlatformState, ProjectEnvironment, ProjectError,
+    ProjectInterpreter, ScriptInterpreter, UniversalState,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{diagnostics, project, ExitStatus};
@@ -223,7 +223,7 @@ pub(crate) async fn add(
             AddTarget::Project(project, Box::new(PythonTarget::Interpreter(interpreter)))
         } else {
             // Discover or create the virtual environment.
-            let venv = project::get_or_init_environment(
+            let environment = ProjectEnvironment::get_or_init(
                 project.workspace(),
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
@@ -235,11 +235,13 @@ pub(crate) async fn add(
                 no_config,
                 active,
                 cache,
+                DryRun::Disabled,
                 printer,
             )
-            .await?;
+            .await?
+            .into_environment()?;
 
-            AddTarget::Project(project, Box::new(PythonTarget::Environment(venv)))
+            AddTarget::Project(project, Box::new(PythonTarget::Environment(environment)))
         }
     };
 
@@ -559,10 +561,11 @@ pub(crate) async fn add(
         });
     }
 
-    // Add any indexes that were provided on the command-line.
+    // Add any indexes that were provided on the command-line, in priority order.
     if !raw_sources {
-        for index in indexes {
-            toml.add_index(&index)?;
+        let urls = IndexUrls::from_indexes(indexes);
+        for index in urls.defined_indexes() {
+            toml.add_index(index)?;
         }
     }
 
@@ -880,6 +883,7 @@ async fn lock_and_sync(
         native_tls,
         allow_insecure_host,
         cache,
+        DryRun::Disabled,
         printer,
         preview,
     )

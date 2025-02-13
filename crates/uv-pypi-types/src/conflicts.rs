@@ -375,9 +375,8 @@ pub enum ConflictError {
 ///
 /// N.B. `Conflicts` is still used for (de)serialization. Specifically, in the
 /// lock file, where the package name is required.
-#[derive(
-    Debug, Default, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize, schemars::JsonSchema,
-)]
+#[derive(Debug, Default, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct SchemaConflicts(Vec<SchemaConflictSet>);
 
 impl SchemaConflicts {
@@ -415,7 +414,8 @@ impl SchemaConflicts {
 /// schema format does not allow specifying the package name (or will make it
 /// optional in the future), where as the in-memory format needs the package
 /// name.
-#[derive(Debug, Default, Clone, Eq, PartialEq, schemars::JsonSchema, serde::Serialize)]
+#[derive(Debug, Default, Clone, Eq, PartialEq, serde::Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct SchemaConflictSet(Vec<SchemaConflictItem>);
 
 /// Like [`ConflictItem`], but for deserialization in `pyproject.toml`.
@@ -437,6 +437,7 @@ pub struct SchemaConflictItem {
     conflict: ConflictPackage,
 }
 
+#[cfg(feature = "schemars")]
 impl schemars::JsonSchema for SchemaConflictItem {
     fn schema_name() -> String {
         "SchemaConflictItem".to_string()
@@ -474,7 +475,8 @@ impl TryFrom<Vec<SchemaConflictItem>> for SchemaConflictSet {
 ///
 /// Each item is a pair of an (optional) package and a corresponding extra or group name for that
 /// package.
-#[derive(Debug, serde::Deserialize, serde::Serialize, schemars::JsonSchema)]
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 struct ConflictItemWire {
     #[serde(default)]
     package: Option<PackageName>,

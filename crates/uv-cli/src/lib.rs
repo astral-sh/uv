@@ -2697,9 +2697,10 @@ pub struct RunArgs {
     #[arg(long, overrides_with("no_dev"), hide = true)]
     pub dev: bool,
 
-    /// Omit the development dependency group.
+    /// Disable the development dependency group.
     ///
     /// This option is an alias of `--no-group dev`.
+    /// See `--no-default-groups` to disable all default groups instead.
     ///
     /// This option is only available when running in a project.
     #[arg(long, overrides_with("dev"))]
@@ -2711,23 +2712,27 @@ pub struct RunArgs {
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
     pub group: Vec<GroupName>,
 
-    /// Exclude dependencies from the specified dependency group.
+    /// Disable the specified dependency group.
+    ///
+    /// This options always takes precedence over default groups,
+    /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
-    /// Exclude dependencies from default groups.
+    /// Ignore the the default dependency groups.
     ///
-    /// `--group` can be used to include specific groups.
+    /// uv includes the groups defined in `tool.uv.default-groups` by default.
+    /// This disables that option, however, specific groups can still be included with `--group`.
     #[arg(long)]
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
     ///
-    /// The project itself will also be omitted.
+    /// The project and its dependencies will be omitted.
     ///
-    /// May be provided multiple times.
+    /// May be provided multiple times. Implies `--no-default-groups`.
     #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"])]
     pub only_group: Vec<GroupName>,
 
@@ -2745,9 +2750,9 @@ pub struct RunArgs {
 
     /// Only include the development dependency group.
     ///
-    /// Omit other dependencies. The project itself will also be omitted.
+    /// The project and its dependencies will be omitted.
     ///
-    /// This option is an alias for `--only-group dev`.
+    /// This option is an alias for `--only-group dev`. Implies `--no-default-groups`.
     #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
     pub only_dev: bool,
 
@@ -2793,7 +2798,7 @@ pub struct RunArgs {
     #[arg(long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
-    /// Run with the given packages installed as editables.
+    /// Run with the given packages installed in editable mode.
     ///
     /// When used in a project, these dependencies will be layered on top of the project environment
     /// in a separate, ephemeral environment. These dependencies are allowed to conflict with those
@@ -2927,6 +2932,15 @@ pub struct RunArgs {
     /// By default, environment modifications are omitted, but enabled under `--verbose`.
     #[arg(long, env = EnvVars::UV_SHOW_RESOLUTION, value_parser = clap::builder::BoolishValueParser::new(), hide = true)]
     pub show_resolution: bool,
+
+    /// Number of times that `uv run` will allow recursive invocations.
+    ///
+    /// The current recursion depth is tracked by environment variable. If environment variables are
+    /// cleared, uv will fail to detect the recursion depth.
+    ///
+    /// If uv reaches the maximum recursion depth, it will exit with an error.
+    #[arg(long, hide = true, env = EnvVars::UV_RUN_MAX_RECURSION_DEPTH)]
+    pub max_recursion_depth: Option<u32>,
 }
 
 #[derive(Args)]
@@ -2969,17 +2983,18 @@ pub struct SyncArgs {
     #[arg(long, overrides_with("no_dev"), hide = true)]
     pub dev: bool,
 
-    /// Omit the development dependency group.
+    /// Disable the development dependency group.
     ///
-    /// This option is an alias for `--no-group dev`.
+    /// This option is an alias of `--no-group dev`.
+    /// See `--no-default-groups` to disable all default groups instead.
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
     /// Only include the development dependency group.
     ///
-    /// Omit other dependencies. The project itself will also be omitted.
+    /// The project and its dependencies will be omitted.
     ///
-    /// This option is an alias for `--only-group dev`.
+    /// This option is an alias for `--only-group dev`. Implies `--no-default-groups`.
     #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
     pub only_dev: bool,
 
@@ -2992,23 +3007,27 @@ pub struct SyncArgs {
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
     pub group: Vec<GroupName>,
 
-    /// Exclude dependencies from the specified dependency group.
+    /// Disable the specified dependency group.
+    ///
+    /// This options always takes precedence over default groups,
+    /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
-    /// Exclude dependencies from default groups.
+    /// Ignore the the default dependency groups.
     ///
-    /// `--group` can be used to include specific groups.
+    /// uv includes the groups defined in `tool.uv.default-groups` by default.
+    /// This disables that option, however, specific groups can still be included with `--group`.
     #[arg(long)]
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
     ///
-    /// The project itself will also be omitted.
+    /// The project and its dependencies will be omitted.
     ///
-    /// May be provided multiple times.
+    /// May be provided multiple times. Implies `--no-default-groups`.
     #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"])]
     pub only_group: Vec<GroupName>,
 
@@ -3091,6 +3110,13 @@ pub struct SyncArgs {
     #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "locked")]
     pub frozen: bool,
 
+    /// Perform a dry run, without writing the lockfile or modifying the project environment.
+    ///
+    /// In dry-run mode, uv will resolve the project's dependencies and report on the resulting
+    /// changes to both the lockfile and the project environment, but will not modify either.
+    #[arg(long, conflicts_with = "locked", conflicts_with = "frozen")]
+    pub dry_run: bool,
+
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
 
@@ -3117,6 +3143,32 @@ pub struct SyncArgs {
     /// If the workspace member does not exist, uv will exit with an error.
     #[arg(long, conflicts_with = "all_packages")]
     pub package: Option<PackageName>,
+
+    /// Sync the environment for a Python script, rather than the current project.
+    ///
+    /// If provided, uv will sync the dependencies based on the script's inline metadata table, in
+    /// adherence with PEP 723.
+    #[arg(
+        long,
+        conflicts_with = "active",
+        conflicts_with = "all_packages",
+        conflicts_with = "package",
+        conflicts_with = "no_install_project",
+        conflicts_with = "no_install_workspace",
+        conflicts_with = "extra",
+        conflicts_with = "all_extras",
+        conflicts_with = "no_extra",
+        conflicts_with = "no_all_extras",
+        conflicts_with = "dev",
+        conflicts_with = "no_dev",
+        conflicts_with = "only_dev",
+        conflicts_with = "group",
+        conflicts_with = "no_group",
+        conflicts_with = "no_default_groups",
+        conflicts_with = "only_group",
+        conflicts_with = "all_groups"
+    )]
+    pub script: Option<PathBuf>,
 
     /// The Python interpreter to use for the project environment.
     ///
@@ -3455,15 +3507,16 @@ pub struct TreeArgs {
 
     /// Only include the development dependency group.
     ///
-    /// Omit other dependencies. The project itself will also be omitted.
+    /// The project and its dependencies will be omitted.
     ///
-    /// This option is an alias for `--only-group dev`.
+    /// This option is an alias for `--only-group dev`. Implies `--no-default-groups`.
     #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
     pub only_dev: bool,
 
-    /// Omit the development dependency group.
+    /// Disable the development dependency group.
     ///
-    /// This option is an alias for `--no-group dev`.
+    /// This option is an alias of `--no-group dev`.
+    /// See `--no-default-groups` to disable all default groups instead.
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
@@ -3473,23 +3526,27 @@ pub struct TreeArgs {
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
     pub group: Vec<GroupName>,
 
-    /// Exclude dependencies from the specified dependency group.
+    /// Disable the specified dependency group.
+    ///
+    /// This options always takes precedence over default groups,
+    /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
-    /// Exclude dependencies from default groups.
+    /// Ignore the the default dependency groups.
     ///
-    /// `--group` can be used to include specific groups.
+    /// uv includes the groups defined in `tool.uv.default-groups` by default.
+    /// This disables that option, however, specific groups can still be included with `--group`.
     #[arg(long)]
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
     ///
-    /// The project itself will also be omitted.
+    /// The project and its dependencies will be omitted.
     ///
-    /// May be provided multiple times.
+    /// May be provided multiple times. Implies `--no-default-groups`.
     #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"])]
     pub only_group: Vec<GroupName>,
 
@@ -3621,17 +3678,18 @@ pub struct ExportArgs {
     #[arg(long, overrides_with("no_dev"), hide = true)]
     pub dev: bool,
 
-    /// Omit the development dependency group.
+    /// Disable the development dependency group.
     ///
-    /// This option is an alias for `--no-group dev`.
+    /// This option is an alias of `--no-group dev`.
+    /// See `--no-default-groups` to disable all default groups instead.
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
     /// Only include the development dependency group.
     ///
-    /// Omit other dependencies. The project itself will also be omitted.
+    /// The project and its dependencies will be omitted.
     ///
-    /// This option is an alias for `--only-group dev`.
+    /// This option is an alias for `--only-group dev`. Implies `--no-default-groups`.
     #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
     pub only_dev: bool,
 
@@ -3641,23 +3699,27 @@ pub struct ExportArgs {
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
     pub group: Vec<GroupName>,
 
-    /// Exclude dependencies from the specified dependency group.
+    /// Disable the specified dependency group.
+    ///
+    /// This options always takes precedence over default groups,
+    /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
-    /// Exclude dependencies from default groups.
+    /// Ignore the the default dependency groups.
     ///
-    /// `--group` can be used to include specific groups.
+    /// uv includes the groups defined in `tool.uv.default-groups` by default.
+    /// This disables that option, however, specific groups can still be included with `--group`.
     #[arg(long)]
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
     ///
-    /// The project itself will also be omitted.
+    /// The project and its dependencies will be omitted.
     ///
-    /// May be provided multiple times.
+    /// May be provided multiple times. Implies `--no-default-groups`.
     #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"])]
     pub only_group: Vec<GroupName>,
 
@@ -3874,7 +3936,7 @@ pub struct ToolRunArgs {
     #[arg(long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
-    /// Run with the given packages installed as editables
+    /// Run with the given packages installed in editable mode
     ///
     /// When used in a project, these dependencies will be layered on top of the uv tool's
     /// environment in a separate, ephemeral environment. These dependencies are allowed to conflict
@@ -3928,9 +3990,6 @@ pub struct ToolInstallArgs {
     /// The package to install commands from.
     pub package: String,
 
-    #[arg(short, long)]
-    pub editable: bool,
-
     /// The package to install commands from.
     ///
     /// This option is provided for parity with `uv tool run`, but is redundant with `package`.
@@ -3941,13 +4000,18 @@ pub struct ToolInstallArgs {
     #[arg(long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
-    /// Include the given packages as editables.
-    #[arg(long)]
-    pub with_editable: Vec<comma::CommaSeparatedRequirements>,
-
     /// Run all requirements listed in the given `requirements.txt` files.
     #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
+
+    /// Install the target package in editable mode, such that changes in the package's source
+    /// directory are reflected without reinstallation.
+    #[arg(short, long)]
+    pub editable: bool,
+
+    /// Include the given packages in editable mode.
+    #[arg(long)]
+    pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
     /// Constrain versions using the given requirements files.
     ///
@@ -4305,10 +4369,10 @@ pub enum PythonCommand {
 
     /// Download and install Python versions.
     ///
-    /// Multiple Python versions may be requested.
-    ///
     /// Supports CPython and PyPy. CPython distributions are downloaded from the Astral
-    /// `python-build-standalone` project. PyPy distributions are downloaded from `python.org`.
+    /// `python-build-standalone` project. PyPy distributions are downloaded from `python.org`. The
+    /// available Python versions are bundled with each uv release. To install new Python versions,
+    /// you may need upgrade uv.
     ///
     /// Python versions are installed into the uv Python directory, which can be retrieved with `uv
     /// python dir`.
@@ -4316,6 +4380,8 @@ pub enum PythonCommand {
     /// A `python` executable is not made globally available, managed Python versions are only used
     /// in uv commands or in active virtual environments. There is experimental support for adding
     /// Python executables to the `PATH` — use the `--preview` flag to enable this behavior.
+    ///
+    /// Multiple Python versions may be requested.
     ///
     /// See `uv help python` to view supported request formats.
     Install(PythonInstallArgs),
@@ -4743,7 +4809,13 @@ pub struct BuildOptionsArgs {
     ///
     /// The given packages will be built and installed from source. The resolver will still use
     /// pre-built wheels to extract package metadata, if available.
-    #[arg(long, overrides_with("binary"), help_heading = "Build options")]
+    #[arg(
+        long,
+        env = EnvVars::UV_NO_BINARY,
+        overrides_with("binary"),
+        value_parser = clap::builder::BoolishValueParser::new(),
+        help_heading = "Build options"
+    )]
     pub no_binary: bool,
 
     #[arg(
@@ -4755,7 +4827,7 @@ pub struct BuildOptionsArgs {
     pub binary: bool,
 
     /// Don't install pre-built wheels for a specific package.
-    #[arg(long, help_heading = "Build options")]
+    #[arg(long, help_heading = "Build options", env = EnvVars::UV_NO_BINARY_PACKAGE, value_delimiter = ' ')]
     pub no_binary_package: Vec<PackageName>,
 }
 

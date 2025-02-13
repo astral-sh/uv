@@ -51,5 +51,8 @@ insta = { version = "1.40.0", features = ["filters", "json", "redactions"] }
 regex = { workspace = true }
 tempfile = { workspace = true }
 
+[features]
+schemars = ["dep:schemars", "uv-pypi-types/schemars"]
+
 [package.metadata.cargo-shear]
 ignored = ["uv-options-metadata"]

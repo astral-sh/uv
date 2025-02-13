@@ -45,7 +45,9 @@ use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
 use uv_pep440::{release_specifiers_to_ranges, Version};
 use uv_platform_tags::Tags;
-use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata12, RequiresTxt, ResolutionMetadata};
+use uv_pypi_types::{
+    HashAlgorithm, HashDigest, Metadata12, PyProjectToml, RequiresTxt, ResolutionMetadata,
+};
 use uv_types::{BuildContext, BuildStack, SourceBuildTrait};
 use uv_workspace::pyproject::ToolUvSources;
 use zip::ZipArchive;
@@ -1890,20 +1892,34 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Ok(None);
         };
 
-        // Parse the metadata.
-        let metadata = match ResolutionMetadata::parse_pyproject_toml(&content, source.version()) {
+        // Parse the `pyproject.toml`.
+        let pyproject_toml = match PyProjectToml::from_toml(&content) {
             Ok(metadata) => metadata,
             Err(
-                uv_pypi_types::MetadataError::Pep508Error(_)
-                | uv_pypi_types::MetadataError::DynamicField(_)
-                | uv_pypi_types::MetadataError::FieldNotFound(_)
-                | uv_pypi_types::MetadataError::PoetrySyntax,
+                uv_pypi_types::MetadataError::InvalidPyprojectTomlSyntax(..)
+                | uv_pypi_types::MetadataError::InvalidPyprojectTomlSchema(..),
             ) => {
-                debug!("Failed to extract static metadata from GitHub API for: {url}");
+                debug!("Failed to read `pyproject.toml` from GitHub API for: {url}");
                 return Ok(None);
             }
             Err(err) => return Err(err.into()),
         };
+
+        // Parse the metadata.
+        let metadata =
+            match ResolutionMetadata::parse_pyproject_toml(pyproject_toml, source.version()) {
+                Ok(metadata) => metadata,
+                Err(
+                    uv_pypi_types::MetadataError::Pep508Error(..)
+                    | uv_pypi_types::MetadataError::DynamicField(..)
+                    | uv_pypi_types::MetadataError::FieldNotFound(..)
+                    | uv_pypi_types::MetadataError::PoetrySyntax,
+                ) => {
+                    debug!("Failed to extract static metadata from GitHub API for: {url}");
+                    return Ok(None);
+                }
+                Err(err) => return Err(err.into()),
+            };
 
         // Determine whether the project has `tool.uv.sources`. If the project has sources, it must
         // be lowered, which requires access to the workspace. For example, it could have workspace
@@ -2417,49 +2433,58 @@ impl StaticMetadata {
         source_root: &Path,
         subdirectory: Option<&Path>,
     ) -> Result<Self, Error> {
-        // Attempt to read static metadata from the `pyproject.toml`.
-        match read_pyproject_toml(source_root, subdirectory, source.version()).await {
-            Ok(metadata) => {
-                debug!("Found static `pyproject.toml` for: {source}");
-
-                // Validate the metadata, but ignore it if the metadata doesn't match.
-                match validate_metadata(source, &metadata) {
-                    Ok(()) => {
-                        return Ok(Self::Some(metadata));
-                    }
-                    Err(err) => {
-                        debug!("Ignoring `pyproject.toml` for {source}: {err}");
-                    }
-                }
-            }
-            Err(
-                err @ Error::PyprojectToml(uv_pypi_types::MetadataError::DynamicField("version")),
-            ) if source.is_source_tree() => {
-                // In Metadata 2.2, `Dynamic` was introduced to Core Metadata to indicate that a
-                // given field was marked as dynamic in the originating source tree. However, we may
-                // be looking at a distribution with a build backend that doesn't support Metadata 2.2. In that case,
-                // we want to infer the `Dynamic` status from the `pyproject.toml` file, if available.
-                debug!("No static `pyproject.toml` available for: {source} ({err:?})");
-                return Ok(Self::Dynamic);
-            }
-            Err(
-                err @ (Error::MissingPyprojectToml
-                | Error::PyprojectToml(
-                    uv_pypi_types::MetadataError::Pep508Error(_)
-                    | uv_pypi_types::MetadataError::DynamicField(_)
-                    | uv_pypi_types::MetadataError::FieldNotFound(_)
-                    | uv_pypi_types::MetadataError::PoetrySyntax,
-                )),
-            ) => {
-                debug!("No static `pyproject.toml` available for: {source} ({err:?})");
+        // Attempt to read the `pyproject.toml`.
+        let pyproject_toml = match read_pyproject_toml(source_root, subdirectory).await {
+            Ok(pyproject_toml) => Some(pyproject_toml),
+            Err(Error::MissingPyprojectToml) => {
+                debug!("No `pyproject.toml` available for: {source}");
+                None
             }
             Err(err) => return Err(err),
+        };
+
+        // Determine whether the version is static or dynamic.
+        let dynamic = pyproject_toml.as_ref().is_some_and(|pyproject_toml| {
+            pyproject_toml.project.as_ref().is_some_and(|project| {
+                project
+                    .dynamic
+                    .as_ref()
+                    .is_some_and(|dynamic| dynamic.iter().any(|field| field == "version"))
+            })
+        });
+
+        // Attempt to read static metadata from the `pyproject.toml`.
+        if let Some(pyproject_toml) = pyproject_toml {
+            match ResolutionMetadata::parse_pyproject_toml(pyproject_toml, source.version()) {
+                Ok(metadata) => {
+                    debug!("Found static `pyproject.toml` for: {source}");
+
+                    // Validate the metadata, but ignore it if the metadata doesn't match.
+                    match validate_metadata(source, &metadata) {
+                        Ok(()) => {
+                            return Ok(Self::Some(metadata));
+                        }
+                        Err(err) => {
+                            debug!("Ignoring `pyproject.toml` for {source}: {err}");
+                        }
+                    }
+                }
+                Err(
+                    err @ (uv_pypi_types::MetadataError::Pep508Error(_)
+                    | uv_pypi_types::MetadataError::DynamicField(_)
+                    | uv_pypi_types::MetadataError::FieldNotFound(_)
+                    | uv_pypi_types::MetadataError::PoetrySyntax),
+                ) => {
+                    debug!("No static `pyproject.toml` available for: {source} ({err:?})");
+                }
+                Err(err) => return Err(Error::PyprojectToml(err)),
+            }
         }
 
         // If the source distribution is a source tree, avoid reading `PKG-INFO` or `egg-info`,
         // since they could be out-of-date.
         if source.is_source_tree() {
-            return Ok(Self::None);
+            return Ok(if dynamic { Self::Dynamic } else { Self::None });
         }
 
         // Attempt to read static metadata from the `PKG-INFO` file.
@@ -2470,6 +2495,15 @@ impl StaticMetadata {
                 // Validate the metadata, but ignore it if the metadata doesn't match.
                 match validate_metadata(source, &metadata) {
                     Ok(()) => {
+                        // If necessary, mark the metadata as dynamic.
+                        let metadata = if dynamic {
+                            ResolutionMetadata {
+                                dynamic: true,
+                                ..metadata
+                            }
+                        } else {
+                            metadata
+                        };
                         return Ok(Self::Some(metadata));
                     }
                     Err(err) => {
@@ -2499,6 +2533,15 @@ impl StaticMetadata {
                 // Validate the metadata, but ignore it if the metadata doesn't match.
                 match validate_metadata(source, &metadata) {
                     Ok(()) => {
+                        // If necessary, mark the metadata as dynamic.
+                        let metadata = if dynamic {
+                            ResolutionMetadata {
+                                dynamic: true,
+                                ..metadata
+                            }
+                        } else {
+                            metadata
+                        };
                         return Ok(Self::Some(metadata));
                     }
                     Err(err) => {
@@ -2526,7 +2569,7 @@ impl StaticMetadata {
             Err(err) => return Err(err),
         }
 
-        Ok(Self::None)
+        Ok(if dynamic { Self::Dynamic } else { Self::None })
     }
 }
 
@@ -2576,7 +2619,7 @@ fn validate_metadata(
     }
 
     if let Some(version) = source.version() {
-        if metadata.version != *version {
+        if *version != metadata.version && *version != metadata.version.clone().without_local() {
             return Err(Error::WheelMetadataVersionMismatch {
                 metadata: metadata.version.clone(),
                 given: version.clone(),
@@ -2845,8 +2888,7 @@ async fn read_pkg_info(
 async fn read_pyproject_toml(
     source_tree: &Path,
     subdirectory: Option<&Path>,
-    sdist_version: Option<&Version>,
-) -> Result<ResolutionMetadata, Error> {
+) -> Result<PyProjectToml, Error> {
     // Read the `pyproject.toml` file.
     let pyproject_toml = match subdirectory {
         Some(subdirectory) => source_tree.join(subdirectory).join("pyproject.toml"),
@@ -2860,11 +2902,9 @@ async fn read_pyproject_toml(
         Err(err) => return Err(Error::CacheRead(err)),
     };
 
-    // Parse the metadata.
-    let metadata = ResolutionMetadata::parse_pyproject_toml(&content, sdist_version)
-        .map_err(Error::PyprojectToml)?;
+    let pyproject_toml = PyProjectToml::from_toml(&content)?;
 
-    Ok(metadata)
+    Ok(pyproject_toml)
 }
 
 /// Return the [`pypi_types::RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.

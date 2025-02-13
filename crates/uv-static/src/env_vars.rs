@@ -142,6 +142,15 @@ impl EnvVars {
     /// will compile Python source files to bytecode after installation.
     pub const UV_COMPILE_BYTECODE: &'static str = "UV_COMPILE_BYTECODE";
 
+    /// Equivalent to the `--no-binary` command-line argument. If set, uv will install
+    /// all packages from source. The resolver will still use pre-built wheels to
+    /// extract package metadata, if available.
+    pub const UV_NO_BINARY: &'static str = "UV_NO_BINARY";
+
+    /// Equivalent to the `--no-binary-package` command line argument. If set, uv will
+    /// not use pre-built wheels for the given space-delimited list of packages.
+    pub const UV_NO_BINARY_PACKAGE: &'static str = "UV_NO_BINARY_PACKAGE";
+
     /// Equivalent to the `--publish-url` command-line argument. The URL of the upload
     /// endpoint of the index to use with `uv publish`.
     pub const UV_PUBLISH_URL: &'static str = "UV_PUBLISH_URL";
@@ -614,4 +623,14 @@ impl EnvVars {
 
     /// Enables fetching files stored in Git LFS when installing a package from a Git repository.
     pub const UV_GIT_LFS: &'static str = "UV_GIT_LFS";
+
+    /// Number of times that `uv run` has been recursively invoked. Used to guard against infinite
+    /// recursion, e.g., when `uv run`` is used in a script shebang.
+    #[attr_hidden]
+    pub const UV_RUN_RECURSION_DEPTH: &'static str = "UV_RUN_RECURSION_DEPTH";
+
+    /// Number of times that `uv run` will allow recursive invocations, before exiting with an
+    /// error.
+    #[attr_hidden]
+    pub const UV_RUN_MAX_RECURSION_DEPTH: &'static str = "UV_RUN_MAX_RECURSION_DEPTH";
 }

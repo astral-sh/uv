@@ -950,6 +950,94 @@ impl Lock {
         dist
     }
 
+    /// Return a [`SatisfiesResult`] if the given [`RequiresDist`] does not match the [`Package`].
+    fn satisfies_requires_dist<'lock>(
+        metadata: RequiresDist,
+        package: &'lock Package,
+        root: &Path,
+    ) -> Result<SatisfiesResult<'lock>, LockError> {
+        // Special-case: if the version is dynamic, compare the flattened requirements.
+        let flattened = if package.is_dynamic() {
+            Some(
+                FlatRequiresDist::from_requirements(
+                    metadata.requires_dist.clone(),
+                    &package.id.name,
+                )
+                .into_iter()
+                .map(|requirement| normalize_requirement(requirement, root))
+                .collect::<Result<BTreeSet<_>, _>>()?,
+            )
+        } else {
+            None
+        };
+
+        // Validate the `requires-dist` metadata.
+        let expected: BTreeSet<_> = metadata
+            .requires_dist
+            .into_iter()
+            .map(|requirement| normalize_requirement(requirement, root))
+            .collect::<Result<_, _>>()?;
+        let actual: BTreeSet<_> = package
+            .metadata
+            .requires_dist
+            .iter()
+            .cloned()
+            .map(|requirement| normalize_requirement(requirement, root))
+            .collect::<Result<_, _>>()?;
+
+        if expected != actual && flattened.is_none_or(|expected| expected != actual) {
+            return Ok(SatisfiesResult::MismatchedPackageRequirements(
+                &package.id.name,
+                package.id.version.as_ref(),
+                expected,
+                actual,
+            ));
+        }
+
+        // Validate the `dependency-groups` metadata.
+        let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = metadata
+            .dependency_groups
+            .into_iter()
+            .filter(|(_, requirements)| !requirements.is_empty())
+            .map(|(group, requirements)| {
+                Ok::<_, LockError>((
+                    group,
+                    requirements
+                        .into_iter()
+                        .map(|requirement| normalize_requirement(requirement, root))
+                        .collect::<Result<_, _>>()?,
+                ))
+            })
+            .collect::<Result<_, _>>()?;
+        let actual: BTreeMap<GroupName, BTreeSet<Requirement>> = package
+            .metadata
+            .dependency_groups
+            .iter()
+            .filter(|(_, requirements)| !requirements.is_empty())
+            .map(|(group, requirements)| {
+                Ok::<_, LockError>((
+                    group.clone(),
+                    requirements
+                        .iter()
+                        .cloned()
+                        .map(|requirement| normalize_requirement(requirement, root))
+                        .collect::<Result<_, _>>()?,
+                ))
+            })
+            .collect::<Result<_, _>>()?;
+
+        if expected != actual {
+            return Ok(SatisfiesResult::MismatchedPackageDependencyGroups(
+                &package.id.name,
+                package.id.version.as_ref(),
+                expected,
+                actual,
+            ));
+        }
+
+        Ok(SatisfiesResult::Satisfied)
+    }
+
     /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
     pub async fn satisfies<Context: BuildContext>(
         &self,
@@ -967,94 +1055,6 @@ impl Lock {
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
     ) -> Result<SatisfiesResult<'_>, LockError> {
-        /// Return a [`SatisfiesResult`] if the given [`RequiresDist`] does not match the [`Package`].
-        fn satisfies_requires_dist<'lock>(
-            metadata: RequiresDist,
-            package: &'lock Package,
-            root: &Path,
-        ) -> Result<SatisfiesResult<'lock>, LockError> {
-            // Special-case: if the version is dynamic, compare the flattened requirements.
-            let flattened = if package.is_dynamic() {
-                Some(
-                    FlatRequiresDist::from_requirements(
-                        metadata.requires_dist.clone(),
-                        &package.id.name,
-                    )
-                    .into_iter()
-                    .map(|requirement| normalize_requirement(requirement, root))
-                    .collect::<Result<BTreeSet<_>, _>>()?,
-                )
-            } else {
-                None
-            };
-
-            // Validate the `requires-dist` metadata.
-            let expected: BTreeSet<_> = metadata
-                .requires_dist
-                .into_iter()
-                .map(|requirement| normalize_requirement(requirement, root))
-                .collect::<Result<_, _>>()?;
-            let actual: BTreeSet<_> = package
-                .metadata
-                .requires_dist
-                .iter()
-                .cloned()
-                .map(|requirement| normalize_requirement(requirement, root))
-                .collect::<Result<_, _>>()?;
-
-            if expected != actual && flattened.is_none_or(|expected| expected != actual) {
-                return Ok(SatisfiesResult::MismatchedPackageRequirements(
-                    &package.id.name,
-                    package.id.version.as_ref(),
-                    expected,
-                    actual,
-                ));
-            }
-
-            // Validate the `dependency-groups` metadata.
-            let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = metadata
-                .dependency_groups
-                .into_iter()
-                .filter(|(_, requirements)| !requirements.is_empty())
-                .map(|(group, requirements)| {
-                    Ok::<_, LockError>((
-                        group,
-                        requirements
-                            .into_iter()
-                            .map(|requirement| normalize_requirement(requirement, root))
-                            .collect::<Result<_, _>>()?,
-                    ))
-                })
-                .collect::<Result<_, _>>()?;
-            let actual: BTreeMap<GroupName, BTreeSet<Requirement>> = package
-                .metadata
-                .dependency_groups
-                .iter()
-                .filter(|(_, requirements)| !requirements.is_empty())
-                .map(|(group, requirements)| {
-                    Ok::<_, LockError>((
-                        group.clone(),
-                        requirements
-                            .iter()
-                            .cloned()
-                            .map(|requirement| normalize_requirement(requirement, root))
-                            .collect::<Result<_, _>>()?,
-                    ))
-                })
-                .collect::<Result<_, _>>()?;
-
-            if expected != actual {
-                return Ok(SatisfiesResult::MismatchedPackageDependencyGroups(
-                    &package.id.name,
-                    package.id.version.as_ref(),
-                    expected,
-                    actual,
-                ));
-            }
-
-            Ok(SatisfiesResult::Satisfied)
-        }
-
         let mut queue: VecDeque<&Package> = VecDeque::new();
         let mut seen = FxHashSet::default();
 
@@ -1333,7 +1333,7 @@ impl Lock {
                 }
 
                 // Validate that the requirements are unchanged.
-                match satisfies_requires_dist(RequiresDist::from(metadata), package, root)? {
+                match Self::satisfies_requires_dist(RequiresDist::from(metadata), package, root)? {
                     SatisfiesResult::Satisfied => {}
                     result => return Ok(result),
                 }
@@ -1363,7 +1363,7 @@ impl Lock {
                     }
 
                     // Validate that the requirements are unchanged.
-                    match satisfies_requires_dist(metadata, package, root) {
+                    match Self::satisfies_requires_dist(metadata, package, root) {
                         Ok(SatisfiesResult::Satisfied) => {
                             debug!("Static `requires-dist` for `{}` is up-to-date", package.id);
                             true
@@ -1435,7 +1435,11 @@ impl Lock {
                     }
 
                     // Validate that the requirements are unchanged.
-                    match satisfies_requires_dist(RequiresDist::from(metadata), package, root)? {
+                    match Self::satisfies_requires_dist(
+                        RequiresDist::from(metadata),
+                        package,
+                        root,
+                    )? {
                         SatisfiesResult::Satisfied => {}
                         result => return Ok(result),
                     }
@@ -1689,8 +1693,8 @@ impl TryFrom<LockWire> for Lock {
             if ambiguous.contains(&dist.id.name) {
                 continue;
             }
-            if unambiguous_package_ids.remove(&dist.id.name).is_some() {
-                ambiguous.insert(dist.id.name.clone());
+            if let Some(id) = unambiguous_package_ids.remove(&dist.id.name) {
+                ambiguous.insert(id.name);
                 continue;
             }
             unambiguous_package_ids.insert(dist.id.name.clone(), dist.id.clone());
@@ -2747,17 +2751,6 @@ impl PackageIdForDependency {
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<PackageId, LockError> {
         let unambiguous_package_id = unambiguous_package_ids.get(&self.name);
-        let version = if let Some(version) = self.version {
-            Some(version)
-        } else {
-            let Some(dist_id) = unambiguous_package_id else {
-                return Err(LockErrorKind::MissingDependencyVersion {
-                    name: self.name.clone(),
-                }
-                .into());
-            };
-            dist_id.version.clone()
-        };
         let source = self.source.map(Ok::<_, LockError>).unwrap_or_else(|| {
             let Some(package_id) = unambiguous_package_id else {
                 return Err(LockErrorKind::MissingDependencySource {
@@ -2767,6 +2760,24 @@ impl PackageIdForDependency {
             };
             Ok(package_id.source.clone())
         })?;
+        let version = if let Some(version) = self.version {
+            Some(version)
+        } else {
+            if let Some(package_id) = unambiguous_package_id {
+                package_id.version.clone()
+            } else {
+                // If the package is a source tree, assume that the missing `self.version` field is
+                // indicative of a dynamic version.
+                if source.is_source_tree() {
+                    None
+                } else {
+                    return Err(LockErrorKind::MissingDependencyVersion {
+                        name: self.name.clone(),
+                    }
+                    .into());
+                }
+            }
+        };
         Ok(PackageId {
             name: self.name,
             version,
@@ -5036,13 +5047,13 @@ requires-python = ">=3.12"
 [[package]]
 name = "a"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "b"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package.dependencies]]
@@ -5062,18 +5073,18 @@ requires-python = ">=3.12"
 [[package]]
 name = "a"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "b"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package.dependencies]]
 name = "a"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
         insta::assert_debug_snapshot!(result);
@@ -5088,13 +5099,13 @@ requires-python = ">=3.12"
 [[package]]
 name = "a"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "b"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package.dependencies]]
@@ -5113,19 +5124,19 @@ requires-python = ">=3.12"
 [[package]]
 name = "a"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "a"
 version = "0.1.1"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "b"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package.dependencies]]
@@ -5145,24 +5156,24 @@ requires-python = ">=3.12"
 [[package]]
 name = "a"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "a"
 version = "0.1.1"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "b"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package.dependencies]]
 name = "a"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 "#;
         let result = toml::from_str::<Lock>(data).unwrap_err();
         assert_stripped_snapshot!(result, @"Dependency `a` has missing `version` field but has more than one matching package");
@@ -5177,7 +5188,7 @@ requires-python = ">=3.12"
 [[package]]
 name = "a"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
@@ -5189,14 +5200,44 @@ sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d
 [[package]]
 name = "b"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package.dependencies]]
 name = "a"
 "#;
         let result = toml::from_str::<Lock>(data).unwrap_err();
-        assert_stripped_snapshot!(result, @"Dependency `a` has missing `version` field but has more than one matching package");
+        assert_stripped_snapshot!(result, @"Dependency `a` has missing `source` field but has more than one matching package");
+    }
+
+    #[test]
+    fn missing_dependency_version_dynamic() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+source = { editable = "path/to/a" }
+
+[[package]]
+name = "a"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package.dependencies]]
+name = "a"
+source = { editable = "path/to/a" }
+"#;
+        let result = toml::from_str::<Lock>(data);
+        insta::assert_debug_snapshot!(result);
     }
 
     #[test]

@@ -5595,7 +5595,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.pip_install(), context.temp_dir.path())
         .arg("-r")
         .arg("requirements.in")
-        .arg("--show-settings"), @r#"
+        .arg("--show-settings"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5634,7 +5634,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         constraints: [],
         overrides: [],
         build_constraints: [],
-        dry_run: false,
+        dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         modifications: Sufficient,
@@ -5730,14 +5730,14 @@ fn verify_hashes() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "#
+    "###
     );
 
     uv_snapshot!(context.filters(), add_shared_args(context.pip_install(), context.temp_dir.path())
         .arg("-r")
         .arg("requirements.in")
         .arg("--no-verify-hashes")
-        .arg("--show-settings"), @r#"
+        .arg("--show-settings"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5776,7 +5776,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         constraints: [],
         overrides: [],
         build_constraints: [],
-        dry_run: false,
+        dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         modifications: Sufficient,
@@ -5870,14 +5870,14 @@ fn verify_hashes() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "#
+    "###
     );
 
     uv_snapshot!(context.filters(), add_shared_args(context.pip_install(), context.temp_dir.path())
         .arg("-r")
         .arg("requirements.in")
         .arg("--require-hashes")
-        .arg("--show-settings"), @r#"
+        .arg("--show-settings"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5916,7 +5916,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         constraints: [],
         overrides: [],
         build_constraints: [],
-        dry_run: false,
+        dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         modifications: Sufficient,
@@ -6012,14 +6012,14 @@ fn verify_hashes() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "#
+    "###
     );
 
     uv_snapshot!(context.filters(), add_shared_args(context.pip_install(), context.temp_dir.path())
         .arg("-r")
         .arg("requirements.in")
         .arg("--no-require-hashes")
-        .arg("--show-settings"), @r#"
+        .arg("--show-settings"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6058,7 +6058,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         constraints: [],
         overrides: [],
         build_constraints: [],
-        dry_run: false,
+        dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         modifications: Sufficient,
@@ -6152,14 +6152,14 @@ fn verify_hashes() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "#
+    "###
     );
 
     uv_snapshot!(context.filters(), add_shared_args(context.pip_install(), context.temp_dir.path())
         .arg("-r")
         .arg("requirements.in")
         .env(EnvVars::UV_NO_VERIFY_HASHES, "1")
-        .arg("--show-settings"), @r#"
+        .arg("--show-settings"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6198,7 +6198,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         constraints: [],
         overrides: [],
         build_constraints: [],
-        dry_run: false,
+        dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         modifications: Sufficient,
@@ -6292,7 +6292,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "#
+    "###
     );
 
     uv_snapshot!(context.filters(), add_shared_args(context.pip_install(), context.temp_dir.path())
@@ -6300,7 +6300,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         .arg("requirements.in")
         .arg("--verify-hashes")
         .arg("--no-require-hashes")
-        .arg("--show-settings"), @r#"
+        .arg("--show-settings"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6339,7 +6339,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         constraints: [],
         overrides: [],
         build_constraints: [],
-        dry_run: false,
+        dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         modifications: Sufficient,
@@ -6435,7 +6435,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "#
+    "###
     );
 
     Ok(())

@@ -100,7 +100,10 @@ fn tool_run_at_version() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Not a valid package or extra name: "pytest@". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
+    error: Failed to parse: `pytest@`
+      Caused by: Expected URL
+    pytest@
+           ^
     "###);
 
     // Invalid versions are just treated as package and command names
@@ -110,11 +113,12 @@ fn tool_run_at_version() {
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Not a valid package or extra name: "pytest@invalid". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
+      × Failed to resolve tool requirement
+      ╰─▶ Distribution not found at: file://[TEMP_DIR]/invalid
     "###);
 
     let filters = context
@@ -650,6 +654,56 @@ fn tool_run_url() {
      + jinja2==3.1.3
      + markupsafe==2.1.5
      + werkzeug==3.0.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl")
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.3
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.3
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.3
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
     "###);
 }
 
@@ -1399,6 +1453,130 @@ fn tool_run_latest() {
 }
 
 #[test]
+fn tool_run_latest_extra() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("flask[dotenv]@latest")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 8 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + python-dotenv==1.0.1
+     + werkzeug==3.0.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("flask[dotenv]@3.0.0")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.0
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 8 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.0
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + python-dotenv==1.0.1
+     + werkzeug==3.0.1
+    "###);
+}
+
+#[test]
+fn tool_run_extra() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("flask[dotenv]")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 8 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + python-dotenv==1.0.1
+     + werkzeug==3.0.1
+    "###);
+}
+
+#[test]
+fn tool_run_specifier() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("flask<3.0.0")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 2.3.3
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==2.3.3
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    "###);
+}
+
+#[test]
 fn tool_run_python() {
     let context = TestContext::new("3.12").with_filtered_counts();
     uv_snapshot!(context.filters(), context.tool_run()
@@ -1583,5 +1761,52 @@ fn tool_run_python_from() {
 
     ----- stderr -----
     error: Using `--from python<specifier>` is not supported. Use `python@<version>` instead.
+    "###);
+}
+
+#[test]
+fn tool_run_from_at() {
+    let context = TestContext::new("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("executable-application@latest")
+        .arg("app")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    app 0.3.0
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + executable-application==0.3.0
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("executable-application@0.2.0")
+        .arg("app")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    app 0.2.0
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + executable-application==0.2.0
     "###);
 }

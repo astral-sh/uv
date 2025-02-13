@@ -422,7 +422,7 @@ impl GitCheckout {
         // Perform a local clone of the repository, which will attempt to use
         // hardlinks to set up the repository. This should speed up the clone operation
         // quite a bit if it works.
-        ProcessBuilder::new(GIT.as_ref()?)
+        let res = ProcessBuilder::new(GIT.as_ref()?)
             .arg("clone")
             .arg("--local")
             // Make sure to pass the local file path and not a file://... url. If given a url,
@@ -430,7 +430,18 @@ impl GitCheckout {
             // have a HEAD checked out.
             .arg(database.repo.path.simplified_display().to_string())
             .arg(into.simplified_display().to_string())
-            .exec_with_output()?;
+            .exec_with_output();
+
+        if let Err(e) = res {
+            debug!("Cloning git repo with --local failed, retrying without hardlinks: {e}");
+
+            ProcessBuilder::new(GIT.as_ref()?)
+                .arg("clone")
+                .arg("--no-hardlinks")
+                .arg(database.repo.path.simplified_display().to_string())
+                .arg(into.simplified_display().to_string())
+                .exec_with_output()?;
+        }
 
         let repo = GitRepository::open(into)?;
         let checkout = GitCheckout::new(revision, repo);

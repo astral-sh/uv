@@ -698,6 +698,8 @@ enum InterpreterInfoResult {
 pub enum InterpreterInfoError {
     #[error("Could not detect a glibc or a musl libc (while running on Linux)")]
     LibcNotFound,
+    #[error("Broken Python installation, `platform.mac_ver()` returned an empty value, please reinstall Python")]
+    BrokenMacVer,
     #[error("Unknown operating system: `{operating_system}`")]
     UnknownOperatingSystem { operating_system: String },
     #[error("Python {python_version} is not supported. Please use Python 3.8 or newer.")]
@@ -1090,7 +1092,7 @@ mod tests {
         fs::write(
             &mocked_interpreter,
             formatdoc! {r"
-        #!/bin/bash
+        #!/bin/sh
         echo '{json}'
         "},
         )
@@ -1109,7 +1111,7 @@ mod tests {
         fs::write(
             &mocked_interpreter,
             formatdoc! {r"
-        #!/bin/bash
+        #!/bin/sh
         echo '{}'
         ", json.replace("3.12", "3.13")},
         )

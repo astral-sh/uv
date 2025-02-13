@@ -27,9 +27,12 @@ pub fn is_executable(path: &Path) -> bool {
         }
     }
 
-    if cfg!(not(target_os = "windows")) {
+    #[cfg(not(target_os = "windows"))]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
         if !fs_err::metadata(path)
-            .map(|metadata| metadata.is_file())
+            .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
             .unwrap_or(false)
         {
             return false;
