@@ -13,7 +13,7 @@ use url::Url;
 use uv_configuration::{DevGroupsManifest, EditableMode, ExtrasSpecification, InstallOptions};
 use uv_distribution_filename::{DistExtension, SourceDistExtension};
 use uv_fs::Simplified;
-use uv_git::GitReference;
+use uv_git_types::GitReference;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
@@ -313,7 +313,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                     url.set_query(None);
 
                     // Reconstruct the `GitUrl` from the `GitSource`.
-                    let git_url = uv_git::GitUrl::from_commit(
+                    let git_url = uv_git_types::GitUrl::from_commit(
                         url,
                         GitReference::from(git.kind.clone()),
                         git.precise,

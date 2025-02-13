@@ -6,7 +6,7 @@ pub use crate::specification::*;
 pub use crate::unnamed::*;
 
 use uv_distribution_types::{Dist, DistErrorKind, GitSourceDist, SourceDist};
-use uv_git::GitUrl;
+use uv_git_types::GitUrl;
 use uv_pypi_types::{Requirement, RequirementSource};
 
 mod extras;

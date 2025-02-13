@@ -26,6 +26,7 @@ uv-distribution-types = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
 uv-git = { workspace = true }
+uv-git-types = { workspace = true }
 uv-metadata = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }

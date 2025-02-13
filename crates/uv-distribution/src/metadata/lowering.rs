@@ -8,7 +8,7 @@ use url::Url;
 
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{Index, IndexLocations, IndexName, Origin};
-use uv_git::GitReference;
+use uv_git_types::GitReference;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{looks_like_git_repository, MarkerTree, VerbatimUrl, VersionOrUrl};
