@@ -185,6 +185,76 @@ fn init_application() -> Result<()> {
     Ok(())
 }
 
+/// Run `uv init --app` to create an application project where the name has a hyphen
+#[test]
+fn init_hyphen_application() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo-bar");
+    child.create_dir_all()?;
+
+    let pyproject_toml = child.join("pyproject.toml");
+    let package_py = child.join("foo_bar.py");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo-bar`
+    ");
+
+    let pyproject = fs_err::read_to_string(&pyproject_toml)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo-bar"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+        "###
+        );
+    });
+
+    let hello = fs_err::read_to_string(package_py)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            hello, @r###"
+        def main():
+            print("Hello from foo-bar!")
+
+
+        if __name__ == "__main__":
+            main()
+        "###
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("foo.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from foo!
+
+    ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    "###);
+
+    Ok(())
+}
+
 /// When `<package>.py` already exists, we don't create it again
 #[test]
 fn init_application_hello_exists() -> Result<()> {
