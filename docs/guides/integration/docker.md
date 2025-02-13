@@ -32,7 +32,7 @@ The following distroless images are available:
 
 - `ghcr.io/astral-sh/uv:latest`
 - `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.6.0`
-- `ghcr.io/astral-sh/uv:{major}.{minor}`, e.g., `ghcr.io/astral-sh/uv:0.5` (the latest patch
+- `ghcr.io/astral-sh/uv:{major}.{minor}`, e.g., `ghcr.io/astral-sh/uv:0.6` (the latest patch
   version)
 
 And the following derived images are available:
