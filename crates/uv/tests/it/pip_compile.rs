@@ -1430,7 +1430,7 @@ fn compile_python_312_annotation_line() -> Result<()> {
 /// Compile for 3.12 when only a different interpreter version is available.
 #[test]
 fn compile_fallback_interpreter() -> Result<()> {
-    let context = TestContext::new("3.10");
+    let context = TestContext::new("3.10").with_filtered_python_sources();
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("black==23.10.1")?;
 
@@ -1529,7 +1529,7 @@ fn compile_fallback_interpreter() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for Python 3.12 in virtual environments, managed installations, or search path
+    error: No interpreter found for Python 3.12 in [PYTHON SOURCES]
     "###
     );
 
@@ -1544,7 +1544,7 @@ fn compile_fallback_interpreter() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for PyPy in virtual environments, managed installations, or search path
+    error: No interpreter found for PyPy in [PYTHON SOURCES]
     "###
     );
 
@@ -1558,7 +1558,7 @@ fn compile_fallback_interpreter() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for Python >=3.12 in virtual environments, managed installations, or search path
+    error: No interpreter found for Python >=3.12 in [PYTHON SOURCES]
     "###
     );
 
