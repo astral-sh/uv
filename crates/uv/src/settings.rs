@@ -4,8 +4,6 @@ use std::path::PathBuf;
 use std::process;
 use std::str::FromStr;
 
-use crate::commands::ToolRunCommand;
-use crate::commands::{pip::operations::Modifications, InitKind, InitProjectKind};
 use url::Url;
 
 use uv_cache::{CacheArgs, Refresh};
@@ -24,10 +22,11 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, DevGroupsSpecification, EditableMode, ExportFormat,
-    ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType,
-    NoBinary, NoBuild, PreviewMode, ProjectBuildBackend, Reinstall, RequiredVersion,
-    SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
+    BuildOptions, Concurrency, ConfigSettings, DevGroupsSpecification, DryRun, EditableMode,
+    ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
+    KeyringProviderType, NoBinary, NoBuild, PreviewMode, ProjectBuildBackend, Reinstall,
+    RequiredVersion, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
+    VersionControlSystem,
 };
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl};
 use uv_install_wheel::LinkMode;
@@ -45,6 +44,9 @@ use uv_settings::{
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
+
+use crate::commands::ToolRunCommand;
+use crate::commands::{pip::operations::Modifications, InitKind, InitProjectKind};
 
 /// The default publish URL.
 const PYPI_PUBLISH_URL: &str = "https://upload.pypi.org/legacy/";
@@ -297,9 +299,16 @@ pub(crate) struct RunSettings {
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) env_file: Vec<PathBuf>,
     pub(crate) no_env_file: bool,
+    pub(crate) max_recursion_depth: u32,
 }
 
 impl RunSettings {
+    // Default value for UV_RUN_MAX_RECURSION_DEPTH if unset. This is large
+    // enough that it's unlikely a user actually needs this recursion depth,
+    // but short enough that we detect recursion quickly enough to avoid OOMing
+    // or hanging for a long time.
+    const DEFAULT_MAX_RECURSION_DEPTH: u32 = 100;
+
     /// Resolve the [`RunSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: RunArgs, filesystem: Option<FilesystemOptions>) -> Self {
@@ -342,6 +351,7 @@ impl RunSettings {
             show_resolution,
             env_file,
             no_env_file,
+            max_recursion_depth,
         } = args;
 
         let install_mirrors = filesystem
@@ -401,6 +411,7 @@ impl RunSettings {
             env_file,
             no_env_file,
             install_mirrors,
+            max_recursion_depth: max_recursion_depth.unwrap_or(Self::DEFAULT_MAX_RECURSION_DEPTH),
         }
     }
 }
@@ -885,6 +896,7 @@ impl PythonUninstallSettings {
             targets,
             all,
         } = args;
+
         Self {
             install_dir,
             targets,
@@ -955,6 +967,8 @@ impl PythonPinSettings {
 pub(crate) struct SyncSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
+    pub(crate) dry_run: DryRun,
+    pub(crate) script: Option<PathBuf>,
     pub(crate) active: Option<bool>,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: DevGroupsSpecification,
@@ -996,11 +1010,13 @@ impl SyncSettings {
             frozen,
             active,
             no_active,
+            dry_run,
             installer,
             build,
             refresh,
             all_packages,
             package,
+            script,
             python,
         } = args;
         let install_mirrors = filesystem
@@ -1016,6 +1032,8 @@ impl SyncSettings {
         Self {
             locked,
             frozen,
+            dry_run: DryRun::from_args(dry_run),
+            script,
             active: flag(active, no_active),
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
@@ -1059,7 +1077,7 @@ impl SyncSettings {
 pub(crate) struct LockSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
-    pub(crate) dry_run: bool,
+    pub(crate) dry_run: DryRun,
     pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -1090,7 +1108,7 @@ impl LockSettings {
         Self {
             locked: check,
             frozen: check_exists,
-            dry_run,
+            dry_run: DryRun::from_args(dry_run),
             script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
@@ -1674,7 +1692,7 @@ pub(crate) struct PipSyncSettings {
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
-    pub(crate) dry_run: bool,
+    pub(crate) dry_run: DryRun,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
 }
@@ -1723,7 +1741,7 @@ impl PipSyncSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            dry_run,
+            dry_run: DryRun::from_args(dry_run),
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {
@@ -1762,7 +1780,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
-    pub(crate) dry_run: bool,
+    pub(crate) dry_run: DryRun,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
     pub(crate) modifications: Modifications,
@@ -1856,7 +1874,7 @@ impl PipInstallSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            dry_run,
+            dry_run: DryRun::from_args(dry_run),
             constraints_from_workspace,
             overrides_from_workspace,
             modifications: if flag(exact, inexact).unwrap_or(false) {
@@ -1897,7 +1915,7 @@ impl PipInstallSettings {
 pub(crate) struct PipUninstallSettings {
     pub(crate) package: Vec<String>,
     pub(crate) requirements: Vec<PathBuf>,
-    pub(crate) dry_run: bool,
+    pub(crate) dry_run: DryRun,
     pub(crate) settings: PipSettings,
 }
 
@@ -1922,7 +1940,7 @@ impl PipUninstallSettings {
         Self {
             package,
             requirements,
-            dry_run,
+            dry_run: DryRun::from_args(dry_run),
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),

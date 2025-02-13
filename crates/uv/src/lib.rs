@@ -178,9 +178,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => None,
                     Err(err) => return Err(err.into()),
                 },
-                Some(RunCommand::PythonRemote(script, _)) => {
+                Some(RunCommand::PythonRemote(url, script, _)) => {
                     match Pep723Metadata::read(&script).await {
-                        Ok(Some(metadata)) => Some(Pep723Item::Remote(metadata)),
+                        Ok(Some(metadata)) => Some(Pep723Item::Remote(metadata, url.clone())),
                         Ok(None) => None,
                         Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
                             None
@@ -198,6 +198,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 ..
             })
             | ProjectCommand::Lock(uv_cli::LockArgs {
+                script: Some(script),
+                ..
+            })
+            | ProjectCommand::Sync(uv_cli::SyncArgs {
                 script: Some(script),
                 ..
             })
@@ -1199,6 +1203,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Commands::Python(PythonNamespace {
             command: PythonCommand::Uninstall(args),
         }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::PythonUninstallSettings::resolve(args, filesystem);
             show_settings!(args);
 
@@ -1511,6 +1516,7 @@ async fn run_project(
                 args.env_file,
                 args.no_env_file,
                 globals.preview,
+                args.max_recursion_depth,
             ))
             .await
         }
@@ -1526,10 +1532,18 @@ async fn run_project(
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
-            commands::sync(
+            // Unwrap the script.
+            let script = script.map(|script| match script {
+                Pep723Item::Script(script) => script,
+                Pep723Item::Stdin(..) => unreachable!("`uv lock` does not support stdin"),
+                Pep723Item::Remote(..) => unreachable!("`uv lock` does not support remote files"),
+            });
+
+            Box::pin(commands::sync(
                 project_dir,
                 args.locked,
                 args.frozen,
+                args.dry_run,
                 args.active,
                 args.all_packages,
                 args.package,
@@ -1543,6 +1557,7 @@ async fn run_project(
                 globals.python_preference,
                 globals.python_downloads,
                 args.settings,
+                script,
                 globals.installer_metadata,
                 globals.connectivity,
                 globals.concurrency,
@@ -1552,7 +1567,7 @@ async fn run_project(
                 &cache,
                 printer,
                 globals.preview,
-            )
+            ))
             .await
         }
         ProjectCommand::Lock(args) => {
@@ -1569,8 +1584,8 @@ async fn run_project(
             // Unwrap the script.
             let script = script.map(|script| match script {
                 Pep723Item::Script(script) => script,
-                Pep723Item::Stdin(_) => unreachable!("`uv lock` does not support stdin"),
-                Pep723Item::Remote(_) => unreachable!("`uv lock` does not support remote files"),
+                Pep723Item::Stdin(..) => unreachable!("`uv lock` does not support stdin"),
+                Pep723Item::Remote(..) => unreachable!("`uv lock` does not support remote files"),
             });
 
             Box::pin(commands::lock(
@@ -1667,8 +1682,8 @@ async fn run_project(
             // Unwrap the script.
             let script = script.map(|script| match script {
                 Pep723Item::Script(script) => script,
-                Pep723Item::Stdin(_) => unreachable!("`uv remove` does not support stdin"),
-                Pep723Item::Remote(_) => unreachable!("`uv remove` does not support remote files"),
+                Pep723Item::Stdin(..) => unreachable!("`uv remove` does not support stdin"),
+                Pep723Item::Remote(..) => unreachable!("`uv remove` does not support remote files"),
             });
 
             Box::pin(commands::remove(
@@ -1709,8 +1724,8 @@ async fn run_project(
             // Unwrap the script.
             let script = script.map(|script| match script {
                 Pep723Item::Script(script) => script,
-                Pep723Item::Stdin(_) => unreachable!("`uv tree` does not support stdin"),
-                Pep723Item::Remote(_) => unreachable!("`uv tree` does not support remote files"),
+                Pep723Item::Stdin(..) => unreachable!("`uv tree` does not support stdin"),
+                Pep723Item::Remote(..) => unreachable!("`uv tree` does not support remote files"),
             });
 
             Box::pin(commands::tree(
@@ -1755,8 +1770,8 @@ async fn run_project(
             // Unwrap the script.
             let script = script.map(|script| match script {
                 Pep723Item::Script(script) => script,
-                Pep723Item::Stdin(_) => unreachable!("`uv export` does not support stdin"),
-                Pep723Item::Remote(_) => unreachable!("`uv export` does not support remote files"),
+                Pep723Item::Stdin(..) => unreachable!("`uv export` does not support stdin"),
+                Pep723Item::Remote(..) => unreachable!("`uv export` does not support remote files"),
             });
 
             commands::export(

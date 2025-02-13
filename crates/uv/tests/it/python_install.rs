@@ -1087,29 +1087,6 @@ fn python_install_default_from_env() {
      + cpython-3.11.11-[PLATFORM]
     "###);
 
-    // Same with uninstall
-    uv_snapshot!(context.filters(), context.python_uninstall().env(EnvVars::UV_PYTHON, "3.12"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Searching for Python versions matching: Python 3.12
-    Uninstalled Python 3.12.9 in [TIME]
-     - cpython-3.12.9-[PLATFORM]
-    ");
-
-    uv_snapshot!(context.filters(), context.python_uninstall().arg("3.11").env(EnvVars::UV_PYTHON, "3.12"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Searching for Python versions matching: Python 3.11
-    Uninstalled Python 3.11.11 in [TIME]
-     - cpython-3.11.11-[PLATFORM]
-    "###);
-
     // Install again so we can test interaction with `uninstall --all`
     uv_snapshot!(context.filters(), context.python_install().arg("3.12"), @r"
     success: true
@@ -1119,6 +1096,18 @@ fn python_install_default_from_env() {
     ----- stderr -----
     Installed Python 3.12.9 in [TIME]
      + cpython-3.12.9-[PLATFORM]
+    ");
+
+    // We should ignore `UV_PYTHON` here and complain there is not a target
+    uv_snapshot!(context.filters(), context.python_uninstall().env(EnvVars::UV_PYTHON, "3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python versions matching: Python 3.12
+    Uninstalled Python 3.12.9 in [TIME]
+     - cpython-3.12.9-[PLATFORM]
     ");
 
     // We should ignore `UV_PYTHON` here and respect `--all`
@@ -1133,7 +1122,7 @@ fn python_install_default_from_env() {
      - cpython-3.12.9-[PLATFORM]
     "###);
 
-    // Uninstall with no targets
+    // Uninstall with no targets should error
     uv_snapshot!(context.filters(), context.python_uninstall(), @r###"
     success: false
     exit_code: 1
@@ -1143,7 +1132,7 @@ fn python_install_default_from_env() {
     No Python versions specified for uninstallation; provide versions to uninstall or use `--all` to uninstall all versions
     "###);
 
-    // Uninstall with conflicting options
+    // Uninstall with conflicting options should error
     uv_snapshot!(context.filters(), context.python_uninstall().arg("--all").arg("3.12"), @r###"
     success: false
     exit_code: 1

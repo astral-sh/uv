@@ -4489,6 +4489,7 @@ pub struct PythonInstallArgs {
     #[arg(long)]
     pub default: bool,
 }
+
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonUninstallArgs {
@@ -4501,10 +4502,11 @@ pub struct PythonUninstallArgs {
     /// If not provided, the target will be read from the `UV_PYTHON` environment variable.
     ///
     /// See `uv help python` to view supported request formats.
+    #[arg(required = true)]
     pub targets: Vec<String>,
 
     /// Uninstall all managed Python versions.
-    #[arg(long)]
+    #[arg(long, conflicts_with("targets"))]
     pub all: bool,
 }
 
