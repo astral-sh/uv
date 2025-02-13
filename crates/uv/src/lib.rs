@@ -428,6 +428,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.annotation_style,
                 args.settings.link_mode,
                 args.settings.python,
+                args.python_legacy,
                 args.settings.system,
                 globals.python_preference,
                 globals.concurrency,

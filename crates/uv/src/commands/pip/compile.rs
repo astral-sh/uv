@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::env;
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
@@ -38,6 +39,7 @@ use uv_resolver::{
     InMemoryIndex, OptionsBuilder, PrereleaseMode, PythonRequirement, RequiresPython,
     ResolutionMode, ResolverEnvironment,
 };
+use uv_static::EnvVars;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::warn_user;
 
@@ -86,14 +88,15 @@ pub(crate) async fn pip_compile(
     no_build_isolation: bool,
     no_build_isolation_package: Vec<PackageName>,
     build_options: BuildOptions,
-    python_version: Option<PythonVersion>,
+    mut python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     universal: bool,
     exclude_newer: Option<ExcludeNewer>,
     sources: SourceStrategy,
     annotation_style: AnnotationStyle,
     link_mode: LinkMode,
-    python: Option<String>,
+    mut python: Option<String>,
+    mut python_legacy: Option<String>,
     system: bool,
     python_preference: PythonPreference,
     concurrency: Concurrency,
@@ -103,6 +106,38 @@ pub(crate) async fn pip_compile(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
+    // If the user requests both `-p` and `--python` or `--python-version`, error
+    if let Some(python_legacy) = python_legacy.as_ref() {
+        if let Some(python) = python.as_ref() {
+            return Err(anyhow!(
+                "Cannot specify both `-p` ({python_legacy}) and `--python` ({python}).",
+            ));
+        }
+        if let Some(python_version) = python_version.as_ref() {
+            return Err(anyhow!(
+                "Cannot specify both `-p` ({python_legacy}) and `--python-version` ({python_version}).",
+            ));
+        }
+    }
+
+    // Respect `UV_PYTHON` with legacy behavior
+    if python_legacy.is_none() && python_version.is_none() && python.is_none() {
+        if let Ok(python) = std::env::var(EnvVars::UV_PYTHON) {
+            if !python.is_empty() {
+                python_legacy = Some(python);
+            }
+        }
+    }
+
+    // Resolve `-p` into `--python-version` or `--python`
+    if let Some(python_legacy) = python_legacy {
+        if let Ok(version) = PythonVersion::from_str(&python_legacy) {
+            python_version = Some(version);
+        } else {
+            python = Some(python_legacy);
+        }
+    }
+
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
     // return an error.
     if !extras.is_empty() && !requirements.iter().any(RequirementsSource::allows_extras) {
@@ -189,8 +224,8 @@ pub(crate) async fn pip_compile(
         let request = PythonRequest::parse(python);
         PythonInstallation::find(&request, environment_preference, python_preference, &cache)
     } else {
-        // TODO(zanieb): The split here hints at a problem with the abstraction; we should be able to use
-        // `PythonInstallation::find(...)` here.
+        // TODO(zanieb): The split here hints at a problem with the request abstraction; we should
+        // be able to use `PythonInstallation::find(...)` here.
         let request = if let Some(version) = python_version.as_ref() {
             // TODO(zanieb): We should consolidate `VersionRequest` and `PythonVersion`
             PythonRequest::Version(VersionRequest::from(version))

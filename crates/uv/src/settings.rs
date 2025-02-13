@@ -1542,6 +1542,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) overrides_from_workspace: Vec<Requirement>,
     pub(crate) environments: SupportedEnvironments,
     pub(crate) refresh: Refresh,
+    pub(crate) python_legacy: Option<String>,
     pub(crate) settings: PipSettings,
 }
 
@@ -1581,6 +1582,7 @@ impl PipCompileSettings {
             no_binary,
             only_binary,
             python_version,
+            python_legacy,
             python_platform,
             universal,
             no_universal,
@@ -1650,6 +1652,7 @@ impl PipCompileSettings {
             overrides_from_workspace,
             environments,
             refresh: Refresh::from(refresh),
+            python_legacy,
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),

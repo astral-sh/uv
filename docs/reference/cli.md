@@ -5955,7 +5955,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
 </ul>
-</dd><dt><code>--python-version</code>, <code>-p</code> <i>python-version</i></dt><dd><p>The Python version to use for resolution.</p>
+</dd><dt><code>--python-version</code> <i>python-version</i></dt><dd><p>The Python version to use for resolution.</p>
 
 <p>For example, <code>3.8</code> or <code>3.8.17</code>.</p>
 
