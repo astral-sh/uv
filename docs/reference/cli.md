@@ -4788,7 +4788,7 @@ uv python install [OPTIONS] [TARGETS]...
 
 <dl class="cli-reference"><dt><code>TARGETS</code></dt><dd><p>The Python version(s) to install.</p>
 
-<p>If not provided, the requested Python version(s) will be read from the <code>.python-versions</code> or <code>.python-version</code> files. If neither file is present, uv will check if it has installed any Python versions. If not, it will install the latest stable version of Python.</p>
+<p>If not provided, the requested Python version(s) will be read from the <code>UV_PYTHON</code> environment variable then <code>.python-versions</code> or <code>.python-version</code> files. If none of the above are present, uv will check if it has installed any Python versions. If not, it will install the latest stable version of Python.</p>
 
 <p>See <a href="#uv-python">uv python</a> to view supported request formats.</p>
 
@@ -5371,12 +5371,14 @@ Uninstall Python versions
 <h3 class="cli-reference">Usage</h3>
 
 ```
-uv python uninstall [OPTIONS] [TARGETS]...
+uv python uninstall [OPTIONS] <TARGETS>...
 ```
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt><code>TARGETS</code></dt><dd><p>The Python version(s) to uninstall. targets can also be set through the <code>UV_PYTHON</code> env variable, however the clap env functionality is not used here to avoid conflicts with the <code>--all</code> flag if target set through env. See <a href="#uv-python">uv python</a> to view supported request formats</p>
+<dl class="cli-reference"><dt><code>TARGETS</code></dt><dd><p>The Python version(s) to uninstall.</p>
+
+<p>See <a href="#uv-python">uv python</a> to view supported request formats.</p>
 
 </dd></dl>
 

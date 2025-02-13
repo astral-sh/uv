@@ -1087,15 +1087,6 @@ fn python_install_default_from_env() {
      + cpython-3.11.11-[PLATFORM]
     "###);
 
-    // Install again so we can test interaction with `uninstall --all`
-    uv_snapshot!(context.filters(), context.python_install().arg("3.12"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    "###);
-
     // We should ignore `UV_PYTHON` here and complain there is not a target
     uv_snapshot!(context.filters(), context.python_uninstall().env(EnvVars::UV_PYTHON, "3.12"), @r###"
     success: false
