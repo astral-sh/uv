@@ -52,7 +52,7 @@ jobs:
           args: --out dist
       - name: "Test sdist"
         run: |
-          # We can't use find links here, since we need maturin, which means no `--no-index`, and without that option
+          # We can't use `--find-links` here, since we need maturin, which means no `--no-index`, and without that option
           # we run the risk that pip pull uv from PyPI instead.
           pip install dist/${{ env.PACKAGE_NAME }}-*.tar.gz --force-reinstall
           ${{ env.MODULE_NAME }} --help
