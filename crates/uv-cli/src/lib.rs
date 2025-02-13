@@ -1079,15 +1079,23 @@ pub struct PipCompileArgs {
 
     /// The Python interpreter to use during resolution.
     ///
-    /// A Python interpreter is required for building source distributions to
-    /// determine package metadata when there are not wheels.
+    /// A Python interpreter is required for building source distributions to determine package
+    /// metadata when there are not wheels.
     ///
-    /// The interpreter is also used to determine the default minimum Python
-    /// version, unless `--python-version` is provided.
+    /// The interpreter is also used to determine the default minimum Python version, unless
+    /// `--python-version` is provided.
     ///
-    /// See `uv help python` for details on Python discovery and supported
-    /// request formats.
-    #[arg(long, verbatim_doc_comment, help_heading = "Python options", value_parser = parse_maybe_string)]
+    /// This option respects `UV_PYTHON`, but when set via environment variable, it is overridden
+    /// by `--python-version`.
+    ///
+    /// See `uv help python` for details on Python discovery and supported request formats.
+    #[arg(
+        long,
+        short,
+        verbatim_doc_comment,
+        help_heading = "Python options",
+        value_parser = parse_maybe_string
+    )]
     pub python: Option<Maybe<String>>,
 
     /// Install packages into the system Python environment.
@@ -1170,7 +1178,7 @@ pub struct PipCompileArgs {
     ///
     /// If a patch version is omitted, the minimum patch version is assumed. For
     /// example, `3.8` is mapped to `3.8.0`.
-    #[arg(long, short, help_heading = "Python options")]
+    #[arg(long, help_heading = "Python options")]
     pub python_version: Option<PythonVersion>,
 
     /// The platform for which requirements should be resolved.

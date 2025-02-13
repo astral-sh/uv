@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::env;
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
@@ -86,14 +87,14 @@ pub(crate) async fn pip_compile(
     no_build_isolation: bool,
     no_build_isolation_package: Vec<PackageName>,
     build_options: BuildOptions,
-    python_version: Option<PythonVersion>,
+    mut python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     universal: bool,
     exclude_newer: Option<ExcludeNewer>,
     sources: SourceStrategy,
     annotation_style: AnnotationStyle,
     link_mode: LinkMode,
-    python: Option<String>,
+    mut python: Option<String>,
     system: bool,
     python_preference: PythonPreference,
     concurrency: Concurrency,
@@ -103,6 +104,29 @@ pub(crate) async fn pip_compile(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
+    // Respect `UV_PYTHON`
+    if python.is_none() && python_version.is_none() {
+        if let Ok(request) = std::env::var("UV_PYTHON") {
+            if !request.is_empty() {
+                python = Some(request);
+            }
+        }
+    }
+
+    // If `--python` / `-p` is a simple Python version request, we treat it as `--python-version`
+    // for backwards compatibility. `-p` was previously aliased to `--python-version` but changed to
+    // `--python` for consistency with the rest of the CLI in v0.6.0. Since we assume metadata is
+    // consistent across wheels, it's okay for us to build wheels (to determine metadata) with an
+    // alternative Python interpreter as long as we solve with the proper Python version tags.
+    if python_version.is_none() {
+        if let Some(request) = python.as_ref() {
+            if let Ok(version) = PythonVersion::from_str(request) {
+                python_version = Some(version);
+                python = None;
+            }
+        }
+    }
+
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
     // return an error.
     if !extras.is_empty() && !requirements.iter().any(RequirementsSource::allows_extras) {
@@ -189,8 +213,8 @@ pub(crate) async fn pip_compile(
         let request = PythonRequest::parse(python);
         PythonInstallation::find(&request, environment_preference, python_preference, &cache)
     } else {
-        // TODO(zanieb): The split here hints at a problem with the abstraction; we should be able to use
-        // `PythonInstallation::find(...)` here.
+        // TODO(zanieb): The split here hints at a problem with the request abstraction; we should
+        // be able to use `PythonInstallation::find(...)` here.
         let request = if let Some(version) = python_version.as_ref() {
             // TODO(zanieb): We should consolidate `VersionRequest` and `PythonVersion`
             PythonRequest::Version(VersionRequest::from(version))
@@ -216,6 +240,7 @@ pub(crate) async fn pip_compile(
                 && python_version.minor() == interpreter.python_minor()
         };
         if no_build.is_none()
+            && python.is_none()
             && python_version.version() != interpreter.python_version()
             && (python_version.patch().is_some() || !matches_without_patch)
         {
