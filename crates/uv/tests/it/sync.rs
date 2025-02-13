@@ -3400,7 +3400,7 @@ fn sync_custom_environment_path() -> Result<()> {
 }
 
 #[test]
-fn sync_active_environment() -> Result<()> {
+fn sync_active_project_environment() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.11", "3.12"])
         .with_filtered_virtualenv_bin()
         .with_filtered_python_names();
@@ -3519,6 +3519,110 @@ fn sync_active_environment() -> Result<()> {
     Resolved 2 packages in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn sync_active_script_environment() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio",
+        # ]
+        # ///
+
+        import anyio
+       "#
+    })?;
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(
+            r"environments-v1/script-\w+",
+            "environments-v1/script-[HASH]",
+        )])
+        .collect::<Vec<_>>();
+
+    // Running `uv sync --script` with `VIRTUAL_ENV` should warn
+    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `VIRTUAL_ENV=foo` does not match the script environment path `[CACHE_DIR]/environments-v1/script-[HASH]` and will be ignored; use `--active` to target the active environment instead
+    Creating script environment at: [CACHE_DIR]/environments-v1/script-[HASH]
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::missing());
+
+    // Using `--active` should create the environment
+    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Creating script environment at: foo
+    Resolved 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::is_dir());
+
+    // A subsequent sync will re-use the environment
+    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using script environment at: foo
+    "###);
+
+    // Requesting another Python version will invalidate the environment
+    uv_snapshot!(&filters, context.sync()
+        .arg("--script")
+        .arg("script.py")
+        .env(EnvVars::VIRTUAL_ENV, "foo")
+        .arg("--active")
+        .arg("-p")
+        .arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Recreating script environment at: foo
+    Resolved 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###);
 
     Ok(())

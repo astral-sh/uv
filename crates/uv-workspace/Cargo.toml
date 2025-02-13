@@ -34,7 +34,6 @@ glob = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
 rustc-hash = { workspace = true }
-same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }

@@ -1486,9 +1486,9 @@ uv sync [OPTIONS]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--active</code></dt><dd><p>Prefer the active virtual environment over the project&#8217;s virtual environment.</p>
+<dl class="cli-reference"><dt><code>--active</code></dt><dd><p>Sync dependencies to the active virtual environment.</p>
 
-<p>If the project virtual environment is active or no virtual environment is active, this has no effect.</p>
+<p>Instead of creating or updating the virtual environment for the project or script, the active virtual environment will be preferred, if the <code>VIRTUAL_ENV</code> environment variable is set.</p>
 
 </dd><dt><code>--all-extras</code></dt><dd><p>Include all optional dependencies.</p>
 

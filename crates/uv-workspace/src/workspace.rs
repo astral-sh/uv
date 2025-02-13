@@ -560,7 +560,7 @@ impl Workspace {
             Some(workspace.install_path.join(path))
         }
 
-        // Resolve the `VIRTUAL_ENV` variable, if any.
+        /// Resolve the `VIRTUAL_ENV` variable, if any.
         fn from_virtual_env_variable() -> Option<PathBuf> {
             let value = std::env::var_os(EnvVars::VIRTUAL_ENV)?;
 
@@ -578,38 +578,14 @@ impl Workspace {
             Some(CWD.join(path))
         }
 
-        // Attempt to check if the two paths refer to the same directory.
-        fn is_same_dir(left: &Path, right: &Path) -> Option<bool> {
-            // First, attempt to check directly
-            if let Ok(value) = same_file::is_same_file(left, right) {
-                return Some(value);
-            };
-
-            // Often, one of the directories won't exist yet so perform the comparison up a level
-            if let (Some(left_parent), Some(right_parent), Some(left_name), Some(right_name)) = (
-                left.parent(),
-                right.parent(),
-                left.file_name(),
-                right.file_name(),
-            ) {
-                match same_file::is_same_file(left_parent, right_parent) {
-                    Ok(true) => return Some(left_name == right_name),
-                    Ok(false) => return Some(false),
-                    _ => (),
-                }
-            };
-
-            // We couldn't determine if they're the same
-            None
-        }
-
         // Determine the default value
         let project_env = from_project_environment_variable(self)
             .unwrap_or_else(|| self.install_path.join(".venv"));
 
         // Warn if it conflicts with `VIRTUAL_ENV`
         if let Some(from_virtual_env) = from_virtual_env_variable() {
-            if !is_same_dir(&from_virtual_env, &project_env).unwrap_or(false) {
+            if !uv_fs::is_same_file_allow_missing(&from_virtual_env, &project_env).unwrap_or(false)
+            {
                 match active {
                     Some(true) => {
                         debug!(
