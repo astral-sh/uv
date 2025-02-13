@@ -2771,6 +2771,161 @@ fn sync_ignore_extras_check_when_no_provides_extras() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn sync_non_existent_extra_workspace_member() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [project.optional-dependencies]
+        types = ["sniffio>1"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("child")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        async = ["anyio>3"]
+        "#,
+        )?;
+
+    context.lock().assert().success();
+
+    // Requesting an extra that only exists in the child should fail.
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("async"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    error: Extra `async` is not defined in the project's `optional-dependencies` table
+    "###);
+
+    // Unless we sync from the child directory.
+    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").arg("--extra").arg("async"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn sync_non_existent_extra_non_project_workspace() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["child", "other"]
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("child")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        async = ["anyio>3"]
+        "#,
+        )?;
+
+    context
+        .temp_dir
+        .child("other")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "other"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+        )?;
+
+    context.lock().assert().success();
+
+    // Requesting an extra that only exists in the child should succeed, since we sync all members
+    // by default.
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("async"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    // Syncing from the child should also succeed.
+    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").arg("--extra").arg("async"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Audited 3 packages in [TIME]
+    "###);
+
+    // Syncing from an unrelated child should fail.
+    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("other").arg("--extra").arg("async"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    error: Extra `async` is not defined in the project's `optional-dependencies` table
+    "###);
+
+    Ok(())
+}
+
 /// Regression test for <https://github.com/astral-sh/uv/issues/6316>.
 ///
 /// Previously, we would read metadata statically from pyproject.toml and write that to `uv.lock`. In
