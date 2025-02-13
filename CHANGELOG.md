@@ -8,7 +8,7 @@ There have been 31 releases and 1135 pull requests since [0.5.0](https://github.
 
 - **Create `main.py` instead of `hello.py` in `uv init`** ([#10369](https://github.com/astral-sh/uv/pull/10369))
 
-  Previously, `uv init` created a `hello.py` sample file. Now, `uv init` will create `main.py` instead — which aligns with expectations from user feedback. The `--bare` option can be used to avoid creating the file. 
+  Previously, `uv init` created a `hello.py` sample file. Now, `uv init` will create `main.py` instead — which aligns with expectations from user feedback. The `--bare` option can be used to avoid creating the file altogether.
 
 - **Respect `UV_PYTHON` in `uv python install`** ([#11487](https://github.com/astral-sh/uv/pull/11487))
 
