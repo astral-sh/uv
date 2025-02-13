@@ -88,6 +88,10 @@ fn init_bare() {
         .assert(predicate::path::missing());
     context
         .temp_dir
+        .child("foo.py")
+        .assert(predicate::path::missing());
+    context
+        .temp_dir
         .child("foo/.python-version")
         .assert(predicate::path::missing());
     context
@@ -120,7 +124,7 @@ fn init_application() -> Result<()> {
     child.create_dir_all()?;
 
     let pyproject_toml = child.join("pyproject.toml");
-    let hello_py = child.join("hello.py");
+    let package_py = child.join("foo.py");
 
     uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app"), @r###"
     success: true
@@ -148,7 +152,7 @@ fn init_application() -> Result<()> {
         );
     });
 
-    let hello = fs_err::read_to_string(hello_py)?;
+    let hello = fs_err::read_to_string(package_py)?;
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -164,7 +168,7 @@ fn init_application() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("hello.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("foo.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -181,7 +185,77 @@ fn init_application() -> Result<()> {
     Ok(())
 }
 
-/// When `hello.py` already exists, we don't create it again
+/// Run `uv init --app` to create an application project where the name has a hyphen
+#[test]
+fn init_hyphen_application() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo-bar");
+    child.create_dir_all()?;
+
+    let pyproject_toml = child.join("pyproject.toml");
+    let package_py = child.join("foo_bar.py");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo-bar`
+    ");
+
+    let pyproject = fs_err::read_to_string(&pyproject_toml)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo-bar"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+        "###
+        );
+    });
+
+    let hello = fs_err::read_to_string(package_py)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            hello, @r###"
+        def main():
+            print("Hello from foo-bar!")
+
+
+        if __name__ == "__main__":
+            main()
+        "###
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("foo_bar.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from foo-bar!
+
+    ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// When `<package>.py` already exists, we don't create it again
 #[test]
 fn init_application_hello_exists() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -190,8 +264,8 @@ fn init_application_hello_exists() -> Result<()> {
     child.create_dir_all()?;
 
     let pyproject_toml = child.join("pyproject.toml");
-    let hello_py = child.child("hello.py");
-    hello_py.touch()?;
+    let package_py = child.child("foo.py");
+    package_py.touch()?;
 
     uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app"), @r###"
     success: true
@@ -219,7 +293,7 @@ fn init_application_hello_exists() -> Result<()> {
         );
     });
 
-    let hello = fs_err::read_to_string(hello_py)?;
+    let hello = fs_err::read_to_string(package_py)?;
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -231,7 +305,7 @@ fn init_application_hello_exists() -> Result<()> {
     Ok(())
 }
 
-/// When other Python files already exists, we still create `hello.py`
+/// When other Python files already exists, we still create `<package>.py`
 #[test]
 fn init_application_other_python_exists() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -240,8 +314,8 @@ fn init_application_other_python_exists() -> Result<()> {
     child.create_dir_all()?;
 
     let pyproject_toml = child.join("pyproject.toml");
-    let hello_py = child.join("hello.py");
-    let other_py = child.child("foo.py");
+    let package_py = child.join("foo.py");
+    let other_py = child.child("foo2.py");
     other_py.touch()?;
 
     uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app"), @r###"
@@ -270,7 +344,7 @@ fn init_application_other_python_exists() -> Result<()> {
         );
     });
 
-    let hello = fs_err::read_to_string(hello_py)?;
+    let hello = fs_err::read_to_string(package_py)?;
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -610,15 +684,15 @@ fn init_script() -> Result<()> {
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
 
-    let script = child.join("hello.py");
+    let script = child.join("foo.py");
 
-    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("hello.py"), @r###"
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("foo.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Initialized script at `hello.py`
+    Initialized script at `foo.py`
     "###);
 
     let script = fs_err::read_to_string(&script)?;
@@ -634,7 +708,7 @@ fn init_script() -> Result<()> {
 
 
         def main() -> None:
-            print("Hello from hello.py!")
+            print("Hello from foo.py!")
 
 
         if __name__ == "__main__":
@@ -643,11 +717,11 @@ fn init_script() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("python").arg("hello.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("python").arg("foo.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
-    Hello from hello.py!
+    Hello from foo.py!
 
     ----- stderr -----
     "###);
@@ -1021,7 +1095,7 @@ fn init_application_current_dir() -> Result<()> {
     "###);
 
     let pyproject = fs_err::read_to_string(dir.join("pyproject.toml"))?;
-    let hello_py = fs_err::read_to_string(dir.join("hello.py"))?;
+    let package_py = fs_err::read_to_string(dir.join("foo.py"))?;
 
     insta::with_settings!({
         filters => context.filters(),
@@ -1043,7 +1117,7 @@ fn init_application_current_dir() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            hello_py, @r###"
+            package_py, @r###"
         def main():
             print("Hello from foo!")
 
