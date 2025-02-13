@@ -7,6 +7,8 @@ use std::process::ExitCode;
 
 use uv::main as uv_main;
 
+#[allow(unsafe_code)]
 fn main() -> ExitCode {
-    uv_main(std::env::args_os())
+    // SAFETY: This is safe because we are running it early in `main` before spawning any threads.
+    unsafe { uv_main(std::env::args_os()) }
 }
