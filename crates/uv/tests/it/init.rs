@@ -238,11 +238,11 @@ fn init_hyphen_application() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("foo.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("foo_bar.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    Hello from foo!
+    Hello from foo-bar!
 
     ----- stderr -----
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
@@ -250,7 +250,7 @@ fn init_hyphen_application() -> Result<()> {
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
     Audited in [TIME]
-    "###);
+    ");
 
     Ok(())
 }

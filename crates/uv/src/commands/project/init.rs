@@ -803,9 +803,9 @@ impl InitProjectKind {
                 generate_package_scripts(name, path, build_backend, false)?;
             }
         } else {
-            // Create `<package>.py` if it doesn't exist
+            // Create `<package>.py` if it doesn't exist∂
             // TODO(zanieb): Only create `<package>.py` if there are no other Python files?
-            let filename = format!("{name}.py");
+            let filename = format!("{}.py", name.as_dist_info_name());
             let package_py = path.join(&filename);
             if !package_py.try_exists()? && !bare {
                 fs_err::write(
