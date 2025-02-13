@@ -172,6 +172,7 @@ pub(crate) async fn sync(
                 allow_insecure_host,
                 &install_mirrors,
                 no_config,
+                active,
                 cache,
                 dry_run,
                 printer,

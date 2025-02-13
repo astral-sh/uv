@@ -23,6 +23,7 @@ fs-err = { workspace = true }
 fs2 = { workspace = true }
 path-slash = { workspace = true }
 percent-encoding = { workspace = true }
+same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 tempfile = { workspace = true }

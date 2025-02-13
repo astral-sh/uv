@@ -165,6 +165,7 @@ pub(crate) async fn add(
             allow_insecure_host,
             &install_mirrors,
             no_config,
+            active,
             cache,
             printer,
         )

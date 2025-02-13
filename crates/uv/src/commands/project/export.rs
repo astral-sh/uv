@@ -147,6 +147,7 @@ pub(crate) async fn export(
                 allow_insecure_host,
                 &install_mirrors,
                 no_config,
+                Some(false),
                 cache,
                 printer,
             )

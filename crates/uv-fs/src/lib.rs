@@ -11,6 +11,38 @@ pub mod cachedir;
 mod path;
 pub mod which;
 
+/// Attempt to check if the two paths refer to the same file.
+///
+/// Returns `Some(true)` if the files are missing, but would be the same if they existed.
+pub fn is_same_file_allow_missing(left: &Path, right: &Path) -> Option<bool> {
+    // First, check an exact path comparison.
+    if left == right {
+        return Some(true);
+    }
+
+    // Second, check the files directly.
+    if let Ok(value) = same_file::is_same_file(left, right) {
+        return Some(value);
+    };
+
+    // Often, one of the directories won't exist yet so perform the comparison up a level.
+    if let (Some(left_parent), Some(right_parent), Some(left_name), Some(right_name)) = (
+        left.parent(),
+        right.parent(),
+        left.file_name(),
+        right.file_name(),
+    ) {
+        match same_file::is_same_file(left_parent, right_parent) {
+            Ok(true) => return Some(left_name == right_name),
+            Ok(false) => return Some(false),
+            _ => (),
+        }
+    };
+
+    // We couldn't determine if they're the same.
+    None
+}
+
 /// Reads data from the path and requires that it be valid UTF-8 or UTF-16.
 ///
 /// This uses BOM sniffing to determine if the data should be transcoded

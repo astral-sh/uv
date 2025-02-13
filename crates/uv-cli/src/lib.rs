@@ -3053,10 +3053,11 @@ pub struct SyncArgs {
     #[arg(long, overrides_with("inexact"), hide = true)]
     pub exact: bool,
 
-    /// Prefer the active virtual environment over the project's virtual environment.
+    /// Sync dependencies to the active virtual environment.
     ///
-    /// If the project virtual environment is active or no virtual environment is active, this has
-    /// no effect.
+    /// Instead of creating or updating the virtual environment for the project or script, the
+    /// active virtual environment will be preferred, if the `VIRTUAL_ENV` environment variable is
+    /// set.
     #[arg(long, overrides_with = "no_active")]
     pub active: bool,
 
@@ -3150,7 +3151,6 @@ pub struct SyncArgs {
     /// adherence with PEP 723.
     #[arg(
         long,
-        conflicts_with = "active",
         conflicts_with = "all_packages",
         conflicts_with = "package",
         conflicts_with = "no_install_project",
