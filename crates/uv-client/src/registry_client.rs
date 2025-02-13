@@ -203,7 +203,7 @@ impl<'a> TryFrom<BaseClientBuilder<'a>> for RegistryClientBuilder<'a> {
             index_urls: IndexUrls::default(),
             index_strategy: IndexStrategy::default(),
             torch_backend: None,
-            cache: Cache::temp()?,
+            cache: Cache::temp(None)?,
             base_client_builder: value,
         })
     }

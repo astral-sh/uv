@@ -160,8 +160,11 @@ impl Cache {
     }
 
     /// Create a temporary cache directory.
-    pub fn temp() -> Result<Self, io::Error> {
-        let temp_dir = tempfile::tempdir_in("")?;
+    pub fn temp(cache_dir: Option<PathBuf>) -> Result<Self, io::Error> {
+        let temp_dir = match cache_dir {
+            Some(dir) => tempfile::tempdir_in(dir)?,
+            None => tempfile::tempdir_in("")?,
+        };
         Ok(Self {
             root: temp_dir.path().to_path_buf(),
             refresh: Refresh::None(Timestamp::now()),
