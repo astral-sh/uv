@@ -10732,10 +10732,10 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
         dependencies = [
             { name = "opt-einsum-fx" },
             { name = "scipy" },
-            { name = "sympy", version = "1.13.1", source = { registry = "https://pypi.org/simple" } },
+            { name = "sympy", version = "1.13.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-all' or extra == 'extra-4-test-chgnet' or (extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet')" },
             { name = "sympy", version = "1.13.3", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-alignn' or extra == 'extra-4-test-m3gnet'" },
             { name = "torch", version = "2.2.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-alignn' or extra == 'extra-4-test-m3gnet'" },
-            { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" } },
+            { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-all' or extra == 'extra-4-test-chgnet' or (extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet')" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/aa/98/8e7102dea93106603383fda23bf96649c397a37b910e7c76086e584cd92d/e3nn-0.4.4.tar.gz", hash = "sha256:51c91a84c1fb72e7e3600000958fa8caad48f8270937090fb8d0f8bfffbb3525", size = 361661 }
         wheels = [
@@ -11095,7 +11095,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
         version = "2.5.0.post0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "fsspec", extra = ["http"] },
+            { name = "fsspec", extra = ["http"], marker = "(extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet') or (extra != 'extra-4-test-alignn' and extra == 'extra-4-test-m3gnet') or (extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
             { name = "lightning-utilities" },
             { name = "packaging" },
             { name = "pytorch-lightning" },
@@ -12062,7 +12062,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
             { name = "opt-einsum" },
             { name = "packaging" },
             { name = "torch", version = "2.2.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-alignn' or extra == 'extra-4-test-m3gnet'" },
-            { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" } },
+            { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-all' or extra == 'extra-4-test-chgnet' or (extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet')" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/93/de/856dab99be0360c7275fee075eb0450a2ec82a54c4c33689606f62e9615b/opt_einsum_fx-0.1.4.tar.gz", hash = "sha256:7eeb7f91ecb70be65e6179c106ea7f64fc1db6319e3d1289a4518b384f81e74f", size = 12969 }
         wheels = [
@@ -12545,7 +12545,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
         version = "2.5.0.post0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "fsspec", extra = ["http"] },
+            { name = "fsspec", extra = ["http"], marker = "(extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet') or (extra != 'extra-4-test-alignn' and extra == 'extra-4-test-m3gnet') or (extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
             { name = "lightning-utilities" },
             { name = "packaging" },
             { name = "pyyaml" },
