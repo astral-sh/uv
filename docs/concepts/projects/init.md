@@ -30,7 +30,7 @@ $ tree example-app
 example-app
 ├── .python-version
 ├── README.md
-├── main.py
+├── hello.py
 └── pyproject.toml
 ```
 
@@ -49,7 +49,7 @@ dependencies = []
 
 The sample file defines a `main` function with some standard boilerplate:
 
-```python title="main.py"
+```python title="hello.py"
 def main():
     print("Hello from example-app!")
 
@@ -61,7 +61,7 @@ if __name__ == "__main__":
 Python files can be executed with `uv run`:
 
 ```console
-$ uv run main.py
+$ uv run hello.py
 Hello from example-project!
 ```
 
