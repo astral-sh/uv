@@ -66,7 +66,7 @@ There have been 31 releases and 1135 pull requests since [0.5.0](https://github.
 
 ### Documentation
 
-- The `CHANGELOG.md` is now split into separate files for each "major" version ([#11510](https://github.com/astral-sh/uv/pull/11510))
+- The `CHANGELOG.md` is now split into separate files for each "major" version to fix rendering ([#11510](https://github.com/astral-sh/uv/pull/11510))
 
 ## 0.5.x
 
