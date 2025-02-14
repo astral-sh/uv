@@ -3,6 +3,7 @@ source: crates/uv/tests/it/ecosystem.rs
 expression: lock
 ---
 version = 1
+revision = 1
 requires-python = "==3.11.*"
 
 [options]
@@ -3957,7 +3958,6 @@ dev = [
 ]
 
 [package.metadata]
-provides-extras = ["deploy"]
 requires-dist = [
     { name = "alembic", specifier = ">=0.7.0" },
     { name = "alembic-postgresql-enum" },
@@ -4039,6 +4039,7 @@ requires-dist = [
     { name = "zope-sqlalchemy" },
     { name = "zxcvbn" },
 ]
+provides-extras = ["deploy"]
 
 [package.metadata.requires-dev]
 dev = [

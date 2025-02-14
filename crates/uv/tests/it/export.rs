@@ -520,8 +520,9 @@ fn dependency_conflicting_markers() -> Result<()> {
         },
         {
             insta::assert_snapshot!(
-                lock, @r#"
+                lock, @r###"
             version = 1
+            revision = 1
             requires-python = ">=3.12"
             resolution-markers = [
                 "sys_platform == 'darwin'",
@@ -594,7 +595,6 @@ fn dependency_conflicting_markers() -> Result<()> {
             ]
 
             [package.metadata]
-            provides-extras = []
             requires-dist = [
                 { name = "trio", marker = "sys_platform == 'darwin'", specifier = "==0.25.0" },
                 { name = "trio", marker = "sys_platform == 'win32'", specifier = "==0.10.0" },
@@ -663,7 +663,7 @@ fn dependency_conflicting_markers() -> Result<()> {
             wheels = [
                 { url = "https://files.pythonhosted.org/packages/17/c9/f86f89f14d52f9f2f652ce24cb2f60141a51d087db1563f3fba94ba07346/trio-0.25.0-py3-none-any.whl", hash = "sha256:e6458efe29cc543e557a91e614e2b51710eba2961669329ce9c862d50c6e8e81", size = 467161 },
             ]
-            "#
+            "###
             );
         }
     );
@@ -1218,8 +1218,9 @@ fn non_project_fork() -> Result<()> {
         },
         {
             insta::assert_snapshot!(
-                lock, @r#"
+                lock, @r###"
             version = 1
+            revision = 1
             requires-python = ">=3.12"
             resolution-markers = [
                 "sys_platform == 'win32'",
@@ -1281,7 +1282,6 @@ fn non_project_fork() -> Result<()> {
             ]
 
             [package.metadata]
-            provides-extras = []
             requires-dist = [
                 { name = "anyio", marker = "sys_platform == 'linux'", specifier = "==3.0.0" },
                 { name = "anyio", marker = "sys_platform == 'win32'", specifier = "==2.0.0" },
@@ -1304,7 +1304,7 @@ fn non_project_fork() -> Result<()> {
             wheels = [
                 { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
             ]
-            "#
+            "###
             );
         }
     );
@@ -2126,8 +2126,9 @@ fn script() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.11"
         resolution-markers = [
             "sys_platform == 'win32'",
@@ -2193,7 +2194,7 @@ fn script() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "#
+        "###
         );
     });
 
@@ -2244,6 +2245,7 @@ fn script() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.11"
         resolution-markers = [
             "sys_platform == 'win32'",

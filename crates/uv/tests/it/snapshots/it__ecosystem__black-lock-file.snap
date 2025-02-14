@@ -3,6 +3,7 @@ source: crates/uv/tests/it/ecosystem.rs
 expression: lock
 ---
 version = 1
+revision = 1
 requires-python = ">=3.8"
 resolution-markers = [
     "python_full_version >= '3.10' and implementation_name == 'pypy' and sys_platform == 'win32'",
@@ -208,7 +209,6 @@ uvloop = [
 ]
 
 [package.metadata]
-provides-extras = ["colorama", "d", "jupyter", "uvloop"]
 requires-dist = [
     { name = "aiohttp", marker = "implementation_name == 'pypy' and sys_platform == 'win32' and extra == 'd'", specifier = ">=3.7.4,!=3.9.0" },
     { name = "aiohttp", marker = "(implementation_name != 'pypy' and extra == 'd') or (sys_platform != 'win32' and extra == 'd')", specifier = ">=3.7.4" },
@@ -224,6 +224,7 @@ requires-dist = [
     { name = "typing-extensions", marker = "python_full_version < '3.11'", specifier = ">=4.0.1" },
     { name = "uvloop", marker = "extra == 'uvloop'", specifier = ">=0.15.2" },
 ]
+provides-extras = ["colorama", "d", "jupyter", "uvloop"]
 
 [[package]]
 name = "click"
