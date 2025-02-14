@@ -266,10 +266,8 @@ impl From<&ResolvedDist> for RequirementSource {
                     }
                 }
                 Dist::Source(SourceDist::Git(sdist)) => RequirementSource::Git {
+                    git: (*sdist.git).clone(),
                     url: sdist.url.clone(),
-                    repository: sdist.git.repository().clone(),
-                    reference: sdist.git.reference().clone(),
-                    precise: sdist.git.precise(),
                     subdirectory: sdist.subdirectory.clone(),
                 },
                 Dist::Source(SourceDist::Path(sdist)) => RequirementSource::Path {

@@ -32,7 +32,7 @@ use uv_distribution_types::{
 };
 use uv_fs::{relative_to, PortablePath, PortablePathBuf};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
-use uv_git_types::{GitOid, GitReference};
+use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
@@ -2273,7 +2273,7 @@ impl Package {
                     url,
                     GitReference::from(git.kind.clone()),
                     git.precise,
-                );
+                )?;
 
                 // Reconstruct the PEP 508-compatible URL from the `GitSource`.
                 let url = Url::from(ParsedGitUrl {
@@ -4331,12 +4331,11 @@ fn normalize_requirement(
     // Normalize the requirement source.
     match requirement.source {
         RequirementSource::Git {
-            mut repository,
-            reference,
-            precise,
+            git,
             subdirectory,
             url: _,
         } => {
+            let mut repository = git.repository().clone();
             // Redact the credentials.
             redact_credentials(&mut repository);
 
@@ -4344,9 +4343,11 @@ fn normalize_requirement(
             repository.set_fragment(None);
             repository.set_query(None);
 
+            let git = GitUrl::from_fields(repository, git.reference().clone(), git.precise())?;
+
             // Reconstruct the PEP 508 URL from the underlying data.
             let url = Url::from(ParsedGitUrl {
-                url: uv_git_types::GitUrl::from_reference(repository.clone(), reference.clone()),
+                url: git.clone(),
                 subdirectory: subdirectory.clone(),
             });
 
@@ -4356,9 +4357,7 @@ fn normalize_requirement(
                 groups: requirement.groups,
                 marker: requirement.marker,
                 source: RequirementSource::Git {
-                    repository,
-                    reference,
-                    precise,
+                    git,
                     subdirectory,
                     url: VerbatimUrl::from_url(url),
                 },
@@ -5036,6 +5035,8 @@ enum LockErrorKind {
         package2: PackageName,
         extra2: ExtraName,
     },
+    #[error(transparent)]
+    GitUrlParse(#[from] GitUrlParseError),
 }
 
 /// An error that occurs when a source string could not be parsed.

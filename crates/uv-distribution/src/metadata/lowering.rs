@@ -8,7 +8,7 @@ use url::Url;
 
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{Index, IndexLocations, IndexName, Origin};
-use uv_git_types::GitReference;
+use uv_git_types::{GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{looks_like_git_repository, MarkerTree, VerbatimUrl, VersionOrUrl};
@@ -291,9 +291,7 @@ impl LoweredRequirement {
                                         .expect("Workspace member must be relative");
                                 let subdirectory = uv_fs::normalize_path_buf(subdirectory);
                                 RequirementSource::Git {
-                                    repository: git_member.git_source.git.repository().clone(),
-                                    reference: git_member.git_source.git.reference().clone(),
-                                    precise: git_member.git_source.git.precise(),
+                                    git: git_member.git_source.git.clone(),
                                     subdirectory: if subdirectory == PathBuf::new() {
                                         None
                                     } else {
@@ -497,6 +495,8 @@ pub enum LoweringError {
     UndeclaredWorkspacePackage(PackageName),
     #[error("Can only specify one of: `rev`, `tag`, or `branch`")]
     MoreThanOneGitRef,
+    #[error(transparent)]
+    GitUrlParse(#[from] GitUrlParseError),
     #[error("Package `{0}` references an undeclared index: `{1}`")]
     MissingIndex(PackageName, IndexName),
     #[error("Workspace members are not allowed in non-workspace contexts")]
@@ -575,9 +575,7 @@ fn git_source(
 
     Ok(RequirementSource::Git {
         url,
-        repository,
-        reference,
-        precise: None,
+        git: GitUrl::from_reference(repository, reference)?,
         subdirectory,
     })
 }
@@ -679,9 +677,7 @@ fn path_source(
                 .expect("Workspace member must be relative");
             let subdirectory = uv_fs::normalize_path_buf(subdirectory);
             return Ok(RequirementSource::Git {
-                repository: git_member.git_source.git.repository().clone(),
-                reference: git_member.git_source.git.reference().clone(),
-                precise: git_member.git_source.git.precise(),
+                git: git_member.git_source.git.clone(),
                 subdirectory: if subdirectory == PathBuf::new() {
                     None
                 } else {

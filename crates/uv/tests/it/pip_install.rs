@@ -8776,3 +8776,22 @@ fn no_sources_workspace_discovery() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn unknown_git_schema() {
+    let context = TestContext::new("3.12");
+    // Reverse direction: Check that we switch back to the workspace package with `--upgrade`.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("git+fantasy:/foo"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `git+fantasy:/foo`
+      Caused by: Unsupported Git URL scheme `fantasy:` in `fantasy:/foo`, only `https:`, `ssh:` and `file:` are supported
+    git+fantasy:/foo
+    ^^^^^^^^^^^^^^^^
+    "###
+    );
+}

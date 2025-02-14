@@ -317,7 +317,8 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                         url,
                         GitReference::from(git.kind.clone()),
                         git.precise,
-                    );
+                    )
+                    .expect("Internal Git URLs must have supported schemes");
 
                     // Reconstruct the PEP 508-compatible URL from the `GitSource`.
                     let url = Url::from(ParsedGitUrl {

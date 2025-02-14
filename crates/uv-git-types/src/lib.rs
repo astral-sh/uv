@@ -1,11 +1,19 @@
 pub use crate::github::GitHubRepository;
 pub use crate::oid::{GitOid, OidParseError};
 pub use crate::reference::GitReference;
+
+use thiserror::Error;
 use url::Url;
 
 mod github;
 mod oid;
 mod reference;
+
+#[derive(Debug, Error)]
+pub enum GitUrlParseError {
+    #[error("Unsupported Git URL scheme `{0}:` in `{1}`, only `https:`, `ssh:` and `file:` are supported")]
+    UnsupportedGitScheme(String, Url),
+}
 
 /// A URL reference to a Git repository.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Hash, Ord)]
@@ -21,21 +29,42 @@ pub struct GitUrl {
 
 impl GitUrl {
     /// Create a new [`GitUrl`] from a repository URL and a reference.
-    pub fn from_reference(repository: Url, reference: GitReference) -> Self {
-        Self {
-            repository,
-            reference,
-            precise: None,
-        }
+    pub fn from_reference(
+        repository: Url,
+        reference: GitReference,
+    ) -> Result<Self, GitUrlParseError> {
+        Self::from_fields(repository, reference, None)
     }
 
     /// Create a new [`GitUrl`] from a repository URL and a precise commit.
-    pub fn from_commit(repository: Url, reference: GitReference, precise: GitOid) -> Self {
-        Self {
+    pub fn from_commit(
+        repository: Url,
+        reference: GitReference,
+        precise: GitOid,
+    ) -> Result<Self, GitUrlParseError> {
+        Self::from_fields(repository, reference, Some(precise))
+    }
+
+    /// Create a new [`GitUrl`] from a repository URL and a precise commit, if known.
+    pub fn from_fields(
+        repository: Url,
+        reference: GitReference,
+        precise: Option<GitOid>,
+    ) -> Result<Self, GitUrlParseError> {
+        match repository.scheme() {
+            "https" | "ssh" | "file" => {}
+            unsupported => {
+                return Err(GitUrlParseError::UnsupportedGitScheme(
+                    unsupported.to_string(),
+                    repository,
+                ))
+            }
+        }
+        Ok(Self {
             repository,
             reference,
-            precise: Some(precise),
-        }
+            precise,
+        })
     }
 
     /// Set the precise [`GitOid`] to use for this Git URL.
@@ -69,7 +98,7 @@ impl GitUrl {
 }
 
 impl TryFrom<Url> for GitUrl {
-    type Error = OidParseError;
+    type Error = GitUrlParseError;
 
     /// Initialize a [`GitUrl`] source from a URL.
     fn try_from(mut url: Url) -> Result<Self, Self::Error> {
@@ -89,7 +118,7 @@ impl TryFrom<Url> for GitUrl {
             url.set_path(&prefix);
         }
 
-        Ok(Self::from_reference(url, reference))
+        Self::from_reference(url, reference)
     }
 }
 
