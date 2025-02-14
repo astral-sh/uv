@@ -11,6 +11,7 @@ Ok(
             [],
         ),
         supported_environments: [],
+        required_environments: [],
         requires_python: RequiresPython {
             specifiers: VersionSpecifiers(
                 [

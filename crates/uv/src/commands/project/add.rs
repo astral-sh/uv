@@ -620,7 +620,7 @@ pub(crate) async fn add(
     let lock_state = state.fork();
     let sync_state = state;
 
-    match lock_and_sync(
+    match Box::pin(lock_and_sync(
         target,
         &mut toml,
         &edits,
@@ -638,7 +638,7 @@ pub(crate) async fn add(
         cache,
         printer,
         preview,
-    )
+    ))
     .await
     {
         Ok(()) => Ok(ExitStatus::Success),
