@@ -318,7 +318,7 @@ jobs:
           run: |
             pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             ${{ env.MODULE_NAME }} --help
-            # TODO(konsti): figure out why this check is failing.
+            # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${{ env.MODULE_NAME }} --help
             uvx --help
       - name: "Upload wheels"
@@ -386,7 +386,7 @@ jobs:
           run: |
             pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             ${{ env.MODULE_NAME }} --help
-            # TODO(konsti): figure out why this check is failing.
+            # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${{ env.MODULE_NAME }} --help
             uvx --help
       - name: "Upload wheels"
@@ -468,7 +468,7 @@ jobs:
       #     run: |
       #       pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
       #       ${{ env.MODULE_NAME }} --help
-      #       # TODO(konsti): figure out why this check is failing.
+      #       #(konsti) TODO: Enable this test on all platforms,currently `find_uv_bin` is failingto discover uv here.
       #       # python -m ${{ env.MODULE_NAME }} --helppython -m ${{ env.MODULE_NAME }} --help
       #       uvx --help
       - name: "Upload wheels"
@@ -615,7 +615,7 @@ jobs:
           run: |
             pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             ${{ env.MODULE_NAME }} --help
-            # TODO(konsti): figure out why this check is failing.
+            # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${{ env.MODULE_NAME }} --help
             uvx --help
       - name: "Upload wheels"
