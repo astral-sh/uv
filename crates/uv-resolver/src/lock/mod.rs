@@ -66,6 +66,9 @@ mod tree;
 /// The current version of the lockfile format.
 pub const VERSION: u32 = 1;
 
+/// The current revision of the lockfile format.
+const REVISION: u32 = 1;
+
 static LINUX_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'linux'").unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
@@ -101,7 +104,21 @@ static X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
 pub struct Lock {
+    /// The (major) version of the lockfile format.
+    ///
+    /// Changes to the major version indicate backwards- and forwards-incompatible changes to the
+    /// lockfile format. A given uv version only supports a single major version of the lockfile
+    /// format.
+    ///
+    /// In other words, a version of uv that supports version 2 of the lockfile format will not be
+    /// able to read lockfiles generated under version 1 or 3.
     version: u32,
+    /// The revision of the lockfile format.
+    ///
+    /// Changes to the revision indicate backwards-compatible changes to the lockfile format.
+    /// In other words, versions of uv that only support revision 1 _will_ be able to read lockfiles
+    /// with a revision greater than 1 (though they may ignore newer fields).
+    revision: u32,
     /// If this lockfile was built from a forking resolution with non-identical forks, store the
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
     fork_markers: Vec<UniversalMarker>,
@@ -262,6 +279,7 @@ impl Lock {
         };
         let lock = Self::new(
             VERSION,
+            REVISION,
             packages,
             requires_python,
             options,
@@ -347,6 +365,7 @@ impl Lock {
     /// Initialize a [`Lock`] from a list of [`Package`] entries.
     fn new(
         version: u32,
+        revision: u32,
         mut packages: Vec<Package>,
         requires_python: RequiresPython,
         options: ResolverOptions,
@@ -500,6 +519,7 @@ impl Lock {
         }
         let lock = Self {
             version,
+            revision,
             fork_markers,
             conflicts,
             supported_environments,
@@ -548,6 +568,11 @@ impl Lock {
     /// Returns the lockfile version.
     pub fn version(&self) -> u32 {
         self.version
+    }
+
+    /// Returns the lockfile revision.
+    pub fn revision(&self) -> u32 {
+        self.revision
     }
 
     /// Returns the number of packages in the lockfile.
@@ -660,6 +685,10 @@ impl Lock {
         // the use of inline tables.
         let mut doc = toml_edit::DocumentMut::new();
         doc.insert("version", value(i64::from(self.version)));
+
+        if self.revision > 0 {
+            doc.insert("revision", value(i64::from(self.revision)));
+        }
 
         doc.insert("requires-python", value(self.requires_python.to_string()));
 
@@ -981,7 +1010,6 @@ impl Lock {
             .metadata
             .requires_dist
             .iter()
-            .flatten()
             .cloned()
             .map(|requirement| normalize_requirement(requirement, root))
             .collect::<Result<_, _>>()?;
@@ -1662,6 +1690,7 @@ impl ResolverManifest {
 #[serde(rename_all = "kebab-case")]
 struct LockWire {
     version: u32,
+    revision: Option<u32>,
     requires_python: RequiresPython,
     /// If this lockfile was built from a forking resolution with non-identical forks, store the
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
@@ -1719,6 +1748,7 @@ impl TryFrom<LockWire> for Lock {
             .collect();
         let lock = Lock::new(
             wire.version,
+            wire.revision.unwrap_or(0),
             packages,
             wire.requires_python,
             wire.options,
@@ -1778,32 +1808,28 @@ impl Package {
         let sdist = SourceDist::from_annotated_dist(&id, annotated_dist)?;
         let wheels = Wheel::from_annotated_dist(annotated_dist)?;
         let requires_dist = if id.source.is_immutable() {
-            None
+            BTreeSet::default()
         } else {
-            Some(
-                annotated_dist
-                    .metadata
-                    .as_ref()
-                    .expect("metadata is present")
-                    .requires_dist
-                    .iter()
-                    .cloned()
-                    .map(|requirement| requirement.relative_to(root))
-                    .collect::<Result<_, _>>()
-                    .map_err(LockErrorKind::RequirementRelativePath)?,
-            )
+            annotated_dist
+                .metadata
+                .as_ref()
+                .expect("metadata is present")
+                .requires_dist
+                .iter()
+                .cloned()
+                .map(|requirement| requirement.relative_to(root))
+                .collect::<Result<_, _>>()
+                .map_err(LockErrorKind::RequirementRelativePath)?
         };
         let provides_extras = if id.source.is_immutable() {
-            None
+            Vec::default()
         } else {
-            Some(
-                annotated_dist
-                    .metadata
-                    .as_ref()
-                    .expect("metadata is present")
-                    .provides_extras
-                    .clone(),
-            )
+            annotated_dist
+                .metadata
+                .as_ref()
+                .expect("metadata is present")
+                .provides_extras
+                .clone()
         };
         let dependency_groups = if id.source.is_immutable() {
             BTreeMap::default()
@@ -2418,22 +2444,10 @@ impl Package {
         {
             let mut metadata_table = Table::new();
 
-            // Even output the empty list to signal it's *known* empty.
-            if let Some(provides_extras) = &self.metadata.provides_extras {
-                let provides_extras = provides_extras
-                    .iter()
-                    .map(|extra| {
-                        serde::Serialize::serialize(&extra, toml_edit::ser::ValueSerializer::new())
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                // This is just a list of names, so linebreaking it is excessive.
-                let provides_extras = Array::from_iter(provides_extras);
-                metadata_table.insert("provides-extras", value(provides_extras));
-            }
-
-            // Even output the empty set to signal it's *known* empty.
-            if let Some(requires_dist) = &self.metadata.requires_dist {
-                let requires_dist = requires_dist
+            if !self.metadata.requires_dist.is_empty() {
+                let requires_dist = self
+                    .metadata
+                    .requires_dist
                     .iter()
                     .map(|requirement| {
                         serde::Serialize::serialize(
@@ -2472,6 +2486,20 @@ impl Package {
                 if !dependency_groups.is_empty() {
                     metadata_table.insert("requires-dev", Item::Table(dependency_groups));
                 }
+            }
+
+            if !self.metadata.provides_extras.is_empty() {
+                let provides_extras = self
+                    .metadata
+                    .provides_extras
+                    .iter()
+                    .map(|extra| {
+                        serde::Serialize::serialize(&extra, toml_edit::ser::ValueSerializer::new())
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                // This is just a list of names, so linebreaking it is excessive.
+                let provides_extras = Array::from_iter(provides_extras);
+                metadata_table.insert("provides-extras", value(provides_extras));
             }
 
             if !metadata_table.is_empty() {
@@ -2619,8 +2647,8 @@ impl Package {
     }
 
     /// Returns the extras the package provides, if any.
-    pub fn provides_extras(&self) -> Option<&Vec<ExtraName>> {
-        self.metadata.provides_extras.as_ref()
+    pub fn provides_extras(&self) -> &[ExtraName] {
+        &self.metadata.provides_extras
     }
 }
 
@@ -2665,12 +2693,10 @@ struct PackageWire {
 #[derive(Clone, Default, Debug, Eq, PartialEq, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct PackageMetadata {
-    // The Options here are so we can distinguish "no info available"
-    // from "known and empty".
     #[serde(default)]
-    requires_dist: Option<BTreeSet<Requirement>>,
+    requires_dist: BTreeSet<Requirement>,
     #[serde(default)]
-    provides_extras: Option<Vec<ExtraName>>,
+    provides_extras: Vec<ExtraName>,
     #[serde(default, rename = "requires-dev", alias = "dependency-groups")]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
 }

@@ -3,6 +3,7 @@ source: crates/uv/tests/it/ecosystem.rs
 expression: lock
 ---
 version = 1
+revision = 1
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.13'",
@@ -126,7 +127,6 @@ dev = [
 ]
 
 [package.metadata]
-provides-extras = []
 requires-dist = [
     { name = "cachecontrol", extras = ["filecache"], specifier = ">=0.14,<0.15" },
     { name = "mwparserfromhell", specifier = ">=0.6.4,<0.7" },

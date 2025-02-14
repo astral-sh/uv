@@ -45,6 +45,7 @@ fn lock_wheel_registry() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -81,7 +82,6 @@ fn lock_wheel_registry() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = "==3.7.0" }]
 
         [[package]]
@@ -177,6 +177,7 @@ fn lock_sdist_registry() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -191,7 +192,6 @@ fn lock_sdist_registry() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "source-distribution", specifier = "==0.0.1" }]
 
         [[package]]
@@ -275,6 +275,7 @@ fn lock_sdist_git() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -289,7 +290,6 @@ fn lock_sdist_git() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1" }]
 
         [[package]]
@@ -365,6 +365,7 @@ fn lock_sdist_git() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -379,7 +380,6 @@ fn lock_sdist_git() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }]
 
         [[package]]
@@ -422,6 +422,7 @@ fn lock_sdist_git() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -436,7 +437,6 @@ fn lock_sdist_git() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?rev=b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }]
 
         [[package]]
@@ -479,6 +479,7 @@ fn lock_sdist_git() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -493,7 +494,6 @@ fn lock_sdist_git() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.2" }]
 
         [[package]]
@@ -541,6 +541,7 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -560,7 +561,6 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "example-pkg-a", git = "https://github.com/pypa/sample-namespace-packages.git?subdirectory=pkg_resources%2Fpkg_a&rev=df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45" }]
         "#
         );
@@ -635,6 +635,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -649,7 +650,6 @@ fn lock_sdist_git_pep508() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0.0.1" }]
 
         [[package]]
@@ -699,6 +699,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -713,7 +714,6 @@ fn lock_sdist_git_pep508() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }]
 
         [[package]]
@@ -753,6 +753,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -767,7 +768,6 @@ fn lock_sdist_git_pep508() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage.git?rev=b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }]
 
         [[package]]
@@ -807,6 +807,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -821,7 +822,6 @@ fn lock_sdist_git_pep508() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0.0.2" }]
 
         [[package]]
@@ -872,6 +872,7 @@ fn lock_sdist_git_short_rev() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -886,7 +887,6 @@ fn lock_sdist_git_short_rev() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?rev=0dacfd6" }]
 
         [[package]]
@@ -974,8 +974,9 @@ fn lock_wheel_url() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -994,7 +995,6 @@ fn lock_wheel_url() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = ["doc", "test", "trio"]
         requires-dist = [
             { name = "anyio", extras = ["trio"], marker = "extra == 'test'" },
             { name = "coverage", extras = ["toml"], marker = "extra == 'test'", specifier = ">=7" },
@@ -1015,6 +1015,7 @@ fn lock_wheel_url() -> Result<()> {
             { name = "typing-extensions", marker = "python_full_version < '3.11'", specifier = ">=4.1" },
             { name = "uvloop", marker = "platform_python_implementation == 'CPython' and sys_platform != 'win32' and extra == 'test'", specifier = ">=0.17" },
         ]
+        provides-extras = ["doc", "test", "trio"]
 
         [[package]]
         name = "idna"
@@ -1034,7 +1035,6 @@ fn lock_wheel_url() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio", url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl" }]
 
         [[package]]
@@ -1045,7 +1045,7 @@ fn lock_wheel_url() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "#
+        "###
         );
     });
 
@@ -1128,8 +1128,9 @@ fn lock_sdist_url() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -1146,7 +1147,6 @@ fn lock_sdist_url() -> Result<()> {
         sdist = { hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6" }
 
         [package.metadata]
-        provides-extras = ["doc", "test", "trio"]
         requires-dist = [
             { name = "anyio", extras = ["trio"], marker = "extra == 'test'" },
             { name = "coverage", extras = ["toml"], marker = "extra == 'test'", specifier = ">=7" },
@@ -1167,6 +1167,7 @@ fn lock_sdist_url() -> Result<()> {
             { name = "typing-extensions", marker = "python_full_version < '3.11'", specifier = ">=4.1" },
             { name = "uvloop", marker = "platform_python_implementation == 'CPython' and sys_platform != 'win32' and extra == 'test'", specifier = ">=0.17" },
         ]
+        provides-extras = ["doc", "test", "trio"]
 
         [[package]]
         name = "idna"
@@ -1186,7 +1187,6 @@ fn lock_sdist_url() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio", url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz" }]
 
         [[package]]
@@ -1197,7 +1197,7 @@ fn lock_sdist_url() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "#
+        "###
         );
     });
 
@@ -1274,6 +1274,7 @@ fn lock_sdist_url_subdirectory() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -1310,7 +1311,6 @@ fn lock_sdist_url_subdirectory() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "root", url = "https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz", subdirectory = "packages/root" }]
 
         [[package]]
@@ -1323,7 +1323,6 @@ fn lock_sdist_url_subdirectory() -> Result<()> {
         sdist = { hash = "sha256:24b55efee28d08ad3cdc58903e359e820601baa6a4a4b3424311541ebcfb09d3" }
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio" }]
 
         [[package]]
@@ -1409,6 +1408,7 @@ fn lock_sdist_url_subdirectory_pep508() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -1445,7 +1445,6 @@ fn lock_sdist_url_subdirectory_pep508() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "root", url = "https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz", subdirectory = "packages/root" }]
 
         [[package]]
@@ -1458,7 +1457,6 @@ fn lock_sdist_url_subdirectory_pep508() -> Result<()> {
         sdist = { hash = "sha256:24b55efee28d08ad3cdc58903e359e820601baa6a4a4b3424311541ebcfb09d3" }
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio" }]
 
         [[package]]
@@ -1545,8 +1543,9 @@ fn lock_project_extra() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -1597,11 +1596,11 @@ fn lock_project_extra() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = ["test"]
         requires-dist = [
             { name = "anyio", specifier = "==3.7.0" },
             { name = "iniconfig", marker = "extra == 'test'" },
         ]
+        provides-extras = ["test"]
 
         [[package]]
         name = "sniffio"
@@ -1611,7 +1610,7 @@ fn lock_project_extra() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "#
+        "###
         );
     });
 
@@ -1917,6 +1916,7 @@ fn lock_dependency_extra() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -2021,7 +2021,6 @@ fn lock_dependency_extra() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "flask", extras = ["dotenv"] }]
 
         [[package]]
@@ -2115,6 +2114,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.7"
         resolution-markers = [
             "python_full_version >= '3.10'",
@@ -2250,7 +2250,6 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "requests" },
             { name = "requests", extras = ["socks"], marker = "python_full_version < '3.10'" },
@@ -2413,6 +2412,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -2512,7 +2512,6 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "flask", extras = ["foo"] }]
 
         [[package]]
@@ -2594,6 +2593,7 @@ fn lock_upgrade_log() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -2624,7 +2624,6 @@ fn lock_upgrade_log() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "iniconfig" },
             { name = "markupsafe", specifier = "<2" },
@@ -2676,6 +2675,7 @@ fn lock_upgrade_log() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -2709,7 +2709,6 @@ fn lock_upgrade_log() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "markupsafe" },
             { name = "typing-extensions" },
@@ -2764,6 +2763,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         resolution-markers = [
             "sys_platform != 'win32'",
@@ -2801,7 +2801,6 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "markupsafe", marker = "sys_platform != 'win32'", specifier = "<2" },
             { name = "markupsafe", marker = "sys_platform == 'win32'", specifier = "==2.0.0" },
@@ -2850,6 +2849,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -2882,7 +2882,6 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "markupsafe" }]
         "#
         );
@@ -2924,6 +2923,7 @@ fn lock_preference() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -2947,7 +2947,6 @@ fn lock_preference() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = "<2" }]
         "#
         );
@@ -2984,6 +2983,7 @@ fn lock_preference() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -3007,7 +3007,6 @@ fn lock_preference() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
         "#
         );
@@ -3031,6 +3030,7 @@ fn lock_preference() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -3054,7 +3054,6 @@ fn lock_preference() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
         "#
         );
@@ -3100,6 +3099,7 @@ fn lock_git_plus_prefix() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -3114,7 +3114,6 @@ fn lock_git_plus_prefix() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage" }]
 
         [[package]]
@@ -3186,6 +3185,7 @@ fn lock_partial_git() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.10"
         resolution-markers = [
             "python_full_version >= '3.12'",
@@ -3253,7 +3253,6 @@ fn lock_partial_git() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "anyio", marker = "python_full_version < '3.12'", git = "https://github.com/agronholm/anyio?rev=4.6.2" },
             { name = "anyio", marker = "python_full_version >= '3.12'" },
@@ -3326,6 +3325,7 @@ fn lock_unsupported_tag() -> Result<()> {
     let lock = context.temp_dir.child("uv.lock");
     lock.write_str(r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12.0"
 
         [options]
@@ -3412,6 +3412,7 @@ fn lock_git_sha() -> Result<()> {
     let lock = context.temp_dir.child("uv.lock");
     lock.write_str(r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -3476,6 +3477,7 @@ fn lock_git_sha() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -3490,7 +3492,6 @@ fn lock_git_sha() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?rev=main" }]
 
         [[package]]
@@ -3576,6 +3577,7 @@ fn lock_requires_python() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.7"
         resolution-markers = [
             "python_full_version >= '3.8'",
@@ -3704,7 +3706,6 @@ fn lock_requires_python() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "pygls" }]
 
         [[package]]
@@ -3867,6 +3868,7 @@ fn lock_requires_python() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.7.9"
         resolution-markers = [
             "python_full_version >= '3.8'",
@@ -3986,7 +3988,6 @@ fn lock_requires_python() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "pygls" }]
 
         [[package]]
@@ -4087,6 +4088,7 @@ fn lock_requires_python() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -4135,7 +4137,6 @@ fn lock_requires_python() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "pygls" }]
 
         [[package]]
@@ -4221,6 +4222,7 @@ fn lock_requires_python_upper() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = "==3.11.*"
 
         [options]
@@ -4290,7 +4292,6 @@ fn lock_requires_python_upper() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "pydantic" }]
         "#
         );
@@ -4346,6 +4347,7 @@ fn lock_requires_python_exact() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = "==3.13"
 
         [options]
@@ -4369,7 +4371,6 @@ fn lock_requires_python_exact() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
         "#
         );
@@ -4424,6 +4425,7 @@ fn lock_requires_python_fork() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.9"
 
         [options]
@@ -4463,7 +4465,6 @@ fn lock_requires_python_fork() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "uv", marker = "python_full_version >= '3.8'" }]
         "#
         );
@@ -4519,6 +4520,7 @@ fn lock_requires_python_wheels() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = "==3.12.*"
 
         [options]
@@ -4557,7 +4559,6 @@ fn lock_requires_python_wheels() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "frozenlist" }]
         "#
         );
@@ -4603,6 +4604,7 @@ fn lock_requires_python_wheels() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = "==3.11.*"
 
         [options]
@@ -4641,7 +4643,6 @@ fn lock_requires_python_wheels() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "frozenlist" }]
         "#
         );
@@ -4697,6 +4698,7 @@ fn lock_requires_python_star() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = "==3.11.*"
 
         [options]
@@ -4755,7 +4757,6 @@ fn lock_requires_python_star() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "linehaul" }]
 
         [[package]]
@@ -4819,6 +4820,7 @@ fn lock_requires_python_not_equal() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">3.10, !=3.10.9, !=3.10.10, !=3.11.*, <3.13"
 
         [options]
@@ -4842,7 +4844,6 @@ fn lock_requires_python_not_equal() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
         "#
         );
@@ -4898,6 +4899,7 @@ fn lock_requires_python_pre() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.11"
 
         [options]
@@ -4956,7 +4958,6 @@ fn lock_requires_python_pre() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "linehaul" }]
 
         [[package]]
@@ -5020,6 +5021,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = "<=3.12"
         resolution-markers = [
             "python_full_version >= '3.7'",
@@ -5063,7 +5065,6 @@ fn lock_requires_python_unbounded() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
         "#
         );
@@ -5161,6 +5162,7 @@ fn lock_requires_python_maximum_version() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.8"
         resolution-markers = [
             "python_full_version >= '3.9'",
@@ -5264,7 +5266,6 @@ fn lock_requires_python_maximum_version() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "numpy" }]
         "#
         );
@@ -5320,6 +5321,7 @@ fn lock_requires_python_fewest_versions() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.8"
 
         [options]
@@ -5370,7 +5372,6 @@ fn lock_requires_python_fewest_versions() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "numpy" }]
         "#
         );
@@ -5437,6 +5438,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.8"
         resolution-markers = [
             "python_full_version >= '3.11'",
@@ -5477,7 +5479,6 @@ fn lock_python_version_marker_complement() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "attrs", marker = "python_full_version < '3.11'" },
             { name = "attrs", marker = "python_full_version >= '3.11'" },
@@ -5548,6 +5549,7 @@ fn lock_dev() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -5576,7 +5578,6 @@ fn lock_dev() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [package.metadata.requires-dev]
@@ -5589,10 +5590,6 @@ fn lock_dev() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d" },
         ]
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
         "#
         );
     });
@@ -5666,6 +5663,7 @@ fn lock_conditional_unconditional() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -5689,7 +5687,6 @@ fn lock_conditional_unconditional() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "iniconfig" },
             { name = "iniconfig", marker = "python_full_version < '3.12'" },
@@ -5744,6 +5741,7 @@ fn lock_multiple_markers() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -5767,7 +5765,6 @@ fn lock_multiple_markers() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "iniconfig", marker = "python_full_version < '3.12'" },
             { name = "iniconfig", marker = "implementation_name == 'cpython'" },
@@ -5860,6 +5857,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.11, <3.13"
 
         [options]
@@ -5875,7 +5873,6 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "b", directory = "b" },
             { name = "c", directory = "c" },
@@ -5886,18 +5883,10 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         version = "0.1.0"
         source = { directory = "b" }
 
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
-
         [[package]]
         name = "c"
         version = "0.1.0"
         source = { directory = "c" }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
         "#
         );
     });
@@ -5948,6 +5937,7 @@ fn lock_cycles() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -6013,7 +6003,6 @@ fn lock_cycles() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "fixtures", specifier = "==3.0.0" },
             { name = "testtools", specifier = "==2.3.0" },
@@ -6151,6 +6140,7 @@ fn lock_new_extras() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -6207,7 +6197,6 @@ fn lock_new_extras() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "requests", specifier = "==2.31.0" }]
 
         [[package]]
@@ -6276,6 +6265,7 @@ fn lock_new_extras() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -6332,7 +6322,6 @@ fn lock_new_extras() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "requests", extras = ["socks"], specifier = "==2.31.0" }]
 
         [[package]]
@@ -6411,6 +6400,7 @@ fn lock_invalid_hash() -> Result<()> {
 
     lock.write_str(r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -6523,6 +6513,7 @@ fn lock_resolution_mode() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -6559,7 +6550,6 @@ fn lock_resolution_mode() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = ">=3" }]
 
         [[package]]
@@ -6604,6 +6594,7 @@ fn lock_resolution_mode() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -6641,7 +6632,6 @@ fn lock_resolution_mode() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = ">=3" }]
 
         [[package]]
@@ -6766,6 +6756,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         resolution-markers = [
             "sys_platform == 'darwin'",
@@ -6819,7 +6810,6 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = "==3.7.0" }]
 
         [[package]]
@@ -6834,7 +6824,6 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = "==3.0.0" }]
 
         [[package]]
@@ -6856,7 +6845,6 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "dependency", marker = "sys_platform != 'darwin'", directory = "v2" },
             { name = "dependency", marker = "sys_platform == 'darwin'", directory = "v1" },
@@ -6990,6 +6978,7 @@ fn lock_exclusion() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -7004,17 +6993,12 @@ fn lock_exclusion() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "project", virtual = "../" }]
 
         [[package]]
         name = "project"
         version = "0.1.0"
         source = { virtual = "../" }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
         "#
         );
     });
@@ -7095,6 +7079,7 @@ fn lock_relative_lock_deserialization() -> Result<()> {
     child.child("uv.lock").write_str(
         r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -7299,6 +7284,7 @@ fn lock_peer_member() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -7315,10 +7301,6 @@ fn lock_peer_member() -> Result<()> {
         version = "0.1.0"
         source = { editable = "../child" }
 
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
-
         [[package]]
         name = "project"
         version = "0.1.0"
@@ -7328,7 +7310,6 @@ fn lock_peer_member() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "child", editable = "../child" }]
         "#
         );
@@ -7426,6 +7407,7 @@ fn lock_index_workspace_member() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -7446,7 +7428,6 @@ fn lock_index_workspace_member() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = ">=2", index = "https://pypi-proxy.fly.dev/basic-auth/simple" }]
 
         [[package]]
@@ -7467,7 +7448,6 @@ fn lock_index_workspace_member() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "child", editable = "child" }]
         "#
         );
@@ -7574,8 +7554,9 @@ fn lock_dev_transitive() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -7598,7 +7579,6 @@ fn lock_dev_transitive() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "baz", editable = "baz" },
             { name = "foo", virtual = "../foo" },
@@ -7616,8 +7596,6 @@ fn lock_dev_transitive() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
-        requires-dist = []
 
         [package.metadata.requires-dev]
         dev = [{ name = "typing-extensions", specifier = ">4" }]
@@ -7628,8 +7606,6 @@ fn lock_dev_transitive() -> Result<()> {
         source = { virtual = "../foo" }
 
         [package.metadata]
-        provides-extras = []
-        requires-dist = []
 
         [package.metadata.requires-dev]
         dev = [{ name = "anyio" }]
@@ -7651,7 +7627,7 @@ fn lock_dev_transitive() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
-        "#
+        "###
         );
     });
 
@@ -7713,6 +7689,7 @@ fn lock_redact_https() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -7727,7 +7704,6 @@ fn lock_redact_https() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [[package]]
@@ -7901,6 +7877,7 @@ fn lock_redact_git_pep508() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -7915,7 +7892,6 @@ fn lock_redact_git_pep508() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "uv-private-pypackage", git = "https://github.com/astral-test/uv-private-pypackage" }]
 
         [[package]]
@@ -7994,6 +7970,7 @@ fn lock_redact_git_sources() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -8008,7 +7985,6 @@ fn lock_redact_git_sources() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "uv-private-pypackage", git = "https://github.com/astral-test/uv-private-pypackage" }]
 
         [[package]]
@@ -8085,6 +8061,7 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -8174,6 +8151,7 @@ fn lock_redact_index_sources() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -8188,7 +8166,6 @@ fn lock_redact_index_sources() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = ">=2", index = "https://pypi-proxy.fly.dev/basic-auth/simple" }]
 
         [[package]]
@@ -8267,6 +8244,7 @@ fn lock_redact_url_sources() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -8281,7 +8259,6 @@ fn lock_redact_url_sources() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig", url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }]
 
         [[package]]
@@ -8291,10 +8268,6 @@ fn lock_redact_url_sources() -> Result<()> {
         wheels = [
             { url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
         ]
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
         "#
         );
     });
@@ -8379,6 +8352,7 @@ fn lock_env_credentials() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -8393,7 +8367,6 @@ fn lock_env_credentials() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [[package]]
@@ -8540,6 +8513,7 @@ fn lock_relative_index() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -8554,7 +8528,6 @@ fn lock_relative_index() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [[package]]
@@ -8652,6 +8625,7 @@ fn lock_no_sources() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -8666,7 +8640,6 @@ fn lock_no_sources() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [[package]]
@@ -8692,7 +8665,6 @@ fn lock_no_sources() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio", directory = "anyio" }]
 
         [package.metadata.requires-dev]
@@ -8742,6 +8714,7 @@ fn lock_no_sources() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -8783,7 +8756,6 @@ fn lock_no_sources() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio" }]
 
         [package.metadata.requires-dev]
@@ -8844,6 +8816,7 @@ fn lock_migrate() -> Result<()> {
     lock.write_str(
         r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -8911,6 +8884,7 @@ fn lock_migrate() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -8947,7 +8921,6 @@ fn lock_migrate() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio" }]
 
         [[package]]
@@ -9010,6 +8983,7 @@ fn lock_upgrade_package() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -9047,7 +9021,6 @@ fn lock_upgrade_package() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "anyio", specifier = "<=2" },
             { name = "idna", specifier = "<=3" },
@@ -9106,6 +9079,7 @@ fn lock_upgrade_package() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -9143,7 +9117,6 @@ fn lock_upgrade_package() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "anyio" },
             { name = "idna" },
@@ -9190,6 +9163,7 @@ fn lock_upgrade_package() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -9227,7 +9201,6 @@ fn lock_upgrade_package() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "anyio" },
             { name = "idna" },
@@ -9380,6 +9353,7 @@ fn lock_find_links_local_wheel() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -9394,7 +9368,6 @@ fn lock_find_links_local_wheel() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "tqdm", specifier = "==1000.0.0" }]
 
         [[package]]
@@ -9494,6 +9467,7 @@ fn lock_find_links_local_sdist() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -9508,7 +9482,6 @@ fn lock_find_links_local_sdist() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "tqdm", specifier = "==999.0.0" }]
 
         [[package]]
@@ -9585,6 +9558,7 @@ fn lock_find_links_http_wheel() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -9608,7 +9582,6 @@ fn lock_find_links_http_wheel() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "packaging", specifier = "==23.2" }]
         "#
         );
@@ -9676,6 +9649,7 @@ fn lock_find_links_http_sdist() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -9699,7 +9673,6 @@ fn lock_find_links_http_sdist() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "packaging", specifier = "==23.2" }]
         "#
         );
@@ -9807,6 +9780,7 @@ fn lock_local_index() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [[package]]
@@ -9818,7 +9792,6 @@ fn lock_local_index() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "tqdm" }]
 
         [[package]]
@@ -9894,6 +9867,7 @@ fn lock_sources_url() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -9930,7 +9904,6 @@ fn lock_sources_url() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "workspace", url = "https://github.com/user-attachments/files/16592193/workspace.zip" }]
 
         [[package]]
@@ -9952,7 +9925,6 @@ fn lock_sources_url() -> Result<()> {
         sdist = { hash = "sha256:ba690a925dc3d1b53e0675201c9ec26ab59eeec72ab271562f53297bf1817263" }
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio" }]
         "#
         );
@@ -10031,6 +10003,7 @@ fn lock_sources_archive() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -10067,7 +10040,6 @@ fn lock_sources_archive() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "workspace", path = "workspace.zip" }]
 
         [[package]]
@@ -10089,7 +10061,6 @@ fn lock_sources_archive() -> Result<()> {
         sdist = { hash = "sha256:ba690a925dc3d1b53e0675201c9ec26ab59eeec72ab271562f53297bf1817263" }
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio" }]
         "#
         );
@@ -10183,6 +10154,7 @@ fn lock_sources_source_tree() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -10193,10 +10165,6 @@ fn lock_sources_source_tree() -> Result<()> {
         version = "0.1.0"
         source = { editable = "workspace/anyio" }
 
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
-
         [[package]]
         name = "project"
         version = "0.1.0"
@@ -10206,7 +10174,6 @@ fn lock_sources_source_tree() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "workspace", directory = "workspace" }]
 
         [[package]]
@@ -10218,7 +10185,6 @@ fn lock_sources_source_tree() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio", editable = "workspace/anyio" }]
         "#
         );
@@ -10325,6 +10291,7 @@ fn lock_editable() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -10345,17 +10312,12 @@ fn lock_editable() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "library", directory = "library" }]
 
         [[package]]
         name = "library"
         version = "0.1.0"
         source = { directory = "library" }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
 
         [[package]]
         name = "workspace"
@@ -10366,7 +10328,6 @@ fn lock_editable() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "library", directory = "library" }]
         "#
         );
@@ -10414,6 +10375,7 @@ fn lock_editable() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -10434,17 +10396,12 @@ fn lock_editable() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "library", editable = "library" }]
 
         [[package]]
         name = "library"
         version = "0.1.0"
         source = { editable = "library" }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
 
         [[package]]
         name = "workspace"
@@ -10455,7 +10412,6 @@ fn lock_editable() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "library", directory = "library" }]
         "#
         );
@@ -10585,8 +10541,9 @@ fn lock_mixed_extras() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -10618,8 +10575,8 @@ fn lock_mixed_extras() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = ["async"]
         requires-dist = [{ name = "iniconfig", marker = "extra == 'async'", specifier = ">=2" }]
+        provides-extras = ["async"]
 
         [[package]]
         name = "leaf2"
@@ -10627,8 +10584,8 @@ fn lock_mixed_extras() -> Result<()> {
         source = { editable = "../workspace2/packages/leaf2" }
 
         [package.metadata]
-        provides-extras = ["async"]
         requires-dist = [{ name = "packaging", marker = "extra == 'async'", specifier = ">=24" }]
+        provides-extras = ["async"]
 
         [[package]]
         name = "typing-extensions"
@@ -10654,12 +10611,12 @@ fn lock_mixed_extras() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = ["async"]
         requires-dist = [
             { name = "leaf1", editable = "packages/leaf1" },
             { name = "typing-extensions", marker = "extra == 'async'", specifier = ">=4" },
             { name = "workspace2", directory = "../workspace2" },
         ]
+        provides-extras = ["async"]
 
         [[package]]
         name = "workspace2"
@@ -10670,9 +10627,8 @@ fn lock_mixed_extras() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "leaf2", editable = "../workspace2/packages/leaf2" }]
-        "#
+        "###
         );
     });
 
@@ -10782,8 +10738,9 @@ fn lock_transitive_extra() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -10815,8 +10772,8 @@ fn lock_transitive_extra() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = ["async"]
         requires-dist = [{ name = "iniconfig", marker = "extra == 'async'", specifier = ">=2" }]
+        provides-extras = ["async"]
 
         [[package]]
         name = "typing-extensions"
@@ -10842,13 +10799,13 @@ fn lock_transitive_extra() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = ["async"]
         requires-dist = [
             { name = "leaf", editable = "packages/leaf" },
             { name = "leaf", extras = ["async"], marker = "extra == 'async'", editable = "packages/leaf" },
             { name = "typing-extensions", marker = "extra == 'async'", specifier = ">=4" },
         ]
-        "#
+        provides-extras = ["async"]
+        "###
         );
     });
 
@@ -10934,6 +10891,7 @@ fn lock_mismatched_sources() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -10948,7 +10906,6 @@ fn lock_mismatched_sources() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1" }]
 
         [[package]]
@@ -10977,6 +10934,7 @@ fn lock_mismatched_sources() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -10991,7 +10949,6 @@ fn lock_mismatched_sources() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?rev=0.0.2" }]
 
         [[package]]
@@ -11045,6 +11002,7 @@ fn lock_mismatched_versions() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -11059,7 +11017,6 @@ fn lock_mismatched_versions() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1" }]
 
         [[package]]
@@ -11161,6 +11118,7 @@ fn lock_change_index() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -11184,7 +11142,6 @@ fn lock_change_index() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
         "#
         );
@@ -11208,6 +11165,7 @@ fn lock_change_index() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -11231,7 +11189,6 @@ fn lock_change_index() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
         "#
         );
@@ -11306,6 +11263,7 @@ fn lock_remove_member() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -11348,7 +11306,6 @@ fn lock_remove_member() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = ">3" }]
 
         [[package]]
@@ -11360,7 +11317,6 @@ fn lock_remove_member() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "leaf", virtual = "leaf" }]
 
         [[package]]
@@ -11429,6 +11385,7 @@ fn lock_remove_member() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -11438,10 +11395,6 @@ fn lock_remove_member() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { virtual = "." }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
         "#
         );
     });
@@ -11490,6 +11443,7 @@ fn lock_add_member() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -11499,10 +11453,6 @@ fn lock_add_member() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { virtual = "." }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
         "#
         );
     });
@@ -11604,6 +11554,7 @@ fn lock_add_member() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -11646,17 +11597,12 @@ fn lock_add_member() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = ">3" }]
 
         [[package]]
         name = "project"
         version = "0.1.0"
         source = { virtual = "." }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
 
         [[package]]
         name = "sniffio"
@@ -11712,6 +11658,7 @@ fn lock_redundant_add_member() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -11748,7 +11695,6 @@ fn lock_redundant_add_member() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio" }]
 
         [[package]]
@@ -11817,6 +11763,7 @@ fn lock_redundant_add_member() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -11854,7 +11801,6 @@ fn lock_redundant_add_member() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "anyio" },
             { name = "idna" },
@@ -11909,6 +11855,7 @@ fn lock_new_constraints() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -11945,7 +11892,6 @@ fn lock_new_constraints() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio" }]
 
         [[package]]
@@ -12016,6 +11962,7 @@ fn lock_new_constraints() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -12055,7 +12002,6 @@ fn lock_new_constraints() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio" }]
 
         [[package]]
@@ -12121,6 +12067,7 @@ fn lock_remove_member_non_project() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -12162,7 +12109,6 @@ fn lock_remove_member_non_project() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = ">3" }]
 
         [[package]]
@@ -12230,6 +12176,7 @@ fn lock_remove_member_non_project() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -12276,6 +12223,7 @@ fn lock_rename_project() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -12299,7 +12247,6 @@ fn lock_rename_project() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
         "#
         );
@@ -12357,6 +12304,7 @@ fn lock_rename_project() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -12380,7 +12328,6 @@ fn lock_rename_project() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
         "#
         );
@@ -12410,6 +12357,7 @@ fn lock_missing_metadata() -> Result<()> {
     // Write a lockfile with a missing `[package.metadata]` section.
     lock.write_str(r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -12473,6 +12421,7 @@ fn lock_missing_metadata() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -12509,7 +12458,6 @@ fn lock_missing_metadata() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = "==3.7.0" }]
 
         [[package]]
@@ -12554,6 +12502,7 @@ fn lock_dev_dependencies_alias() -> Result<()> {
     // Write a lockfile with `[package.dev-dependencies]`.
     lock.write_str(r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -12624,6 +12573,7 @@ fn lock_dev_dependencies_alias() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -12652,7 +12602,6 @@ fn lock_dev_dependencies_alias() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "typing-extensions" }]
 
         [package.metadata.requires-dev]
@@ -12707,6 +12656,7 @@ fn lock_reorder() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -12753,7 +12703,6 @@ fn lock_reorder() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "anyio" },
             { name = "iniconfig" },
@@ -12857,6 +12806,7 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.7, <4"
         resolution-markers = [
             "python_full_version >= '3.10'",
@@ -12877,7 +12827,6 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [[package]]
@@ -12898,7 +12847,6 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "dependency", marker = "python_full_version >= '3.10'", virtual = "dependency" }]
         "#
         );
@@ -12969,6 +12917,7 @@ fn lock_narrowed_python_version() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.7"
         resolution-markers = [
             "python_full_version >= '3.11'",
@@ -12988,7 +12937,6 @@ fn lock_narrowed_python_version() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [[package]]
@@ -13009,7 +12957,6 @@ fn lock_narrowed_python_version() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "dependency", marker = "python_full_version < '3.9'", directory = "dependency" },
             { name = "dependency", marker = "python_full_version >= '3.11'", directory = "dependency" },
@@ -13070,6 +13017,7 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         resolution-markers = [
             "sys_platform == 'darwin'",
@@ -13101,7 +13049,6 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "anyio", marker = "python_full_version >= '3.11'" },
             { name = "anyio", marker = "sys_platform == 'darwin'" },
@@ -13178,6 +13125,7 @@ fn lock_constrained_environment() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         resolution-markers = [
             "sys_platform != 'win32'",
@@ -13262,7 +13210,6 @@ fn lock_constrained_environment() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "black" }]
         "#
         );
@@ -13356,6 +13303,7 @@ fn lock_constrained_environment() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -13447,7 +13395,6 @@ fn lock_constrained_environment() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "black" }]
         "#
         );
@@ -13502,6 +13449,7 @@ fn lock_constrained_environment_legacy() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         resolution-markers = [
             "sys_platform != 'win32'",
@@ -13546,7 +13494,6 @@ fn lock_constrained_environment_legacy() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "black" }]
 
         [[package]]
@@ -13691,6 +13638,7 @@ fn lock_non_project_fork() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.10"
         resolution-markers = [
             "python_full_version >= '3.11'",
@@ -13883,6 +13831,7 @@ fn lock_non_project_conditional() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -13991,6 +13940,7 @@ fn lock_non_project_group() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.10"
 
         [options]
@@ -14131,6 +14081,7 @@ fn lock_non_project_sources() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -14148,10 +14099,6 @@ fn lock_non_project_sources() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl", hash = "sha256:14475042e284991034cb48e06f6851428fb14c4dc953acd9be9a5e95c7b6dd7a" },
         ]
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
         "#
         );
     });
@@ -14215,8 +14162,9 @@ fn lock_dropped_dev_extra() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -14251,12 +14199,10 @@ fn lock_dropped_dev_extra() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
-        requires-dist = []
 
         [package.metadata.requires-dev]
         dev = [{ name = "coverage", extras = ["toml"] }]
-        "#
+        "###
         );
     });
 
@@ -14332,6 +14278,7 @@ fn lock_empty_dev_dependencies() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -14355,7 +14302,6 @@ fn lock_empty_dev_dependencies() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [package.metadata.requires-dev]
@@ -14436,6 +14382,7 @@ fn lock_empty_dependency_group() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -14459,7 +14406,6 @@ fn lock_empty_dependency_group() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [package.metadata.requires-dev]
@@ -14540,6 +14486,7 @@ fn lock_trailing_slash() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -14576,7 +14523,6 @@ fn lock_trailing_slash() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = "==3.7.0" }]
 
         [[package]]
@@ -14716,6 +14662,7 @@ fn lock_explicit_index() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -14762,7 +14709,6 @@ fn lock_explicit_index() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "anyio", specifier = "==3.7.0" },
             { name = "iniconfig", specifier = "==2.0.0", index = "https://test.pypi.org/simple" },
@@ -14824,6 +14770,7 @@ fn lock_explicit_default_index() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -14847,7 +14794,6 @@ fn lock_explicit_default_index() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = "==2.0.0", index = "https://test.pypi.org/simple" }]
         "#
         );
@@ -14911,6 +14857,7 @@ fn lock_explicit_default_index() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -14934,7 +14881,6 @@ fn lock_explicit_default_index() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = "==2.0.0", index = "https://test.pypi.org/simple" }]
         "#
         );
@@ -14988,6 +14934,7 @@ fn lock_named_index() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -15002,7 +14949,6 @@ fn lock_named_index() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "typing-extensions" }]
 
         [[package]]
@@ -15057,6 +15003,7 @@ fn lock_default_index() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -15080,7 +15027,6 @@ fn lock_default_index() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
         "#
         );
@@ -15120,6 +15066,7 @@ fn lock_default_index() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -15143,7 +15090,6 @@ fn lock_default_index() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
         "#
         );
@@ -15200,6 +15146,7 @@ fn lock_named_index_cli() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -15233,7 +15180,6 @@ fn lock_named_index_cli() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "jinja2", specifier = "==3.1.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu121" }]
         "#
         );
@@ -15288,6 +15234,7 @@ fn lock_repeat_named_index() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -15311,7 +15258,6 @@ fn lock_repeat_named_index() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
         "#
         );
@@ -15362,6 +15308,7 @@ fn lock_repeat_named_index_cli() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -15404,7 +15351,6 @@ fn lock_repeat_named_index_cli() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "jinja2", specifier = "==3.1.2" }]
         "#
         );
@@ -15429,6 +15375,7 @@ fn lock_repeat_named_index_cli() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -15476,7 +15423,6 @@ fn lock_repeat_named_index_cli() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "jinja2", specifier = "==3.1.2" }]
         "#
         );
@@ -15528,6 +15474,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -15646,7 +15593,6 @@ fn lock_explicit_virtual_project() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "black" }]
 
         [package.metadata.requires-dev]
@@ -15746,6 +15692,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -15864,7 +15811,6 @@ fn lock_implicit_virtual_project() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "black" }]
 
         [package.metadata.requires-dev]
@@ -15974,6 +15920,7 @@ fn lock_implicit_virtual_path() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -16001,7 +15948,6 @@ fn lock_implicit_virtual_path() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = ">1" }]
 
         [[package]]
@@ -16032,7 +15978,6 @@ fn lock_implicit_virtual_path() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "anyio", specifier = ">3" },
             { name = "child", virtual = "child" },
@@ -16158,6 +16103,7 @@ fn lock_split_python_environment() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.7"
         resolution-markers = [
             "python_full_version < '3.8'",
@@ -16180,7 +16126,6 @@ fn lock_split_python_environment() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "uv", marker = "python_full_version >= '3.8'" }]
 
         [[package]]
@@ -16269,6 +16214,7 @@ fn lock_python_upper_bound() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.8"
         resolution-markers = [
             "python_full_version >= '3.9' and python_full_version < '3.13'",
@@ -16503,7 +16449,6 @@ fn lock_python_upper_bound() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "magika", marker = "python_full_version < '3.13'" }]
 
         [[package]]
@@ -16641,6 +16586,7 @@ fn lock_simplified_environments() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = "==3.11.*"
         resolution-markers = [
             "sys_platform == 'darwin'",
@@ -16672,7 +16618,6 @@ fn lock_simplified_environments() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
         "#
         );
@@ -16751,6 +16696,7 @@ fn lock_dependency_metadata() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -16793,7 +16739,6 @@ fn lock_dependency_metadata() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = "==3.7.0" }]
         "#
         );
@@ -16957,6 +16902,7 @@ fn lock_dependency_metadata_git() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -16995,7 +16941,6 @@ fn lock_dependency_metadata_git() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio", git = "https://github.com/agronholm/anyio?tag=4.6.2" }]
         "#
         );
@@ -17070,6 +17015,7 @@ fn lock_strip_fragment() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -17083,10 +17029,6 @@ fn lock_strip_fragment() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
         ]
 
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
-
         [[package]]
         name = "project"
         version = "0.1.0"
@@ -17096,7 +17038,6 @@ fn lock_strip_fragment() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }]
         "#
         );
@@ -17474,6 +17415,7 @@ fn lock_change_requires_python() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         resolution-markers = [
             "python_full_version >= '3.13'",
@@ -17534,7 +17476,6 @@ fn lock_change_requires_python() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "anyio", marker = "python_full_version == '3.12.*'", specifier = "<3" },
             { name = "anyio", marker = "python_full_version >= '3.13'", specifier = ">3,<4" },
@@ -17584,6 +17525,7 @@ fn lock_change_requires_python() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.10"
         resolution-markers = [
             "python_full_version >= '3.13'",
@@ -17645,7 +17587,6 @@ fn lock_change_requires_python() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "anyio", marker = "python_full_version == '3.12.*'", specifier = "<3" },
             { name = "anyio", marker = "python_full_version >= '3.13'", specifier = ">3" },
@@ -17729,6 +17670,7 @@ fn lock_keyring_credentials() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -17743,7 +17685,6 @@ fn lock_keyring_credentials() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [[package]]
@@ -17799,6 +17740,7 @@ fn lock_multiple_sources() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         resolution-markers = [
             "sys_platform != 'win32'",
@@ -17817,10 +17759,6 @@ fn lock_multiple_sources() -> Result<()> {
         ]
         sdist = { hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3" }
 
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
-
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
@@ -17832,10 +17770,6 @@ fn lock_multiple_sources() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
         ]
 
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
-
         [[package]]
         name = "project"
         version = "0.1.0"
@@ -17846,7 +17780,6 @@ fn lock_multiple_sources() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "iniconfig", marker = "sys_platform != 'win32'", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
             { name = "iniconfig", marker = "sys_platform == 'win32'", url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz" },
@@ -17995,6 +17928,7 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         resolution-markers = [
             "sys_platform == 'win32'",
@@ -18059,7 +17993,6 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "jinja2", marker = "sys_platform != 'win32'", specifier = ">=3,<3.1.4", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" },
             { name = "jinja2", marker = "sys_platform == 'win32'", specifier = ">=3,<3.1.4", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" },
@@ -18124,8 +18057,9 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         resolution-markers = [
             "sys_platform == 'win32'",
@@ -18167,11 +18101,11 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = ["i18n"]
         requires-dist = [
             { name = "babel", marker = "extra == 'i18n'", specifier = ">=2.7" },
             { name = "markupsafe", specifier = ">=2.0" },
         ]
+        provides-extras = ["i18n"]
 
         [[package]]
         name = "markupsafe"
@@ -18197,12 +18131,11 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "jinja2", marker = "sys_platform != 'win32'", url = "https://files.pythonhosted.org/packages/31/80/3a54838c3fb461f6fec263ebf3a3a41771bd05190238de3486aae8540c36/jinja2-3.1.4-py3-none-any.whl" },
             { name = "jinja2", marker = "sys_platform == 'win32'", specifier = ">=3,<3.1.4", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" },
         ]
-        "#
+        "###
         );
     });
 
@@ -18298,6 +18231,7 @@ fn lock_multiple_sources_index_explicit() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         resolution-markers = [
             "sys_platform == 'win32'",
@@ -18385,7 +18319,6 @@ fn lock_multiple_sources_index_explicit() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "jinja2", marker = "sys_platform != 'win32'", specifier = ">=3" },
             { name = "jinja2", marker = "sys_platform == 'win32'", specifier = ">=3", index = "https://test.pypi.org/simple" },
@@ -18444,6 +18377,7 @@ fn lock_multiple_sources_non_total() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         resolution-markers = [
             "sys_platform == 'darwin'",
@@ -18476,10 +18410,6 @@ fn lock_multiple_sources_non_total() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
         ]
 
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
-
         [[package]]
         name = "project"
         version = "0.1.0"
@@ -18490,7 +18420,6 @@ fn lock_multiple_sources_non_total() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "iniconfig", marker = "sys_platform != 'darwin'" },
             { name = "iniconfig", marker = "sys_platform == 'darwin'", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
@@ -18549,6 +18478,7 @@ fn lock_multiple_sources_respect_marker() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -18572,7 +18502,6 @@ fn lock_multiple_sources_respect_marker() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig", marker = "sys_platform == 'win32'" }]
         "#
         );
@@ -18629,8 +18558,9 @@ fn lock_multiple_sources_extra() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -18644,10 +18574,6 @@ fn lock_multiple_sources_extra() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
         ]
 
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
-
         [[package]]
         name = "project"
         version = "0.1.0"
@@ -18659,12 +18585,12 @@ fn lock_multiple_sources_extra() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = ["cpu"]
         requires-dist = [
             { name = "iniconfig", marker = "extra == 'cpu'", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
             { name = "iniconfig", marker = "extra != 'cpu'" },
         ]
-        "#
+        provides-extras = ["cpu"]
+        "###
         );
     });
 
@@ -19063,6 +18989,7 @@ fn lock_group_include() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -19142,7 +19069,6 @@ fn lock_group_include() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "typing-extensions" }]
 
         [package.metadata.requires-dev]
@@ -19592,6 +19518,7 @@ fn lock_group_workspace() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -19633,7 +19560,6 @@ fn lock_group_workspace() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = ">1" }]
 
         [package.metadata.requires-dev]
@@ -19702,7 +19628,6 @@ fn lock_group_workspace() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "child", editable = "child" }]
 
         [package.metadata.requires-dev]
@@ -19784,6 +19709,7 @@ fn lock_transitive_git() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -19798,7 +19724,6 @@ fn lock_transitive_git() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "c", git = "https://github.com/astral-sh/workspace-virtual-root-test?subdirectory=packages%2Fc&rev=fac39c8d4c5d0ef32744e2bb309bbe34a759fd46" }]
 
         [[package]]
@@ -19947,6 +19872,7 @@ fn lock_dynamic_version() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -19955,10 +19881,6 @@ fn lock_dynamic_version() -> Result<()> {
         [[package]]
         name = "project"
         source = { editable = "." }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
         "#
         );
     });
@@ -19989,6 +19911,7 @@ fn lock_dynamic_version() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -19997,10 +19920,6 @@ fn lock_dynamic_version() -> Result<()> {
         [[package]]
         name = "project"
         source = { editable = "." }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
         "#
         );
     });
@@ -20063,6 +19982,7 @@ fn lock_dynamic_version_dependencies() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -20071,10 +19991,6 @@ fn lock_dynamic_version_dependencies() -> Result<()> {
         [[package]]
         name = "project"
         source = { editable = "." }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
         "###
         );
     });
@@ -20105,6 +20021,7 @@ fn lock_dynamic_version_dependencies() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -20113,10 +20030,6 @@ fn lock_dynamic_version_dependencies() -> Result<()> {
         [[package]]
         name = "project"
         source = { editable = "." }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
         "###
         );
     });
@@ -20167,6 +20080,7 @@ fn lock_dynamic_version_no_build() -> Result<()> {
     context.temp_dir.child("uv.lock").write_str(indoc::indoc! {
     r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -20264,6 +20178,7 @@ fn lock_dynamic_version_workspace_member() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -20278,10 +20193,6 @@ fn lock_dynamic_version_workspace_member() -> Result<()> {
         [[package]]
         name = "dynamic"
         source = { editable = "dynamic" }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
 
         [[package]]
         name = "iniconfig"
@@ -20302,7 +20213,6 @@ fn lock_dynamic_version_workspace_member() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "dynamic", editable = "dynamic" },
             { name = "iniconfig", specifier = ">=2" },
@@ -20338,6 +20248,7 @@ fn lock_dynamic_version_workspace_member() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -20352,10 +20263,6 @@ fn lock_dynamic_version_workspace_member() -> Result<()> {
         [[package]]
         name = "dynamic"
         source = { editable = "dynamic" }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
 
         [[package]]
         name = "iniconfig"
@@ -20376,7 +20283,6 @@ fn lock_dynamic_version_workspace_member() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "dynamic", editable = "dynamic" },
             { name = "iniconfig", specifier = ">=2" },
@@ -20460,6 +20366,7 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -20468,10 +20375,6 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
         [[package]]
         name = "dynamic"
         source = { directory = "dynamic" }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
 
         [[package]]
         name = "iniconfig"
@@ -20492,7 +20395,6 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "dynamic", directory = "dynamic" },
             { name = "iniconfig", specifier = ">=2" },
@@ -20528,6 +20430,7 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -20536,10 +20439,6 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
         [[package]]
         name = "dynamic"
         source = { directory = "dynamic" }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
 
         [[package]]
         name = "iniconfig"
@@ -20560,7 +20459,6 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "dynamic", directory = "dynamic" },
             { name = "iniconfig", specifier = ">=2" },
@@ -20630,8 +20528,9 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -20673,11 +20572,11 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = ["all", "async"]
         requires-dist = [
             { name = "anyio", marker = "extra == 'all'" },
             { name = "anyio", marker = "extra == 'async'" },
         ]
+        provides-extras = ["all", "async"]
 
         [[package]]
         name = "sniffio"
@@ -20696,7 +20595,7 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d", size = 37438 },
         ]
-        "#
+        "###
         );
     });
 
@@ -20789,8 +20688,9 @@ fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -20832,11 +20732,11 @@ fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = ["all", "async"]
         requires-dist = [
             { name = "anyio", marker = "extra == 'async'" },
             { name = "project", extras = ["async"], marker = "extra == 'all'" },
         ]
+        provides-extras = ["all", "async"]
 
         [[package]]
         name = "sniffio"
@@ -20855,7 +20755,7 @@ fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d", size = 37438 },
         ]
-        "#
+        "###
         );
     });
 
@@ -20942,6 +20842,7 @@ fn lock_dynamic_built_cache() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -20950,10 +20851,6 @@ fn lock_dynamic_built_cache() -> Result<()> {
         [[package]]
         name = "project"
         source = { editable = "." }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
         "#
         );
     });
@@ -20992,6 +20889,7 @@ fn lock_dynamic_built_cache() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -21000,10 +20898,6 @@ fn lock_dynamic_built_cache() -> Result<()> {
         [[package]]
         name = "project"
         source = { editable = "." }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
         "#
         );
     });
@@ -21070,6 +20964,7 @@ fn lock_shared_build_dependency() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.8"
         resolution-markers = [
             "python_full_version >= '3.9'",
@@ -21192,7 +21087,6 @@ fn lock_shared_build_dependency() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "libcst", specifier = ">=1.1.0" }]
 
         [[package]]
@@ -21349,6 +21243,7 @@ fn lock_dynamic_to_static() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -21357,10 +21252,6 @@ fn lock_dynamic_to_static() -> Result<()> {
         [[package]]
         name = "project"
         source = { editable = "." }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
         "#
         );
     });
@@ -21409,6 +21300,7 @@ fn lock_dynamic_to_static() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -21418,10 +21310,6 @@ fn lock_dynamic_to_static() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
         "#
         );
     });
@@ -21466,6 +21354,7 @@ fn lock_static_to_dynamic() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -21475,10 +21364,6 @@ fn lock_static_to_dynamic() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
         "#
         );
     });
@@ -21546,6 +21431,7 @@ fn lock_static_to_dynamic() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -21554,10 +21440,6 @@ fn lock_static_to_dynamic() -> Result<()> {
         [[package]]
         name = "project"
         source = { editable = "." }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
         "#
         );
     });
@@ -21597,6 +21479,7 @@ fn lock_bump_static_version() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -21606,10 +21489,6 @@ fn lock_bump_static_version() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { virtual = "." }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
         "#
         );
     });
@@ -21654,6 +21533,7 @@ fn lock_bump_static_version() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -21663,10 +21543,6 @@ fn lock_bump_static_version() -> Result<()> {
         name = "project"
         version = "0.2.0"
         source = { virtual = "." }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
         "#
         );
     });
@@ -22003,6 +21879,7 @@ fn lock_relative_project() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -22017,7 +21894,6 @@ fn lock_relative_project() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "typing-extensions" }]
 
         [[package]]
@@ -22103,8 +21979,9 @@ fn lock_recursive_extra() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -22142,7 +22019,6 @@ fn lock_recursive_extra() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = ["foo", "bar", "baz", "bop", "qux"]
         requires-dist = [
             { name = "iniconfig", marker = "extra == 'foo'" },
             { name = "project", extras = ["bar"], marker = "sys_platform == 'darwin' and extra == 'bop'" },
@@ -22150,7 +22026,8 @@ fn lock_recursive_extra() -> Result<()> {
             { name = "project", extras = ["bop"], marker = "python_full_version == '3.12.*' and extra == 'qux'" },
             { name = "project", extras = ["foo"], marker = "extra == 'bar'" },
         ]
-        "#
+        provides-extras = ["foo", "bar", "baz", "bop", "qux"]
+        "###
         );
     });
 
@@ -22243,6 +22120,7 @@ fn lock_no_build_static_metadata() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -22257,7 +22135,6 @@ fn lock_no_build_static_metadata() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [[package]]
@@ -22366,6 +22243,7 @@ fn lock_self_compatible() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -22380,7 +22258,6 @@ fn lock_self_compatible() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "project" },
             { name = "typing-extensions" },
@@ -22466,6 +22343,7 @@ fn lock_self_exact() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -22480,7 +22358,6 @@ fn lock_self_exact() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "project", specifier = "==0.1.0" },
             { name = "typing-extensions" },
@@ -22597,8 +22474,9 @@ fn lock_self_extra_to_extra_compatible() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -22613,11 +22491,11 @@ fn lock_self_extra_to_extra_compatible() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = ["foo"]
         requires-dist = [
             { name = "project", extras = ["foo"], marker = "extra == 'foo'" },
             { name = "typing-extensions" },
         ]
+        provides-extras = ["foo"]
 
         [[package]]
         name = "typing-extensions"
@@ -22627,7 +22505,7 @@ fn lock_self_extra_to_extra_compatible() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
-        "#
+        "###
         );
     });
 
@@ -22767,8 +22645,9 @@ fn lock_self_extra_compatible() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -22783,11 +22662,11 @@ fn lock_self_extra_compatible() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = ["foo"]
         requires-dist = [
             { name = "project", marker = "extra == 'foo'" },
             { name = "typing-extensions" },
         ]
+        provides-extras = ["foo"]
 
         [[package]]
         name = "typing-extensions"
@@ -22797,7 +22676,7 @@ fn lock_self_extra_compatible() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
-        "#
+        "###
         );
     });
 
@@ -22902,6 +22781,7 @@ fn lock_self_marker_compatible() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -22916,7 +22796,6 @@ fn lock_self_marker_compatible() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "project", marker = "sys_platform == 'win32'" },
             { name = "typing-extensions" },
@@ -23034,6 +22913,7 @@ fn lock_split_on_windows() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -23048,7 +22928,6 @@ fn lock_split_on_windows() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "pyqt5-qt5" }]
 
         [[package]]
@@ -23134,6 +23013,7 @@ fn lock_arm() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         resolution-markers = [
             "platform_machine == 'arm64'",
@@ -23165,7 +23045,6 @@ fn lock_arm() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "numpy" }]
         "#
         );
@@ -23209,6 +23088,7 @@ fn lock_x86_64() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         resolution-markers = [
             "platform_machine == 'x86_64'",
@@ -23241,7 +23121,6 @@ fn lock_x86_64() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "numpy" }]
         "#
         );
@@ -23285,6 +23164,7 @@ fn lock_x86() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         resolution-markers = [
             "platform_machine == 'i686'",
@@ -23314,7 +23194,6 @@ fn lock_x86() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "numpy" }]
         "#
         );
@@ -23357,6 +23236,7 @@ fn lock_script() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.11"
 
         [options]
@@ -23493,6 +23373,7 @@ fn lock_script_path() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.11"
 
         [options]
@@ -23526,7 +23407,6 @@ fn lock_script_path() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig" }]
 
         [[package]]
@@ -23697,8 +23577,9 @@ fn lock_pytorch_cpu() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12.[X]"
         resolution-markers = [
             "(platform_machine != 'aarch64' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (sys_platform != 'linux' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')",
@@ -24060,7 +23941,6 @@ fn lock_pytorch_cpu() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = ["cpu", "cu124"]
         requires-dist = [
             { name = "jinja2", specifier = "<=3.1.4" },
             { name = "numpy", specifier = "<=2.2.0" },
@@ -24069,6 +23949,7 @@ fn lock_pytorch_cpu() -> Result<()> {
             { name = "torchvision", marker = "extra == 'cpu'", specifier = ">=0.20.1,<0.20.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cpu", conflict = { package = "project", extra = "cpu" } },
             { name = "torchvision", marker = "extra == 'cu124'", specifier = ">=0.20.1,<0.20.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "project", extra = "cu124" } },
         ]
+        provides-extras = ["cpu", "cu124"]
 
         [[package]]
         name = "setuptools"
@@ -24275,7 +24156,7 @@ fn lock_pytorch_cpu() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d", size = 37438 },
         ]
-        "#
+        "###
         );
     });
 
@@ -24349,8 +24230,9 @@ fn lock_pytorch_preferences() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.10.0"
         resolution-markers = [
             "sys_platform != 'darwin' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu118'",
@@ -24612,13 +24494,13 @@ fn lock_pytorch_preferences() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = ["cpu", "cu118"]
         requires-dist = [
             { name = "torch", marker = "sys_platform == 'darwin' and extra == 'cpu'", specifier = "==2.2.2" },
             { name = "torch", marker = "sys_platform == 'darwin' and extra == 'cu118'", specifier = "==2.2.2" },
             { name = "torch", marker = "sys_platform != 'darwin' and extra == 'cpu'", specifier = "==2.2.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cpu", conflict = { package = "project", extra = "cpu" } },
             { name = "torch", marker = "sys_platform != 'darwin' and extra == 'cu118'", specifier = "==2.2.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118", conflict = { package = "project", extra = "cu118" } },
         ]
+        provides-extras = ["cpu", "cu118"]
 
         [[package]]
         name = "sympy"
@@ -24773,7 +24655,7 @@ fn lock_pytorch_preferences() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d", size = 37438 },
         ]
-        "#
+        "###
         );
     });
 

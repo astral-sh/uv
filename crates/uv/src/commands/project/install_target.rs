@@ -259,6 +259,11 @@ impl<'lock> InstallTarget<'lock> {
             Self::Project { lock, .. }
             | Self::Workspace { lock, .. }
             | Self::NonProjectWorkspace { lock, .. } => {
+                // `provides-extra` was added in Revision 1.
+                if lock.revision() == 0 {
+                    return Ok(());
+                }
+
                 let roots = self.roots().collect::<FxHashSet<_>>();
                 let member_packages: Vec<&Package> = lock
                     .packages()
@@ -266,20 +271,10 @@ impl<'lock> InstallTarget<'lock> {
                     .filter(|package| roots.contains(package.name()))
                     .collect();
 
-                // If `provides-extra` is not set in any package, do not perform the check, as this
-                // means that the lock file was generated on a version of uv that predates when the
-                // feature was added.
-                if !member_packages
-                    .iter()
-                    .any(|package| package.provides_extras().is_some())
-                {
-                    return Ok(());
-                }
-
                 // Collect all known extras from the member packages.
                 let known_extras = member_packages
                     .iter()
-                    .flat_map(|package| package.provides_extras().into_iter().flatten())
+                    .flat_map(|package| package.provides_extras().iter())
                     .collect::<FxHashSet<_>>();
 
                 for extra in extras {

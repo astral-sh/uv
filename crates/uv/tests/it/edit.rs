@@ -75,6 +75,7 @@ fn add_registry() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -111,7 +112,6 @@ fn add_registry() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio", specifier = "==3.7.0" }]
 
         [[package]]
@@ -243,6 +243,7 @@ fn add_git() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -280,7 +281,6 @@ fn add_git() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "anyio", specifier = "==3.7.0" },
             { name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1" },
@@ -383,6 +383,7 @@ fn add_git_private_source() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -397,7 +398,6 @@ fn add_git_private_source() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "uv-private-pypackage", git = "https://github.com/astral-test/uv-private-pypackage" }]
 
         [[package]]
@@ -490,6 +490,7 @@ fn add_git_private_raw() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -504,7 +505,6 @@ fn add_git_private_raw() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "uv-private-pypackage", git = "https://github.com/astral-test/uv-private-pypackage" }]
 
         [[package]]
@@ -711,6 +711,7 @@ fn add_git_raw() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -748,7 +749,6 @@ fn add_git_raw() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "anyio", specifier = "==3.7.0" },
             { name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?rev=0.0.1" },
@@ -976,6 +976,7 @@ fn add_unnamed() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -990,7 +991,6 @@ fn add_unnamed() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1" }]
 
         [[package]]
@@ -1079,8 +1079,9 @@ fn add_remove_dev() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -1119,8 +1120,6 @@ fn add_remove_dev() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
-        requires-dist = []
 
         [package.metadata.requires-dev]
         dev = [{ name = "anyio", specifier = "==3.7.0" }]
@@ -1133,7 +1132,7 @@ fn add_remove_dev() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "#
+        "###
         );
     });
 
@@ -1204,8 +1203,9 @@ fn add_remove_dev() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -1217,12 +1217,10 @@ fn add_remove_dev() -> Result<()> {
         source = { editable = "." }
 
         [package.metadata]
-        provides-extras = []
-        requires-dist = []
 
         [package.metadata.requires-dev]
         dev = []
-        "#
+        "###
         );
     });
 
@@ -1304,8 +1302,9 @@ fn add_remove_optional() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -1344,8 +1343,8 @@ fn add_remove_optional() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = ["io"]
         requires-dist = [{ name = "anyio", marker = "extra == 'io'", specifier = "==3.7.0" }]
+        provides-extras = ["io"]
 
         [[package]]
         name = "sniffio"
@@ -1355,7 +1354,7 @@ fn add_remove_optional() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "#
+        "###
         );
     });
 
@@ -1427,8 +1426,9 @@ fn add_remove_optional() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -1441,8 +1441,7 @@ fn add_remove_optional() -> Result<()> {
 
         [package.metadata]
         provides-extras = ["io"]
-        requires-dist = []
-        "#
+        "###
         );
     });
 
@@ -1670,6 +1669,7 @@ fn add_remove_workspace() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -1690,17 +1690,12 @@ fn add_remove_workspace() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "child2", editable = "child2" }]
 
         [[package]]
         name = "child2"
         version = "0.1.0"
         source = { editable = "child2" }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
         "#
         );
     });
@@ -1758,6 +1753,7 @@ fn add_remove_workspace() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -1774,18 +1770,10 @@ fn add_remove_workspace() -> Result<()> {
         version = "0.1.0"
         source = { editable = "child1" }
 
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
-
         [[package]]
         name = "child2"
         version = "0.1.0"
         source = { editable = "child2" }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
         "#
         );
     });
@@ -2313,6 +2301,7 @@ fn add_workspace_editable() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -2334,7 +2323,6 @@ fn add_workspace_editable() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "child2", editable = "child2" }]
 
         [[package]]
@@ -2342,18 +2330,10 @@ fn add_workspace_editable() -> Result<()> {
         version = "0.1.0"
         source = { editable = "child2" }
 
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
-
         [[package]]
         name = "parent"
         version = "0.1.0"
         source = { virtual = "." }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
         "#
         );
     });
@@ -2446,6 +2426,7 @@ fn add_workspace_path() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -2462,10 +2443,6 @@ fn add_workspace_path() -> Result<()> {
         version = "0.1.0"
         source = { editable = "child" }
 
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
-
         [[package]]
         name = "parent"
         version = "0.1.0"
@@ -2475,7 +2452,6 @@ fn add_workspace_path() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "child", editable = "child" }]
         "#
         );
@@ -2574,6 +2550,7 @@ fn add_path() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -2584,10 +2561,6 @@ fn add_path() -> Result<()> {
         version = "0.1.0"
         source = { directory = "packages/child" }
 
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
-
         [[package]]
         name = "parent"
         version = "0.1.0"
@@ -2597,7 +2570,6 @@ fn add_path() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "child", directory = "packages/child" }]
         "#
         );
@@ -2786,6 +2758,7 @@ fn update() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -2851,7 +2824,6 @@ fn update() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "requests", extras = ["security"], git = "https://github.com/psf/requests?tag=v2.32.3" },
             { name = "requests", extras = ["socks", "use-chardet-on-py3"], marker = "python_full_version >= '3.8'", git = "https://github.com/psf/requests?tag=v2.32.3" },
@@ -3482,6 +3454,7 @@ fn add_inexact() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -3505,7 +3478,6 @@ fn add_inexact() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
         "#
         );
@@ -3622,6 +3594,7 @@ fn remove_registry() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -3631,10 +3604,6 @@ fn remove_registry() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
-
-        [package.metadata]
-        provides-extras = []
-        requires-dist = []
         "#
         );
     });
@@ -4307,8 +4276,9 @@ fn add_lower_bound_optional() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -4347,8 +4317,8 @@ fn add_lower_bound_optional() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = ["io"]
         requires-dist = [{ name = "anyio", marker = "extra == 'io'", specifier = ">=4.3.0" }]
+        provides-extras = ["io"]
 
         [[package]]
         name = "sniffio"
@@ -4358,7 +4328,7 @@ fn add_lower_bound_optional() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "#
+        "###
         );
     });
 
@@ -4430,6 +4400,7 @@ fn add_lower_bound_local() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [[package]]
@@ -4450,7 +4421,6 @@ fn add_lower_bound_local() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "local-simple-a", specifier = ">=1.2.3" }]
         "#
         );
@@ -4532,6 +4502,7 @@ fn add_non_project() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -5491,8 +5462,9 @@ fn add_remove_script_lock() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.11"
 
         [options]
@@ -5627,7 +5599,7 @@ fn add_remove_script_lock() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl", hash = "sha256:450b20ec296a467077128bff42b73080516e71b56ff59a60a02bef2232c4fa9d", size = 121067 },
         ]
-        "#
+        "###
         );
     });
 
@@ -5675,6 +5647,7 @@ fn add_remove_script_lock() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.11"
 
         [options]
@@ -5879,6 +5852,7 @@ fn add_remove_script_lock() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.11"
 
         [options]
@@ -6850,6 +6824,7 @@ fn add_warn_index_url() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -6873,7 +6848,6 @@ fn add_warn_index_url() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "idna", specifier = ">=3.6" }]
         "#
         );
@@ -6952,6 +6926,7 @@ fn add_no_warn_index_url() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -6975,7 +6950,6 @@ fn add_no_warn_index_url() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0" }]
         "#
         );
@@ -7045,6 +7019,7 @@ fn add_index() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -7071,7 +7046,6 @@ fn add_index() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
         "#
         );
@@ -7131,6 +7105,7 @@ fn add_index() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -7183,7 +7158,6 @@ fn add_index() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "iniconfig", specifier = "==2.0.0" },
             { name = "jinja2", specifier = ">=3.1.4", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu121" },
@@ -7243,6 +7217,7 @@ fn add_index() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -7300,7 +7275,6 @@ fn add_index() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "iniconfig", specifier = "==2.0.0" },
             { name = "jinja2", specifier = ">=3.1.4", index = "https://test.pypi.org/simple" },
@@ -7363,6 +7337,7 @@ fn add_index() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -7421,7 +7396,6 @@ fn add_index() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "iniconfig", specifier = "==2.0.0" },
             { name = "jinja2", specifier = ">=3.1.4", index = "https://test.pypi.org/simple" },
@@ -7492,6 +7466,7 @@ fn add_index() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -7550,7 +7525,6 @@ fn add_index() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "iniconfig", specifier = "==2.0.0" },
             { name = "jinja2", specifier = ">=3.1.4", index = "https://test.pypi.org/simple" },
@@ -7628,6 +7602,7 @@ fn add_default_index_url() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -7651,7 +7626,6 @@ fn add_default_index_url() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0" }]
         "#
         );
@@ -7701,6 +7675,7 @@ fn add_default_index_url() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -7725,7 +7700,6 @@ fn add_default_index_url() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [
             { name = "iniconfig", specifier = ">=2.0.0" },
             { name = "typing-extensions", specifier = ">=4.10.0" },
@@ -7802,6 +7776,7 @@ fn add_index_credentials() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -7825,7 +7800,6 @@ fn add_index_credentials() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
         "#
         );
@@ -7898,6 +7872,7 @@ fn existing_index_credentials() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -7921,7 +7896,6 @@ fn existing_index_credentials() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
         "#
         );
@@ -7991,6 +7965,7 @@ fn add_index_with_trailing_slash() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -8017,7 +7992,6 @@ fn add_index_with_trailing_slash() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
         "#
         );
@@ -8087,6 +8061,7 @@ fn add_index_without_trailing_slash() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -8113,7 +8088,6 @@ fn add_index_without_trailing_slash() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
         "#
         );
@@ -8190,8 +8164,9 @@ fn add_group_comment() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r#"
+            lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.11"
 
         [options]
@@ -8221,8 +8196,6 @@ fn add_group_comment() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
-        requires-dist = []
 
         [package.metadata.requires-dev]
         dev = [
@@ -8248,7 +8221,7 @@ fn add_group_comment() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
-        "#
+        "###
         );
     });
 
@@ -8327,6 +8300,7 @@ fn add_index_comments() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -8350,7 +8324,6 @@ fn add_index_comments() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
         "#
         );
@@ -8629,6 +8602,7 @@ fn add_direct_url_subdirectory() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -8665,7 +8639,6 @@ fn add_direct_url_subdirectory() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "root", url = "https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz", subdirectory = "packages/root" }]
 
         [[package]]
@@ -8678,7 +8651,6 @@ fn add_direct_url_subdirectory() -> Result<()> {
         sdist = { hash = "sha256:24b55efee28d08ad3cdc58903e359e820601baa6a4a4b3424311541ebcfb09d3" }
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio" }]
 
         [[package]]
@@ -8769,6 +8741,7 @@ fn add_direct_url_subdirectory_raw() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -8805,7 +8778,6 @@ fn add_direct_url_subdirectory_raw() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "root", url = "https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz", subdirectory = "packages/root" }]
 
         [[package]]
@@ -8818,7 +8790,6 @@ fn add_direct_url_subdirectory_raw() -> Result<()> {
         sdist = { hash = "sha256:24b55efee28d08ad3cdc58903e359e820601baa6a4a4b3424311541ebcfb09d3" }
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "anyio" }]
 
         [[package]]
@@ -9482,6 +9453,7 @@ fn repeated_index_cli_environment_variable() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -9505,7 +9477,6 @@ fn repeated_index_cli_environment_variable() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0" }]
         "#
         );
@@ -9592,6 +9563,7 @@ fn repeated_index_cli() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -9615,7 +9587,6 @@ fn repeated_index_cli() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0" }]
         "#
         );
@@ -9702,6 +9673,7 @@ fn repeated_index_cli_reversed() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -9725,7 +9697,6 @@ fn repeated_index_cli_reversed() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = []
         requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0" }]
         "#
         );

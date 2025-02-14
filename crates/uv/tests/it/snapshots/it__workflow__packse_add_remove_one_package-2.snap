@@ -3,6 +3,7 @@ source: crates/uv/tests/it/workflow.rs
 expression: lock
 ---
 version = 1
+revision = 1
 requires-python = ">=3.12"
 
 [options]
@@ -336,7 +337,6 @@ dev = [
 ]
 
 [package.metadata]
-provides-extras = ["index", "serve"]
 requires-dist = [
     { name = "chevron-blue", specifier = ">=0.2.1" },
     { name = "hatchling", specifier = ">=1.20.0" },
@@ -348,6 +348,7 @@ requires-dist = [
     { name = "twine", specifier = ">=4.0.2" },
     { name = "watchfiles", marker = "extra == 'serve'", specifier = ">=0.21.0" },
 ]
+provides-extras = ["index", "serve"]
 
 [package.metadata.requires-dev]
 dev = [

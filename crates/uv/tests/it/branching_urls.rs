@@ -203,8 +203,9 @@ fn root_package_splits_transitive_too() -> Result<()> {
     "###
     );
 
-    assert_snapshot!(context.read("uv.lock"), @r#"
+    assert_snapshot!(context.read("uv.lock"), @r###"
     version = 1
+    revision = 1
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
         "python_full_version >= '3.12'",
@@ -225,7 +226,6 @@ fn root_package_splits_transitive_too() -> Result<()> {
     ]
 
     [package.metadata]
-    provides-extras = []
     requires-dist = [
         { name = "anyio", marker = "python_full_version < '3.12'", specifier = "==4.2.0" },
         { name = "anyio", marker = "python_full_version >= '3.12'", specifier = "==4.3.0" },
@@ -274,7 +274,6 @@ fn root_package_splits_transitive_too() -> Result<()> {
     ]
 
     [package.metadata]
-    provides-extras = []
     requires-dist = [
         { name = "b1", marker = "python_full_version < '3.12'", directory = "b1" },
         { name = "b2", marker = "python_full_version >= '3.12'", directory = "b2" },
@@ -289,7 +288,6 @@ fn root_package_splits_transitive_too() -> Result<()> {
     ]
 
     [package.metadata]
-    provides-extras = []
     requires-dist = [{ name = "iniconfig", url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" }]
 
     [[package]]
@@ -301,7 +299,6 @@ fn root_package_splits_transitive_too() -> Result<()> {
     ]
 
     [package.metadata]
-    provides-extras = []
     requires-dist = [{ name = "iniconfig", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }]
 
     [[package]]
@@ -324,10 +321,6 @@ fn root_package_splits_transitive_too() -> Result<()> {
         { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3" },
     ]
 
-    [package.metadata]
-    provides-extras = []
-    requires-dist = []
-
     [[package]]
     name = "iniconfig"
     version = "2.0.0"
@@ -339,10 +332,6 @@ fn root_package_splits_transitive_too() -> Result<()> {
         { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
     ]
 
-    [package.metadata]
-    provides-extras = []
-    requires-dist = []
-
     [[package]]
     name = "sniffio"
     version = "1.3.1"
@@ -351,7 +340,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
     wheels = [
         { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
     ]
-    "#);
+    "###);
 
     Ok(())
 }
@@ -412,6 +401,7 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
 
     assert_snapshot!(context.read("uv.lock"), @r#"
     version = 1
+    revision = 1
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
         "python_full_version >= '3.12'",
@@ -433,7 +423,6 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     ]
 
     [package.metadata]
-    provides-extras = []
     requires-dist = [
         { name = "anyio", marker = "python_full_version < '3.12'", specifier = "==4.2.0" },
         { name = "anyio", marker = "python_full_version >= '3.12'", specifier = "==4.3.0" },
@@ -482,7 +471,6 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     ]
 
     [package.metadata]
-    provides-extras = []
     requires-dist = [{ name = "iniconfig", specifier = "==1.1.1" }]
 
     [[package]]
@@ -494,7 +482,6 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     ]
 
     [package.metadata]
-    provides-extras = []
     requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
 
     [[package]]
@@ -574,8 +561,9 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     );
 
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
-    assert_snapshot!(context.read("uv.lock"), @r#"
+    assert_snapshot!(context.read("uv.lock"), @r###"
     version = 1
+    revision = 1
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
         "python_full_version >= '3.12'",
@@ -595,7 +583,6 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     ]
 
     [package.metadata]
-    provides-extras = []
     requires-dist = [
         { name = "iniconfig", marker = "python_full_version < '3.12'", specifier = "==1.1.1" },
         { name = "iniconfig", marker = "python_full_version >= '3.12'", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
@@ -623,11 +610,7 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     wheels = [
         { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
     ]
-
-    [package.metadata]
-    provides-extras = []
-    requires-dist = []
-    "#);
+    "###);
 
     Ok(())
 }
@@ -665,8 +648,9 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     );
 
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
-    assert_snapshot!(context.read("uv.lock"), @r#"
+    assert_snapshot!(context.read("uv.lock"), @r###"
     version = 1
+    revision = 1
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
         "python_full_version >= '3.12'",
@@ -686,7 +670,6 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     ]
 
     [package.metadata]
-    provides-extras = []
     requires-dist = [
         { name = "iniconfig", marker = "python_full_version < '3.12'", url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" },
         { name = "iniconfig", marker = "python_full_version >= '3.12'", git = "https://github.com/pytest-dev/iniconfig?rev=93f5930e668c0d1ddf4597e38dd0dea4e2665e7a" },
@@ -703,10 +686,6 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
         { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3" },
     ]
 
-    [package.metadata]
-    provides-extras = []
-    requires-dist = []
-
     [[package]]
     name = "iniconfig"
     version = "2.0.0"
@@ -714,7 +693,7 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     resolution-markers = [
         "python_full_version >= '3.12'",
     ]
-    "#);
+    "###);
 
     Ok(())
 }
@@ -798,8 +777,9 @@ fn dont_pre_visit_url_packages() -> Result<()> {
     "###
     );
 
-    assert_snapshot!(context.read("uv.lock"), @r#"
+    assert_snapshot!(context.read("uv.lock"), @r###"
     version = 1
+    revision = 1
     requires-python = ">=3.11, <3.13"
 
     [options]
@@ -815,7 +795,6 @@ fn dont_pre_visit_url_packages() -> Result<()> {
     ]
 
     [package.metadata]
-    provides-extras = []
     requires-dist = [
         { name = "b", directory = "b" },
         { name = "c", specifier = "==0.1.0" },
@@ -830,18 +809,13 @@ fn dont_pre_visit_url_packages() -> Result<()> {
     ]
 
     [package.metadata]
-    provides-extras = []
     requires-dist = [{ name = "c", directory = "c" }]
 
     [[package]]
     name = "c"
     version = "0.1.0"
     source = { directory = "c" }
-
-    [package.metadata]
-    provides-extras = []
-    requires-dist = []
-    "#);
+    "###);
 
     Ok(())
 }
