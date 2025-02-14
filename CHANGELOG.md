@@ -18,6 +18,8 @@ There have been 31 releases and 1135 pull requests since [0.5.0](https://github.
 
   When uv spawns a subprocess, it will now have the `UV` environment variable set to the `uv` binary path. This change is breaking if you are setting the `UV` environment variable yourself, as we will overwrite its value.
 
+  Additionally, this change requires marking the uv Rust entrypoint (`uv::main`) as `unsafe` to avoid unsoundness — this is only relevant if you are invoking uv using Rust. See the [Rust documentation](https://doc.rust-lang.org/std/env/fn.set_var.html#safety) for details about the safety of updating a process' environment.
+
 - **Error on non-existent extras, e.g., in `uv sync`** ([#11426](https://github.com/astral-sh/uv/pull/11426))
 
   Previously, uv would silently ignore non-existent extras requested on the command-line (e.g., via `uv sync --extra foo`). This is _generally_ correct behavior when resolving requests for package extras, because an extra may be present on one compatible version of a package but not another. However, this flexibility doesn't need to apply to the local project and it's less surprising to error here.
