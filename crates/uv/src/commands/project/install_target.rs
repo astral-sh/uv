@@ -259,8 +259,8 @@ impl<'lock> InstallTarget<'lock> {
             Self::Project { lock, .. }
             | Self::Workspace { lock, .. }
             | Self::NonProjectWorkspace { lock, .. } => {
-                // `provides-extra` was added in Revision 1.
-                if lock.revision() == 0 {
+                // `provides-extra` was added in Version 1 Revision 1.
+                if (lock.version(), lock.revision()) < (1, 1) {
                     return Ok(());
                 }
 
