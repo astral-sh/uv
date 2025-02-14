@@ -39,8 +39,7 @@ use crate::commands::project::lock::{do_safe_lock, LockMode, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     default_dependency_groups, detect_conflicts, script_specification, update_environment,
-    DependencyGroupsTarget, PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment,
-    UniversalState,
+    PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment, UniversalState,
 };
 use crate::commands::{diagnostics, ExitStatus};
 use crate::printer::Printer;
@@ -112,28 +111,6 @@ pub(crate) async fn sync(
 
         SyncTarget::Project(project)
     };
-
-    // Validate that any referenced dependency groups are defined in the workspace.
-    if !frozen {
-        match &target {
-            SyncTarget::Project(project) => {
-                let target = match &project {
-                    VirtualProject::Project(project) => {
-                        if all_packages {
-                            DependencyGroupsTarget::Workspace(project.workspace())
-                        } else {
-                            DependencyGroupsTarget::Project(project)
-                        }
-                    }
-                    VirtualProject::NonProject(workspace) => {
-                        DependencyGroupsTarget::Workspace(workspace)
-                    }
-                };
-                target.validate(&dev)?;
-            }
-            SyncTarget::Script(..) => {}
-        }
-    }
 
     // Determine the default groups to include.
     let defaults = match &target {
@@ -587,8 +564,11 @@ pub(super) async fn do_sync(
     }
 
     // Validate that the set of requested extras and development groups are compatible.
-    target.validate_extras(extras)?;
     detect_conflicts(target.lock(), extras, dev)?;
+
+    // Validate that the set of requested extras and development groups are defined in the lockfile.
+    target.validate_extras(extras)?;
+    target.validate_groups(dev)?;
 
     // Determine the markers to use for resolution.
     let marker_env = venv.interpreter().resolver_marker_environment();

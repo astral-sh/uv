@@ -2622,6 +2622,11 @@ impl Package {
     pub fn provides_extras(&self) -> Option<&Vec<ExtraName>> {
         self.metadata.provides_extras.as_ref()
     }
+
+    /// Returns the dependency groups the package provides, if any.
+    pub fn dependency_groups(&self) -> &BTreeMap<GroupName, BTreeSet<Requirement>> {
+        &self.metadata.dependency_groups
+    }
 }
 
 /// Attempts to construct a `VerbatimUrl` from the given normalized `Path`.

@@ -24,8 +24,7 @@ use crate::commands::pip::resolution_markers;
 use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, DependencyGroupsTarget, ProjectError, ProjectInterpreter,
-    ScriptInterpreter, UniversalState,
+    default_dependency_groups, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
 };
 use crate::commands::reporters::LatestVersionReporter;
 use crate::commands::{diagnostics, ExitStatus};
@@ -71,15 +70,6 @@ pub(crate) async fn tree(
         workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
         LockTarget::Workspace(&workspace)
     };
-
-    // Validate that any referenced dependency groups are defined in the target.
-    if !frozen {
-        let target = match &target {
-            LockTarget::Workspace(workspace) => DependencyGroupsTarget::Workspace(workspace),
-            LockTarget::Script(..) => DependencyGroupsTarget::Script,
-        };
-        target.validate(&dev)?;
-    }
 
     // Determine the default groups to include.
     let defaults = match target {
