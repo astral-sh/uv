@@ -2640,10 +2640,10 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
 
         [package.optional-dependencies]
         cu118 = [
-            { name = "jinja2", version = "3.1.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, extra = ["i18n"] },
+            { name = "jinja2", version = "3.1.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, extra = ["i18n"], marker = "extra == 'extra-7-project-cu118'" },
         ]
         cu124 = [
-            { name = "jinja2", version = "3.1.3", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, extra = ["i18n"] },
+            { name = "jinja2", version = "3.1.3", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, extra = ["i18n"], marker = "extra == 'extra-7-project-cu124'" },
         ]
 
         [package.metadata]
@@ -2814,8 +2814,8 @@ fn multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
 
         [package.optional-dependencies]
         cu118 = [
-            { name = "jinja2", version = "3.1.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, marker = "sys_platform == 'darwin'" },
-            { name = "jinja2", version = "3.1.2", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'darwin'" },
+            { name = "jinja2", version = "3.1.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, marker = "(sys_platform == 'darwin' and extra == 'extra-7-project-cu118') or (extra == 'extra-7-project-cu118' and extra == 'extra-7-project-cu124')" },
+            { name = "jinja2", version = "3.1.2", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'darwin' and extra == 'extra-7-project-cu118') or (extra == 'extra-7-project-cu118' and extra == 'extra-7-project-cu124')" },
         ]
         cu124 = [
             { name = "jinja2", version = "3.1.3", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" } },
@@ -4746,10 +4746,10 @@ fn jinja_no_conflict_markers1() -> Result<()> {
 
         [package.optional-dependencies]
         cu118 = [
-            { name = "jinja2", version = "3.1.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, extra = ["i18n"] },
+            { name = "jinja2", version = "3.1.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, extra = ["i18n"], marker = "extra == 'extra-7-project-cu118'" },
         ]
         cu124 = [
-            { name = "jinja2", version = "3.1.3", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, extra = ["i18n"] },
+            { name = "jinja2", version = "3.1.3", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, extra = ["i18n"], marker = "extra == 'extra-7-project-cu124'" },
         ]
 
         [package.metadata]
@@ -4913,8 +4913,8 @@ fn jinja_no_conflict_markers2() -> Result<()> {
 
         [package.optional-dependencies]
         cu118 = [
-            { name = "jinja2", version = "3.1.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, marker = "sys_platform == 'darwin'" },
-            { name = "jinja2", version = "3.1.2", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'darwin'" },
+            { name = "jinja2", version = "3.1.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, marker = "(sys_platform == 'darwin' and extra == 'extra-7-project-cu118') or (extra == 'extra-7-project-cu118' and extra == 'extra-7-project-cu124')" },
+            { name = "jinja2", version = "3.1.2", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'darwin' and extra == 'extra-7-project-cu118') or (extra == 'extra-7-project-cu118' and extra == 'extra-7-project-cu124')" },
         ]
         cu124 = [
             { name = "jinja2", version = "3.1.3", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" } },
@@ -5415,7 +5415,7 @@ fn extra_inferences() -> Result<()> {
             { name = "cattrs" },
             { name = "colorlog" },
             { name = "configupdater" },
-            { name = "connexion", extra = ["flask"] },
+            { name = "connexion", extra = ["flask"], marker = "extra == 'extra-3-pkg-x2' or extra != 'extra-3-pkg-x1'" },
             { name = "cron-descriptor" },
             { name = "croniter" },
             { name = "cryptography" },
@@ -5989,7 +5989,7 @@ fn extra_inferences() -> Result<()> {
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "apispec", version = "5.2.2", source = { registry = "https://pypi.org/simple" }, extra = ["yaml"] },
+            { name = "apispec", version = "5.2.2", source = { registry = "https://pypi.org/simple" }, extra = ["yaml"], marker = "extra == 'extra-3-pkg-x2' or extra != 'extra-3-pkg-x1'" },
             { name = "click" },
             { name = "colorama" },
             { name = "email-validator" },
@@ -7321,12 +7321,12 @@ fn deduplicate_resolution_markers() -> Result<()> {
 
         [package.optional-dependencies]
         x1 = [
-            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
-            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
+            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'extra-3-pkg-x1') or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
+            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'linux' and extra == 'extra-3-pkg-x1') or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
         ]
         x2 = [
-            { name = "markupsafe", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
-            { name = "markupsafe", version = "2.1.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
+            { name = "markupsafe", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'extra-3-pkg-x2') or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
+            { name = "markupsafe", version = "2.1.0", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'linux' and extra == 'extra-3-pkg-x2') or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
         ]
 
         [package.metadata]
@@ -8219,7 +8219,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
         version = "2.5.0.post0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "fsspec", extra = ["http"] },
+            { name = "fsspec", extra = ["http"], marker = "extra == 'extra-4-test-m3gnet'" },
             { name = "lightning-utilities" },
             { name = "packaging" },
             { name = "pytorch-lightning" },
@@ -9438,7 +9438,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
         version = "2.5.0.post0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "fsspec", extra = ["http"] },
+            { name = "fsspec", extra = ["http"], marker = "extra == 'extra-4-test-m3gnet'" },
             { name = "lightning-utilities" },
             { name = "packaging" },
             { name = "pyyaml" },
@@ -10184,6 +10184,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
             lock,
             @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.10"
         resolution-markers = [
             "python_full_version >= '3.12' and sys_platform == 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
@@ -12957,7 +12958,6 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
         ]
 
         [package.metadata]
-        provides-extras = ["chgnet", "sevennet", "all", "alignn", "m3gnet"]
         requires-dist = [
             { name = "alignn", marker = "extra == 'alignn'", specifier = "==2024.5.27" },
             { name = "chgnet", marker = "extra == 'all'", specifier = "==0.4.0" },
@@ -12971,6 +12971,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
             { name = "torchdata", marker = "extra == 'alignn'", specifier = "==0.7.1" },
             { name = "torchdata", marker = "extra == 'm3gnet'", specifier = "==0.7.1" },
         ]
+        provides-extras = ["chgnet", "sevennet", "all", "alignn", "m3gnet"]
 
         [[package]]
         name = "threadpoolctl"
@@ -13474,9 +13475,9 @@ fn overlapping_resolution_markers() -> Result<()> {
 
         [package.optional-dependencies]
         cpu = [
-            { name = "torch", version = "2.2.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
-            { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
-            { name = "torch", version = "2.2.2+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+            { name = "torch", version = "2.2.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (platform_machine != 'aarch64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "torch", version = "2.2.2+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
         ]
         cu118 = [
             { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" } },
