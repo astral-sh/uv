@@ -44,10 +44,6 @@ There have been 31 releases and 1135 pull requests since [0.5.0](https://github.
 
   Previously, we used junctions for atomic replacement of cache entries on Windows. Now, we use a file with a pointer to the cache entry instead. This resolves various edge-case behaviors with junctions. These files are only intended to be consumed by uv and the cache version has been bumped. We do not think this change will affect workflows.
 
-- **Add `provides-extras` to lockfile** ([#11063](https://github.com/astral-sh/uv/pull/11063))
-
-  This field is used to track extras provided by local packages. This change is not breaking, but may add empty lists to existing lockfiles.
-
 ### Stabilizations
 
 - **`uv publish` is no longer in preview** ([#11032](https://github.com/astral-sh/uv/pull/11032))
@@ -57,6 +53,7 @@ There have been 31 releases and 1135 pull requests since [0.5.0](https://github.
 ### Enhancements
 
 - Support `--active` for PEP 723 script environments ([#11433](https://github.com/astral-sh/uv/pull/11433))
+- Add `revision` to the lockfile to allow backwards-compatible metadata changes ([#11500](https://github.com/astral-sh/uv/pull/11500))
 
 ### Bug fixes
 
