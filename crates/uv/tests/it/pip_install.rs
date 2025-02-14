@@ -8776,3 +8776,27 @@ fn no_sources_workspace_discovery() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn unknown_git_schema() {
+    let context = TestContext::new("3.12");
+    // Reverse direction: Check that we switch back to the workspace package with `--upgrade`.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("git+fantasy:/foo"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Git operation failed
+      Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/e97623e3dc7167a2
+      Caused by: process didn't exit successfully: `/usr/bin/git fetch --force --update-head-ok 'fantasy:/foo' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+    --- stderr
+    ssh: Could not resolve hostname fantasy: Name or service not known
+    fatal: Could not read from remote repository.
+
+    Please make sure you have the correct access rights
+    and the repository exists.
+    "###
+    );
+}

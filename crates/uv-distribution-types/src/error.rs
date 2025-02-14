@@ -21,4 +21,7 @@ pub enum Error {
 
     #[error("Requested package name `{0}` does not match `{1}` in the distribution filename: {2}")]
     PackageNameMismatch(PackageName, PackageName, String),
+
+    #[error("Unsupported git URL scheme `{0}:` in `{1}`, only `https:`, `ssh:` and `file:` are supported")]
+    UnsupportedGitScheme(String, Url),
 }

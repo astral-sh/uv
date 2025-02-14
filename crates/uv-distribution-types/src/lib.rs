@@ -474,6 +474,15 @@ impl Dist {
         git: GitUrl,
         subdirectory: Option<PathBuf>,
     ) -> Result<Dist, Error> {
+        match url.scheme() {
+            "https" | "ssh" | "file" => {}
+            unsupported => {
+                return Err(Error::UnsupportedGitScheme(
+                    unsupported.to_string(),
+                    url.to_url(),
+                ))
+            }
+        }
         Ok(Self::Source(SourceDist::Git(GitSourceDist {
             name,
             git: Box::new(git),

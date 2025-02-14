@@ -7615,3 +7615,37 @@ fn sync_locked_script() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn unsupported_git_scheme() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo"]
+
+        [tool.uv.sources]
+        # `c:/...` looks like an absolute path, but this field requires a URL such as `file:///...`.
+        foo = { git = "c:/home/ferris/projects/foo", rev = "7701ffcbae245819b828dc5f885a5201158897ef" }
+        "#},
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 9, column 7
+      |
+    9 | foo = { git = "c:/home/ferris/projects/foo", rev = "7701ffcbae245819b828dc5f885a5201158897ef" }
+      |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    Unsupported git URL scheme `c:` in `c:/home/ferris/projects/foo`, only `https:`, `ssh:` and `file:` are supported
+    "###);
+    Ok(())
+}
