@@ -24,6 +24,10 @@ There have been 31 releases and 1135 pull requests since [0.5.0](https://github.
 
   Previously, uv would silently ignore non-existent extras requested on the command-line (e.g., via `uv sync --extra foo`). This is _generally_ correct behavior when resolving requests for package extras, because an extra may be present on one compatible version of a package but not another. However, this flexibility doesn't need to apply to the local project and it's less surprising to error here.
 
+- **Error on missing dependency groups when `--frozen` is provided** ([#11499](https://github.com/astral-sh/uv/pull/11499))
+
+  Previously, uv would not validate that the requested dependency groups were present in the lockfile when the `--frozen` flag was used. Now, an error will be raised if a requested dependency group is not present.
+
 - **Change `-p` to a `--python` alias in `uv pip compile`** ([#11486](https://github.com/astral-sh/uv/pull/11486))
 
   In `uv pip compile`, `-p` was an alias for `--python-version` while everywhere else in uv's interface it is an alias for `--python`. Additionally, `uv pip compile` did not respect the `UV_PYTHON` environment variable. Now, the semantics of this flag have been updated for parity with the rest of the CLI. 
