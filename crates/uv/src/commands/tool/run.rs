@@ -529,6 +529,22 @@ async fn get_or_create_environment(
             // Ex) `ruff>=0.6.0`
             Target::Unspecified(requirement) => {
                 let spec = RequirementsSpecification::parse_package(requirement)?;
+
+                // Extract the verbatim executable name, if possible.
+                let name = match &spec.requirement {
+                    UnresolvedRequirement::Named(..) => {
+                        // Identify the package name from the PEP 508 specifier.
+                        //
+                        // For example, given `ruff>=0.6.0`, extract `ruff`, to use as the executable name.
+                        let content = requirement.trim();
+                        let index = content
+                            .find(|c| !matches!(c, 'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.'))
+                            .unwrap_or(content.len());
+                        Some(&content[..index])
+                    }
+                    UnresolvedRequirement::Unnamed(..) => None,
+                };
+
                 if let UnresolvedRequirement::Named(requirement) = &spec.requirement {
                     if requirement.name.as_str() == "python" {
                         return Err(anyhow::anyhow!(
@@ -539,6 +555,7 @@ async fn get_or_create_environment(
                         .into());
                     }
                 }
+
                 let requirement = resolve_names(
                     vec![spec],
                     &interpreter,
@@ -556,12 +573,14 @@ async fn get_or_create_environment(
                 .pop()
                 .unwrap();
 
-                // Use the executable provided by the user, if possible (as in: `uvx --from package executable`).
-                //
-                // If no such executable was provided, rely on the package name (as in: `uvx git+https://github.com/pallets/flask`).
+                // Prefer, in order:
+                // 1. The verbatim executable provided by the user, independent of the requirement (as in: `uvx --from package executable`).
+                // 2. The verbatim executable provided by the user as a named requirement (as in: `uvx change_wheel_version`).
+                // 3. The resolved package name (as in: `uvx git+https://github.com/pallets/flask`).
                 let executable = request
                     .executable
                     .map(ToString::to_string)
+                    .or_else(|| name.map(ToString::to_string))
                     .unwrap_or_else(|| requirement.name.to_string());
 
                 (executable, requirement)

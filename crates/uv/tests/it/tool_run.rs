@@ -1810,3 +1810,93 @@ fn tool_run_from_at() {
      + executable-application==0.2.0
     "###);
 }
+
+#[test]
+fn tool_run_verbatim_name() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // The normalized package name is `change-wheel-version`, but the executable is `change_wheel_version`.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("change_wheel_version")
+        .arg("--help")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    usage: change_wheel_version [-h] [--local-version LOCAL_VERSION]
+                                [--version VERSION] [--delete-old-wheel]
+                                [--allow-same-version]
+                                wheel
+
+    positional arguments:
+      wheel
+
+    options:
+      -h, --help            show this help message and exit
+      --local-version LOCAL_VERSION
+      --version VERSION
+      --delete-old-wheel
+      --allow-same-version
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + change-wheel-version==0.5.0
+     + installer==0.7.0
+     + packaging==24.0
+     + wheel==0.43.0
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("change-wheel-version")
+        .arg("--help")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    The executable `change-wheel-version` was not found.
+    The following executables are provided by `change-wheel-version`:
+    - change_wheel_version
+    Consider using `uv tool run --from change-wheel-version <EXECUTABLE_NAME>` instead.
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    warning: An executable named `change-wheel-version` is not provided by package `change-wheel-version`.
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("change-wheel-version")
+        .arg("change_wheel_version")
+        .arg("--help")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    usage: change_wheel_version [-h] [--local-version LOCAL_VERSION]
+                                [--version VERSION] [--delete-old-wheel]
+                                [--allow-same-version]
+                                wheel
+
+    positional arguments:
+      wheel
+
+    options:
+      -h, --help            show this help message and exit
+      --local-version LOCAL_VERSION
+      --version VERSION
+      --delete-old-wheel
+      --allow-same-version
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    "###);
+}
