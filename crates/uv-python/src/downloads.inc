@@ -239,7 +239,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250212/cpython-3.14.0a5%2B20250212-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250212/cpython-3.14.0a5%2B20250212-i686-pc-windows-msvc-shared-install_only_stripped.tar.gz",
         sha256: Some("5851a9e6a6afa698fa3ee5b678dff96e612f47e5e2c2f0c032f7c48d42f6a1ac")
     },
     ManagedPythonDownload {
