@@ -208,9 +208,6 @@ impl CandidateSelector {
                     // Prefer preferences that match the current environment.
                     let matches_env = env.included_by_marker(marker.pep508());
 
-                    // Prefer preferences that match the current index.
-                    let matches_index = index.is_none_or(|index| entry.index().matches(index));
-
                     // Prefer the latest (or earliest) version.
                     let version = if highest {
                         Either::Left(entry.pin().version())
@@ -218,7 +215,7 @@ impl CandidateSelector {
                         Either::Right(std::cmp::Reverse(entry.pin().version()))
                     };
 
-                    std::cmp::Reverse((matches_env, matches_index, version))
+                    std::cmp::Reverse((matches_env, version))
                 });
 
                 Either::Right(
