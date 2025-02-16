@@ -1,10 +1,11 @@
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 use std::fmt::Formatter;
 use std::path::{Component, Path, PathBuf};
 
 use either::Either;
+use itertools::Itertools;
 use petgraph::visit::IntoNodeReferences;
 use petgraph::Graph;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
@@ -14,13 +15,13 @@ use uv_configuration::{DevGroupsManifest, EditableMode, ExtrasSpecification, Ins
 use uv_distribution_filename::{DistExtension, SourceDistExtension};
 use uv_fs::Simplified;
 use uv_git_types::GitReference;
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
-use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
+use uv_pypi_types::{ConflictItem, ParsedArchiveUrl, ParsedGitUrl};
 
-use crate::graph_ops::marker_reachability;
-use crate::lock::{Package, PackageId, Source};
-use crate::{Installable, LockError};
+use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
+use crate::lock::{LockErrorKind, Package, PackageId, Source};
+use crate::{ConflictMarker, Installable, LockError, UniversalMarker};
 
 /// An export of a [`Lock`] that renders in `requirements.txt` format.
 #[derive(Debug)]
@@ -46,6 +47,8 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
         let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
         let mut seen = FxHashSet::default();
+        let mut activated_extras: Vec<(&PackageName, &ExtraName)> = vec![];
+        let mut activated_groups: Vec<(&PackageName, &GroupName)> = vec![];
 
         let root = petgraph.add_node(Node::Root);
 
@@ -75,16 +78,17 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 queue.push_back((dist, None));
                 for extra in extras.extra_names(dist.optional_dependencies.keys()) {
                     queue.push_back((dist, Some(extra)));
+                    activated_extras.push((&dist.id.name, extra));
                 }
             }
 
             // Add any development dependencies.
-            for dep in dist
+            for (group, dep) in dist
                 .dependency_groups
                 .iter()
                 .filter_map(|(group, deps)| {
                     if dev.contains(group) {
-                        Some(deps)
+                        Some(deps.iter().map(move |dep| (group, dep)))
                     } else {
                         None
                     }
@@ -95,7 +99,10 @@ impl<'lock> RequirementsTxtExport<'lock> {
                     continue;
                 }
 
+                activated_groups.push((&dist.id.name, group));
+
                 let dep_dist = target.lock().find_by_id(&dep.package_id);
+
 
                 // Add the dependency to the graph.
                 if let Entry::Vacant(entry) = inverse.entry(&dep.package_id) {
@@ -203,11 +210,110 @@ impl<'lock> RequirementsTxtExport<'lock> {
                     for extra in &requirement.extras {
                         if seen.insert((&dist.id, Some(extra))) {
                             queue.push_back((dist, Some(extra)));
+                            activated_extras.push((&dist.id.name, extra));
                         }
                     }
                 }
             }
         }
+
+        // See: [`Installable::to_resolution`].
+        if !target.lock().conflicts().is_empty() {
+            let mut activated_extras_set: BTreeSet<(&PackageName, &ExtraName)> =
+                activated_extras.iter().copied().collect();
+            let mut queue = queue.clone();
+            let mut seen = seen.clone();
+            while let Some((package, extra)) = queue.pop_front() {
+                let deps = if let Some(extra) = extra {
+                    Either::Left(
+                        package
+                            .optional_dependencies
+                            .get(extra)
+                            .into_iter()
+                            .flatten(),
+                    )
+                } else {
+                    Either::Right(package.dependencies.iter())
+                };
+                for dep in deps {
+                    let mut additional_activated_extras = vec![];
+                    for extra in &dep.extra {
+                        let key = (&dep.package_id.name, extra);
+                        if !activated_extras_set.contains(&key) {
+                            additional_activated_extras.push(key);
+                        }
+                    }
+                    let temp_activated_extras = if additional_activated_extras.is_empty() {
+                        Cow::Borrowed(&activated_extras)
+                    } else {
+                        let mut owned = activated_extras.clone();
+                        owned.extend_from_slice(&additional_activated_extras);
+                        Cow::Owned(owned)
+                    };
+                    if !dep.complexified_marker.conflict().evaluate(
+                        &temp_activated_extras,
+                        &activated_groups,
+                    ) {
+                        continue;
+                    }
+                    for key in additional_activated_extras {
+                        activated_extras_set.insert(key);
+                        activated_extras.push(key);
+                    }
+                    let dep_dist = target.lock().find_by_id(&dep.package_id);
+
+                    // Push its dependencies on the queue.
+                    if seen.insert((&dep.package_id, None)) {
+                        queue.push_back((dep_dist, None));
+                    }
+                    for extra in &dep.extra {
+                        if seen.insert((&dep.package_id, Some(extra))) {
+                            queue.push_back((dep_dist, Some(extra)));
+                        }
+                    }
+                }
+            }
+            for set in target.lock().conflicts().iter() {
+                for ((pkg1, extra1), (pkg2, extra2)) in
+                    activated_extras_set.iter().tuple_combinations()
+                {
+                    if set.contains(pkg1, *extra1) && set.contains(pkg2, *extra2) {
+                        return Err(LockErrorKind::ConflictingExtra {
+                            package1: (*pkg1).clone(),
+                            extra1: (*extra1).clone(),
+                            package2: (*pkg2).clone(),
+                            extra2: (*extra2).clone(),
+                        }
+                            .into());
+                    }
+                }
+            }
+        }
+
+        // Why is it problematic to collect activated extras?
+        //
+        // Well, we have on `package[cpu]` and `package[gpu`] that conflict.
+        //
+        // Maybe the top-level has:
+        // ```
+        // ["package[cpu] ; sys_platform == 'darwin'", "package[gpu] ; sys_platform == 'linux'"]
+        // ```
+        //
+        // So then we detect that both `package[cpu]` and `package[gpu]` are "activated".
+        //
+        // What if we then have a dependency that's like...
+        // ```
+        // torch==2.6.0 ; (python_version >= '3.7' and package[cpu]) or (package[gpu])
+        // ```
+        //
+        // We want this to simplify to...
+        // ```
+        // torch==2.6.0 ; (sys_platform == 'darwin' and python_version >= '3.7') or (sys_platform == 'linux')
+        // ```
+        //
+        // We actually just want to get rid of all the conflict markers, but we don't want them to
+        // evaluate to `true`... At minimum, we need the ones that are actual conflicts to evaluate
+        // to `false`.
 
         // Create all the relevant nodes.
         while let Some((package, extra)) = queue.pop_front() {
@@ -230,6 +336,14 @@ impl<'lock> RequirementsTxtExport<'lock> {
                     continue;
                 }
 
+                if !dep.complexified_marker.conflict().evaluate(
+                    &activated_extras,
+                    &activated_groups,
+                ) {
+                    continue;
+                }
+
+                // Evaluate the conflict marker.
                 let dep_dist = target.lock().find_by_id(&dep.package_id);
 
                 // Add the dependency to the graph.
@@ -276,6 +390,29 @@ impl<'lock> RequirementsTxtExport<'lock> {
             .map(|(index, package)| Requirement {
                 package,
                 marker: reachability.remove(&index).unwrap_or_default(),
+            })
+            .map(|Requirement { package, marker }| {
+                {
+                    // I somehow need to call simplify_conflict_markers here...
+                    println!("package: {:?}", package.name());
+                    println!("marker: {:?}", marker);
+                    println!("marker.without_extras(): {:?}", marker.without_extras());
+                    let mut marker = UniversalMarker::from_combined(marker);
+                    marker.imbibe(ConflictMarker::from_conflicts(target.lock().conflicts()));
+                    println!("conflict marker: {:?}", ConflictMarker::from_conflicts(target.lock().conflicts()));
+                    println!("imbibe: {:?}", marker);
+                    for (package, extra) in &activated_extras {
+                        marker.assume_conflict_item(&ConflictItem::from(((*package).clone(), (*extra).clone())));
+                    }
+
+                    // TODO(charlie): Then here, we should mark them all as false? What happens?
+                    // I guess we can try.
+
+                    Requirement {
+                        package,
+                        marker: marker.pep508(),
+                    }
+                }
             })
             .collect::<Vec<_>>();
 

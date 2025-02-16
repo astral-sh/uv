@@ -256,7 +256,11 @@ pub(crate) fn simplify_conflict_markers(
                     }
                     Some((inf.item.package(), inf.item.extra()?))
                 })
+<<<<<<< HEAD
                 .collect::<Vec<_>>();
+=======
+                .collect::<Vec<(&PackageName, &ExtraName)>>();
+>>>>>>> 2df187eb6 (Try to fix conflict markers with export)
             let groups = set
                 .iter()
                 .filter_map(|inf| {
@@ -265,7 +269,11 @@ pub(crate) fn simplify_conflict_markers(
                     }
                     Some((inf.item.package(), inf.item.group()?))
                 })
+<<<<<<< HEAD
                 .collect::<Vec<_>>();
+=======
+                .collect::<Vec<(&PackageName, &GroupName)>>();
+>>>>>>> 2df187eb6 (Try to fix conflict markers with export)
             graph[edge_index].conflict().evaluate(&extras, &groups)
         });
         if !all_paths_satisfied {
