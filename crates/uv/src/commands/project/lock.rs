@@ -366,6 +366,7 @@ async fn do_lock(
     let requirements = target.requirements();
     let overrides = target.overrides();
     let constraints = target.constraints();
+    let build_constraints = target.build_constraints();
     let dependency_groups = target.dependency_groups()?;
     let source_trees = vec![];
 
@@ -373,6 +374,7 @@ async fn do_lock(
     let requirements = target.lower(requirements, index_locations, sources)?;
     let overrides = target.lower(overrides, index_locations, sources)?;
     let constraints = target.lower(constraints, index_locations, sources)?;
+    let build_constraints = target.lower(build_constraints, index_locations, sources)?;
     let dependency_groups = dependency_groups
         .into_iter()
         .map(|(name, requirements)| {
@@ -556,9 +558,10 @@ async fn do_lock(
         .build();
     let hasher = HashStrategy::Generate(HashGeneration::Url);
 
+    let build_constraints = Constraints::from_requirements(build_constraints.iter().cloned());
+
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
     let extras = ExtrasSpecification::default();
     let groups = DevGroupsSpecification::default();

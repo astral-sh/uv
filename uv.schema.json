@@ -14,6 +14,16 @@
         "$ref": "#/definitions/TrustedHost"
       }
     },
+    "build-constraint-dependencies": {
+      "description": "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
     "cache-dir": {
       "description": "Path to the cache directory.\n\nDefaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Linux, and `%LOCALAPPDATA%\\uv\\cache` on Windows.",
       "type": [
