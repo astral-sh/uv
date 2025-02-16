@@ -19,7 +19,7 @@ workspace = true
 uv-cache-key = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio", "schemars"] }
-uv-git = { workspace = true }
+uv-git-types = { workspace = true }
 uv-macros = { workspace = true }
 uv-normalize = { workspace = true }
 uv-options-metadata = { workspace = true }

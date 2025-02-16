@@ -3,7 +3,7 @@ use std::path::Path;
 
 use url::Url;
 use uv_distribution_filename::SourceDistExtension;
-use uv_git::GitUrl;
+use uv_git_types::GitUrl;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::VerbatimUrl;
 

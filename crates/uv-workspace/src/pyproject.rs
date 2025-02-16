@@ -19,7 +19,7 @@ use url::Url;
 
 use uv_distribution_types::{Index, IndexName};
 use uv_fs::{relative_to, PortablePathBuf};
-use uv_git::GitReference;
+use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
