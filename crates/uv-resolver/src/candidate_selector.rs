@@ -298,10 +298,38 @@ impl CandidateSelector {
             }
 
             // Check for a remote distribution that matches the preferred version
-            if let Some(file) = version_maps
+            if let Some((version_map, file)) = version_maps
                 .iter()
-                .find_map(|version_map| version_map.get(version))
+                .find_map(|version_map| version_map.get(version).map(|dist| (version_map, dist)))
             {
+                // If the preferred version has a local variant, prefer that.
+                if version_map.local() {
+                    for local in version_map
+                        .versions()
+                        .rev()
+                        .take_while(|local| *local > version)
+                    {
+                        if !local.is_local() {
+                            continue;
+                        }
+                        if local.clone().without_local() != *version {
+                            continue;
+                        }
+                        if !range.contains(local) {
+                            continue;
+                        }
+                        if let Some(dist) = version_map.get(local) {
+                            debug!("Preferring local version `{package_name}` (v{local})");
+                            return Some(Candidate::new(
+                                package_name,
+                                local,
+                                dist,
+                                VersionChoiceKind::Preference,
+                            ));
+                        }
+                    }
+                }
+
                 return Some(Candidate::new(
                     package_name,
                     version,
