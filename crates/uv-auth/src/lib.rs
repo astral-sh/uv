@@ -6,12 +6,15 @@ use url::Url;
 use cache::CredentialsCache;
 pub use credentials::Credentials;
 pub use keyring::KeyringProvider;
+pub use keyring_config::AuthConfig;
+pub use keyring_config::ConfigFile;
 pub use middleware::AuthMiddleware;
 use realm::Realm;
 
 mod cache;
 mod credentials;
 mod keyring;
+mod keyring_config;
 mod middleware;
 mod realm;
 
