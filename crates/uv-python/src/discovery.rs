@@ -145,7 +145,9 @@ pub(crate) struct DiscoveryPreferences {
 pub enum PythonVariant {
     #[default]
     Default,
+    Debug,
     Freethreaded,
+    FreethreadedDebug,
 }
 
 /// A Python discovery version request.
@@ -1344,17 +1346,32 @@ impl PythonVariant {
     fn matches_interpreter(self, interpreter: &Interpreter) -> bool {
         match self {
             PythonVariant::Default => !interpreter.gil_disabled(),
+            PythonVariant::Debug => interpreter.debug_enabled(),
             PythonVariant::Freethreaded => interpreter.gil_disabled(),
+            PythonVariant::FreethreadedDebug => {
+                interpreter.gil_disabled() && interpreter.debug_enabled()
+            }
         }
     }
 
-    /// Return the lib or executable suffix for the variant, e.g., `t` for `python3.13t`.
+    /// Return the executable suffix for the variant, e.g., `t` for `python3.13t`.
     ///
     /// Returns an empty string for the default Python variant.
     pub fn suffix(self) -> &'static str {
         match self {
             Self::Default => "",
+            Self::Debug => "d",
             Self::Freethreaded => "t",
+            Self::FreethreadedDebug => "td",
+        }
+    }
+
+    /// Return the lib suffix for the variant, e.g., `t` for `python3.13t` but an empty string for
+    /// `python3.13d` or `python3.13`.
+    pub fn lib_suffix(self) -> &'static str {
+        match self {
+            Self::Default | Self::Debug => "",
+            Self::Freethreaded | Self::FreethreadedDebug => "t",
         }
     }
 }
@@ -1978,10 +1995,12 @@ impl VersionRequest {
         }
 
         // Include free-threaded variants
-        if self.is_freethreaded() {
-            for i in 0..names.len() {
-                let name = names[i].with_variant(PythonVariant::Freethreaded);
-                names.push(name);
+        if let Some(variant) = self.variant() {
+            if variant != PythonVariant::Default {
+                for i in 0..names.len() {
+                    let name = names[i].with_variant(variant);
+                    names.push(name);
+                }
             }
         }
 
@@ -2272,7 +2291,9 @@ impl VersionRequest {
             | Self::MajorMinor(_, _, variant)
             | Self::MajorMinorPatch(_, _, _, variant)
             | Self::MajorMinorPrerelease(_, _, _, variant)
-            | Self::Range(_, variant) => variant == &PythonVariant::Freethreaded,
+            | Self::Range(_, variant) => {
+                variant == &PythonVariant::Freethreaded || variant == &PythonVariant::Default
+            }
         }
     }
 
@@ -2317,17 +2338,36 @@ impl FromStr for VersionRequest {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Check if the version request is for a free-threaded Python version
+        // Check if the version request is for a debug Python version
         let (s, variant) = s
-            .strip_suffix('t')
-            .map_or((s, PythonVariant::Default), |s| {
-                (s, PythonVariant::Freethreaded)
-            });
+            .strip_suffix('d')
+            .map_or((s, PythonVariant::Default), |s| (s, PythonVariant::Debug));
+
+        // Check if the version request is for a free-threaded Python version
+        let (s, variant) = s.strip_suffix('t').map_or((s, variant), |s| {
+            (
+                s,
+                if variant == PythonVariant::Default {
+                    PythonVariant::Freethreaded
+                } else if variant == PythonVariant::Debug {
+                    PythonVariant::FreethreadedDebug
+                } else {
+                    unreachable!()
+                },
+            )
+        });
 
         if variant == PythonVariant::Freethreaded && s.ends_with('t') {
             // More than one trailing "t" is not allowed
             return Err(Error::InvalidVersionRequest(format!("{s}t")));
         }
+
+        if variant == PythonVariant::Debug && s.ends_with('d') {
+            // More than one trailing "d" is not allowed
+            return Err(Error::InvalidVersionRequest(format!("{s}d")));
+        }
+
+        // TODO(zanieb): Special-case error for use of `dt` instead of `td`
 
         let Ok(version) = Version::from_str(s) else {
             return parse_version_specifiers_request(s, variant);
@@ -2422,7 +2462,9 @@ impl fmt::Display for PythonVariant {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Default => f.write_str("default"),
+            Self::Debug => f.write_str("debug"),
             Self::Freethreaded => f.write_str("freethreaded"),
+            Self::FreethreadedDebug => f.write_str("freethreaded+debug"),
         }
     }
 }
@@ -2452,23 +2494,15 @@ impl fmt::Display for VersionRequest {
         match self {
             Self::Any => f.write_str("any"),
             Self::Default => f.write_str("default"),
-            Self::Major(major, PythonVariant::Default) => write!(f, "{major}"),
-            Self::Major(major, PythonVariant::Freethreaded) => write!(f, "{major}t"),
-            Self::MajorMinor(major, minor, PythonVariant::Default) => write!(f, "{major}.{minor}"),
-            Self::MajorMinor(major, minor, PythonVariant::Freethreaded) => {
-                write!(f, "{major}.{minor}t")
+            Self::Major(major, variant) => write!(f, "{major}{}", variant.suffix()),
+            Self::MajorMinor(major, minor, variant) => {
+                write!(f, "{major}.{minor}{}", variant.suffix())
             }
-            Self::MajorMinorPatch(major, minor, patch, PythonVariant::Default) => {
-                write!(f, "{major}.{minor}.{patch}")
+            Self::MajorMinorPatch(major, minor, patch, variant) => {
+                write!(f, "{major}.{minor}.{patch}{}", variant.suffix())
             }
-            Self::MajorMinorPatch(major, minor, patch, PythonVariant::Freethreaded) => {
-                write!(f, "{major}.{minor}.{patch}t")
-            }
-            Self::MajorMinorPrerelease(major, minor, prerelease, PythonVariant::Default) => {
-                write!(f, "{major}.{minor}{prerelease}")
-            }
-            Self::MajorMinorPrerelease(major, minor, prerelease, PythonVariant::Freethreaded) => {
-                write!(f, "{major}.{minor}{prerelease}t")
+            Self::MajorMinorPrerelease(major, minor, prerelease, variant) => {
+                write!(f, "{major}.{minor}{prerelease}{}", variant.suffix())
             }
             Self::Range(specifiers, _) => write!(f, "{specifiers}"),
         }

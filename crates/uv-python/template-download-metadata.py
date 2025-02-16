@@ -56,6 +56,8 @@ def prepare_variant(variant: str | None) -> str | None:
             return "PythonVariant::Default"
         case "freethreaded":
             return "PythonVariant::Freethreaded"
+        case "freethreaded+debug":
+            return "PythonVariant::FreethreadedDebug"
         case "debug":
             return "PythonVariant::Debug"
         case _:
@@ -126,8 +128,6 @@ def main() -> None:
     data["versions"] = [
         {"key": key, "value": prepare_value(value)}
         for key, value in json.loads(VERSION_METADATA.read_text()).items()
-        # Exclude debug variants for now, we don't support them in the Rust side
-        if value["variant"] != "debug"
     ]
 
     # Render the template

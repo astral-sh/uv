@@ -506,7 +506,7 @@ impl ManagedPythonInstallation {
         let stdlib = if matches!(self.key.os, Os(target_lexicon::OperatingSystem::Windows)) {
             self.python_dir().join("Lib")
         } else {
-            let lib_suffix = self.key.variant.suffix();
+            let lib_suffix = self.key.variant.lib_suffix();
             let python = if matches!(
                 self.key.implementation,
                 LenientImplementationName::Known(ImplementationName::PyPy)
