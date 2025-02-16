@@ -98,6 +98,12 @@ impl Error {
                     if status == reqwest::StatusCode::FORBIDDEN {
                         return true;
                     }
+
+                    // In some cases, registries (like Alibaba Cloud) return a 400 for HEAD requests
+                    // when they're not supported. Again, it's better to be lenient here.
+                    if status == reqwest::StatusCode::BAD_REQUEST {
+                        return true;
+                    }
                 }
             }
 
