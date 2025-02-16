@@ -217,6 +217,48 @@ print(Point)
 is not installed — see the documentation on [Python versions](../concepts/python-versions.md) for
 more details.
 
+## Using a shebang line
+
+With a shebang line, you can run scripts that are on your `PATH` or in the current folder without specifying `uv run` before the filename.
+
+!!! important
+
+    The filename must end with `.py`
+
+For example, create a file with the following name and contents
+
+```python title="script.py"
+#!/usr/bin/env uv run
+
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["rich"]
+# ///
+
+from rich import pprint
+
+pprint("[bold]Hello, world![/bold]")
+```
+
+Now allow the script to be executed
+
+```
+chmod +x script.py
+```
+
+Finally run the script
+
+```
+./script.py
+```
+
+Output
+
+```
+Reading inline script metadata from `./script.py`
+Hello, world!
+```
+
 ## Using alternative package indexes
 
 If you wish to use an alternative [package index](../configuration/indexes.md) to resolve
