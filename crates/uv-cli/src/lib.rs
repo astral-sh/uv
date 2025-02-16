@@ -2717,7 +2717,7 @@ pub struct RunArgs {
     /// Include dependencies from the specified dependency group.
     ///
     /// May be provided multiple times.
-    #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
+    #[arg(long, short = 'G', conflicts_with_all = ["only_group", "only_dev"])]
     pub group: Vec<GroupName>,
 
     /// Disable the specified dependency group.
@@ -3012,7 +3012,7 @@ pub struct SyncArgs {
     /// `tool.uv.conflicts`, uv will report an error.
     ///
     /// May be provided multiple times.
-    #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
+    #[arg(long, short = 'G', conflicts_with_all = ["only_group", "only_dev"])]
     pub group: Vec<GroupName>,
 
     /// Disable the specified dependency group.
@@ -3289,7 +3289,7 @@ pub struct AddArgs {
     /// Add the requirements to the specified dependency group.
     ///
     /// These requirements will not be included in the published metadata for the project.
-    #[arg(long, conflicts_with("dev"), conflicts_with("optional"))]
+    #[arg(long, short = 'G', conflicts_with("dev"), conflicts_with("optional"))]
     pub group: Option<GroupName>,
 
     /// Add the requirements as editable.
@@ -3422,7 +3422,7 @@ pub struct RemoveArgs {
     pub optional: Option<ExtraName>,
 
     /// Remove the packages from the specified dependency group.
-    #[arg(long, conflicts_with("dev"), conflicts_with("optional"))]
+    #[arg(long, short = 'G', conflicts_with("dev"), conflicts_with("optional"))]
     pub group: Option<GroupName>,
 
     /// Avoid syncing the virtual environment after re-locking the project.
@@ -3531,7 +3531,7 @@ pub struct TreeArgs {
     /// Include dependencies from the specified dependency group.
     ///
     /// May be provided multiple times.
-    #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
+    #[arg(long, short = 'G', conflicts_with_all = ["only_group", "only_dev"])]
     pub group: Vec<GroupName>,
 
     /// Disable the specified dependency group.
@@ -3704,7 +3704,7 @@ pub struct ExportArgs {
     /// Include dependencies from the specified dependency group.
     ///
     /// May be provided multiple times.
-    #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
+    #[arg(long, short = 'G', conflicts_with_all = ["only_group", "only_dev"])]
     pub group: Vec<GroupName>,
 
     /// Disable the specified dependency group.
