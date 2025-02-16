@@ -1673,6 +1673,8 @@ impl Ord for LocalSegment {
 /// [pep440]: https://packaging.python.org/en/latest/specifications/version-specifiers/
 #[derive(Debug)]
 struct Parser<'a> {
+    /// Try to be compatible with non-PEP 440 versions
+    compat: bool,
     /// The version string we are parsing.
     v: &'a [u8],
     /// The current position of the parser.
@@ -1703,7 +1705,10 @@ impl<'a> Parser<'a> {
 
     /// Create a new `Parser` for parsing the version in the given byte string.
     fn new(version: &'a [u8]) -> Parser<'a> {
+        static NON_PEP440_COMPAT: LazyLock<bool> =
+            LazyLock::new(|| std::env::var("UV_NON_PEP440_COMPAT").is_ok());
         Parser {
+            compat: *NON_PEP440_COMPAT,
             v: version,
             i: 0,
             epoch: 0,
@@ -1720,6 +1725,8 @@ impl<'a> Parser<'a> {
     ///
     /// If a version pattern is found, then an error is returned.
     fn parse(self) -> Result<Version, VersionParseError> {
+        let compat = self.compat;
+        let _version = self.v;
         match self.parse_pattern() {
             Ok(vpat) => {
                 if vpat.is_wildcard() {
@@ -1727,6 +1734,17 @@ impl<'a> Parser<'a> {
                 } else {
                     Ok(vpat.into_version())
                 }
+            }
+            Err(_err) if compat => {
+                #[cfg(feature = "tracing")]
+                {
+                    tracing::warn!(
+                        "Accepted non-PEP 440 version: {} {}",
+                        String::from_utf8_lossy(_version),
+                        _err
+                    );
+                }
+                Ok(MIN_VERSION.clone())
             }
             // If we get an error when parsing a version pattern, then
             // usually it will actually just be a VersionParseError.
@@ -3696,7 +3714,21 @@ mod tests {
             .into()
         );
     }
+    #[test]
+    fn parse_version_invalid_compat() {
+        let p = |s: &str| {
+            let mut parser = Parser::new(s.as_bytes());
+            parser.compat = true;
 
+            match parser.parse() {
+                Ok(v) => v,
+                Err(err) => unreachable!("expected valid version, but got error: {err:?}"),
+            }
+        };
+
+        // release-only tests
+        assert_eq!(p("invalid-version"), MIN_VERSION.clone());
+    }
     #[test]
     fn parse_version_pattern_valid() {
         let p = |s: &str| match Parser::new(s.as_bytes()).parse_pattern() {
