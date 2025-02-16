@@ -961,6 +961,11 @@ fn verify_pyvenv_cfg() {
 
     // Not relocatable by default.
     pyvenv_cfg.assert(predicates::str::contains("relocatable").not());
+
+    // The location of the virtual environment is saved
+    let path = std::path::absolute(context.venv.path()).unwrap();
+    let path = path.to_str().unwrap();
+    pyvenv_cfg.assert(predicates::str::contains(format!("uv-venv-path = {path}")));
 }
 
 #[test]
@@ -986,6 +991,9 @@ fn verify_pyvenv_cfg_relocatable() {
 
     // Relocatable flag is set.
     pyvenv_cfg.assert(predicates::str::contains("relocatable = true"));
+
+    // Relocatable pyvenv.cfg does not have path saved
+    pyvenv_cfg.assert(predicates::str::contains("uv-venv-path").not());
 
     // Activate scripts contain the relocatable boilerplate
     let scripts = if cfg!(windows) {
