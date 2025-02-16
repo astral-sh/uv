@@ -325,7 +325,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             prefetcher,
         );
         let mut preferences = self.preferences.clone();
-        let mut forked_states = self.env.initial_forked_states(state);
+        let mut forked_states = self.env.initial_forked_states(state)?;
         let mut resolutions = vec![];
 
         'FORK: while let Some(mut state) = forked_states.pop() {
