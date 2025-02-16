@@ -237,6 +237,7 @@ For example, create a file with the following name and contents
 
 from rich import pprint
 
+
 pprint("[bold]Hello, world![/bold]")
 ```
 
