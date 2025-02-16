@@ -195,6 +195,8 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         };
 
         // Fetch the metadata for the distribution.
+        //
+        // TODO(charlie): Respect in-flight fetches.
         let metadata = {
             let id = VersionId::from_url(source.url());
             if let Some(archive) =
