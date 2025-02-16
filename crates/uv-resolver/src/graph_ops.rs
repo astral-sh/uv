@@ -225,7 +225,21 @@ pub(crate) fn simplify_conflict_markers(
     }
 
     for edge_index in (0..graph.edge_count()).map(EdgeIndex::new) {
-        let (from_index, _) = graph.edge_endpoints(edge_index).unwrap();
+        let (from_index, to_index) = graph.edge_endpoints(edge_index).unwrap();
+        // If there are ambiguous edges (i.e., two or more edges
+        // with the same package name), then we specifically skip
+        // conflict marker simplification. It seems that in some
+        // cases, the logic encoded in `inferences` isn't quite enough
+        // to perfectly disambiguate between them. It's plausible we
+        // could do better here, but it requires smarter simplification
+        // logic. ---AG
+        let ambiguous_edges = graph
+            .edges_directed(from_index, Direction::Outgoing)
+            .filter(|edge| graph[to_index].package_name() == graph[edge.target()].package_name())
+            .count();
+        if ambiguous_edges > 1 {
+            continue;
+        }
         let Some(inference_sets) = inferences.get(&from_index) else {
             continue;
         };
