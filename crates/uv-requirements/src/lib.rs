@@ -69,6 +69,15 @@ pub(crate) fn required_dist(
             } else {
                 GitUrl::from_reference(repository.clone(), reference.clone())
             };
+            match url.scheme() {
+                "https" | "ssh" | "file" => {}
+                unsupported => {
+                    return Err(uv_distribution_types::Error::UnsupportedGitScheme(
+                        unsupported.to_string(),
+                        url.to_url(),
+                    ))
+                }
+            }
             Dist::Source(SourceDist::Git(GitSourceDist {
                 name: requirement.name.clone(),
                 git: Box::new(git_url),

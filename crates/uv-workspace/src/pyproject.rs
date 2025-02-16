@@ -1095,6 +1095,18 @@ impl<'de> Deserialize<'de> for Source {
                 ));
             }
 
+            match git.scheme() {
+                "https" | "ssh" | "file" => {}
+                unsupported => {
+                    return Err(serde::de::Error::custom(format!(
+                        "Unsupported git URL scheme `{}:` in `{}`, \
+                        only `https:`, `ssh:` and `file:` are supported",
+                        unsupported.to_string(),
+                        git.clone(),
+                    )))
+                }
+            }
+
             // At most one of `rev`, `tag`, or `branch` may be set.
             match (rev.as_ref(), tag.as_ref(), branch.as_ref()) {
                 (None, None, None) => {}

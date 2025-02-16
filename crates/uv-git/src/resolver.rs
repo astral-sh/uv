@@ -3,16 +3,18 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use tracing::debug;
-
-use crate::{Fetch, GitHubRepository, GitOid, GitReference, GitSource, GitUrl, Reporter};
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
 use fs_err::tokio as fs;
 use reqwest_middleware::ClientWithMiddleware;
+use tracing::debug;
+use url::Url;
+
 use uv_cache_key::{cache_digest, RepositoryUrl};
 use uv_fs::LockedFile;
 use uv_version::version;
+
+use crate::{Fetch, GitHubRepository, GitOid, GitReference, GitSource, GitUrl, Reporter};
 
 #[derive(Debug, thiserror::Error)]
 pub enum GitResolverError {
@@ -26,6 +28,8 @@ pub enum GitResolverError {
     Reqwest(#[from] reqwest::Error),
     #[error(transparent)]
     ReqwestMiddleware(#[from] reqwest_middleware::Error),
+    #[error("Unsupported git URL scheme `{0}:` in `{1}`, only `https:`, `ssh:` and `file:` are supported")]
+    UnsupportedGitScheme(String, Url),
 }
 
 /// A resolver for Git repositories.
@@ -111,6 +115,16 @@ impl GitResolver {
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Fetch, GitResolverError> {
         debug!("Fetching source distribution from Git: {url}");
+
+        match url.repository.scheme() {
+            "https" | "ssh" | "file" => {}
+            unsupported => {
+                return Err(GitResolverError::UnsupportedGitScheme(
+                    unsupported.to_string(),
+                    url.repository().clone(),
+                ))
+            }
+        }
 
         let reference = RepositoryReference::from(url);
 
