@@ -4732,6 +4732,7 @@ dependencies = [
  "uv-static",
  "uv-types",
  "uv-virtualenv",
+ "uv-warnings",
 ]
 
 [[package]]
