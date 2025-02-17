@@ -219,7 +219,8 @@ more details.
 
 ## Using a shebang line
 
-With a shebang line, you can run scripts that are on your `PATH` or in the current folder without specifying `uv run` before the filename.
+With a shebang line, you can run scripts that are on your `PATH` or in the current folder without
+specifying `uv run` before the filename.
 
 !!! important
 
