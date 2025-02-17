@@ -245,20 +245,18 @@ impl UniversalMarker {
     pub(crate) fn evaluate<P, E, G>(
         self,
         env: &MarkerEnvironment,
-        extras: &[(P, E)],
-        groups: &[(P, G)],
+        extras: impl Iterator<Item = (P, E)>,
+        groups: impl Iterator<Item = (P, G)>,
     ) -> bool
     where
         P: Borrow<PackageName>,
         E: Borrow<ExtraName>,
         G: Borrow<GroupName>,
     {
-        let extras = extras
-            .iter()
-            .map(|(package, extra)| encode_package_extra(package.borrow(), extra.borrow()));
-        let groups = groups
-            .iter()
-            .map(|(package, group)| encode_package_group(package.borrow(), group.borrow()));
+        let extras =
+            extras.map(|(package, extra)| encode_package_extra(package.borrow(), extra.borrow()));
+        let groups =
+            groups.map(|(package, group)| encode_package_group(package.borrow(), group.borrow()));
         self.marker
             .evaluate(env, &extras.chain(groups).collect::<Vec<ExtraName>>())
     }
