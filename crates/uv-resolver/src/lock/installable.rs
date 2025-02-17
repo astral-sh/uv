@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::collections::BTreeSet;
 use std::collections::VecDeque;
@@ -320,17 +319,13 @@ pub trait Installable<'lock> {
                             additional_activated_extras.push(key);
                         }
                     }
-                    let temp_activated_extras = if additional_activated_extras.is_empty() {
-                        Cow::Borrowed(&activated_extras)
-                    } else {
-                        let mut owned = activated_extras.clone();
-                        owned.extend_from_slice(&additional_activated_extras);
-                        Cow::Owned(owned)
-                    };
                     if !dep.complexified_marker.evaluate(
                         marker_env,
-                        &temp_activated_extras,
-                        &activated_groups,
+                        activated_extras
+                            .iter()
+                            .chain(additional_activated_extras.iter())
+                            .copied(),
+                        activated_groups.iter().copied(),
                     ) {
                         continue;
                     }
@@ -413,8 +408,8 @@ pub trait Installable<'lock> {
             for dep in deps {
                 if !dep.complexified_marker.evaluate(
                     marker_env,
-                    &activated_extras,
-                    &activated_groups,
+                    activated_extras.iter().copied(),
+                    activated_groups.iter().copied(),
                 ) {
                     continue;
                 }
