@@ -290,9 +290,16 @@ Constraints can also be defined for indirect dependencies using `constraints.txt
 
 ### Old Version of a Build Dependency is Used
 
-If a package fails to build because `uv` selects an incompatible or outdated version of a build-time dependency, you can enforce constraints specifically for build dependencies. The [`build-constraint-dependencies`](../settings.md#build-constraint-dependencies) setting or a `build-constraints.txt` file can help ensure that `uv` selects an appropriate version of build requirements.
+If a package fails to build because `uv` selects an incompatible or outdated version of a build-time
+dependency, you can enforce constraints specifically for build dependencies. The
+[`build-constraint-dependencies`](../settings.md#build-constraint-dependencies) setting or a
+`build-constraints.txt` file can help ensure that `uv` selects an appropriate version of build
+requirements.
 
-For example, the issue described in [uv#5551](https://github.com/astral-sh/uv/issues/5551#issuecomment-2256055975) can be addressed by specifying a build constraint that excludes `setuptools` version `72.0.0`, which causes a build failure for certain packages. This can be done as follows:
+For example, the issue described in
+[uv#5551](https://github.com/astral-sh/uv/issues/5551#issuecomment-2256055975) can be addressed by
+specifying a build constraint that excludes `setuptools` version `72.0.0`, which causes a build
+failure for certain packages. This can be done as follows:
 
 ```toml title="pyproject.toml"
 [tool.uv]
@@ -300,7 +307,8 @@ For example, the issue described in [uv#5551](https://github.com/astral-sh/uv/is
 build-constraint-dependencies = ["setuptools!=72.0.0"]
 ```
 
-This ensures that any package requiring `setuptools` during the build process will avoid using the problematic version, preventing build failures caused by incompatible build dependencies.
+This ensures that any package requiring `setuptools` during the build process will avoid using the
+problematic version, preventing build failures caused by incompatible build dependencies.
 
 ### Package is only needed for an unused platform
 

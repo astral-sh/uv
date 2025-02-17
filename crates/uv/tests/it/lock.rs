@@ -1890,7 +1890,7 @@ fn lock_project_with_build_constraints() -> Result<()> {
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
-        r###"
+        r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -1900,9 +1900,9 @@ fn lock_project_with_build_constraints() -> Result<()> {
         [tool.uv]
         constraint-dependencies = ["idna<3.4"]
 
-        # This should be ignored because none of the dependecies requires 'setuptools'
+        # This should be ignored because none of the dependencies requires 'setuptools'
         build-constraint-dependencies = ["setuptools==1"]
-        "###,
+        "#,
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -1941,7 +1941,7 @@ fn lock_project_with_build_constraints() -> Result<()> {
     //
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
-        r###"
+        r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -1950,7 +1950,7 @@ fn lock_project_with_build_constraints() -> Result<()> {
 
         [tool.uv]
         build-constraint-dependencies = ["setuptools==1"]
-        "###,
+        "#,
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r"

@@ -9720,7 +9720,7 @@ fn add_with_build_constraints() -> Result<()> {
     let context = TestContext::new("3.8");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r###"
+    pyproject_toml.write_str(indoc! {r#"
     [project]
     name = "project"
     version = "0.1.0"
@@ -9729,7 +9729,7 @@ fn add_with_build_constraints() -> Result<()> {
 
     [tool.uv]
     build-constraint-dependencies = ["setuptools==1"]
-    "###})?;
+    "#})?;
 
     uv_snapshot!(context.filters(), context.add().arg("requests==1.2"), @r"
     success: false
@@ -9745,7 +9745,7 @@ fn add_with_build_constraints() -> Result<()> {
     ");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r###"
+    pyproject_toml.write_str(indoc! {r#"
     [project]
     name = "project"
     version = "0.1.0"
@@ -9754,7 +9754,7 @@ fn add_with_build_constraints() -> Result<()> {
 
     [tool.uv]
     build-constraint-dependencies = ["setuptools>=40"]
-    "###})?;
+    "#})?;
 
     uv_snapshot!(context.filters(), context.add().arg("requests==1.2"), @r###"
     success: true
