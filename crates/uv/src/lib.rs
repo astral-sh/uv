@@ -1406,7 +1406,7 @@ async fn run_project(
             }
         };
         ($arg:expr, false) => {
-            if globals.show_settings {#
+            if globals.show_settings {
                 writeln!(printer.stdout(), "{:#?}", $arg)?;
             }
         };
