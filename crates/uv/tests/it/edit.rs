@@ -9716,6 +9716,7 @@ fn repeated_index_cli_reversed() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn add_unsupported_git_scheme() {
     let context = TestContext::new("3.12");
 
