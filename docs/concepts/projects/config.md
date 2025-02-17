@@ -209,19 +209,26 @@ environments = [
 ]
 ```
 
-Or, to exclude alternative Python implementations:
+See the [resolution documentation](../resolution.md#limited-resolution-environments) for more.
+
+## Required environments
+
+If your project _must_ support a specific platform or Python version, you can mark that platform as
+required via the `required-environments` setting. For example, to require that the project supports
+Intel macOS:
 
 ```toml title="pyproject.toml"
 [tool.uv]
-environments = [
-    "implementation_name == 'cpython'"
+required-environments = [
+    "sys_platform == 'darwin' and platform.machine() == 'x86_64'",
 ]
 ```
 
-Entries in the `environments` setting must be disjoint (i.e., they must not overlap). For example,
-`sys_platform == 'darwin'` and `sys_platform == 'linux'` are disjoint, but
-`sys_platform == 'darwin'` and `python_version >= '3.9'` are not, since both could be true at the
-same time.
+The `required-environments` setting is only relevant for packages that do not publish a source
+distribution (like PyTorch), as such packages can _only_ be installed on environments covered by the
+set of pre-built binary distributions (wheels) published by that package.
+
+See the [resolution documentation](../resolution.md#required-environments) for more.
 
 ## Build isolation
 
