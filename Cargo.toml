@@ -116,7 +116,7 @@ indexmap = { version = "2.5.0" }
 indicatif = { version = "0.17.8" }
 indoc = { version = "2.0.5" }
 itertools = { version = "0.14.0" }
-jiff = { version = "0.1.14", features = ["serde"] }
+jiff = { version = "0.2.0", features = ["serde"] }
 junction = { version = "1.2.0" }
 mailparse = { version = "0.16.0" }
 md-5 = { version = "0.10.6" }
