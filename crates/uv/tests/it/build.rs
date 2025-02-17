@@ -1826,7 +1826,7 @@ fn build_with_hardlink() -> Result<()> {
 }
 
 /// This is bad project layout that is allowed: A project that defines PEP 621 metadata, but no
-/// PEP 517 build system not a setup.py, so we fall back to setuptools implicitly.
+/// PEP 517 build system not a setup.py, so we fallback to setuptools implicitly.
 #[test]
 fn build_unconfigured_setuptools() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -1888,7 +1888,7 @@ fn build_workspace_virtual_root() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    warning: `[TEMP_DIR]/` appears to be a workspace root without a Python project, consider using `uv sync` or installing workspace members individually, or add a `[build-system]` table to `pyproject.toml`.
+    warning: `[TEMP_DIR]/` appears to be a workspace root without a Python project; consider using `uv sync` to install the workspace, or add a `[build-system]` table to `pyproject.toml`
     Building wheel from source distribution...
     Successfully built dist/cache-0.0.0.tar.gz
     Successfully built dist/unknown-0.0.0-py3-none-any.whl
@@ -1917,7 +1917,7 @@ fn build_pyproject_toml_not_a_project() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    warning: `[TEMP_DIR]/` does not appear to be a Python project, as neither `pyproject.toml` with a `[build-system]` table, nor `setup.py`, nor `setup.cfg` are present in the directory
+    warning: `[TEMP_DIR]/` does not appear to be a Python project, as the `pyproject.toml` does not include a `[build-system]` table, and neither `setup.py` nor `setup.cfg` are present in the directory
     Building wheel from source distribution...
     Successfully built dist/cache-0.0.0.tar.gz
     Successfully built dist/unknown-0.0.0-py3-none-any.whl
