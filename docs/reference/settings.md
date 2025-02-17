@@ -1,4 +1,36 @@
 ## Project metadata
+
+### [`build-constraint-dependencies`](#build-constraint-dependencies) {: #build-constraint-dependencies }
+
+Constraints applied when resolving the project’s build-time dependencies, including build dependencies of runtime dependencies.
+
+Build constraints restrict the versions of dependencies selected during resolution. They do _not_ trigger installation on their own; instead, they apply only when a package is required as a first-party or transitive build-time dependency.
+
+When installing a runtime dependency that requires building, its build dependencies will also be constrained by the build-constraint-dependencies settings.
+
+!!! note
+    In `uv lock`, `uv sync`, and `uv run`, uv will only read `build-constraint-dependencies` from
+    the `pyproject.toml` at the workspace root, and will ignore any declarations in other
+    workspace members or `uv.toml` files.
+
+!!! note
+    In `uv pip compile` and `uv pip install`, if a build constraints file is provided as `--build-constraints`, uv will read the `build-constraint-dependencies` from `pyproject.toml` at the workspace root, and append them to those specified in the build constraints file.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+# Ensure that the setuptools version is always greater than 72.0.0, if it's requested by a
+# direct or transitive build-time dependency.
+build-constraint-dependencies = ["setuptools>72.0.0"]
+```
+
+---
+
 ### [`conflicts`](#conflicts) {: #conflicts }
 
 Declare collections of extras or dependency groups that are conflicting
@@ -61,6 +93,9 @@ transitive dependencies.
     In `uv lock`, `uv sync`, and `uv run`, uv will only read `constraint-dependencies` from
     the `pyproject.toml` at the workspace root, and will ignore any declarations in other
     workspace members or `uv.toml` files.
+
+!!! note
+    In `uv pip compile` and `uv pip install`, if a constraints file is provided as `--constraints`, uv will read the `constraint-dependencies` from `pyproject.toml` at the workspace root, and append them to those specified in the constraints file.
 
 **Default value**: `[]`
 

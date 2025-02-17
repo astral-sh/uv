@@ -125,6 +125,16 @@ $ uv pip compile requirements.in --constraint constraints.txt
 
 Note that multiple constraints can be defined in each file and multiple files can be used.
 
+uv will also read `constraint-dependencies` from the `pyproject.toml` at the workspace root, and append them to those specified in the constaints file.
+
+## Adding build constraints
+
+Similar to `constraints`, but specifically for build-time dependencies, including those required when building runtime dependencies.
+
+Build constraint files are `requirements.txt`-like files that only control the _version_ of a build-time requirement. However, including a package in a build constraints file will _not_ trigger its installation; instead, constraints apply only when the package is required as a direct or transitive build-time dependency. Build constraints can be used to add bounds to dependencies that are not explicitly declared as build-time dependencies of the current project.
+
+uv will also read `build-constraint-dependencies` from the `pyproject.toml` at the workspace root, and append them to those specified in the build constraints file.
+
 ## Overriding dependency versions
 
 Overrides files are `requirements.txt`-like files that force a specific version of a requirement to
