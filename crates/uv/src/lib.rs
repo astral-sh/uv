@@ -1405,11 +1405,6 @@ async fn run_project(
                 return Ok(ExitStatus::Success);
             }
         };
-        ($arg:expr, false) => {
-            if globals.show_settings {#
-                writeln!(printer.stdout(), "{:#?}", $arg)?;
-            }
-        };
     }
 
     match *project_command {
