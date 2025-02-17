@@ -72,7 +72,8 @@ impl LinkMode {
 /// via copy-on-write, which is similar to a hard link, but allows the files to be modified
 /// independently (that is, the file is copied upon modification).
 ///
-/// This method uses `clonefile` on macOS, and `reflink` on Linux.
+/// This method uses `clonefile` on macOS, and `reflink` on Linux. See [`clone_recursive`] for
+/// details.
 fn clone_wheel_files(
     site_packages: impl AsRef<Path>,
     wheel: impl AsRef<Path>,
@@ -81,17 +82,6 @@ fn clone_wheel_files(
     let mut count = 0usize;
     let mut attempt = Attempt::default();
 
-    // On macOS, directories can be recursively copied with a single `clonefile` call.
-    // So we only need to iterate over the top-level of the directory, and copy each file or
-    // subdirectory unless the subdirectory exists already in which case we'll need to recursively
-    // merge its contents with the existing directory.
-    //
-    // On linux, we need to always reflink recursively, as `FICLONE` ioctl does not support directories.
-    // Also note, that reflink is only supported on certain filesystems (btrfs, xfs, ...), and only when
-    // it does not cross filesystem boundaries.
-    //
-    // On windows, we also always need to reflink recursively, as `FSCTL_DUPLICATE_EXTENTS_TO_FILE` ioctl
-    // is not supported on directories. Also, it is only supported on certain filesystems (ReFS, SMB, ...).
     for entry in fs::read_dir(wheel.as_ref())? {
         clone_recursive(
             site_packages.as_ref(),
@@ -144,6 +134,21 @@ enum Attempt {
 }
 
 /// Recursively clone the contents of `from` into `to`.
+///
+/// Note the behavior here is platform-dependent.
+///
+/// On macOS, directories can be recursively copied with a single `clonefile` call. So we only
+/// need to iterate over the top-level of the directory, and copy each file or subdirectory
+/// unless the subdirectory exists already in which case we'll need to recursively merge its
+/// contents with the existing directory.
+///
+/// On Linux, we need to always reflink recursively, as `FICLONE` ioctl does not support
+/// directories. Also note, that reflink is only supported on certain filesystems (btrfs, xfs,
+/// ...), and only when it does not cross filesystem boundaries.
+///
+/// On Windows, we also always need to reflink recursively, as `FSCTL_DUPLICATE_EXTENTS_TO_FILE`
+/// ioctl is not supported on directories. Also, it is only supported on certain filesystems
+/// (ReFS, SMB, ...).
 fn clone_recursive(
     site_packages: &Path,
     wheel: &Path,
@@ -158,7 +163,6 @@ fn clone_recursive(
     trace!("Cloning {} to {}", from.display(), to.display());
 
     if (cfg!(windows) || cfg!(target_os = "linux")) && from.is_dir() {
-        // On Windows, reflinking directories is not supported, so we copy each file instead.
         fs::create_dir_all(&to)?;
         for entry in fs::read_dir(from)? {
             clone_recursive(site_packages, wheel, locks, &entry?, attempt)?;
@@ -170,7 +174,8 @@ fn clone_recursive(
         Attempt::Initial => {
             if let Err(err) = reflink::reflink(&from, &to) {
                 if err.kind() == std::io::ErrorKind::AlreadyExists {
-                    // If cloning/copying fails and the directory exists already, it must be merged recursively.
+                    // If cloning or copying fails and the directory exists already, it must be
+                    // merged recursively.
                     if entry.file_type()?.is_dir() {
                         for entry in fs::read_dir(from)? {
                             clone_recursive(site_packages, wheel, locks, &entry?, attempt)?;
@@ -197,7 +202,7 @@ fn clone_recursive(
                         from.display(),
                         to.display()
                     );
-                    // switch to copy fallback
+                    // Fallback to copying
                     *attempt = Attempt::UseCopyFallback;
                     clone_recursive(site_packages, wheel, locks, entry, attempt)?;
                 }

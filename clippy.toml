@@ -4,6 +4,7 @@ doc-valid-idents = [
   "PyPy",
   "CPython",
   "GraalPy",
+  "ReFS",
   ".." # Include the defaults
 ]
 
