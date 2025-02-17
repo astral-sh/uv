@@ -608,6 +608,22 @@ impl InternerGuard<'_> {
         }
     }
 
+    pub(crate) fn drop_extras(&mut self, mut i: NodeId) -> NodeId {
+        if matches!(i, NodeId::TRUE | NodeId::FALSE) {
+            return i;
+        }
+
+        let parent = i;
+        let node = self.shared.node(i);
+        if matches!(node.var, Variable::Extra(_)) {
+            return NodeId::FALSE;
+        } else {
+            // Restrict all nodes recursively.
+            let children = node.children.map(i, |node| self.drop_extras(node));
+            self.create_node(node.var.clone(), children)
+        }
+    }
+
     /// Simplify this tree by *assuming* that the Python version range provided
     /// is true and that the complement of it is false.
     ///

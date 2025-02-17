@@ -1153,6 +1153,18 @@ impl MarkerTree {
         MarkerTree(INTERNER.lock().without_extras(self.0))
     }
 
+    #[must_use]
+    pub fn drop_extras(self) -> MarkerTree {
+        MarkerTree(INTERNER.lock().drop_extras(self.0))
+    }
+
+    pub fn false_extras(self) -> MarkerTree {
+        MarkerTree(INTERNER.lock().restrict(self.0, &|var| match var {
+            Variable::Extra(..) => Some(false),
+            _ => None,
+        }))
+    }
+
     /// Returns a new `MarkerTree` where only `extra` expressions are removed.
     ///
     /// If the marker did not contain any `extra` expressions, then a marker

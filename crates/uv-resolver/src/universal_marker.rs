@@ -297,6 +297,10 @@ impl UniversalMarker {
             marker: self.marker.only_extras(),
         }
     }
+
+    pub(crate) fn drop_extras(self) -> MarkerTree {
+        self.marker.false_extras()
+    }
 }
 
 impl std::fmt::Debug for UniversalMarker {

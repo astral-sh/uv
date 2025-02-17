@@ -6,8 +6,10 @@ use std::path::{Component, Path, PathBuf};
 
 use either::Either;
 use itertools::Itertools;
+use petgraph::graph::NodeIndex;
+use petgraph::prelude::EdgeRef;
 use petgraph::visit::IntoNodeReferences;
-use petgraph::Graph;
+use petgraph::{Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use url::Url;
 
@@ -16,10 +18,10 @@ use uv_distribution_filename::{DistExtension, SourceDistExtension};
 use uv_fs::Simplified;
 use uv_git_types::GitReference;
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::MarkerTree;
+use uv_pep508::{ExtraOperator, MarkerExpression, MarkerTree};
 use uv_pypi_types::{ConflictItem, ParsedArchiveUrl, ParsedGitUrl};
 
-use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
+use crate::graph_ops::{marker_reachability, simplify_conflict_markers, Reachable};
 use crate::lock::{LockErrorKind, Package, PackageId, Source};
 use crate::{ConflictMarker, Installable, LockError, UniversalMarker};
 
@@ -42,7 +44,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
         install_options: &'lock InstallOptions,
     ) -> Result<Self, LockError> {
         let size_guess = target.lock().packages.len();
-        let mut petgraph = Graph::with_capacity(size_guess, size_guess);
+        let mut petgraph = Graph::<Node<'lock>, Edge<'lock>>::with_capacity(size_guess, size_guess);
         let mut inverse = FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
 
         let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
@@ -51,6 +53,8 @@ impl<'lock> RequirementsTxtExport<'lock> {
         let mut activated_groups: Vec<(&PackageName, &GroupName)> = vec![];
 
         let root = petgraph.add_node(Node::Root);
+
+        let mut base_map = FxHashMap::default();
 
         // Add the workspace packages to the queue.
         for root_name in target.roots() {
@@ -72,13 +76,13 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
                 // Add an edge from the root.
                 let index = inverse[&dist.id];
-                petgraph.add_edge(root, index, MarkerTree::TRUE);
+                petgraph.add_edge(root, index, Edge::Prod(MarkerTree::TRUE));
 
                 // Push its dependencies on the queue.
                 queue.push_back((dist, None));
                 for extra in extras.extra_names(dist.optional_dependencies.keys()) {
                     queue.push_back((dist, Some(extra)));
-                    activated_extras.push((&dist.id.name, extra));
+                    base_map.insert(ConflictItem::from((dist.id.name.clone(), extra.clone())), MarkerTree::TRUE);
                 }
             }
 
@@ -103,7 +107,6 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
                 let dep_dist = target.lock().find_by_id(&dep.package_id);
 
-
                 // Add the dependency to the graph.
                 if let Entry::Vacant(entry) = inverse.entry(&dep.package_id) {
                     entry.insert(petgraph.add_node(Node::Package(dep_dist)));
@@ -116,7 +119,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 petgraph.add_edge(
                     root,
                     dep_index,
-                    dep.simplified_marker.as_simplified_marker_tree(),
+                    Edge::Dev(group, dep.simplified_marker.as_simplified_marker_tree()),
                 );
 
                 // Push its dependencies on the queue.
@@ -201,7 +204,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
                     // Add an edge from the root.
                     let dep_index = inverse[&dist.id];
-                    petgraph.add_edge(root, dep_index, marker);
+                    petgraph.add_edge(root, dep_index, Edge::Prod(marker));
 
                     // Push its dependencies on the queue.
                     if seen.insert((&dist.id, None)) {
@@ -217,78 +220,79 @@ impl<'lock> RequirementsTxtExport<'lock> {
             }
         }
 
-        // See: [`Installable::to_resolution`].
-        if !target.lock().conflicts().is_empty() {
-            let mut activated_extras_set: BTreeSet<(&PackageName, &ExtraName)> =
-                activated_extras.iter().copied().collect();
-            let mut queue = queue.clone();
-            let mut seen = seen.clone();
-            while let Some((package, extra)) = queue.pop_front() {
-                let deps = if let Some(extra) = extra {
-                    Either::Left(
-                        package
-                            .optional_dependencies
-                            .get(extra)
-                            .into_iter()
-                            .flatten(),
-                    )
-                } else {
-                    Either::Right(package.dependencies.iter())
-                };
-                for dep in deps {
-                    let mut additional_activated_extras = vec![];
-                    for extra in &dep.extra {
-                        let key = (&dep.package_id.name, extra);
-                        if !activated_extras_set.contains(&key) {
-                            additional_activated_extras.push(key);
-                        }
-                    }
-                    let temp_activated_extras = if additional_activated_extras.is_empty() {
-                        Cow::Borrowed(&activated_extras)
-                    } else {
-                        let mut owned = activated_extras.clone();
-                        owned.extend_from_slice(&additional_activated_extras);
-                        Cow::Owned(owned)
-                    };
-                    if !dep.complexified_marker.conflict().evaluate(
-                        &temp_activated_extras,
-                        &activated_groups,
-                    ) {
-                        continue;
-                    }
-                    for key in additional_activated_extras {
-                        activated_extras_set.insert(key);
-                        activated_extras.push(key);
-                    }
-                    let dep_dist = target.lock().find_by_id(&dep.package_id);
-
-                    // Push its dependencies on the queue.
-                    if seen.insert((&dep.package_id, None)) {
-                        queue.push_back((dep_dist, None));
-                    }
-                    for extra in &dep.extra {
-                        if seen.insert((&dep.package_id, Some(extra))) {
-                            queue.push_back((dep_dist, Some(extra)));
-                        }
-                    }
-                }
-            }
-            for set in target.lock().conflicts().iter() {
-                for ((pkg1, extra1), (pkg2, extra2)) in
-                    activated_extras_set.iter().tuple_combinations()
-                {
-                    if set.contains(pkg1, *extra1) && set.contains(pkg2, *extra2) {
-                        return Err(LockErrorKind::ConflictingExtra {
-                            package1: (*pkg1).clone(),
-                            extra1: (*extra1).clone(),
-                            package2: (*pkg2).clone(),
-                            extra2: (*extra2).clone(),
-                        }
-                            .into());
-                    }
-                }
-            }
-        }
+        // // See: [`Installable::to_resolution`].
+        // if !target.lock().conflicts().is_empty() {
+        //     let mut activated_extras_set: BTreeSet<(&PackageName, &ExtraName)> =
+        //         activated_extras.iter().copied().collect();
+        //     let mut queue = queue.clone();
+        //     let mut seen = seen.clone();
+        //     while let Some((package, extra)) = queue.pop_front() {
+        //         let deps = if let Some(extra) = extra {
+        //             Either::Left(
+        //                 package
+        //                     .optional_dependencies
+        //                     .get(extra)
+        //                     .into_iter()
+        //                     .flatten(),
+        //             )
+        //         } else {
+        //             Either::Right(package.dependencies.iter())
+        //         };
+        //         for dep in deps {
+        //             let mut additional_activated_extras = vec![];
+        //             for extra in &dep.extra {
+        //                 let key = (&dep.package_id.name, extra);
+        //                 if !activated_extras_set.contains(&key) {
+        //                     additional_activated_extras.push(key);
+        //                 }
+        //             }
+        //             let temp_activated_extras = if additional_activated_extras.is_empty() {
+        //                 Cow::Borrowed(&activated_extras)
+        //             } else {
+        //                 let mut owned = activated_extras.clone();
+        //                 owned.extend_from_slice(&additional_activated_extras);
+        //                 Cow::Owned(owned)
+        //             };
+        //             if !dep
+        //                 .complexified_marker
+        //                 .conflict()
+        //                 .evaluate(&temp_activated_extras, &activated_groups)
+        //             {
+        //                 continue;
+        //             }
+        //             for key in additional_activated_extras {
+        //                 activated_extras_set.insert(key);
+        //                 activated_extras.push(key);
+        //             }
+        //             let dep_dist = target.lock().find_by_id(&dep.package_id);
+        //
+        //             // Push its dependencies on the queue.
+        //             if seen.insert((&dep.package_id, None)) {
+        //                 queue.push_back((dep_dist, None));
+        //             }
+        //             for extra in &dep.extra {
+        //                 if seen.insert((&dep.package_id, Some(extra))) {
+        //                     queue.push_back((dep_dist, Some(extra)));
+        //                 }
+        //             }
+        //         }
+        //     }
+        //     for set in target.lock().conflicts().iter() {
+        //         for ((pkg1, extra1), (pkg2, extra2)) in
+        //             activated_extras_set.iter().tuple_combinations()
+        //         {
+        //             if set.contains(pkg1, *extra1) && set.contains(pkg2, *extra2) {
+        //                 return Err(LockErrorKind::ConflictingExtra {
+        //                     package1: (*pkg1).clone(),
+        //                     extra1: (*extra1).clone(),
+        //                     package2: (*pkg2).clone(),
+        //                     extra2: (*extra2).clone(),
+        //                 }
+        //                 .into());
+        //             }
+        //         }
+        //     }
+        // }
 
         // Why is it problematic to collect activated extras?
         //
@@ -305,6 +309,9 @@ impl<'lock> RequirementsTxtExport<'lock> {
         // ```
         // torch==2.6.0 ; (python_version >= '3.7' and package[cpu]) or (package[gpu])
         // ```
+        //
+        // It seems like what we need is... we have to replace the conflict marker with the expression
+        // that would cause it to be true or false...
         //
         // We want this to simplify to...
         // ```
@@ -336,12 +343,13 @@ impl<'lock> RequirementsTxtExport<'lock> {
                     continue;
                 }
 
-                if !dep.complexified_marker.conflict().evaluate(
-                    &activated_extras,
-                    &activated_groups,
-                ) {
-                    continue;
-                }
+                // if !dep
+                //     .complexified_marker
+                //     .conflict()
+                //     .evaluate(&activated_extras, &activated_groups)
+                // {
+                //     continue;
+                // }
 
                 // Evaluate the conflict marker.
                 let dep_dist = target.lock().find_by_id(&dep.package_id);
@@ -356,7 +364,11 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 petgraph.add_edge(
                     index,
                     dep_index,
-                    dep.simplified_marker.as_simplified_marker_tree(),
+                    if let Some(extra) = extra {
+                        Edge::Optional(extra, dep.simplified_marker.as_simplified_marker_tree())
+                    } else {
+                        Edge::Prod(dep.simplified_marker.as_simplified_marker_tree())
+                    },
                 );
 
                 // Push its dependencies on the queue.
@@ -371,7 +383,224 @@ impl<'lock> RequirementsTxtExport<'lock> {
             }
         }
 
-        let mut reachability = marker_reachability(&petgraph, &[]);
+        let mut reachability = {
+            // Ok, so... for each node, we want to a map from conflict item to marker.
+            let mut conflict_maps = FxHashMap::<NodeIndex, FxHashMap<ConflictItem, MarkerTree>>::with_capacity_and_hasher(petgraph.node_count(), FxBuildHasher);
+
+            // Perform a BFS.
+            // Collect the root nodes.
+            //
+            // Besides the actual virtual root node, virtual dev dependencies packages are also root
+            // nodes since the edges don't cover dev dependencies.
+            let mut queue: Vec<_> = petgraph
+                .node_indices()
+                .filter(|node_index| {
+                    petgraph
+                        .edges_directed(*node_index, Direction::Incoming)
+                        .next()
+                        .is_none()
+                })
+                .collect();
+
+            fn replace(
+                marker: MarkerTree,
+                conflict_map: &FxHashMap<ConflictItem, MarkerTree>,
+            ) -> MarkerTree {
+                if marker.is_true() || marker.is_false() {
+                    return marker;
+                }
+
+                println!("attempting {:?} with {:?}", marker, conflict_map);
+
+                let mut marker = marker.to_dnf();
+                let mut transformed = MarkerTree::FALSE;
+                for m in marker.iter_mut() {
+                    let mut or = MarkerTree::TRUE;
+                    for m_i in m.iter_mut() {
+                        if let MarkerExpression::Extra { operator, name } = m_i {
+                            let name = name.as_extra().unwrap();
+                            let mut found = false;
+                            for (conflict_item, conflict_marker) in conflict_map {
+                                if let Some(extra) = conflict_item.extra() {
+                                    let package = conflict_item.package();
+                                    let package_len = package.as_str().len();
+                                    let encoded = ExtraName::new(format!(
+                                        "extra-{package_len}-{package}-{extra}"
+                                    ))
+                                    .unwrap();
+                                    if encoded == *name {
+                                        match operator {
+                                            ExtraOperator::Equal => {
+                                                or.and(conflict_marker.clone());
+                                                found = true;
+                                                break;
+                                            }
+                                            ExtraOperator::NotEqual => {
+                                                or.and(conflict_marker.negate());
+                                                found = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if !found {
+                                match operator {
+                                    ExtraOperator::Equal => {
+                                        println!("Couldn't find {:?}; replacing with FALSE", name);
+                                        or.and(MarkerTree::FALSE);
+                                    }
+                                    ExtraOperator::NotEqual => {
+                                        println!("Couldn't find {:?}; replacing with TRUE", name);
+                                        or.and(MarkerTree::TRUE);
+                                    }
+                                }
+                            }
+                        } else {
+                            or.and(MarkerTree::expression(m_i.clone()));
+                        }
+                    }
+                    transformed.or(or);
+                }
+
+                println!("transformed: {:?}", transformed);
+                println!();
+
+                transformed
+            }
+
+            let mut reachability = FxHashMap::<NodeIndex, MarkerTree>::with_capacity_and_hasher(petgraph.node_count(), FxBuildHasher);
+            for root_index in &queue {
+                reachability.insert(*root_index, MarkerTree::TRUE);
+            }
+
+            // Propagate all markers through the graph, so that the eventual marker for each node is the
+            // union of the markers of each path we can reach the node by.
+            //
+            // STOPSHIP(charlie): I think this assumes no cycles... Which might be a blocker?
+            while let Some(parent_index) = queue.pop() {
+                if let Node::Package(package) = &petgraph[parent_index] {
+                    println!("parent: {:?}", package.id);
+                }
+
+                // Here, we should take the reachability and "fix" it.
+                reachability
+                    .entry(parent_index)
+                    .and_modify(|marker| {
+                        let conflict_map = conflict_maps.get(&parent_index).unwrap_or(&base_map);
+                        println!("parent marker: {:?}", marker);
+                        *marker = replace(*marker, &conflict_map);
+                        println!("replaced parent with: {:?}", marker);
+                    });
+
+                // When we see an edge like parent [dotenv]> flask, we should take the reachability
+                // on `parent`, combine it with the marker on the edge, then add `flask[dotenv]` to
+                // the inference map on the `flask` node.
+                //
+                // What if there are multiple edges? Combine the maps with an OR?
+                //
+                // Then, at the end, we take the marker on the node, convert to DNF, and replace any
+                // conflict markers with the implied edges.
+                for child_edge in petgraph.edges_directed(parent_index, Direction::Outgoing) {
+                    let mut parent_marker = reachability[&parent_index];
+
+                    if let Node::Package(package) = &petgraph[child_edge.target()] {
+                        println!("child: {:?}", package.id);
+                    }
+
+                    // The marker for all paths to the child through the parent.
+                    let mut parent_map = conflict_maps
+                        .get(&parent_index)
+                        .cloned()
+                        .unwrap_or_else(|| base_map.clone());
+
+                    match child_edge.weight() {
+                        Edge::Prod(marker) => {
+                            let marker = replace(*marker, &parent_map);
+                            for (i, value) in parent_map.iter_mut() {
+                                value.and(marker);
+                                println!("Set {:?} to {:?}", i, value);
+                            }
+                            parent_marker.and(marker);
+                        }
+                        Edge::Optional(extra, marker) => {
+                            let marker = replace(*marker, &parent_map);
+                            for (i, value) in parent_map.iter_mut() {
+                                value.and(marker);
+                                println!("Set {:?} to {:?}", i, value);
+                            }
+                            let parent_name = match petgraph[child_edge.source()] {
+                                Node::Package(package) => &package.id.name,
+                                Node::Root => panic!("root node has no name"),
+                            };
+                            let item = ConflictItem::from((parent_name.clone(), (*extra).clone()));
+
+                            let mut x = parent_marker;
+                            x.and(marker);
+                            println!("Set {:?} to {:?}", item, x);
+                            parent_map.insert(item, x);
+
+                            parent_marker.and(marker);
+                        }
+                        Edge::Dev(group, marker) => {
+                            let marker = replace(*marker, &parent_map);
+                            for (i, value) in parent_map.iter_mut() {
+                                // We need to "replace" on this using the parent map.
+                                value.and(marker);
+                                println!("Set {:?} to {:?}", i, value);
+                            }
+                            parent_marker.and(marker);
+                        }
+                    }
+
+                    match conflict_maps.entry(child_edge.target()) {
+                        Entry::Occupied(mut existing) => {
+                            let child_map = existing.get_mut();
+                            for (key, value) in parent_map {
+                                let mut after = child_map.get(&key).cloned().unwrap_or(MarkerTree::FALSE);
+                                after.or(value);
+                                println!("Set {:?} to {:?}", key, after);
+                                child_map.entry(key).or_insert(MarkerTree::FALSE).or(value);
+                            }
+                        }
+                        Entry::Vacant(vacant) => {
+                            vacant.insert(parent_map);
+                        }
+                    }
+
+                    match reachability.entry(child_edge.target()) {
+                        Entry::Occupied(mut existing) => {
+                            let child_marker = existing.get_mut();
+                            child_marker.or(parent_marker);
+                            println!("Set child to {:?}", child_marker);
+                        }
+                        Entry::Vacant(vacant) => {
+                            println!("Set child to {:?}", parent_marker);
+                            vacant.insert(parent_marker);
+                        }
+                    }
+
+                    queue.push(child_edge.target());
+                }
+            }
+
+            for i in petgraph.node_indices() {
+                let node = &petgraph[i];
+                let marker = reachability[&i];
+                let conflict_map = conflict_maps.get(&i).cloned().unwrap_or_default();
+                match node {
+                    Node::Root => {}
+                    Node::Package(p) => {
+                        println!("node: {:?}", p.id);
+                        println!("marker: {:?}", marker);
+                        println!("conflict_map: {:?}", conflict_map);
+                        println!();
+                    }
+                }
+            }
+
+            reachability
+        };
 
         // Collect all packages.
         let mut nodes = petgraph
@@ -391,29 +620,28 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 package,
                 marker: reachability.remove(&index).unwrap_or_default(),
             })
-            .map(|Requirement { package, marker }| {
-                {
-                    // I somehow need to call simplify_conflict_markers here...
-                    println!("package: {:?}", package.name());
-                    println!("marker: {:?}", marker);
-                    println!("marker.without_extras(): {:?}", marker.without_extras());
-                    let mut marker = UniversalMarker::from_combined(marker);
-                    marker.imbibe(ConflictMarker::from_conflicts(target.lock().conflicts()));
-                    println!("conflict marker: {:?}", ConflictMarker::from_conflicts(target.lock().conflicts()));
-                    println!("imbibe: {:?}", marker);
-                    for (package, extra) in &activated_extras {
-                        marker.assume_conflict_item(&ConflictItem::from(((*package).clone(), (*extra).clone())));
-                    }
-
-                    // TODO(charlie): Then here, we should mark them all as false? What happens?
-                    // I guess we can try.
-
-                    Requirement {
-                        package,
-                        marker: marker.pep508(),
-                    }
-                }
-            })
+            .filter(|requirement| !requirement.marker.is_false())
+            // .map(|Requirement { package, marker }| {
+            //     {
+            //         // I somehow need to call simplify_conflict_markers here...
+            //         println!("package: {:?}", package.name());
+            //         println!("marker: {:?}", marker);
+            //         let mut marker = UniversalMarker::from_combined(marker);
+            //         for (package, extra) in &activated_extras {
+            //             marker.assume_conflict_item(&ConflictItem::from((
+            //                 (*package).clone(),
+            //                 (*extra).clone(),
+            //             )));
+            //         }
+            //         println!("assume_conflict_items: {:?}", marker);
+            //         let marker = marker.drop_extras();
+            //         println!("drop_extras: {:?}", marker);
+            //
+            //         // TODO(charlie): Then here, we should mark them all as false? What happens?
+            //         // I guess we can try.
+            //         Requirement { package, marker }
+            //     }
+            // })
             .collect::<Vec<_>>();
 
         // Sort the nodes, such that unnamed URLs (editables) appear at the top.
@@ -428,6 +656,82 @@ impl<'lock> RequirementsTxtExport<'lock> {
         })
     }
 }
+
+
+/// Determine the markers under which a package is reachable in the dependency tree.
+///
+/// The algorithm is a variant of Dijkstra's algorithm for not totally ordered distances:
+/// Whenever we find a shorter distance to a node (a marker that is not a subset of the existing
+/// marker), we re-queue the node and update all its children. This implicitly handles cycles,
+/// whenever we re-reach a node through a cycle the marker we have is a more
+/// specific marker/longer path, so we don't update the node and don't re-queue it.
+fn conflict_marker_reachability<'lock>(
+    graph: &Graph<Node<'lock>, Edge<'lock>>,
+    fork_markers: &[Edge<'lock>],
+) -> FxHashMap<NodeIndex, Edge<'lock>> {
+    // Note that we build including the virtual packages due to how we propagate markers through
+    // the graph, even though we then only read the markers for base packages.
+    let mut reachability = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
+
+    // Collect the root nodes.
+    //
+    // Besides the actual virtual root node, virtual dev dependencies packages are also root
+    // nodes since the edges don't cover dev dependencies.
+    let mut queue: Vec<_> = graph
+        .node_indices()
+        .filter(|node_index| {
+            graph
+                .edges_directed(*node_index, Direction::Incoming)
+                .next()
+                .is_none()
+        })
+        .collect();
+
+    // The root nodes are always applicable, unless the user has restricted resolver
+    // environments with `tool.uv.environments`.
+    let root_markers = if fork_markers.is_empty() {
+        Edge::true_marker()
+    } else {
+        fork_markers
+            .iter()
+            .fold(Edge::false_marker(), |mut acc, marker| {
+                acc.or(*marker);
+                acc
+            })
+    };
+    for root_index in &queue {
+        reachability.insert(*root_index, root_markers);
+    }
+
+    // Propagate all markers through the graph, so that the eventual marker for each node is the
+    // union of the markers of each path we can reach the node by.
+    while let Some(parent_index) = queue.pop() {
+        let marker = reachability[&parent_index];
+        for child_edge in graph.edges_directed(parent_index, Direction::Outgoing) {
+            // The marker for all paths to the child through the parent.
+            let mut child_marker = *child_edge.weight();
+            child_marker.and(marker);
+            match reachability.entry(child_edge.target()) {
+                Entry::Occupied(mut existing) => {
+                    // If the marker is a subset of the existing marker (A ⊆ B exactly if
+                    // A ∪ B = A), updating the child wouldn't change child's marker.
+                    child_marker.or(*existing.get());
+                    if &child_marker != existing.get() {
+                        existing.insert(child_marker);
+                        queue.push(child_edge.target());
+                    }
+                }
+                Entry::Vacant(vacant) => {
+                    vacant.insert(child_marker);
+                    queue.push(child_edge.target());
+                }
+            }
+        }
+    }
+
+    reachability
+}
+
 
 impl std::fmt::Display for RequirementsTxtExport<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -534,6 +838,25 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
 enum Node<'lock> {
     Root,
     Package(&'lock Package),
+}
+
+/// An edge in the resolution graph, along with the marker that must be satisfied to traverse it.
+#[derive(Debug, Clone)]
+enum Edge<'lock> {
+    Prod(MarkerTree),
+    Optional(&'lock ExtraName, MarkerTree),
+    Dev(&'lock GroupName, MarkerTree),
+}
+
+impl Edge<'_> {
+    /// Return the [`MarkerTree`] for this edge.
+    fn marker(&self) -> &MarkerTree {
+        match self {
+            Self::Prod(marker) => marker,
+            Self::Optional(_, marker) => marker,
+            Self::Dev(_, marker) => marker,
+        }
+    }
 }
 
 /// A flat requirement, with its associated marker.
