@@ -1,0 +1,226 @@
+---
+source: crates/uv-resolver/src/lock/mod.rs
+expression: result
+---
+Ok(
+    Lock {
+        version: 1,
+        revision: 0,
+        fork_markers: [],
+        conflicts: Conflicts(
+            [],
+        ),
+        supported_environments: [],
+        required_environments: [],
+        requires_python: RequiresPython {
+            specifiers: VersionSpecifiers(
+                [
+                    VersionSpecifier {
+                        operator: GreaterThanEqual,
+                        version: "3.12",
+                    },
+                ],
+            ),
+            range: RequiresPythonRange(
+                LowerBound(
+                    Included(
+                        "3.12",
+                    ),
+                ),
+                UpperBound(
+                    Unbounded,
+                ),
+            ),
+        },
+        options: ResolverOptions {
+            resolution_mode: Highest,
+            prerelease_mode: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
+            exclude_newer: None,
+        },
+        packages: [
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "a",
+                    ),
+                    version: None,
+                    source: Editable(
+                        "path/to/a",
+                    ),
+                },
+                sdist: None,
+                wheels: [],
+                fork_markers: [],
+                dependencies: [],
+                optional_dependencies: {},
+                dependency_groups: {},
+                metadata: PackageMetadata {
+                    requires_dist: {},
+                    provides_extras: [],
+                    dependency_groups: {},
+                },
+            },
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "a",
+                    ),
+                    version: Some(
+                        "0.1.1",
+                    ),
+                    source: Registry(
+                        Url(
+                            UrlString(
+                                "https://pypi.org/simple",
+                            ),
+                        ),
+                    ),
+                },
+                sdist: Some(
+                    Url {
+                        url: UrlString(
+                            "https://example.com",
+                        ),
+                        metadata: SourceDistMetadata {
+                            hash: Some(
+                                Hash(
+                                    HashDigest {
+                                        algorithm: Sha256,
+                                        digest: "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
+                                    },
+                                ),
+                            ),
+                            size: Some(
+                                0,
+                            ),
+                        },
+                    },
+                ),
+                wheels: [],
+                fork_markers: [],
+                dependencies: [],
+                optional_dependencies: {},
+                dependency_groups: {},
+                metadata: PackageMetadata {
+                    requires_dist: {},
+                    provides_extras: [],
+                    dependency_groups: {},
+                },
+            },
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "b",
+                    ),
+                    version: Some(
+                        "0.1.0",
+                    ),
+                    source: Registry(
+                        Url(
+                            UrlString(
+                                "https://pypi.org/simple",
+                            ),
+                        ),
+                    ),
+                },
+                sdist: Some(
+                    Url {
+                        url: UrlString(
+                            "https://example.com",
+                        ),
+                        metadata: SourceDistMetadata {
+                            hash: Some(
+                                Hash(
+                                    HashDigest {
+                                        algorithm: Sha256,
+                                        digest: "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
+                                    },
+                                ),
+                            ),
+                            size: Some(
+                                0,
+                            ),
+                        },
+                    },
+                ),
+                wheels: [],
+                fork_markers: [],
+                dependencies: [
+                    Dependency {
+                        package_id: PackageId {
+                            name: PackageName(
+                                "a",
+                            ),
+                            version: None,
+                            source: Editable(
+                                "path/to/a",
+                            ),
+                        },
+                        extra: {},
+                        simplified_marker: SimplifiedMarkerTree(
+                            true,
+                        ),
+                        complexified_marker: python_full_version >= '3.12',
+                    },
+                ],
+                optional_dependencies: {},
+                dependency_groups: {},
+                metadata: PackageMetadata {
+                    requires_dist: {},
+                    provides_extras: [],
+                    dependency_groups: {},
+                },
+            },
+        ],
+        by_id: {
+            PackageId {
+                name: PackageName(
+                    "a",
+                ),
+                version: None,
+                source: Editable(
+                    "path/to/a",
+                ),
+            }: 0,
+            PackageId {
+                name: PackageName(
+                    "a",
+                ),
+                version: Some(
+                    "0.1.1",
+                ),
+                source: Registry(
+                    Url(
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
+                    ),
+                ),
+            }: 1,
+            PackageId {
+                name: PackageName(
+                    "b",
+                ),
+                version: Some(
+                    "0.1.0",
+                ),
+                source: Registry(
+                    Url(
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
+                    ),
+                ),
+            }: 2,
+        },
+        manifest: ResolverManifest {
+            members: {},
+            requirements: {},
+            dependency_groups: {},
+            constraints: {},
+            overrides: {},
+            dependency_metadata: {},
+        },
+    },
+)

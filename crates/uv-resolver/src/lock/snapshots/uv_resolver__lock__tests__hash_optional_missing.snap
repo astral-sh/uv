@@ -5,11 +5,13 @@ expression: result
 Ok(
     Lock {
         version: 1,
+        revision: 0,
         fork_markers: [],
         conflicts: Conflicts(
             [],
         ),
         supported_environments: [],
+        required_environments: [],
         requires_python: RequiresPython {
             specifiers: VersionSpecifiers(
                 [
@@ -87,6 +89,7 @@ Ok(
                 dependency_groups: {},
                 metadata: PackageMetadata {
                     requires_dist: {},
+                    provides_extras: [],
                     dependency_groups: {},
                 },
             },

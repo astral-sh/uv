@@ -1,13 +1,13 @@
 use std::{path::Path, process::Command};
 
+use crate::common::{uv_snapshot, TestContext};
 use assert_fs::{
     assert::PathAssert,
     prelude::{FileTouch, PathChild, PathCreateDir},
 };
 use predicates::prelude::predicate;
 use uv_fs::Simplified;
-
-use crate::common::{uv_snapshot, TestContext};
+use uv_static::EnvVars;
 
 #[test]
 fn python_install() {
@@ -1058,9 +1058,96 @@ fn python_install_preview_broken_link() {
     });
 }
 
+#[test]
+fn python_install_default_from_env() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    // Install the version specified by the `UV_PYTHON` environment variable by default
+    uv_snapshot!(context.filters(), context.python_install().env(EnvVars::UV_PYTHON, "3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.9 in [TIME]
+     + cpython-3.12.9-[PLATFORM]
+    ");
+
+    // But prefer explicit requests
+    uv_snapshot!(context.filters(), context.python_install().arg("3.11").env(EnvVars::UV_PYTHON, "3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.11.11 in [TIME]
+     + cpython-3.11.11-[PLATFORM]
+    "###);
+
+    // We should ignore `UV_PYTHON` here and complain there is not a target
+    uv_snapshot!(context.filters(), context.python_uninstall().env(EnvVars::UV_PYTHON, "3.12"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the following required arguments were not provided:
+      <TARGETS>...
+
+    Usage: uv python uninstall --install-dir <INSTALL_DIR> <TARGETS>...
+
+    For more information, try '--help'.
+    "###);
+
+    // We should ignore `UV_PYTHON` here and respect `--all`
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--all").env(EnvVars::UV_PYTHON, "3.11"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python installations
+    Uninstalled 2 versions in [TIME]
+     - cpython-3.11.11-[PLATFORM]
+     - cpython-3.12.9-[PLATFORM]
+    "###);
+
+    // Uninstall with no targets should error
+    uv_snapshot!(context.filters(), context.python_uninstall(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the following required arguments were not provided:
+      <TARGETS>...
+
+    Usage: uv python uninstall --install-dir <INSTALL_DIR> <TARGETS>...
+
+    For more information, try '--help'.
+    "###);
+
+    // Uninstall with conflicting options should error
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--all").arg("3.12"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--all' cannot be used with '<TARGETS>...'
+
+    Usage: uv python uninstall --all --install-dir <INSTALL_DIR> <TARGETS>...
+
+    For more information, try '--help'.
+    "###);
+}
+
 #[cfg(target_os = "macos")]
 #[test]
-fn python_dylib_install_name_is_patched_on_install() {
+fn python_install_patch_dylib() {
     use assert_cmd::assert::OutputAssertExt;
     use uv_python::managed::platform_key_from_env;
 

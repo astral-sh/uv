@@ -7,6 +7,7 @@ use std::sync::LazyLock;
 use memchr::memmem::Finder;
 use serde::Deserialize;
 use thiserror::Error;
+use url::Url;
 
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::PackageName;
@@ -24,7 +25,7 @@ pub enum Pep723Item {
     /// A PEP 723 script provided via `stdin`.
     Stdin(Pep723Metadata),
     /// A PEP 723 script provided via a remote URL.
-    Remote(Pep723Metadata),
+    Remote(Pep723Metadata, Url),
 }
 
 impl Pep723Item {
@@ -33,7 +34,7 @@ impl Pep723Item {
         match self {
             Self::Script(script) => &script.metadata,
             Self::Stdin(metadata) => metadata,
-            Self::Remote(metadata) => metadata,
+            Self::Remote(metadata, ..) => metadata,
         }
     }
 
@@ -42,7 +43,7 @@ impl Pep723Item {
         match self {
             Self::Script(script) => script.metadata,
             Self::Stdin(metadata) => metadata,
-            Self::Remote(metadata) => metadata,
+            Self::Remote(metadata, ..) => metadata,
         }
     }
 
@@ -50,8 +51,8 @@ impl Pep723Item {
     pub fn path(&self) -> Option<&Path> {
         match self {
             Self::Script(script) => Some(&script.path),
-            Self::Stdin(_) => None,
-            Self::Remote(_) => None,
+            Self::Stdin(..) => None,
+            Self::Remote(..) => None,
         }
     }
 
@@ -65,14 +66,14 @@ impl Pep723Item {
 }
 
 /// A reference to a PEP 723 item.
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum Pep723ItemRef<'item> {
     /// A PEP 723 script read from disk.
     Script(&'item Pep723Script),
     /// A PEP 723 script provided via `stdin`.
     Stdin(&'item Pep723Metadata),
     /// A PEP 723 script provided via a remote URL.
-    Remote(&'item Pep723Metadata),
+    Remote(&'item Pep723Metadata, &'item Url),
 }
 
 impl Pep723ItemRef<'_> {
@@ -81,7 +82,7 @@ impl Pep723ItemRef<'_> {
         match self {
             Self::Script(script) => &script.metadata,
             Self::Stdin(metadata) => metadata,
-            Self::Remote(metadata) => metadata,
+            Self::Remote(metadata, ..) => metadata,
         }
     }
 
@@ -89,8 +90,8 @@ impl Pep723ItemRef<'_> {
     pub fn path(&self) -> Option<&Path> {
         match self {
             Self::Script(script) => Some(&script.path),
-            Self::Stdin(_) => None,
-            Self::Remote(_) => None,
+            Self::Stdin(..) => None,
+            Self::Remote(..) => None,
         }
     }
 }
@@ -100,7 +101,7 @@ impl<'item> From<&'item Pep723Item> for Pep723ItemRef<'item> {
         match item {
             Pep723Item::Script(script) => Self::Script(script),
             Pep723Item::Stdin(metadata) => Self::Stdin(metadata),
-            Pep723Item::Remote(metadata) => Self::Remote(metadata),
+            Pep723Item::Remote(metadata, url) => Self::Remote(metadata, url),
         }
     }
 }

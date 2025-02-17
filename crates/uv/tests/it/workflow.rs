@@ -35,7 +35,7 @@ fn packse_add_remove_one_package() {
         assert_snapshot!(diff, @r###"
         --- old
         +++ new
-        @@ -306,20 +306,21 @@
+        @@ -307,20 +307,21 @@
          name = "packse"
          version = "0.0.0"
          source = { editable = "." }
@@ -57,7 +57,7 @@ fn packse_add_remove_one_package() {
              { name = "pypiserver" },
              { name = "watchfiles" },
          ]
-        @@ -334,20 +335,21 @@
+        @@ -335,20 +336,21 @@
          [package.metadata]
          requires-dist = [
              { name = "chevron-blue", specifier = ">=0.2.1" },
@@ -71,6 +71,7 @@ fn packse_add_remove_one_package() {
         +    { name = "tzdata", specifier = ">=2024.1" },
              { name = "watchfiles", marker = "extra == 'serve'", specifier = ">=0.21.0" },
          ]
+         provides-extras = ["index", "serve"]
 
          [package.metadata.requires-dev]
          dev = [
@@ -78,8 +79,7 @@ fn packse_add_remove_one_package() {
              { name = "pytest", specifier = ">=7.4.3" },
              { name = "syrupy", specifier = ">=4.6.0" },
          ]
-
-        @@ -599,20 +601,29 @@
+        @@ -601,20 +603,29 @@
              { name = "rfc3986" },
              { name = "rich" },
              { name = "urllib3" },
@@ -123,7 +123,7 @@ fn packse_add_remove_one_package() {
         assert_snapshot!(diff, @r###"
         --- old
         +++ new
-        @@ -306,21 +306,20 @@
+        @@ -307,21 +307,20 @@
          name = "packse"
          version = "0.0.0"
          source = { editable = "." }
@@ -145,7 +145,7 @@ fn packse_add_remove_one_package() {
              { name = "pypiserver" },
              { name = "watchfiles" },
          ]
-        @@ -335,21 +334,20 @@
+        @@ -336,21 +335,20 @@
          [package.metadata]
          requires-dist = [
              { name = "chevron-blue", specifier = ">=0.2.1" },
@@ -159,6 +159,7 @@ fn packse_add_remove_one_package() {
         -    { name = "tzdata", specifier = ">=2024.1" },
              { name = "watchfiles", marker = "extra == 'serve'", specifier = ">=0.21.0" },
          ]
+         provides-extras = ["index", "serve"]
 
          [package.metadata.requires-dev]
          dev = [
@@ -166,8 +167,7 @@ fn packse_add_remove_one_package() {
              { name = "pytest", specifier = ">=7.4.3" },
              { name = "syrupy", specifier = ">=4.6.0" },
          ]
-
-        @@ -598,29 +596,20 @@
+        @@ -600,29 +598,20 @@
              { name = "readme-renderer" },
              { name = "requests" },
              { name = "requests-toolbelt" },
@@ -277,7 +277,7 @@ fn packse_promote_transitive_to_direct_then_remove() {
         assert_snapshot!(diff, @r###"
         --- old
         +++ new
-        @@ -305,20 +305,21 @@
+        @@ -306,20 +306,21 @@
          [[package]]
          name = "packse"
          version = "0.0.0"
@@ -299,7 +299,7 @@ fn packse_promote_transitive_to_direct_then_remove() {
          serve = [
              { name = "pypiserver" },
              { name = "watchfiles" },
-        @@ -333,20 +334,21 @@
+        @@ -334,20 +335,21 @@
 
          [package.metadata]
          requires-dist = [
@@ -314,13 +314,13 @@ fn packse_promote_transitive_to_direct_then_remove() {
              { name = "twine", specifier = ">=4.0.2" },
              { name = "watchfiles", marker = "extra == 'serve'", specifier = ">=0.21.0" },
          ]
+         provides-extras = ["index", "serve"]
 
          [package.metadata.requires-dev]
          dev = [
              { name = "psutil", specifier = ">=5.9.7" },
              { name = "pytest", specifier = ">=7.4.3" },
              { name = "syrupy", specifier = ">=4.6.0" },
-         ]
         "###);
     });
 
@@ -335,7 +335,7 @@ fn packse_promote_transitive_to_direct_then_remove() {
         assert_snapshot!(diff, @r###"
         --- old
         +++ new
-        @@ -305,21 +305,20 @@
+        @@ -306,21 +306,20 @@
          [[package]]
          name = "packse"
          version = "0.0.0"
@@ -357,7 +357,7 @@ fn packse_promote_transitive_to_direct_then_remove() {
          serve = [
              { name = "pypiserver" },
              { name = "watchfiles" },
-        @@ -334,21 +333,20 @@
+        @@ -335,21 +334,20 @@
 
          [package.metadata]
          requires-dist = [
@@ -372,13 +372,13 @@ fn packse_promote_transitive_to_direct_then_remove() {
              { name = "twine", specifier = ">=4.0.2" },
              { name = "watchfiles", marker = "extra == 'serve'", specifier = ">=0.21.0" },
          ]
+         provides-extras = ["index", "serve"]
 
          [package.metadata.requires-dev]
          dev = [
              { name = "psutil", specifier = ">=5.9.7" },
              { name = "pytest", specifier = ">=7.4.3" },
              { name = "syrupy", specifier = ">=4.6.0" },
-         ]
         "###);
     });
 
@@ -434,7 +434,7 @@ fn jax_instability() -> Result<()> {
         assert_snapshot!(diff, @r###"
         --- old
         +++ new
-        @@ -8,21 +8,21 @@
+        @@ -9,21 +9,21 @@
          ]
 
          [options]
@@ -457,7 +457,7 @@ fn jax_instability() -> Result<()> {
          name = "jax"
          version = "0.4.17"
          source = { registry = "https://pypi.org/simple" }
-        @@ -149,28 +149,41 @@
+        @@ -150,28 +150,41 @@
              { url = "https://files.pythonhosted.org/packages/f3/31/91a2a3c5eb85d2bfa86d7c98f2df5d77dcdefb3d80ca9f9037ad04393acf/scipy-1.12.0-cp312-cp312-win_amd64.whl", hash = "sha256:e646d8571804a304e1da01040d21577685ce8e2db08ac58e543eaca063453e1c", size = 45816713 },
              { url = "https://files.pythonhosted.org/packages/ed/be/49a3f999dc91f1a653847f38c34763dcdeaa8a327f3665bdfe9bf5555109/scipy-1.12.0-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:913d6e7956c3a671de3b05ccb66b11bc293f56bfdef040583a7221d9e22a2e35", size = 38929252 },
              { url = "https://files.pythonhosted.org/packages/32/48/f605bad3e610efe05a51b56698578f7a98f900513a4bad2c9f12df845cd6/scipy-1.12.0-cp39-cp39-macosx_12_0_arm64.whl", hash = "sha256:bba1b0c7256ad75401c73e4b3cf09d1f176e9bd4248f0d3112170fb2ec4db067", size = 31356374 },
@@ -514,7 +514,7 @@ fn jax_instability() -> Result<()> {
         assert_snapshot!(diff, @r###"
         --- old
         +++ new
-        @@ -149,41 +149,28 @@
+        @@ -150,41 +150,28 @@
              { url = "https://files.pythonhosted.org/packages/f3/31/91a2a3c5eb85d2bfa86d7c98f2df5d77dcdefb3d80ca9f9037ad04393acf/scipy-1.12.0-cp312-cp312-win_amd64.whl", hash = "sha256:e646d8571804a304e1da01040d21577685ce8e2db08ac58e543eaca063453e1c", size = 45816713 },
              { url = "https://files.pythonhosted.org/packages/ed/be/49a3f999dc91f1a653847f38c34763dcdeaa8a327f3665bdfe9bf5555109/scipy-1.12.0-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:913d6e7956c3a671de3b05ccb66b11bc293f56bfdef040583a7221d9e22a2e35", size = 38929252 },
              { url = "https://files.pythonhosted.org/packages/32/48/f605bad3e610efe05a51b56698578f7a98f900513a4bad2c9f12df845cd6/scipy-1.12.0-cp39-cp39-macosx_12_0_arm64.whl", hash = "sha256:bba1b0c7256ad75401c73e4b3cf09d1f176e9bd4248f0d3112170fb2ec4db067", size = 31356374 },
@@ -575,7 +575,7 @@ fn jax_instability() -> Result<()> {
         assert_snapshot!(diff, @r###"
         --- old
         +++ new
-        @@ -8,21 +8,21 @@
+        @@ -9,21 +9,21 @@
          ]
 
          [options]

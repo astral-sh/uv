@@ -91,6 +91,7 @@ fn extra_basic() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "extra1" },
@@ -118,6 +119,7 @@ fn extra_basic() -> Result<()> {
             { name = "sortedcontainers", marker = "extra == 'extra1'", specifier = "==2.3.0" },
             { name = "sortedcontainers", marker = "extra == 'extra2'", specifier = "==2.4.0" },
         ]
+        provides-extras = ["extra1", "extra2"]
 
         [[package]]
         name = "sortedcontainers"
@@ -283,6 +285,7 @@ fn extra_basic_three_extras() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "extra1" },
@@ -315,6 +318,7 @@ fn extra_basic_three_extras() -> Result<()> {
             { name = "sortedcontainers", marker = "extra == 'extra2'", specifier = "==2.3.0" },
             { name = "sortedcontainers", marker = "extra == 'project3'", specifier = "==2.4.0" },
         ]
+        provides-extras = ["extra1", "extra2", "project3"]
 
         [[package]]
         name = "sortedcontainers"
@@ -756,6 +760,7 @@ fn extra_multiple_independent() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "extra1" },
@@ -829,6 +834,7 @@ fn extra_multiple_independent() -> Result<()> {
             { name = "sortedcontainers", marker = "extra == 'extra1'", specifier = "==2.3.0" },
             { name = "sortedcontainers", marker = "extra == 'extra2'", specifier = "==2.4.0" },
         ]
+        provides-extras = ["extra1", "extra2", "project3", "project4"]
 
         [[package]]
         name = "sniffio"
@@ -904,6 +910,7 @@ fn extra_config_change_ignore_lockfile() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "extra1" },
@@ -931,6 +938,7 @@ fn extra_config_change_ignore_lockfile() -> Result<()> {
             { name = "sortedcontainers", marker = "extra == 'extra1'", specifier = "==2.3.0" },
             { name = "sortedcontainers", marker = "extra == 'extra2'", specifier = "==2.4.0" },
         ]
+        provides-extras = ["extra1", "extra2"]
 
         [[package]]
         name = "sortedcontainers"
@@ -1717,6 +1725,7 @@ fn group_basic() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "group1" },
@@ -1871,6 +1880,7 @@ fn group_default() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "group1" },
@@ -2082,6 +2092,7 @@ fn mixed() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "group1" },
@@ -2108,6 +2119,7 @@ fn mixed() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "sortedcontainers", marker = "extra == 'extra1'", specifier = "==2.4.0" }]
+        provides-extras = ["extra1"]
 
         [package.metadata.requires-dev]
         group1 = [{ name = "sortedcontainers", specifier = "==2.3.0" }]
@@ -2250,6 +2262,7 @@ fn multiple_sources_index_disjoint_extras() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "cu118" },
@@ -2320,6 +2333,7 @@ fn multiple_sources_index_disjoint_extras() -> Result<()> {
             { name = "jinja2", marker = "extra == 'cu118'", specifier = "==3.1.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118", conflict = { package = "project", extra = "cu118" } },
             { name = "jinja2", marker = "extra == 'cu124'", specifier = "==3.1.3", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "project", extra = "cu124" } },
         ]
+        provides-extras = ["cu118", "cu124"]
         "###
         );
     });
@@ -2398,6 +2412,7 @@ fn multiple_sources_index_disjoint_groups() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "cu118" },
@@ -2546,6 +2561,7 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "cu118" },
@@ -2635,6 +2651,7 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
             { name = "jinja2", extras = ["i18n"], marker = "extra == 'cu118'", specifier = "==3.1.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118", conflict = { package = "project", extra = "cu118" } },
             { name = "jinja2", extras = ["i18n"], marker = "extra == 'cu124'", specifier = "==3.1.3", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "project", extra = "cu124" } },
         ]
+        provides-extras = ["cu118", "cu124"]
         "###
         );
     });
@@ -2713,6 +2730,7 @@ fn multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         resolution-markers = [
             "extra != 'extra-7-project-cu118' and extra == 'extra-7-project-cu124'",
@@ -2809,6 +2827,7 @@ fn multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
             { name = "jinja2", marker = "sys_platform != 'darwin' and extra == 'cu118'", specifier = "==3.1.2" },
             { name = "jinja2", marker = "extra == 'cu124'", specifier = "==3.1.3", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "project", extra = "cu124" } },
         ]
+        provides-extras = ["cu118", "cu124"]
         "###
         );
     });
@@ -3037,6 +3056,7 @@ fn shared_optional_dependency_extra1() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "foo" },
@@ -3100,6 +3120,7 @@ fn shared_optional_dependency_extra1() -> Result<()> {
             { name = "idna", marker = "extra == 'bar'", specifier = "==3.6" },
             { name = "idna", marker = "extra == 'foo'", specifier = "==3.5" },
         ]
+        provides-extras = ["foo", "bar", "baz"]
 
         [[package]]
         name = "sniffio"
@@ -3175,6 +3196,7 @@ fn shared_optional_dependency_group1() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "foo" },
@@ -3315,6 +3337,7 @@ fn shared_optional_dependency_mixed1() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "foo" },
@@ -3376,6 +3399,7 @@ fn shared_optional_dependency_mixed1() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "idna", marker = "extra == 'foo'", specifier = "==3.5" }]
+        provides-extras = ["foo"]
 
         [package.metadata.requires-dev]
         bar = [{ name = "idna", specifier = "==3.6" }]
@@ -3458,6 +3482,7 @@ fn shared_optional_dependency_extra2() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = "==3.11.*"
         conflicts = [[
             { package = "project", extra = "foo" },
@@ -3521,6 +3546,7 @@ fn shared_optional_dependency_extra2() -> Result<()> {
             { name = "idna", marker = "extra == 'bar'", specifier = "==3.6" },
             { name = "idna", marker = "extra == 'foo'", specifier = "==3.5" },
         ]
+        provides-extras = ["foo", "bar"]
 
         [[package]]
         name = "sniffio"
@@ -3597,6 +3623,7 @@ fn shared_optional_dependency_group2() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = "==3.11.*"
         conflicts = [[
             { package = "project", group = "foo" },
@@ -3742,6 +3769,7 @@ fn shared_optional_dependency_mixed2() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = "==3.11.*"
         conflicts = [[
             { package = "project", extra = "foo" },
@@ -3805,6 +3833,7 @@ fn shared_optional_dependency_mixed2() -> Result<()> {
             { name = "anyio", marker = "extra == 'foo'" },
             { name = "idna", marker = "extra == 'foo'", specifier = "==3.5" },
         ]
+        provides-extras = ["foo"]
 
         [package.metadata.requires-dev]
         bar = [
@@ -3884,6 +3913,7 @@ fn shared_dependency_extra() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "foo" },
@@ -3947,6 +3977,7 @@ fn shared_dependency_extra() -> Result<()> {
             { name = "idna", marker = "extra == 'bar'", specifier = "==3.6" },
             { name = "idna", marker = "extra == 'foo'", specifier = "==3.5" },
         ]
+        provides-extras = ["foo", "bar"]
 
         [[package]]
         name = "sniffio"
@@ -4057,6 +4088,7 @@ fn shared_dependency_group() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "foo" },
@@ -4232,6 +4264,7 @@ fn shared_dependency_mixed() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "foo" },
@@ -4296,6 +4329,7 @@ fn shared_dependency_mixed() -> Result<()> {
             { name = "anyio" },
             { name = "idna", marker = "extra == 'foo'", specifier = "==3.5" },
         ]
+        provides-extras = ["foo"]
 
         [package.metadata.requires-dev]
         bar = [{ name = "idna", specifier = "==3.6" }]
@@ -4415,11 +4449,18 @@ conflicts = [
         "#,
     )?;
 
-    // I believe there are multiple valid solutions here, but the main
-    // thing is that `x2` should _not_ activate the `idna==3.4` dependency
-    // in `proxy1`. The `--extra=x2` should be a no-op, since there is no
-    // `x2` extra in the top level `pyproject.toml`.
+    // Error out, as x2 extra is only on the child.
     uv_snapshot!(context.filters(), context.sync().arg("--extra=x2"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    error: Extra `x2` is not defined in the project's `optional-dependencies` table
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4440,6 +4481,7 @@ conflicts = [
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = "==3.11.*"
         conflicts = [[
             { package = "project", extra = "x1" },
@@ -4518,6 +4560,7 @@ conflicts = [
             { name = "idna", marker = "extra == 'x1'", specifier = "==3.6" },
             { name = "proxy1", virtual = "proxy1" },
         ]
+        provides-extras = ["x1"]
 
         [[package]]
         name = "proxy1"
@@ -4537,6 +4580,7 @@ conflicts = [
             { name = "idna", marker = "extra == 'x2'", specifier = "==3.4" },
             { name = "idna", marker = "extra == 'x3'", specifier = "==3.5" },
         ]
+        provides-extras = ["x2", "x3"]
 
         [[package]]
         name = "sniffio"
@@ -4623,6 +4667,7 @@ fn jinja_no_conflict_markers1() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "cu118" },
@@ -4712,6 +4757,7 @@ fn jinja_no_conflict_markers1() -> Result<()> {
             { name = "jinja2", extras = ["i18n"], marker = "extra == 'cu118'", specifier = "==3.1.2", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118", conflict = { package = "project", extra = "cu118" } },
             { name = "jinja2", extras = ["i18n"], marker = "extra == 'cu124'", specifier = "==3.1.3", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "project", extra = "cu124" } },
         ]
+        provides-extras = ["cu118", "cu124"]
         "###
         );
     });
@@ -4783,6 +4829,7 @@ fn jinja_no_conflict_markers2() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         resolution-markers = [
             "extra != 'extra-7-project-cu118' and extra == 'extra-7-project-cu124'",
@@ -4879,6 +4926,7 @@ fn jinja_no_conflict_markers2() -> Result<()> {
             { name = "jinja2", marker = "sys_platform != 'darwin' and extra == 'cu118'", specifier = "==3.1.2" },
             { name = "jinja2", marker = "extra == 'cu124'", specifier = "==3.1.3", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "project", extra = "cu124" } },
         ]
+        provides-extras = ["cu118", "cu124"]
         "###
         );
     });
@@ -4942,6 +4990,7 @@ fn collision_extra() -> Result<()> {
             lock,
             @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         conflicts = [[
             { package = "pkg", extra = "foo" },
@@ -5009,6 +5058,7 @@ fn collision_extra() -> Result<()> {
             { name = "idna", marker = "extra == 'foo'", specifier = "==3.5" },
             { name = "sortedcontainers", marker = "extra == 'extra-3-pkg-foo'", specifier = ">=2" },
         ]
+        provides-extras = ["foo", "bar", "extra-3-pkg-foo"]
 
         [[package]]
         name = "sniffio"
@@ -5169,6 +5219,7 @@ fn extra_inferences() -> Result<()> {
             lock,
             @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         conflicts = [[
             { package = "pkg", extra = "x1" },
@@ -6544,6 +6595,7 @@ fn extra_inferences() -> Result<()> {
             { name = "apache-airflow", marker = "extra == 'x2'", specifier = "==2.6.0" },
             { name = "quickpath-airflow-operator", specifier = "==1.0.2" },
         ]
+        provides-extras = ["x1", "x2"]
 
         [[package]]
         name = "pluggy"
@@ -7203,6 +7255,7 @@ fn deduplicate_resolution_markers() -> Result<()> {
             lock,
             @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         resolution-markers = [
             "sys_platform != 'linux' and extra != 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2'",
@@ -7283,6 +7336,7 @@ fn deduplicate_resolution_markers() -> Result<()> {
             { name = "markupsafe", marker = "sys_platform == 'linux' and extra == 'x2'", specifier = "==2.1.0" },
             { name = "markupsafe", marker = "sys_platform != 'linux' and extra == 'x2'", specifier = "==2.0.0" },
         ]
+        provides-extras = ["x1", "x2"]
         "###
         );
     });
@@ -7355,6 +7409,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
             lock,
             @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.10"
         resolution-markers = [
             "python_full_version >= '3.12' and sys_platform == 'win32' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
@@ -9702,6 +9757,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
             { name = "torch", marker = "extra == 'm3gnet'", specifier = "==2.2.1" },
             { name = "torchdata", marker = "extra == 'm3gnet'", specifier = "==0.7.1" },
         ]
+        provides-extras = ["chgnet", "m3gnet"]
 
         [[package]]
         name = "torch"
@@ -10095,6 +10151,7 @@ fn overlapping_resolution_markers() -> Result<()> {
             lock,
             @r###"
         version = 1
+        revision = 1
         requires-python = "==3.10.*"
         resolution-markers = [
             "sys_platform == 'linux' and extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118'",
@@ -10139,6 +10196,7 @@ fn overlapping_resolution_markers() -> Result<()> {
             { name = "torch", marker = "extra == 'cu118'", specifier = "==2.2.2" },
             { name = "wandb", specifier = "==0.17.6" },
         ]
+        provides-extras = ["cpu", "cu118"]
 
         [[package]]
         name = "certifi"

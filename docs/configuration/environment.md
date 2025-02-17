@@ -178,6 +178,17 @@ Equivalent to the `--locked` command-line argument. If set, uv will assert that 
 Equivalent to the `--native-tls` command-line argument. If set to `true`, uv will
 use the system's trust store instead of the bundled `webpki-roots` crate.
 
+### `UV_NO_BINARY`
+
+Equivalent to the `--no-binary` command-line argument. If set, uv will install
+all packages from source. The resolver will still use pre-built wheels to
+extract package metadata, if available.
+
+### `UV_NO_BINARY_PACKAGE`
+
+Equivalent to the `--no-binary-package` command line argument. If set, uv will
+not use pre-built wheels for the given space-delimited list of packages.
+
 ### `UV_NO_BUILD_ISOLATION`
 
 Equivalent to the `--no-build-isolation` command-line argument. If set, uv will
@@ -533,6 +544,18 @@ Path to system-level configuration directory on Windows systems.
 ### `TRACING_DURATIONS_FILE`
 
 Use to create the tracing durations file via the `tracing-durations-export` feature.
+
+### `UV`
+
+The path to the binary that was used to invoke uv.
+
+This is propagated to all subprocesses spawned by uv.
+
+If the executable was invoked through a symbolic link, some platforms will return the path
+of the symbolic link and other platforms will return the path of the symbolic link’s target.
+
+See <https://doc.rust-lang.org/std/env/fn.current_exe.html#security> for security
+considerations.
 
 ### `VIRTUAL_ENV`
 

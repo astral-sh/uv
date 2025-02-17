@@ -137,6 +137,7 @@ pub(crate) async fn lock(
                 allow_insecure_host,
                 &install_mirrors,
                 no_config,
+                Some(false),
                 cache,
                 printer,
             )
@@ -419,6 +420,41 @@ async fn do_lock(
         environments
     };
 
+    // Collect the list of required platforms.
+    let required_environments = if let Some(required_environments) = target.required_environments()
+    {
+        // Ensure that the environments are disjoint.
+        for (lhs, rhs) in required_environments
+            .as_markers()
+            .iter()
+            .zip(required_environments.as_markers().iter().skip(1))
+        {
+            if !lhs.is_disjoint(*rhs) {
+                let mut hint = lhs.negate();
+                hint.and(*rhs);
+
+                let lhs = lhs
+                    .contents()
+                    .map(|contents| contents.to_string())
+                    .unwrap_or_else(|| "true".to_string());
+                let rhs = rhs
+                    .contents()
+                    .map(|contents| contents.to_string())
+                    .unwrap_or_else(|| "true".to_string());
+                let hint = hint
+                    .contents()
+                    .map(|contents| contents.to_string())
+                    .unwrap_or_else(|| "true".to_string());
+
+                return Err(ProjectError::OverlappingMarkers(lhs, rhs, hint));
+            }
+        }
+
+        Some(required_environments)
+    } else {
+        None
+    };
+
     // Determine the supported Python range. If no range is defined, and warn and default to the
     // current minor version.
     let requires_python = target.requires_python()?;
@@ -516,6 +552,7 @@ async fn do_lock(
         .exclude_newer(exclude_newer)
         .index_strategy(index_strategy)
         .build_options(build_options.clone())
+        .required_environments(required_environments.cloned().unwrap_or_default())
         .build();
     let hasher = HashStrategy::Generate(HashGeneration::Url);
 
@@ -572,6 +609,7 @@ async fn do_lock(
             &overrides,
             &conflicts,
             environments,
+            required_environments,
             dependency_metadata,
             interpreter,
             &requires_python,
@@ -740,6 +778,12 @@ async fn do_lock(
                         .cloned()
                         .map(SupportedEnvironments::into_markers)
                         .unwrap_or_default(),
+                )
+                .with_required_environments(
+                    required_environments
+                        .cloned()
+                        .map(SupportedEnvironments::into_markers)
+                        .unwrap_or_default(),
                 );
 
             Ok(LockResult::Changed(previous, lock))
@@ -774,6 +818,7 @@ impl ValidatedLock {
         overrides: &[Requirement],
         conflicts: &Conflicts,
         environments: Option<&SupportedEnvironments>,
+        required_environments: Option<&SupportedEnvironments>,
         dependency_metadata: &DependencyMetadata,
         interpreter: &Interpreter,
         requires_python: &RequiresPython,
@@ -876,6 +921,23 @@ impl ValidatedLock {
         // If the set of supported environments has changed, we have to perform a clean resolution.
         let expected = lock.simplified_supported_environments();
         let actual = environments
+            .map(SupportedEnvironments::as_markers)
+            .unwrap_or_default()
+            .iter()
+            .copied()
+            .map(|marker| lock.simplify_environment(marker))
+            .collect::<Vec<_>>();
+        if expected != actual {
+            debug!(
+                "Ignoring existing lockfile due to change in supported environments: `{:?}` vs. `{:?}`",
+                expected, actual
+            );
+            return Ok(Self::Versions(lock));
+        }
+
+        // If the set of required platforms has changed, we have to perform a clean resolution.
+        let expected = lock.simplified_required_environments();
+        let actual = required_environments
             .map(SupportedEnvironments::as_markers)
             .unwrap_or_default()
             .iter()

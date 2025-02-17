@@ -1,10 +1,10 @@
+use std::collections::hash_map::Entry;
+
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::visit::EdgeRef;
 use petgraph::{Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
-use std::collections::hash_map::Entry;
 
-use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{ConflictItem, Conflicts};
 
@@ -240,18 +240,18 @@ pub(crate) fn simplify_conflict_markers(
                     if !inf.included {
                         return None;
                     }
-                    Some((inf.item.package().clone(), inf.item.extra()?.clone()))
+                    Some((inf.item.package(), inf.item.extra()?))
                 })
-                .collect::<Vec<(PackageName, ExtraName)>>();
+                .collect::<Vec<_>>();
             let groups = set
                 .iter()
                 .filter_map(|inf| {
                     if !inf.included {
                         return None;
                     }
-                    Some((inf.item.package().clone(), inf.item.group()?.clone()))
+                    Some((inf.item.package(), inf.item.group()?))
                 })
-                .collect::<Vec<(PackageName, GroupName)>>();
+                .collect::<Vec<_>>();
             graph[edge_index].conflict().evaluate(&extras, &groups)
         });
         if !all_paths_satisfied {

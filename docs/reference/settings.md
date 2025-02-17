@@ -269,6 +269,45 @@ package = false
 
 ---
 
+### [`required-environments`](#required-environments) {: #required-environments }
+
+A list of required platforms, for packages that lack source distributions.
+
+When a package does not have a source distribution, it's availability will be limited to
+the platforms supported by its built distributions (wheels). For example, if a package only
+publishes wheels for Linux, then it won't be installable on macOS or Windows.
+
+By default, uv requires each package to include at least one wheel that is compatible with
+the designated Python version. The `required-environments` setting can be used to ensure that
+the resulting resolution contains wheels for specific platforms, or fails if no such wheels
+are available.
+
+While the `environments` setting _limits_ the set of environments that uv will consider when
+resolving dependencies, `required-environments` _expands_ the set of platforms that uv _must_
+support when resolving dependencies.
+
+For example, `environments = ["sys_platform == 'darwin'"]` would limit uv to solving for
+macOS (and ignoring Linux and Windows). On the other hand, `required-environments = ["sys_platform == 'darwin'"]`
+would _require_ that any package without a source distribution include a wheel for macOS in
+order to be installable.
+
+**Default value**: `[]`
+
+**Type**: `str | list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+# Require that the package is available for macOS ARM and x86 (Intel).
+required-environments = [
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+]
+```
+
+---
+
 ### [`sources`](#sources) {: #sources }
 
 The sources to use when resolving dependencies.

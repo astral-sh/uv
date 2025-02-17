@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
@@ -5,24 +6,24 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tracing::debug;
+use tracing::{debug, warn};
 
-use uv_cache::Cache;
+use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, DryRun,
-    ExtrasSpecification, PreviewMode, Reinstall, TrustedHost, Upgrade,
+    ExtrasSpecification, PreviewMode, Reinstall, SourceStrategy, TrustedHost, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
-use uv_distribution::DistributionDatabase;
+use uv_distribution::{DistributionDatabase, LoweredRequirement};
 use uv_distribution_types::{
     Index, Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::{LockedFile, Simplified, CWD};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{SatisfiesResult, SitePackages};
-use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
 use uv_pypi_types::{ConflictPackage, ConflictSet, Conflicts, Requirement};
@@ -39,11 +40,12 @@ use uv_resolver::{
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
+use uv_static::EnvVars;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::PyProjectToml;
-use uv_workspace::{ProjectWorkspace, Workspace};
+use uv_workspace::Workspace;
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
@@ -150,6 +152,15 @@ pub(crate) enum ProjectError {
     #[error("Default group `{0}` (from `tool.uv.default-groups`) is not defined in the project's `dependency-groups` table")]
     MissingDefaultGroup(GroupName),
 
+    #[error("Extra `{0}` is not defined in the project's `optional-dependencies` table")]
+    MissingExtraProject(ExtraName),
+
+    #[error("Extra `{0}` is not defined in any project's `optional-dependencies` table")]
+    MissingExtraWorkspace(ExtraName),
+
+    #[error("PEP 723 scripts do not support optional dependencies, but extra `{0}` was specified")]
+    MissingExtraScript(ExtraName),
+
     #[error("Supported environments must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
     OverlappingMarkers(String, String, String),
 
@@ -182,6 +193,9 @@ pub(crate) enum ProjectError {
 
     #[error("Failed to find `site-packages` directory for environment")]
     NoSitePackages,
+
+    #[error("Attempted to drop a temporary virtual environment while still in-use")]
+    DroppedEnvironment,
 
     #[error(transparent)]
     DependencyGroup(#[from] DependencyGroupError),
@@ -221,6 +235,9 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     Metadata(#[from] uv_distribution::MetadataError),
+
+    #[error(transparent)]
+    Lowering(#[from] uv_distribution::LoweringError),
 
     #[error(transparent)]
     PyprojectMut(#[from] uv_workspace::pyproject_mut::Error),
@@ -515,9 +532,100 @@ fn validate_script_requires_python(
 
 /// An interpreter suitable for a PEP 723 script.
 #[derive(Debug, Clone)]
-pub(crate) struct ScriptInterpreter(Interpreter);
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum ScriptInterpreter {
+    /// An interpreter to use to create a new script environment.
+    Interpreter(Interpreter),
+    /// An interpreter from an existing script environment.
+    Environment(PythonEnvironment),
+}
 
 impl ScriptInterpreter {
+    /// Return the expected virtual environment path for the [`Pep723Script`].
+    ///
+    /// If `--active` is set, the active virtual environment will be preferred.
+    ///
+    /// See: [`Workspace::venv`].
+    pub(crate) fn root(script: Pep723ItemRef<'_>, active: Option<bool>, cache: &Cache) -> PathBuf {
+        /// Resolve the `VIRTUAL_ENV` variable, if any.
+        fn from_virtual_env_variable() -> Option<PathBuf> {
+            let value = std::env::var_os(EnvVars::VIRTUAL_ENV)?;
+
+            if value.is_empty() {
+                return None;
+            };
+
+            let path = PathBuf::from(value);
+            if path.is_absolute() {
+                return Some(path);
+            };
+
+            // Resolve the path relative to current directory.
+            Some(CWD.join(path))
+        }
+
+        // Determine the stable path to the script environment in the cache.
+        let cache_env = {
+            let entry = match script {
+                // For local scripts, use a hash of the path to the script.
+                Pep723ItemRef::Script(script) => {
+                    let digest = cache_digest(&script.path);
+                    if let Some(file_name) = script
+                        .path
+                        .file_stem()
+                        .and_then(|name| name.to_str())
+                        .and_then(cache_name)
+                    {
+                        format!("{file_name}-{digest}")
+                    } else {
+                        digest
+                    }
+                }
+                // For remote scripts, use a hash of the URL.
+                Pep723ItemRef::Remote(.., url) => cache_digest(url),
+                // Otherwise, use a hash of the metadata.
+                Pep723ItemRef::Stdin(metadata) => cache_digest(&metadata.raw),
+            };
+
+            cache
+                .shard(CacheBucket::Environments, entry)
+                .into_path_buf()
+        };
+
+        // If `--active` is set, prefer the active virtual environment.
+        if let Some(from_virtual_env) = from_virtual_env_variable() {
+            if !uv_fs::is_same_file_allow_missing(&from_virtual_env, &cache_env).unwrap_or(false) {
+                match active {
+                    Some(true) => {
+                        debug!(
+                            "Using active virtual environment `{}` instead of script environment `{}`",
+                            from_virtual_env.user_display(),
+                            cache_env.user_display()
+                        );
+                        return from_virtual_env;
+                    }
+                    Some(false) => {}
+                    None => {
+                        warn_user_once!(
+                            "`VIRTUAL_ENV={}` does not match the script environment path `{}` and will be ignored; use `--active` to target the active environment instead",
+                            from_virtual_env.user_display(),
+                            cache_env.user_display()
+                        );
+                    }
+                }
+            }
+        } else {
+            if active.unwrap_or_default() {
+                debug!(
+                    "Use of the active virtual environment was requested, but `VIRTUAL_ENV` is not set"
+                );
+            }
+        }
+
+        // Otherwise, use the cache root.
+        cache_env
+    }
+
     /// Discover the interpreter to use for the current [`Pep723Item`].
     pub(crate) async fn discover(
         script: Pep723ItemRef<'_>,
@@ -529,6 +637,7 @@ impl ScriptInterpreter {
         allow_insecure_host: &[TrustedHost],
         install_mirrors: &PythonInstallMirrors,
         no_config: bool,
+        active: Option<bool>,
         cache: &Cache,
         printer: Printer,
     ) -> Result<Self, ProjectError> {
@@ -540,6 +649,41 @@ impl ScriptInterpreter {
             python_request,
             requires_python,
         } = ScriptPython::from_request(python_request, workspace, script, no_config).await?;
+
+        let root = Self::root(script, active, cache);
+
+        match PythonEnvironment::from_root(&root, cache) {
+            Ok(venv) => {
+                if python_request.as_ref().map_or(true, |request| {
+                    if request.satisfied(venv.interpreter(), cache) {
+                        debug!(
+                            "The script environment's Python version satisfies `{}`",
+                            request.to_canonical_string()
+                        );
+                        true
+                    } else {
+                        debug!(
+                            "The script environment's Python version does not satisfy `{}`",
+                            request.to_canonical_string()
+                        );
+                        false
+                    }
+                }) {
+                    if let Some((requires_python, ..)) = requires_python.as_ref() {
+                        if requires_python.contains(venv.interpreter().python_version()) {
+                            return Ok(Self::Environment(venv));
+                        }
+                        debug!(
+                            "The script environment's Python version does not meet the script's Python requirement: `{requires_python}`"
+                        );
+                    } else {
+                        return Ok(Self::Environment(venv));
+                    }
+                }
+            }
+            Err(uv_python::Error::MissingEnvironment(_)) => {}
+            Err(err) => warn!("Ignoring existing script environment: {err}"),
+        };
 
         let client_builder = BaseClientBuilder::new()
             .connectivity(connectivity)
@@ -574,12 +718,42 @@ impl ScriptInterpreter {
             warn_user!("{err}");
         }
 
-        Ok(Self(interpreter))
+        Ok(Self::Interpreter(interpreter))
     }
 
     /// Consume the [`PythonInstallation`] and return the [`Interpreter`].
     pub(crate) fn into_interpreter(self) -> Interpreter {
-        self.0
+        match self {
+            ScriptInterpreter::Interpreter(interpreter) => interpreter,
+            ScriptInterpreter::Environment(venv) => venv.into_interpreter(),
+        }
+    }
+
+    /// Grab a file lock for the script to prevent concurrent writes across processes.
+    pub(crate) async fn lock(script: Pep723ItemRef<'_>) -> Result<LockedFile, std::io::Error> {
+        match script {
+            Pep723ItemRef::Script(script) => {
+                LockedFile::acquire(
+                    std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&script.path))),
+                    script.path.simplified_display(),
+                )
+                .await
+            }
+            Pep723ItemRef::Remote(.., url) => {
+                LockedFile::acquire(
+                    std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(url))),
+                    url.to_string(),
+                )
+                .await
+            }
+            Pep723ItemRef::Stdin(metadata) => {
+                LockedFile::acquire(
+                    std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&metadata.raw))),
+                    "stdin".to_string(),
+                )
+                .await
+            }
+        }
     }
 }
 
@@ -937,15 +1111,24 @@ enum ProjectEnvironment {
     Existing(PythonEnvironment),
     /// An existing [`PythonEnvironment`] was discovered, but did not satisfy the project's
     /// requirements, and so was replaced.
-    ///
-    /// In `--dry-run` mode, the environment will not be replaced, but this variant will still be
-    /// returned.
-    Replaced(PythonEnvironment, PathBuf),
+    Replaced(PythonEnvironment),
     /// A new [`PythonEnvironment`] was created.
-    ///
-    /// In `--dry-run` mode, the environment will not be created, but this variant will still be
-    /// returned.
-    New(PythonEnvironment, PathBuf),
+    Created(PythonEnvironment),
+    /// An existing [`PythonEnvironment`] was discovered, but did not satisfy the project's
+    /// requirements. A new environment would've been created, but `--dry-run` mode is enabled; as
+    /// such, a temporary environment was created instead.
+    WouldReplace(
+        PathBuf,
+        PythonEnvironment,
+        #[allow(unused)] tempfile::TempDir,
+    ),
+    /// A new [`PythonEnvironment`] would've been created, but `--dry-run` mode is enabled; as such,
+    /// a temporary environment was created instead.
+    WouldCreate(
+        PathBuf,
+        PythonEnvironment,
+        #[allow(unused)] tempfile::TempDir,
+    ),
 }
 
 impl ProjectEnvironment {
@@ -990,10 +1173,10 @@ impl ProjectEnvironment {
 
             // Otherwise, create a virtual environment with the discovered interpreter.
             ProjectInterpreter::Interpreter(interpreter) => {
-                let venv = workspace.venv(active);
+                let root = workspace.venv(active);
 
                 // Avoid removing things that are not virtual environments
-                let replace = match (venv.try_exists(), venv.join("pyvenv.cfg").try_exists()) {
+                let replace = match (root.try_exists(), root.join("pyvenv.cfg").try_exists()) {
                     // It's a virtual environment we can remove it
                     (_, Ok(true)) => true,
                     // It doesn't exist at all, we should use it without deleting it to avoid TOCTOU bugs
@@ -1001,11 +1184,11 @@ impl ProjectEnvironment {
                     // If it's not a virtual environment, bail
                     (Ok(true), Ok(false)) => {
                         // Unless it's empty, in which case we just ignore it
-                        if venv.read_dir().is_ok_and(|mut dir| dir.next().is_none()) {
+                        if root.read_dir().is_ok_and(|mut dir| dir.next().is_none()) {
                             false
                         } else {
                             return Err(ProjectError::InvalidProjectEnvironmentDir(
-                                venv,
+                                root,
                                 "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
                             ));
                         }
@@ -1013,42 +1196,11 @@ impl ProjectEnvironment {
                     // Similarly, if we can't _tell_ if it exists we should bail
                     (_, Err(err)) | (Err(err), _) => {
                         return Err(ProjectError::InvalidProjectEnvironmentDir(
-                            venv,
+                            root,
                             format!("it is not a compatible environment but cannot be recreated because uv cannot determine if it is a virtual environment: {err}"),
                         ));
                     }
                 };
-
-                // Under `--dry-run`, avoid modifying the environment.
-                if dry_run.enabled() {
-                    let environment = PythonEnvironment::from_interpreter(interpreter);
-                    return Ok(if replace {
-                        Self::Replaced(environment, venv)
-                    } else {
-                        Self::New(environment, venv)
-                    });
-                }
-
-                // Remove the existing virtual environment if it doesn't meet the requirements.
-                if replace {
-                    match fs_err::remove_dir_all(&venv) {
-                        Ok(()) => {
-                            writeln!(
-                                printer.stderr(),
-                                "Removed virtual environment at: {}",
-                                venv.user_display().cyan()
-                            )?;
-                        }
-                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                        Err(e) => return Err(e.into()),
-                    }
-                }
-
-                writeln!(
-                    printer.stderr(),
-                    "Creating virtual environment at: {}",
-                    venv.user_display().cyan()
-                )?;
 
                 // Determine a prompt for the environment, in order of preference:
                 //
@@ -1069,8 +1221,48 @@ impl ProjectEnvironment {
                     .map(uv_virtualenv::Prompt::Static)
                     .unwrap_or(uv_virtualenv::Prompt::None);
 
+                // Under `--dry-run`, avoid modifying the environment.
+                if dry_run.enabled() {
+                    let temp_dir = cache.venv_dir()?;
+                    let environment = uv_virtualenv::create_venv(
+                        temp_dir.path(),
+                        interpreter,
+                        prompt,
+                        false,
+                        false,
+                        false,
+                        false,
+                    )?;
+                    return Ok(if replace {
+                        Self::WouldReplace(root, environment, temp_dir)
+                    } else {
+                        Self::WouldCreate(root, environment, temp_dir)
+                    });
+                }
+
+                // Remove the existing virtual environment if it doesn't meet the requirements.
+                if replace {
+                    match fs_err::remove_dir_all(&root) {
+                        Ok(()) => {
+                            writeln!(
+                                printer.stderr(),
+                                "Removed virtual environment at: {}",
+                                root.user_display().cyan()
+                            )?;
+                        }
+                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(e) => return Err(e.into()),
+                    }
+                }
+
+                writeln!(
+                    printer.stderr(),
+                    "Creating virtual environment at: {}",
+                    root.user_display().cyan()
+                )?;
+
                 let environment = uv_virtualenv::create_venv(
-                    &venv,
+                    &root,
                     interpreter,
                     prompt,
                     false,
@@ -1080,20 +1272,207 @@ impl ProjectEnvironment {
                 )?;
 
                 if replace {
-                    Ok(Self::Replaced(environment, venv))
+                    Ok(Self::Replaced(environment))
                 } else {
-                    Ok(Self::New(environment, venv))
+                    Ok(Self::Created(environment))
                 }
             }
         }
     }
 
     /// Convert the [`ProjectEnvironment`] into a [`PythonEnvironment`].
-    pub(crate) fn into_environment(self) -> PythonEnvironment {
+    ///
+    /// Returns an error if the environment was created in `--dry-run` mode, as dropping the
+    /// associated temporary directory could lead to errors downstream.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn into_environment(self) -> Result<PythonEnvironment, ProjectError> {
+        match self {
+            Self::Existing(environment) => Ok(environment),
+            Self::Replaced(environment) => Ok(environment),
+            Self::Created(environment) => Ok(environment),
+            Self::WouldReplace(..) => Err(ProjectError::DroppedEnvironment),
+            Self::WouldCreate(..) => Err(ProjectError::DroppedEnvironment),
+        }
+    }
+}
+
+impl std::ops::Deref for ProjectEnvironment {
+    type Target = PythonEnvironment;
+
+    fn deref(&self) -> &Self::Target {
         match self {
             Self::Existing(environment) => environment,
-            Self::Replaced(environment, ..) => environment,
-            Self::New(environment, ..) => environment,
+            Self::Replaced(environment) => environment,
+            Self::Created(environment) => environment,
+            Self::WouldReplace(_, environment, _) => environment,
+            Self::WouldCreate(_, environment, _) => environment,
+        }
+    }
+}
+
+/// The Python environment for a script.
+#[derive(Debug)]
+enum ScriptEnvironment {
+    /// An existing [`PythonEnvironment`] was discovered, which satisfies the script's requirements.
+    Existing(PythonEnvironment),
+    /// An existing [`PythonEnvironment`] was discovered, but did not satisfy the script's
+    /// requirements, and so was replaced.
+    Replaced(PythonEnvironment),
+    /// A new [`PythonEnvironment`] was created for the script.
+    Created(PythonEnvironment),
+    /// An existing [`PythonEnvironment`] was discovered, but did not satisfy the script's
+    /// requirements. A new environment would've been created, but `--dry-run` mode is enabled; as
+    /// such, a temporary environment was created instead.
+    WouldReplace(
+        PathBuf,
+        PythonEnvironment,
+        #[allow(unused)] tempfile::TempDir,
+    ),
+    /// A new [`PythonEnvironment`] would've been created, but `--dry-run` mode is enabled; as such,
+    /// a temporary environment was created instead.
+    WouldCreate(
+        PathBuf,
+        PythonEnvironment,
+        #[allow(unused)] tempfile::TempDir,
+    ),
+}
+
+impl ScriptEnvironment {
+    /// Initialize a virtual environment for a PEP 723 script.
+    pub(crate) async fn get_or_init(
+        script: Pep723ItemRef<'_>,
+        python_request: Option<PythonRequest>,
+        python_preference: PythonPreference,
+        python_downloads: PythonDownloads,
+        connectivity: Connectivity,
+        native_tls: bool,
+        allow_insecure_host: &[TrustedHost],
+        install_mirrors: &PythonInstallMirrors,
+        no_config: bool,
+        active: Option<bool>,
+        cache: &Cache,
+        dry_run: DryRun,
+        printer: Printer,
+    ) -> Result<Self, ProjectError> {
+        // Lock the script environment to avoid synchronization issues.
+        let _lock = ScriptInterpreter::lock(script).await?;
+
+        match ScriptInterpreter::discover(
+            script,
+            python_request,
+            python_preference,
+            python_downloads,
+            connectivity,
+            native_tls,
+            allow_insecure_host,
+            install_mirrors,
+            no_config,
+            active,
+            cache,
+            printer,
+        )
+        .await?
+        {
+            // If we found an existing, compatible environment, use it.
+            ScriptInterpreter::Environment(environment) => Ok(Self::Existing(environment)),
+
+            // Otherwise, create a virtual environment with the discovered interpreter.
+            ScriptInterpreter::Interpreter(interpreter) => {
+                let root = ScriptInterpreter::root(script, active, cache);
+
+                // Determine a prompt for the environment, in order of preference:
+                //
+                // 1) The name of the script
+                // 2) No prompt
+                let prompt = script
+                    .path()
+                    .and_then(|path| path.file_name())
+                    .map(|f| f.to_string_lossy().to_string())
+                    .map(uv_virtualenv::Prompt::Static)
+                    .unwrap_or(uv_virtualenv::Prompt::None);
+
+                // Under `--dry-run`, avoid modifying the environment.
+                if dry_run.enabled() {
+                    let temp_dir = cache.venv_dir()?;
+                    let environment = uv_virtualenv::create_venv(
+                        temp_dir.path(),
+                        interpreter,
+                        prompt,
+                        false,
+                        false,
+                        false,
+                        false,
+                    )?;
+                    return Ok(if root.exists() {
+                        Self::WouldReplace(root, environment, temp_dir)
+                    } else {
+                        Self::WouldCreate(root, environment, temp_dir)
+                    });
+                }
+
+                // Remove the existing virtual environment.
+                let replaced = match fs_err::remove_dir_all(&root) {
+                    Ok(()) => {
+                        debug!(
+                            "Removed virtual environment at: {}",
+                            root.user_display().cyan()
+                        );
+                        true
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
+                    Err(err) => return Err(err.into()),
+                };
+
+                debug!(
+                    "Creating script environment at: {}",
+                    root.user_display().cyan()
+                );
+
+                let environment = uv_virtualenv::create_venv(
+                    &root,
+                    interpreter,
+                    prompt,
+                    false,
+                    false,
+                    false,
+                    false,
+                )?;
+
+                Ok(if replaced {
+                    Self::Replaced(environment)
+                } else {
+                    Self::Created(environment)
+                })
+            }
+        }
+    }
+
+    /// Convert the [`ScriptEnvironment`] into a [`PythonEnvironment`].
+    ///
+    /// Returns an error if the environment was created in `--dry-run` mode, as dropping the
+    /// associated temporary directory could lead to errors downstream.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn into_environment(self) -> Result<PythonEnvironment, ProjectError> {
+        match self {
+            Self::Existing(environment) => Ok(environment),
+            Self::Replaced(environment) => Ok(environment),
+            Self::Created(environment) => Ok(environment),
+            Self::WouldReplace(..) => Err(ProjectError::DroppedEnvironment),
+            Self::WouldCreate(..) => Err(ProjectError::DroppedEnvironment),
+        }
+    }
+}
+
+impl std::ops::Deref for ScriptEnvironment {
+    type Target = PythonEnvironment;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Existing(environment) => environment,
+            Self::Replaced(environment) => environment,
+            Self::Created(environment) => environment,
+            Self::WouldReplace(_, environment, _) => environment,
+            Self::WouldCreate(_, environment, _) => environment,
         }
     }
 }
@@ -1606,6 +1985,7 @@ pub(crate) async fn update_environment(
     native_tls: bool,
     allow_insecure_host: &[TrustedHost],
     cache: &Cache,
+    dry_run: DryRun,
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<EnvironmentUpdate, ProjectError> {
@@ -1721,7 +2101,6 @@ pub(crate) async fn update_environment(
     // optional on the downstream APIs.
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
-    let dry_run = DryRun::default();
     let extras = ExtrasSpecification::default();
     let groups = DevGroupsSpecification::default();
     let hasher = HashStrategy::default();
@@ -1882,49 +2261,6 @@ pub(crate) async fn init_script_python_requirement(
     ))
 }
 
-#[derive(Debug, Copy, Clone)]
-pub(crate) enum DependencyGroupsTarget<'env> {
-    /// The dependency groups can be defined in any workspace member.
-    Workspace(&'env Workspace),
-    /// The dependency groups must be defined in the target project.
-    Project(&'env ProjectWorkspace),
-    /// The dependency groups must be defined in the target script.
-    Script,
-}
-
-impl DependencyGroupsTarget<'_> {
-    /// Validate the dependency groups requested by the [`DevGroupsSpecification`].
-    #[allow(clippy::result_large_err)]
-    pub(crate) fn validate(self, dev: &DevGroupsSpecification) -> Result<(), ProjectError> {
-        for group in dev.explicit_names() {
-            match self {
-                Self::Workspace(workspace) => {
-                    // The group must be defined in the workspace.
-                    if !workspace.groups().contains(group) {
-                        return Err(ProjectError::MissingGroupWorkspace(group.clone()));
-                    }
-                }
-                Self::Project(project) => {
-                    // The group must be defined in the target project.
-                    if !project
-                        .current_project()
-                        .pyproject_toml()
-                        .dependency_groups
-                        .as_ref()
-                        .is_some_and(|groups| groups.contains_key(group))
-                    {
-                        return Err(ProjectError::MissingGroupProject(group.clone()));
-                    }
-                }
-                Self::Script => {
-                    return Err(ProjectError::MissingGroupScript(group.clone()));
-                }
-            }
-        }
-        Ok(())
-    }
-}
-
 /// Returns the default dependency groups from the [`PyProjectToml`].
 #[allow(clippy::result_large_err)]
 pub(crate) fn default_dependency_groups(
@@ -1992,6 +2328,113 @@ pub(crate) fn detect_conflicts(
     Ok(())
 }
 
+/// Determine the [`RequirementsSpecification`] for a script.
+#[allow(clippy::result_large_err)]
+pub(crate) fn script_specification(
+    script: Pep723ItemRef<'_>,
+    settings: ResolverSettingsRef,
+) -> Result<Option<RequirementsSpecification>, ProjectError> {
+    let Some(dependencies) = script.metadata().dependencies.as_ref() else {
+        return Ok(None);
+    };
+
+    // Determine the working directory for the script.
+    let script_dir = match &script {
+        Pep723ItemRef::Script(script) => std::path::absolute(&script.path)?
+            .parent()
+            .expect("script path has no parent")
+            .to_owned(),
+        Pep723ItemRef::Stdin(..) | Pep723ItemRef::Remote(..) => std::env::current_dir()?,
+    };
+
+    // Collect any `tool.uv.index` from the script.
+    let empty = Vec::default();
+    let script_indexes = match settings.sources {
+        SourceStrategy::Enabled => script
+            .metadata()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.top_level.index.as_deref())
+            .unwrap_or(&empty),
+        SourceStrategy::Disabled => &empty,
+    };
+
+    // Collect any `tool.uv.sources` from the script.
+    let empty = BTreeMap::default();
+    let script_sources = match settings.sources {
+        SourceStrategy::Enabled => script
+            .metadata()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.sources.as_ref())
+            .unwrap_or(&empty),
+        SourceStrategy::Disabled => &empty,
+    };
+
+    let requirements = dependencies
+        .iter()
+        .cloned()
+        .flat_map(|requirement| {
+            LoweredRequirement::from_non_workspace_requirement(
+                requirement,
+                script_dir.as_ref(),
+                script_sources,
+                script_indexes,
+                settings.index_locations,
+            )
+            .map_ok(LoweredRequirement::into_inner)
+        })
+        .collect::<Result<_, _>>()?;
+    let constraints = script
+        .metadata()
+        .tool
+        .as_ref()
+        .and_then(|tool| tool.uv.as_ref())
+        .and_then(|uv| uv.constraint_dependencies.as_ref())
+        .into_iter()
+        .flatten()
+        .cloned()
+        .flat_map(|requirement| {
+            LoweredRequirement::from_non_workspace_requirement(
+                requirement,
+                script_dir.as_ref(),
+                script_sources,
+                script_indexes,
+                settings.index_locations,
+            )
+            .map_ok(LoweredRequirement::into_inner)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let overrides = script
+        .metadata()
+        .tool
+        .as_ref()
+        .and_then(|tool| tool.uv.as_ref())
+        .and_then(|uv| uv.override_dependencies.as_ref())
+        .into_iter()
+        .flatten()
+        .cloned()
+        .flat_map(|requirement| {
+            LoweredRequirement::from_non_workspace_requirement(
+                requirement,
+                script_dir.as_ref(),
+                script_sources,
+                script_indexes,
+                settings.index_locations,
+            )
+            .map_ok(LoweredRequirement::into_inner)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(Some(RequirementsSpecification::from_overrides(
+        requirements,
+        constraints,
+        overrides,
+    )))
+}
+
 /// Warn if the user provides (e.g.) an `--index-url` in a requirements file.
 fn warn_on_requirements_txt_setting(
     spec: &RequirementsSpecification,
@@ -2050,5 +2493,58 @@ fn warn_on_requirements_txt_setting(
 
     if !no_build.is_none() && settings.build_options.no_build() != no_build {
         warn_user_once!("Ignoring `--no-binary` setting from requirements file. Instead, use the `--no-build` command-line argument, or set `no-build` in a `uv.toml` or `pyproject.toml` file.");
+    }
+}
+
+/// Normalize a filename for use in a cache entry.
+///
+/// Replaces non-alphanumeric characters with dashes, and lowercases the filename.
+fn cache_name(name: &str) -> Option<Cow<'_, str>> {
+    if name.bytes().all(|c| matches!(c, b'0'..=b'9' | b'a'..=b'f')) {
+        return if name.is_empty() {
+            None
+        } else {
+            Some(Cow::Borrowed(name))
+        };
+    }
+    let mut normalized = String::with_capacity(name.len());
+    let mut dash = false;
+    for char in name.bytes() {
+        match char {
+            b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z' => {
+                dash = false;
+                normalized.push(char.to_ascii_lowercase() as char);
+            }
+            _ => {
+                if !dash {
+                    normalized.push('-');
+                    dash = true;
+                }
+            }
+        }
+    }
+    if normalized.ends_with('-') {
+        normalized.pop();
+    }
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(Cow::Owned(normalized))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cache_name() {
+        assert_eq!(cache_name("foo"), Some("foo".into()));
+        assert_eq!(cache_name("foo-bar"), Some("foo-bar".into()));
+        assert_eq!(cache_name("foo_bar"), Some("foo-bar".into()));
+        assert_eq!(cache_name("foo-bar_baz"), Some("foo-bar-baz".into()));
+        assert_eq!(cache_name("foo-bar_baz_"), Some("foo-bar-baz".into()));
+        assert_eq!(cache_name("foo-_bar_baz"), Some("foo-bar-baz".into()));
+        assert_eq!(cache_name("_+-_"), None);
     }
 }

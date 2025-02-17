@@ -31,7 +31,8 @@ use uv_distribution_types::{
     RemoteSource, ResolvedDist, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{relative_to, PortablePath, PortablePathBuf};
-use uv_git::{GitOid, GitReference, RepositoryReference, ResolvedRepositoryReference};
+use uv_git::{RepositoryReference, ResolvedRepositoryReference};
+use uv_git_types::{GitOid, GitReference};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
@@ -65,6 +66,9 @@ mod tree;
 
 /// The current version of the lockfile format.
 pub const VERSION: u32 = 1;
+
+/// The current revision of the lockfile format.
+const REVISION: u32 = 1;
 
 static LINUX_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'linux'").unwrap();
@@ -101,7 +105,21 @@ static X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
 pub struct Lock {
+    /// The (major) version of the lockfile format.
+    ///
+    /// Changes to the major version indicate backwards- and forwards-incompatible changes to the
+    /// lockfile format. A given uv version only supports a single major version of the lockfile
+    /// format.
+    ///
+    /// In other words, a version of uv that supports version 2 of the lockfile format will not be
+    /// able to read lockfiles generated under version 1 or 3.
     version: u32,
+    /// The revision of the lockfile format.
+    ///
+    /// Changes to the revision indicate backwards-compatible changes to the lockfile format.
+    /// In other words, versions of uv that only support revision 1 _will_ be able to read lockfiles
+    /// with a revision greater than 1 (though they may ignore newer fields).
+    revision: u32,
     /// If this lockfile was built from a forking resolution with non-identical forks, store the
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
     fork_markers: Vec<UniversalMarker>,
@@ -109,6 +127,8 @@ pub struct Lock {
     conflicts: Conflicts,
     /// The list of supported environments specified by the user.
     supported_environments: Vec<MarkerTree>,
+    /// The list of required platforms specified by the user.
+    required_environments: Vec<MarkerTree>,
     /// The range of supported Python versions.
     requires_python: RequiresPython,
     /// We discard the lockfile if these options don't match.
@@ -262,11 +282,13 @@ impl Lock {
         };
         let lock = Self::new(
             VERSION,
+            REVISION,
             packages,
             requires_python,
             options,
             ResolverManifest::default(),
             Conflicts::empty(),
+            vec![],
             vec![],
             resolution.fork_markers.clone(),
         )?;
@@ -347,12 +369,14 @@ impl Lock {
     /// Initialize a [`Lock`] from a list of [`Package`] entries.
     fn new(
         version: u32,
+        revision: u32,
         mut packages: Vec<Package>,
         requires_python: RequiresPython,
         options: ResolverOptions,
         manifest: ResolverManifest,
         conflicts: Conflicts,
         supported_environments: Vec<MarkerTree>,
+        required_environments: Vec<MarkerTree>,
         fork_markers: Vec<UniversalMarker>,
     ) -> Result<Self, LockError> {
         // Put all dependencies for each package in a canonical order and
@@ -500,9 +524,11 @@ impl Lock {
         }
         let lock = Self {
             version,
+            revision,
             fork_markers,
             conflicts,
             supported_environments,
+            required_environments,
             requires_python,
             options,
             packages,
@@ -545,9 +571,24 @@ impl Lock {
         self
     }
 
+    /// Record the required platforms that were used to generate this lock.
+    #[must_use]
+    pub fn with_required_environments(mut self, required_environments: Vec<MarkerTree>) -> Self {
+        self.required_environments = required_environments
+            .into_iter()
+            .map(|marker| self.requires_python.complexify_markers(marker))
+            .collect();
+        self
+    }
+
     /// Returns the lockfile version.
     pub fn version(&self) -> u32 {
         self.version
+    }
+
+    /// Returns the lockfile revision.
+    pub fn revision(&self) -> u32 {
+        self.revision
     }
 
     /// Returns the number of packages in the lockfile.
@@ -600,6 +641,11 @@ impl Lock {
         &self.supported_environments
     }
 
+    /// Returns the required platforms that were used to generate this lock.
+    pub fn required_environments(&self) -> &[MarkerTree] {
+        &self.required_environments
+    }
+
     /// Returns the workspace members that were used to generate this lock.
     pub fn members(&self) -> &BTreeSet<PackageName> {
         &self.manifest.members
@@ -642,6 +688,16 @@ impl Lock {
             .collect()
     }
 
+    /// Returns the required platforms that were used to generate this
+    /// lock.
+    pub fn simplified_required_environments(&self) -> Vec<MarkerTree> {
+        self.required_environments()
+            .iter()
+            .copied()
+            .map(|marker| self.simplify_environment(marker))
+            .collect()
+    }
+
     /// Simplify the given marker environment with respect to the lockfile's
     /// `requires-python` setting.
     pub fn simplify_environment(&self, marker: MarkerTree) -> MarkerTree {
@@ -660,6 +716,10 @@ impl Lock {
         // the use of inline tables.
         let mut doc = toml_edit::DocumentMut::new();
         doc.insert("version", value(i64::from(self.version)));
+
+        if self.revision > 0 {
+            doc.insert("revision", value(i64::from(self.revision)));
+        }
 
         doc.insert("requires-python", value(self.requires_python.to_string()));
 
@@ -681,6 +741,17 @@ impl Lock {
                     .filter_map(SimplifiedMarkerTree::try_to_string),
             );
             doc.insert("supported-markers", value(supported_environments));
+        }
+
+        if !self.required_environments.is_empty() {
+            let required_environments = each_element_on_its_line_array(
+                self.required_environments
+                    .iter()
+                    .copied()
+                    .map(|marker| SimplifiedMarkerTree::new(&self.requires_python, marker))
+                    .filter_map(SimplifiedMarkerTree::try_to_string),
+            );
+            doc.insert("required-markers", value(required_environments));
         }
 
         if !self.conflicts.is_empty() {
@@ -1661,6 +1732,7 @@ impl ResolverManifest {
 #[serde(rename_all = "kebab-case")]
 struct LockWire {
     version: u32,
+    revision: Option<u32>,
     requires_python: RequiresPython,
     /// If this lockfile was built from a forking resolution with non-identical forks, store the
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
@@ -1668,6 +1740,8 @@ struct LockWire {
     fork_markers: Vec<SimplifiedMarkerTree>,
     #[serde(rename = "supported-markers", default)]
     supported_environments: Vec<SimplifiedMarkerTree>,
+    #[serde(rename = "required-markers", default)]
+    required_environments: Vec<SimplifiedMarkerTree>,
     #[serde(rename = "conflicts", default)]
     conflicts: Option<Conflicts>,
     /// We discard the lockfile if these options match.
@@ -1693,8 +1767,8 @@ impl TryFrom<LockWire> for Lock {
             if ambiguous.contains(&dist.id.name) {
                 continue;
             }
-            if unambiguous_package_ids.remove(&dist.id.name).is_some() {
-                ambiguous.insert(dist.id.name.clone());
+            if let Some(id) = unambiguous_package_ids.remove(&dist.id.name) {
+                ambiguous.insert(id.name);
                 continue;
             }
             unambiguous_package_ids.insert(dist.id.name.clone(), dist.id.clone());
@@ -1710,6 +1784,11 @@ impl TryFrom<LockWire> for Lock {
             .into_iter()
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
             .collect();
+        let required_environments = wire
+            .required_environments
+            .into_iter()
+            .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
+            .collect();
         let fork_markers = wire
             .fork_markers
             .into_iter()
@@ -1718,12 +1797,14 @@ impl TryFrom<LockWire> for Lock {
             .collect();
         let lock = Lock::new(
             wire.version,
+            wire.revision.unwrap_or(0),
             packages,
             wire.requires_python,
             wire.options,
             wire.manifest,
             wire.conflicts.unwrap_or_else(Conflicts::empty),
             supported_environments,
+            required_environments,
             fork_markers,
         )?;
 
@@ -1790,6 +1871,16 @@ impl Package {
                 .collect::<Result<_, _>>()
                 .map_err(LockErrorKind::RequirementRelativePath)?
         };
+        let provides_extras = if id.source.is_immutable() {
+            Vec::default()
+        } else {
+            annotated_dist
+                .metadata
+                .as_ref()
+                .expect("metadata is present")
+                .provides_extras
+                .clone()
+        };
         let dependency_groups = if id.source.is_immutable() {
             BTreeMap::default()
         } else {
@@ -1820,6 +1911,7 @@ impl Package {
             dependency_groups: BTreeMap::default(),
             metadata: PackageMetadata {
                 requires_dist,
+                provides_extras,
                 dependency_groups,
             },
         })
@@ -2177,7 +2269,7 @@ impl Package {
                 url.set_query(None);
 
                 // Reconstruct the `GitUrl` from the `GitSource`.
-                let git_url = uv_git::GitUrl::from_commit(
+                let git_url = uv_git_types::GitUrl::from_commit(
                     url,
                     GitReference::from(git.kind.clone()),
                     git.precise,
@@ -2446,6 +2538,20 @@ impl Package {
                 }
             }
 
+            if !self.metadata.provides_extras.is_empty() {
+                let provides_extras = self
+                    .metadata
+                    .provides_extras
+                    .iter()
+                    .map(|extra| {
+                        serde::Serialize::serialize(&extra, toml_edit::ser::ValueSerializer::new())
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                // This is just a list of names, so linebreaking it is excessive.
+                let provides_extras = Array::from_iter(provides_extras);
+                metadata_table.insert("provides-extras", value(provides_extras));
+            }
+
             if !metadata_table.is_empty() {
                 table.insert("metadata", Item::Table(metadata_table));
             }
@@ -2589,6 +2695,16 @@ impl Package {
     fn is_dynamic(&self) -> bool {
         self.id.version.is_none()
     }
+
+    /// Returns the extras the package provides, if any.
+    pub fn provides_extras(&self) -> &[ExtraName] {
+        &self.metadata.provides_extras
+    }
+
+    /// Returns the dependency groups the package provides, if any.
+    pub fn dependency_groups(&self) -> &BTreeMap<GroupName, BTreeSet<Requirement>> {
+        &self.metadata.dependency_groups
+    }
 }
 
 /// Attempts to construct a `VerbatimUrl` from the given normalized `Path`.
@@ -2634,6 +2750,8 @@ struct PackageWire {
 struct PackageMetadata {
     #[serde(default)]
     requires_dist: BTreeSet<Requirement>,
+    #[serde(default)]
+    provides_extras: Vec<ExtraName>,
     #[serde(default, rename = "requires-dev", alias = "dependency-groups")]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
 }
@@ -2751,17 +2869,6 @@ impl PackageIdForDependency {
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<PackageId, LockError> {
         let unambiguous_package_id = unambiguous_package_ids.get(&self.name);
-        let version = if let Some(version) = self.version {
-            Some(version)
-        } else {
-            let Some(dist_id) = unambiguous_package_id else {
-                return Err(LockErrorKind::MissingDependencyVersion {
-                    name: self.name.clone(),
-                }
-                .into());
-            };
-            dist_id.version.clone()
-        };
         let source = self.source.map(Ok::<_, LockError>).unwrap_or_else(|| {
             let Some(package_id) = unambiguous_package_id else {
                 return Err(LockErrorKind::MissingDependencySource {
@@ -2771,6 +2878,24 @@ impl PackageIdForDependency {
             };
             Ok(package_id.source.clone())
         })?;
+        let version = if let Some(version) = self.version {
+            Some(version)
+        } else {
+            if let Some(package_id) = unambiguous_package_id {
+                package_id.version.clone()
+            } else {
+                // If the package is a source tree, assume that the missing `self.version` field is
+                // indicative of a dynamic version.
+                if source.is_source_tree() {
+                    None
+                } else {
+                    return Err(LockErrorKind::MissingDependencyVersion {
+                        name: self.name.clone(),
+                    }
+                    .into());
+                }
+            }
+        };
         Ok(PackageId {
             name: self.name,
             version,
@@ -4221,7 +4346,7 @@ fn normalize_requirement(
 
             // Reconstruct the PEP 508 URL from the underlying data.
             let url = Url::from(ParsedGitUrl {
-                url: uv_git::GitUrl::from_reference(repository.clone(), reference.clone()),
+                url: uv_git_types::GitUrl::from_reference(repository.clone(), reference.clone()),
                 subdirectory: subdirectory.clone(),
             });
 
@@ -5040,13 +5165,13 @@ requires-python = ">=3.12"
 [[package]]
 name = "a"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "b"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package.dependencies]]
@@ -5066,18 +5191,18 @@ requires-python = ">=3.12"
 [[package]]
 name = "a"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "b"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package.dependencies]]
 name = "a"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
         insta::assert_debug_snapshot!(result);
@@ -5092,13 +5217,13 @@ requires-python = ">=3.12"
 [[package]]
 name = "a"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "b"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package.dependencies]]
@@ -5117,19 +5242,19 @@ requires-python = ">=3.12"
 [[package]]
 name = "a"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "a"
 version = "0.1.1"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "b"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package.dependencies]]
@@ -5149,24 +5274,24 @@ requires-python = ">=3.12"
 [[package]]
 name = "a"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "a"
 version = "0.1.1"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "b"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package.dependencies]]
 name = "a"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 "#;
         let result = toml::from_str::<Lock>(data).unwrap_err();
         assert_stripped_snapshot!(result, @"Dependency `a` has missing `version` field but has more than one matching package");
@@ -5181,7 +5306,7 @@ requires-python = ">=3.12"
 [[package]]
 name = "a"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
@@ -5193,14 +5318,44 @@ sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d
 [[package]]
 name = "b"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package.dependencies]]
 name = "a"
 "#;
         let result = toml::from_str::<Lock>(data).unwrap_err();
-        assert_stripped_snapshot!(result, @"Dependency `a` has missing `version` field but has more than one matching package");
+        assert_stripped_snapshot!(result, @"Dependency `a` has missing `source` field but has more than one matching package");
+    }
+
+    #[test]
+    fn missing_dependency_version_dynamic() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+source = { editable = "path/to/a" }
+
+[[package]]
+name = "a"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package.dependencies]]
+name = "a"
+source = { editable = "path/to/a" }
+"#;
+        let result = toml::from_str::<Lock>(data);
+        insta::assert_debug_snapshot!(result);
     }
 
     #[test]

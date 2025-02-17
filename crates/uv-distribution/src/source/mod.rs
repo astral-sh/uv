@@ -10,22 +10,18 @@
 
 use std::borrow::Cow;
 use std::ops::Bound;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use crate::distribution_database::ManagedClient;
-use crate::error::Error;
-use crate::metadata::{ArchiveMetadata, GitWorkspaceMember, Metadata};
-use crate::source::built_wheel_metadata::BuiltWheelMetadata;
-use crate::source::revision::Revision;
-use crate::{Reporter, RequiresDist};
 use fs_err::tokio as fs;
 use futures::{FutureExt, TryStreamExt};
 use reqwest::{Response, StatusCode};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, info_span, instrument, warn, Instrument};
 use url::Url;
+use zip::ZipArchive;
+
 use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
 use uv_cache_info::CacheInfo;
 use uv_cache_key::cache_digest;
@@ -33,22 +29,28 @@ use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
 use uv_configuration::{BuildKind, BuildOutput, SourceStrategy};
-use uv_distribution_filename::{EggInfoFilename, SourceDistExtension, WheelFilename};
+use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
     BuildableSource, DirectorySourceUrl, FileLocation, GitSourceUrl, HashPolicy, Hashed,
     PathSourceUrl, SourceDist, SourceUrl,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic};
-use uv_git::{GitHubRepository, GitOid};
+use uv_git_types::{GitHubRepository, GitOid};
 use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
 use uv_pep440::{release_specifiers_to_ranges, Version};
 use uv_platform_tags::Tags;
-use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata12, RequiresTxt, ResolutionMetadata};
+use uv_pypi_types::{HashAlgorithm, HashDigest, PyProjectToml, ResolutionMetadata};
 use uv_types::{BuildContext, BuildStack, SourceBuildTrait};
 use uv_workspace::pyproject::ToolUvSources;
-use zip::ZipArchive;
+
+use crate::distribution_database::ManagedClient;
+use crate::error::Error;
+use crate::metadata::{ArchiveMetadata, GitWorkspaceMember, Metadata};
+use crate::source::built_wheel_metadata::BuiltWheelMetadata;
+use crate::source::revision::Revision;
+use crate::{Reporter, RequiresDist};
 
 mod built_wheel_metadata;
 mod revision;
@@ -1890,20 +1892,34 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Ok(None);
         };
 
-        // Parse the metadata.
-        let metadata = match ResolutionMetadata::parse_pyproject_toml(&content, source.version()) {
+        // Parse the `pyproject.toml`.
+        let pyproject_toml = match PyProjectToml::from_toml(&content) {
             Ok(metadata) => metadata,
             Err(
-                uv_pypi_types::MetadataError::Pep508Error(_)
-                | uv_pypi_types::MetadataError::DynamicField(_)
-                | uv_pypi_types::MetadataError::FieldNotFound(_)
-                | uv_pypi_types::MetadataError::PoetrySyntax,
+                uv_pypi_types::MetadataError::InvalidPyprojectTomlSyntax(..)
+                | uv_pypi_types::MetadataError::InvalidPyprojectTomlSchema(..),
             ) => {
-                debug!("Failed to extract static metadata from GitHub API for: {url}");
+                debug!("Failed to read `pyproject.toml` from GitHub API for: {url}");
                 return Ok(None);
             }
             Err(err) => return Err(err.into()),
         };
+
+        // Parse the metadata.
+        let metadata =
+            match ResolutionMetadata::parse_pyproject_toml(pyproject_toml, source.version()) {
+                Ok(metadata) => metadata,
+                Err(
+                    uv_pypi_types::MetadataError::Pep508Error(..)
+                    | uv_pypi_types::MetadataError::DynamicField(..)
+                    | uv_pypi_types::MetadataError::FieldNotFound(..)
+                    | uv_pypi_types::MetadataError::PoetrySyntax,
+                ) => {
+                    debug!("Failed to extract static metadata from GitHub API for: {url}");
+                    return Ok(None);
+                }
+                Err(err) => return Err(err.into()),
+            };
 
         // Determine whether the project has `tool.uv.sources`. If the project has sources, it must
         // be lowered, which requires access to the workspace. For example, it could have workspace
@@ -2417,49 +2433,58 @@ impl StaticMetadata {
         source_root: &Path,
         subdirectory: Option<&Path>,
     ) -> Result<Self, Error> {
-        // Attempt to read static metadata from the `pyproject.toml`.
-        match read_pyproject_toml(source_root, subdirectory, source.version()).await {
-            Ok(metadata) => {
-                debug!("Found static `pyproject.toml` for: {source}");
-
-                // Validate the metadata, but ignore it if the metadata doesn't match.
-                match validate_metadata(source, &metadata) {
-                    Ok(()) => {
-                        return Ok(Self::Some(metadata));
-                    }
-                    Err(err) => {
-                        debug!("Ignoring `pyproject.toml` for {source}: {err}");
-                    }
-                }
-            }
-            Err(
-                err @ Error::PyprojectToml(uv_pypi_types::MetadataError::DynamicField("version")),
-            ) if source.is_source_tree() => {
-                // In Metadata 2.2, `Dynamic` was introduced to Core Metadata to indicate that a
-                // given field was marked as dynamic in the originating source tree. However, we may
-                // be looking at a distribution with a build backend that doesn't support Metadata 2.2. In that case,
-                // we want to infer the `Dynamic` status from the `pyproject.toml` file, if available.
-                debug!("No static `pyproject.toml` available for: {source} ({err:?})");
-                return Ok(Self::Dynamic);
-            }
-            Err(
-                err @ (Error::MissingPyprojectToml
-                | Error::PyprojectToml(
-                    uv_pypi_types::MetadataError::Pep508Error(_)
-                    | uv_pypi_types::MetadataError::DynamicField(_)
-                    | uv_pypi_types::MetadataError::FieldNotFound(_)
-                    | uv_pypi_types::MetadataError::PoetrySyntax,
-                )),
-            ) => {
-                debug!("No static `pyproject.toml` available for: {source} ({err:?})");
+        // Attempt to read the `pyproject.toml`.
+        let pyproject_toml = match read_pyproject_toml(source_root, subdirectory).await {
+            Ok(pyproject_toml) => Some(pyproject_toml),
+            Err(Error::MissingPyprojectToml) => {
+                debug!("No `pyproject.toml` available for: {source}");
+                None
             }
             Err(err) => return Err(err),
+        };
+
+        // Determine whether the version is static or dynamic.
+        let dynamic = pyproject_toml.as_ref().is_some_and(|pyproject_toml| {
+            pyproject_toml.project.as_ref().is_some_and(|project| {
+                project
+                    .dynamic
+                    .as_ref()
+                    .is_some_and(|dynamic| dynamic.iter().any(|field| field == "version"))
+            })
+        });
+
+        // Attempt to read static metadata from the `pyproject.toml`.
+        if let Some(pyproject_toml) = pyproject_toml {
+            match ResolutionMetadata::parse_pyproject_toml(pyproject_toml, source.version()) {
+                Ok(metadata) => {
+                    debug!("Found static `pyproject.toml` for: {source}");
+
+                    // Validate the metadata, but ignore it if the metadata doesn't match.
+                    match validate_metadata(source, &metadata) {
+                        Ok(()) => {
+                            return Ok(Self::Some(metadata));
+                        }
+                        Err(err) => {
+                            debug!("Ignoring `pyproject.toml` for {source}: {err}");
+                        }
+                    }
+                }
+                Err(
+                    err @ (uv_pypi_types::MetadataError::Pep508Error(_)
+                    | uv_pypi_types::MetadataError::DynamicField(_)
+                    | uv_pypi_types::MetadataError::FieldNotFound(_)
+                    | uv_pypi_types::MetadataError::PoetrySyntax),
+                ) => {
+                    debug!("No static `pyproject.toml` available for: {source} ({err:?})");
+                }
+                Err(err) => return Err(Error::PyprojectToml(err)),
+            }
         }
 
-        // If the source distribution is a source tree, avoid reading `PKG-INFO` or `egg-info`,
-        // since they could be out-of-date.
+        // If the source distribution is a source tree, avoid reading `PKG-INFO`, since it could be
+        // out-of-date.
         if source.is_source_tree() {
-            return Ok(Self::None);
+            return Ok(if dynamic { Self::Dynamic } else { Self::None });
         }
 
         // Attempt to read static metadata from the `PKG-INFO` file.
@@ -2470,6 +2495,15 @@ impl StaticMetadata {
                 // Validate the metadata, but ignore it if the metadata doesn't match.
                 match validate_metadata(source, &metadata) {
                     Ok(()) => {
+                        // If necessary, mark the metadata as dynamic.
+                        let metadata = if dynamic {
+                            ResolutionMetadata {
+                                dynamic: true,
+                                ..metadata
+                            }
+                        } else {
+                            metadata
+                        };
                         return Ok(Self::Some(metadata));
                     }
                     Err(err) => {
@@ -2487,41 +2521,6 @@ impl StaticMetadata {
                 )),
             ) => {
                 debug!("No static `PKG-INFO` available for: {source} ({err:?})");
-            }
-            Err(err) => return Err(err),
-        }
-
-        // Attempt to read static metadata from the `egg-info` directory.
-        match read_egg_info(source_root, subdirectory, source.name(), source.version()).await {
-            Ok(metadata) => {
-                debug!("Found static `egg-info` for: {source}");
-
-                // Validate the metadata, but ignore it if the metadata doesn't match.
-                match validate_metadata(source, &metadata) {
-                    Ok(()) => {
-                        return Ok(Self::Some(metadata));
-                    }
-                    Err(err) => {
-                        debug!("Ignoring `egg-info` for {source}: {err}");
-                    }
-                }
-            }
-            Err(
-                err @ (Error::MissingEggInfo
-                | Error::MissingRequiresTxt
-                | Error::MissingPkgInfo
-                | Error::RequiresTxt(
-                    uv_pypi_types::MetadataError::Pep508Error(_)
-                    | uv_pypi_types::MetadataError::RequiresTxtContents(_),
-                )
-                | Error::PkgInfo(
-                    uv_pypi_types::MetadataError::Pep508Error(_)
-                    | uv_pypi_types::MetadataError::DynamicField(_)
-                    | uv_pypi_types::MetadataError::FieldNotFound(_)
-                    | uv_pypi_types::MetadataError::UnsupportedMetadataVersion(_),
-                )),
-            ) => {
-                debug!("No static `egg-info` available for: {source} ({err:?})");
             }
             Err(err) => return Err(err),
         }
@@ -2576,7 +2575,7 @@ fn validate_metadata(
     }
 
     if let Some(version) = source.version() {
-        if metadata.version != *version {
+        if *version != metadata.version && *version != metadata.version.clone().without_local() {
             return Err(Error::WheelMetadataVersionMismatch {
                 metadata: metadata.version.clone(),
                 given: version.clone(),
@@ -2681,139 +2680,6 @@ impl LocalRevisionPointer {
     }
 }
 
-/// Read the [`ResolutionMetadata`] by combining a source distribution's `PKG-INFO` file with a
-/// `requires.txt`.
-///
-/// `requires.txt` is a legacy concept from setuptools. For example, here's
-/// `Flask.egg-info/requires.txt` from Flask's 1.0 release:
-///
-/// ```txt
-/// Werkzeug>=0.14
-/// Jinja2>=2.10
-/// itsdangerous>=0.24
-/// click>=5.1
-///
-/// [dev]
-/// pytest>=3
-/// coverage
-/// tox
-/// sphinx
-/// pallets-sphinx-themes
-/// sphinxcontrib-log-cabinet
-///
-/// [docs]
-/// sphinx
-/// pallets-sphinx-themes
-/// sphinxcontrib-log-cabinet
-///
-/// [dotenv]
-/// python-dotenv
-/// ```
-///
-/// See: <https://setuptools.pypa.io/en/latest/deprecated/python_eggs.html#dependency-metadata>
-async fn read_egg_info(
-    source_tree: &Path,
-    subdirectory: Option<&Path>,
-    name: Option<&PackageName>,
-    version: Option<&Version>,
-) -> Result<ResolutionMetadata, Error> {
-    fn find_egg_info(
-        source_tree: &Path,
-        name: Option<&PackageName>,
-        version: Option<&Version>,
-    ) -> std::io::Result<Option<PathBuf>> {
-        for entry in fs_err::read_dir(source_tree)? {
-            let entry = entry?;
-            let ty = entry.file_type()?;
-            if ty.is_dir() {
-                let path = entry.path();
-                if path
-                    .extension()
-                    .is_some_and(|ext| ext.eq_ignore_ascii_case("egg-info"))
-                {
-                    let Some(file_stem) = path.file_stem() else {
-                        continue;
-                    };
-                    let Some(file_stem) = file_stem.to_str() else {
-                        continue;
-                    };
-                    let Ok(file_name) = EggInfoFilename::parse(file_stem) else {
-                        continue;
-                    };
-                    if let Some(name) = name {
-                        if file_name.name != *name {
-                            debug!("Skipping `{file_stem}.egg-info` due to name mismatch (expected: `{name}`)");
-                            continue;
-                        }
-                    }
-                    if let Some(version) = version {
-                        if file_name.version.as_ref().is_some_and(|v| v != version) {
-                            debug!("Skipping `{file_stem}.egg-info` due to version mismatch (expected: `{version}`)");
-                            continue;
-                        }
-                    }
-                    return Ok(Some(path));
-                }
-            }
-        }
-        Ok(None)
-    }
-
-    let directory = match subdirectory {
-        Some(subdirectory) => Cow::Owned(source_tree.join(subdirectory)),
-        None => Cow::Borrowed(source_tree),
-    };
-
-    // Locate the `egg-info` directory.
-    let egg_info = match find_egg_info(directory.as_ref(), name, version) {
-        Ok(Some(path)) => path,
-        Ok(None) => return Err(Error::MissingEggInfo),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            return Err(Error::MissingEggInfo)
-        }
-        Err(err) => return Err(Error::CacheRead(err)),
-    };
-
-    // Read the `requires.txt`.
-    let requires_txt = egg_info.join("requires.txt");
-    let content = match fs::read(requires_txt).await {
-        Ok(content) => content,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            return Err(Error::MissingRequiresTxt);
-        }
-        Err(err) => return Err(Error::CacheRead(err)),
-    };
-
-    // Parse the `requires.txt.
-    let requires_txt = RequiresTxt::parse(&content).map_err(Error::RequiresTxt)?;
-
-    // Read the `PKG-INFO` file.
-    let pkg_info = egg_info.join("PKG-INFO");
-    let content = match fs::read(pkg_info).await {
-        Ok(content) => content,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            return Err(Error::MissingPkgInfo);
-        }
-        Err(err) => return Err(Error::CacheRead(err)),
-    };
-
-    // Parse the metadata.
-    let metadata = Metadata12::parse_metadata(&content).map_err(Error::PkgInfo)?;
-
-    // Determine whether the version is dynamic.
-    let dynamic = metadata.dynamic.iter().any(|field| field == "version");
-
-    // Combine the sources.
-    Ok(ResolutionMetadata {
-        name: metadata.name,
-        version: metadata.version,
-        requires_python: metadata.requires_python,
-        requires_dist: requires_txt.requires_dist,
-        provides_extras: requires_txt.provides_extras,
-        dynamic,
-    })
-}
-
 /// Read the [`ResolutionMetadata`] from a source distribution's `PKG-INFO` file, if it uses Metadata 2.2
 /// or later _and_ none of the required fields (`Requires-Python`, `Requires-Dist`, and
 /// `Provides-Extra`) are marked as dynamic.
@@ -2845,8 +2711,7 @@ async fn read_pkg_info(
 async fn read_pyproject_toml(
     source_tree: &Path,
     subdirectory: Option<&Path>,
-    sdist_version: Option<&Version>,
-) -> Result<ResolutionMetadata, Error> {
+) -> Result<PyProjectToml, Error> {
     // Read the `pyproject.toml` file.
     let pyproject_toml = match subdirectory {
         Some(subdirectory) => source_tree.join(subdirectory).join("pyproject.toml"),
@@ -2860,11 +2725,9 @@ async fn read_pyproject_toml(
         Err(err) => return Err(Error::CacheRead(err)),
     };
 
-    // Parse the metadata.
-    let metadata = ResolutionMetadata::parse_pyproject_toml(&content, sdist_version)
-        .map_err(Error::PyprojectToml)?;
+    let pyproject_toml = PyProjectToml::from_toml(&content)?;
 
-    Ok(metadata)
+    Ok(pyproject_toml)
 }
 
 /// Return the [`pypi_types::RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.

@@ -4,6 +4,7 @@ use std::io;
 use std::io::Write;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Arc;
 
 use rustc_hash::FxHashSet;
@@ -11,6 +12,7 @@ use tracing::debug;
 
 pub use archive::ArchiveId;
 use uv_cache_info::Timestamp;
+use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::InstalledDist;
 use uv_fs::{cachedir, directories, LockedFile};
 use uv_normalize::PackageName;
@@ -30,6 +32,11 @@ mod by_timestamp;
 mod cli;
 mod removal;
 mod wheel;
+
+/// The version of the archive bucket.
+///
+/// Must be kept in-sync with the version in [`CacheBucket::to_str`].
+pub const ARCHIVE_VERSION: u8 = 0;
 
 /// A [`CacheEntry`] which may or may not exist yet.
 #[derive(Debug, Clone)]
@@ -108,6 +115,11 @@ impl CacheShard {
     pub async fn lock(&self) -> Result<LockedFile, io::Error> {
         fs_err::create_dir_all(self.as_ref())?;
         LockedFile::acquire(self.join(".lock"), self.display()).await
+    }
+
+    /// Return the [`CacheShard`] as a [`PathBuf`].
+    pub fn into_path_buf(self) -> PathBuf {
+        self.0
     }
 }
 
@@ -273,7 +285,7 @@ impl Cache {
 
         // Create a symlink to the directory store.
         fs_err::create_dir_all(path.as_ref().parent().expect("Cache entry to have parent"))?;
-        uv_fs::replace_symlink(archive_entry.path(), path.as_ref())?;
+        self.create_link(&id, path.as_ref())?;
 
         Ok(id)
     }
@@ -355,10 +367,30 @@ impl Cache {
                 if bucket.is_dir() {
                     for entry in walkdir::WalkDir::new(bucket) {
                         let entry = entry?;
-                        if entry.file_type().is_symlink() {
-                            if let Ok(target) = fs_err::canonicalize(entry.path()) {
-                                references.insert(target);
-                            }
+
+                        // Ignore any `.lock` files.
+                        if entry
+                            .path()
+                            .extension()
+                            .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
+                        {
+                            continue;
+                        }
+
+                        // Identify entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
+                        let Some(filename) = entry
+                            .path()
+                            .file_name()
+                            .and_then(|file_name| file_name.to_str())
+                        else {
+                            continue;
+                        };
+
+                        if WheelFilename::from_stem(filename).is_err() {
+                            continue;
+                        }
+                        if let Ok(target) = self.resolve_link(entry.path()) {
+                            references.insert(target);
                         }
                     }
                 }
@@ -380,10 +412,29 @@ impl Cache {
                 if bucket.is_dir() {
                     for entry in walkdir::WalkDir::new(bucket) {
                         let entry = entry?;
-                        if entry.file_type().is_symlink() {
-                            if let Ok(target) = fs_err::canonicalize(entry.path()) {
-                                references.insert(target);
-                            }
+
+                        // Ignore any `.lock` files.
+                        if entry
+                            .path()
+                            .extension()
+                            .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
+                        {
+                            continue;
+                        }
+
+                        // Identify entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
+                        let Some(filename) = entry
+                            .path()
+                            .file_name()
+                            .and_then(|file_name| file_name.to_str())
+                        else {
+                            continue;
+                        };
+                        if WheelFilename::from_stem(filename).is_err() {
+                            continue;
+                        }
+                        if let Ok(target) = self.resolve_link(entry.path()) {
+                            references.insert(target);
                         }
                     }
                 }
@@ -483,19 +534,29 @@ impl Cache {
                     continue;
                 }
 
-                // Remove any symlinks and directories in the revision. The symlinks represent
-                // unzipped wheels, and the directories represent the source distribution archives.
+                // Remove everything except the built wheel archive and the metadata.
                 for entry in fs_err::read_dir(entry.path())? {
                     let entry = entry?;
                     let path = entry.path();
 
-                    if path.is_dir() {
-                        debug!("Removing unzipped built wheel entry: {}", path.display());
-                        summary += rm_rf(path)?;
-                    } else if path.is_symlink() {
-                        debug!("Removing unzipped built wheel entry: {}", path.display());
-                        summary += rm_rf(path)?;
+                    // Retain the resolved metadata (`metadata.msgpack`).
+                    if path
+                        .file_name()
+                        .is_some_and(|file_name| file_name == "metadata.msgpack")
+                    {
+                        continue;
                     }
+
+                    // Retain any built wheel archives.
+                    if path
+                        .extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
+                    {
+                        continue;
+                    }
+
+                    debug!("Removing unzipped built wheel entry: {}", path.display());
+                    summary += rm_rf(path)?;
                 }
             }
         }
@@ -508,10 +569,29 @@ impl Cache {
             if bucket.is_dir() {
                 for entry in walkdir::WalkDir::new(bucket) {
                     let entry = entry?;
-                    if entry.file_type().is_symlink() {
-                        if let Ok(target) = fs_err::canonicalize(entry.path()) {
-                            references.insert(target);
-                        }
+
+                    // Ignore any `.lock` files.
+                    if entry
+                        .path()
+                        .extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
+                    {
+                        continue;
+                    }
+
+                    // Identify entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
+                    let Some(filename) = entry
+                        .path()
+                        .file_name()
+                        .and_then(|file_name| file_name.to_str())
+                    else {
+                        continue;
+                    };
+                    if WheelFilename::from_stem(filename).is_err() {
+                        continue;
+                    }
+                    if let Ok(target) = self.resolve_link(entry.path()) {
+                        references.insert(target);
                     }
                 }
             }
@@ -533,6 +613,164 @@ impl Cache {
         }
 
         Ok(summary)
+    }
+
+    /// Create a link to a directory in the archive bucket.
+    ///
+    /// On Windows, we write structured data ([`Link`]) to a file containing the archive ID and
+    /// version. On Unix, we create a symlink to the target directory.
+    #[cfg(windows)]
+    pub fn create_link(&self, id: &ArchiveId, dst: impl AsRef<Path>) -> io::Result<()> {
+        // Serialize the link.
+        let link = Link::new(id.clone());
+        let contents = link.to_string();
+
+        // First, attempt to create a file at the location, but fail if it already exists.
+        match fs_err::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(dst.as_ref())
+        {
+            Ok(mut file) => {
+                // Write the target path to the file.
+                file.write_all(contents.as_bytes())?;
+                Ok(())
+            }
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+                // Write to a temporary file, then move it into place.
+                let temp_dir = tempfile::tempdir_in(dst.as_ref().parent().unwrap())?;
+                let temp_file = temp_dir.path().join("link");
+                fs_err::write(&temp_file, contents.as_bytes())?;
+
+                // Move the symlink into the target location.
+                fs_err::rename(&temp_file, dst.as_ref())?;
+
+                Ok(())
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Resolve an archive link, returning the fully-resolved path.
+    ///
+    /// Returns an error if the link target does not exist.
+    #[cfg(windows)]
+    pub fn resolve_link(&self, path: impl AsRef<Path>) -> io::Result<PathBuf> {
+        // Deserialize the link.
+        let contents = fs_err::read_to_string(path.as_ref())?;
+        let link = Link::from_str(&contents)?;
+
+        // Ignore stale links.
+        if link.version != ARCHIVE_VERSION {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "The link target does not exist.",
+            ));
+        }
+
+        // Reconstruct the path.
+        let path = self.archive(&link.id);
+        path.canonicalize()
+    }
+
+    /// Create a link to a directory in the archive bucket.
+    ///
+    /// On Windows, we write structured data ([`Link`]) to a file containing the archive ID and
+    /// version. On Unix, we create a symlink to the target directory.
+    #[cfg(unix)]
+    pub fn create_link(&self, id: &ArchiveId, dst: impl AsRef<Path>) -> io::Result<()> {
+        // Construct the link target.
+        let src = self.archive(id);
+        let dst = dst.as_ref();
+
+        // Attempt to create the symlink directly.
+        match std::os::unix::fs::symlink(&src, dst) {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+                // Create a symlink, using a temporary file to ensure atomicity.
+                let temp_dir = tempfile::tempdir_in(dst.parent().unwrap())?;
+                let temp_file = temp_dir.path().join("link");
+                std::os::unix::fs::symlink(&src, &temp_file)?;
+
+                // Move the symlink into the target location.
+                fs_err::rename(&temp_file, dst)?;
+
+                Ok(())
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Resolve an archive link, returning the fully-resolved path.
+    ///
+    /// Returns an error if the link target does not exist.
+    #[cfg(unix)]
+    pub fn resolve_link(&self, path: impl AsRef<Path>) -> io::Result<PathBuf> {
+        path.as_ref().canonicalize()
+    }
+}
+
+/// An archive (unzipped wheel) that exists in the local cache.
+#[derive(Debug, Clone)]
+#[allow(unused)]
+struct Link {
+    /// The unique ID of the entry in the archive bucket.
+    id: ArchiveId,
+    /// The version of the archive bucket.
+    version: u8,
+}
+
+#[allow(unused)]
+impl Link {
+    /// Create a new [`Archive`] with the given ID and hashes.
+    fn new(id: ArchiveId) -> Self {
+        Self {
+            id,
+            version: ARCHIVE_VERSION,
+        }
+    }
+}
+
+impl Display for Link {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "archive-v{}/{}", self.version, self.id)
+    }
+}
+
+impl FromStr for Link {
+    type Err = io::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut parts = s.splitn(2, '/');
+        let version = parts
+            .next()
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing version"))?;
+        let id = parts
+            .next()
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing ID"))?;
+
+        // Parse the archive version from `archive-v{version}/{id}`.
+        let version = version
+            .strip_prefix("archive-v")
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing version prefix"))?;
+        let version = u8::from_str(version).map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("failed to parse version: {err}"),
+            )
+        })?;
+
+        // Parse the ID from `archive-v{version}/{id}`.
+        let id = ArchiveId::from_str(id).map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("failed to parse ID: {err}"),
+            )
+        })?;
+
+        Ok(Self { id, version })
     }
 }
 
@@ -691,7 +929,7 @@ pub enum CacheBucket {
     ///
     /// ...may be cached as:
     /// ```text
-    /// built-wheels-v3/
+    /// built-wheels-v4/
     /// ├── git
     /// │   └── 2122faf3e081fb7a
     /// │       └── 7a2d650a4a7b4d04
@@ -792,20 +1030,22 @@ impl CacheBucket {
     fn to_str(self) -> &'static str {
         match self {
             // Note that when bumping this, you'll also need to bump it
-            // in crates/uv/tests/cache_prune.rs.
-            Self::SourceDistributions => "sdists-v7",
+            // in `crates/uv/tests/it/cache_prune.rs`.
+            Self::SourceDistributions => "sdists-v8",
             Self::FlatIndex => "flat-index-v2",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v4",
             // Note that when bumping this, you'll also need to bump it
-            // in crates/uv/tests/cache_clean.rs.
+            // in `crates/uv/tests/it/cache_clean.rs`.
             Self::Simple => "simple-v15",
             // Note that when bumping this, you'll also need to bump it
-            // in crates/uv/tests/cache_prune.rs.
-            Self::Wheels => "wheels-v3",
+            // in `crates/uv/tests/it/cache_prune.rs`.
+            Self::Wheels => "wheels-v4",
+            // Note that when bumping this, you'll also need to bump
+            // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
             Self::Archive => "archive-v0",
             Self::Builds => "builds-v0",
-            Self::Environments => "environments-v1",
+            Self::Environments => "environments-v2",
         }
     }
 
@@ -1165,5 +1405,32 @@ impl Refresh {
                 max(t1, t2),
             ),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use crate::ArchiveId;
+
+    use super::Link;
+
+    #[test]
+    fn test_link_round_trip() {
+        let id = ArchiveId::new();
+        let link = Link::new(id);
+        let s = link.to_string();
+        let parsed = Link::from_str(&s).unwrap();
+        assert_eq!(link.id, parsed.id);
+        assert_eq!(link.version, parsed.version);
+    }
+
+    #[test]
+    fn test_link_deserialize() {
+        assert!(Link::from_str("archive-v0/foo").is_ok());
+        assert!(Link::from_str("archive/foo").is_err());
+        assert!(Link::from_str("v1/foo").is_err());
+        assert!(Link::from_str("archive-v0/").is_err());
     }
 }

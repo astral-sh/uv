@@ -1079,15 +1079,23 @@ pub struct PipCompileArgs {
 
     /// The Python interpreter to use during resolution.
     ///
-    /// A Python interpreter is required for building source distributions to
-    /// determine package metadata when there are not wheels.
+    /// A Python interpreter is required for building source distributions to determine package
+    /// metadata when there are not wheels.
     ///
-    /// The interpreter is also used to determine the default minimum Python
-    /// version, unless `--python-version` is provided.
+    /// The interpreter is also used to determine the default minimum Python version, unless
+    /// `--python-version` is provided.
     ///
-    /// See `uv help python` for details on Python discovery and supported
-    /// request formats.
-    #[arg(long, verbatim_doc_comment, help_heading = "Python options", value_parser = parse_maybe_string)]
+    /// This option respects `UV_PYTHON`, but when set via environment variable, it is overridden
+    /// by `--python-version`.
+    ///
+    /// See `uv help python` for details on Python discovery and supported request formats.
+    #[arg(
+        long,
+        short,
+        verbatim_doc_comment,
+        help_heading = "Python options",
+        value_parser = parse_maybe_string
+    )]
     pub python: Option<Maybe<String>>,
 
     /// Install packages into the system Python environment.
@@ -1170,7 +1178,7 @@ pub struct PipCompileArgs {
     ///
     /// If a patch version is omitted, the minimum patch version is assumed. For
     /// example, `3.8` is mapped to `3.8.0`.
-    #[arg(long, short, help_heading = "Python options")]
+    #[arg(long, help_heading = "Python options")]
     pub python_version: Option<PythonVersion>,
 
     /// The platform for which requirements should be resolved.
@@ -2932,6 +2940,15 @@ pub struct RunArgs {
     /// By default, environment modifications are omitted, but enabled under `--verbose`.
     #[arg(long, env = EnvVars::UV_SHOW_RESOLUTION, value_parser = clap::builder::BoolishValueParser::new(), hide = true)]
     pub show_resolution: bool,
+
+    /// Number of times that `uv run` will allow recursive invocations.
+    ///
+    /// The current recursion depth is tracked by environment variable. If environment variables are
+    /// cleared, uv will fail to detect the recursion depth.
+    ///
+    /// If uv reaches the maximum recursion depth, it will exit with an error.
+    #[arg(long, hide = true, env = EnvVars::UV_RUN_MAX_RECURSION_DEPTH)]
+    pub max_recursion_depth: Option<u32>,
 }
 
 #[derive(Args)]
@@ -3044,10 +3061,11 @@ pub struct SyncArgs {
     #[arg(long, overrides_with("inexact"), hide = true)]
     pub exact: bool,
 
-    /// Prefer the active virtual environment over the project's virtual environment.
+    /// Sync dependencies to the active virtual environment.
     ///
-    /// If the project virtual environment is active or no virtual environment is active, this has
-    /// no effect.
+    /// Instead of creating or updating the virtual environment for the project or script, the
+    /// active virtual environment will be preferred, if the `VIRTUAL_ENV` environment variable is
+    /// set.
     #[arg(long, overrides_with = "no_active")]
     pub active: bool,
 
@@ -3134,6 +3152,31 @@ pub struct SyncArgs {
     /// If the workspace member does not exist, uv will exit with an error.
     #[arg(long, conflicts_with = "all_packages")]
     pub package: Option<PackageName>,
+
+    /// Sync the environment for a Python script, rather than the current project.
+    ///
+    /// If provided, uv will sync the dependencies based on the script's inline metadata table, in
+    /// adherence with PEP 723.
+    #[arg(
+        long,
+        conflicts_with = "all_packages",
+        conflicts_with = "package",
+        conflicts_with = "no_install_project",
+        conflicts_with = "no_install_workspace",
+        conflicts_with = "extra",
+        conflicts_with = "all_extras",
+        conflicts_with = "no_extra",
+        conflicts_with = "no_all_extras",
+        conflicts_with = "dev",
+        conflicts_with = "no_dev",
+        conflicts_with = "only_dev",
+        conflicts_with = "group",
+        conflicts_with = "no_group",
+        conflicts_with = "no_default_groups",
+        conflicts_with = "only_group",
+        conflicts_with = "all_groups"
+    )]
+    pub script: Option<PathBuf>,
 
     /// The Python interpreter to use for the project environment.
     ///
@@ -4463,11 +4506,13 @@ pub struct PythonInstallArgs {
 
     /// The Python version(s) to install.
     ///
-    /// If not provided, the requested Python version(s) will be read from the `.python-versions` or
-    /// `.python-version` files. If neither file is present, uv will check if it has installed any
-    /// Python versions. If not, it will install the latest stable version of Python.
+    /// If not provided, the requested Python version(s) will be read from the `UV_PYTHON`
+    /// environment variable then `.python-versions` or `.python-version` files. If none of the
+    /// above are present, uv will check if it has installed any Python versions. If not, it will
+    /// install the latest stable version of Python.
     ///
     /// See `uv help python` to view supported request formats.
+    #[arg(env = EnvVars::UV_PYTHON)]
     pub targets: Vec<String>,
 
     /// Set the URL to use as the source for downloading Python installations.
@@ -4770,7 +4815,13 @@ pub struct BuildOptionsArgs {
     ///
     /// The given packages will be built and installed from source. The resolver will still use
     /// pre-built wheels to extract package metadata, if available.
-    #[arg(long, overrides_with("binary"), help_heading = "Build options")]
+    #[arg(
+        long,
+        env = EnvVars::UV_NO_BINARY,
+        overrides_with("binary"),
+        value_parser = clap::builder::BoolishValueParser::new(),
+        help_heading = "Build options"
+    )]
     pub no_binary: bool,
 
     #[arg(
@@ -4782,7 +4833,7 @@ pub struct BuildOptionsArgs {
     pub binary: bool,
 
     /// Don't install pre-built wheels for a specific package.
-    #[arg(long, help_heading = "Build options")]
+    #[arg(long, help_heading = "Build options", env = EnvVars::UV_NO_BINARY_PACKAGE, value_delimiter = ' ')]
     pub no_binary_package: Vec<PackageName>,
 }
 

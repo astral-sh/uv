@@ -11,6 +11,38 @@ pub mod cachedir;
 mod path;
 pub mod which;
 
+/// Attempt to check if the two paths refer to the same file.
+///
+/// Returns `Some(true)` if the files are missing, but would be the same if they existed.
+pub fn is_same_file_allow_missing(left: &Path, right: &Path) -> Option<bool> {
+    // First, check an exact path comparison.
+    if left == right {
+        return Some(true);
+    }
+
+    // Second, check the files directly.
+    if let Ok(value) = same_file::is_same_file(left, right) {
+        return Some(value);
+    };
+
+    // Often, one of the directories won't exist yet so perform the comparison up a level.
+    if let (Some(left_parent), Some(right_parent), Some(left_name), Some(right_name)) = (
+        left.parent(),
+        right.parent(),
+        left.file_name(),
+        right.file_name(),
+    ) {
+        match same_file::is_same_file(left_parent, right_parent) {
+            Ok(true) => return Some(left_name == right_name),
+            Ok(false) => return Some(false),
+            _ => (),
+        }
+    };
+
+    // We couldn't determine if they're the same.
+    None
+}
+
 /// Reads data from the path and requires that it be valid UTF-8 or UTF-16.
 ///
 /// This uses BOM sniffing to determine if the data should be transcoded
@@ -246,10 +278,14 @@ pub async fn rename_with_retry(
     }
 }
 
-/// Rename a file, retrying (on Windows) if it fails due to transient operating system errors, in a synchronous context.
-pub fn rename_with_retry_sync(
+/// Rename or copy a file, retrying (on Windows) if it fails due to transient operating system
+/// errors, in a synchronous context.
+#[cfg_attr(not(windows), allow(unused_variables))]
+pub fn with_retry_sync(
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
+    operation_name: &str,
+    operation: impl Fn() -> Result<(), std::io::Error>,
 ) -> Result<(), std::io::Error> {
     #[cfg(windows)]
     {
@@ -261,15 +297,15 @@ pub fn rename_with_retry_sync(
         // See: <https://github.com/astral-sh/uv/issues/1491> & <https://github.com/astral-sh/uv/issues/9531>
         let from = from.as_ref();
         let to = to.as_ref();
-        let rename = || fs_err::rename(from, to);
 
-        rename
+        operation
             .retry(backoff_file_move())
             .sleep(std::thread::sleep)
             .when(|err| err.kind() == std::io::ErrorKind::PermissionDenied)
             .notify(|err, _dur| {
                 warn!(
-                    "Retrying rename from {} to {} due to transient error: {}",
+                    "Retrying {} from {} to {} due to transient error: {}",
+                    operation_name,
                     from.display(),
                     to.display(),
                     err
@@ -280,7 +316,8 @@ pub fn rename_with_retry_sync(
                 std::io::Error::new(
                     std::io::ErrorKind::Other,
                     format!(
-                        "Failed to rename {} to {}: {}",
+                        "Failed {} {} to {}: {}",
+                        operation_name,
                         from.display(),
                         to.display(),
                         err
@@ -290,7 +327,7 @@ pub fn rename_with_retry_sync(
     }
     #[cfg(not(windows))]
     {
-        fs_err::rename(from, to)
+        operation()
     }
 }
 
@@ -498,10 +535,10 @@ pub fn directories(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
         .map(|entry| entry.path())
 }
 
-/// Iterate over the symlinks in a directory.
+/// Iterate over the entries in a directory.
 ///
 /// If the directory does not exist, returns an empty iterator.
-pub fn symlinks(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
+pub fn entries(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
     path.as_ref()
         .read_dir()
         .ok()
@@ -513,11 +550,6 @@ pub fn symlinks(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
                 warn!("Failed to read entry: {}", err);
                 None
             }
-        })
-        .filter(|entry| {
-            entry
-                .file_type()
-                .is_ok_and(|file_type| file_type.is_symlink())
         })
         .map(|entry| entry.path())
 }

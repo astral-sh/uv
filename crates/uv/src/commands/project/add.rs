@@ -21,9 +21,10 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_distribution_types::{Index, IndexName, UnresolvedRequirement, VersionId};
+use uv_distribution_types::{Index, IndexName, IndexUrls, UnresolvedRequirement, VersionId};
 use uv_fs::Simplified;
-use uv_git::{GitReference, GIT_STORE};
+use uv_git::GIT_STORE;
+use uv_git_types::GitReference;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_pep508::{ExtraName, Requirement, UnnamedRequirement, VersionOrUrl};
 use uv_pypi_types::{redact_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
@@ -165,6 +166,7 @@ pub(crate) async fn add(
             allow_insecure_host,
             &install_mirrors,
             no_config,
+            active,
             cache,
             printer,
         )
@@ -223,7 +225,7 @@ pub(crate) async fn add(
             AddTarget::Project(project, Box::new(PythonTarget::Interpreter(interpreter)))
         } else {
             // Discover or create the virtual environment.
-            let venv = ProjectEnvironment::get_or_init(
+            let environment = ProjectEnvironment::get_or_init(
                 project.workspace(),
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
@@ -239,9 +241,9 @@ pub(crate) async fn add(
                 printer,
             )
             .await?
-            .into_environment();
+            .into_environment()?;
 
-            AddTarget::Project(project, Box::new(PythonTarget::Environment(venv)))
+            AddTarget::Project(project, Box::new(PythonTarget::Environment(environment)))
         }
     };
 
@@ -561,10 +563,11 @@ pub(crate) async fn add(
         });
     }
 
-    // Add any indexes that were provided on the command-line.
+    // Add any indexes that were provided on the command-line, in priority order.
     if !raw_sources {
-        for index in indexes {
-            toml.add_index(&index)?;
+        let urls = IndexUrls::from_indexes(indexes);
+        for index in urls.defined_indexes() {
+            toml.add_index(index)?;
         }
     }
 
@@ -618,7 +621,7 @@ pub(crate) async fn add(
     let lock_state = state.fork();
     let sync_state = state;
 
-    match lock_and_sync(
+    match Box::pin(lock_and_sync(
         target,
         &mut toml,
         &edits,
@@ -636,7 +639,7 @@ pub(crate) async fn add(
         cache,
         printer,
         preview,
-    )
+    ))
     .await
     {
         Ok(()) => Ok(ExitStatus::Success),

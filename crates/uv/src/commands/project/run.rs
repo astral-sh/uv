@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::env::VarError;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::Read;
@@ -18,9 +18,8 @@ use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{
     Concurrency, DevGroupsSpecification, DryRun, EditableMode, ExtrasSpecification, InstallOptions,
-    PreviewMode, SourceStrategy, TrustedHost,
+    PreviewMode, TrustedHost,
 };
-use uv_distribution::LoweredRequirement;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified};
 use uv_installer::{SatisfiesResult, SitePackages};
@@ -46,9 +45,9 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, validate_project_requires_python, DependencyGroupsTarget,
-    EnvironmentSpecification, ProjectEnvironment, ProjectError, ScriptInterpreter, UniversalState,
-    WorkspacePython,
+    default_dependency_groups, script_specification, update_environment,
+    validate_project_requires_python, EnvironmentSpecification, ProjectEnvironment, ProjectError,
+    ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::run::run_to_completion;
@@ -92,7 +91,23 @@ pub(crate) async fn run(
     env_file: Vec<PathBuf>,
     no_env_file: bool,
     preview: PreviewMode,
+    max_recursion_depth: u32,
 ) -> anyhow::Result<ExitStatus> {
+    // Check if max recursion depth was exceeded. This most commonly happens
+    // for scripts with a shebang line like `#!/usr/bin/env -S uv run`, so try
+    // to provide guidance for that case.
+    let recursion_depth = read_recursion_depth_from_environment_variable()?;
+    if recursion_depth > max_recursion_depth {
+        bail!(
+            r"
+`uv run` was recursively invoked {recursion_depth} times which exceeds the limit of {max_recursion_depth}.
+
+hint: If you are running a script with `{}` in the shebang, you may need to include the `{}` flag.",
+            "uv run".green(),
+            "--script".green(),
+        );
+    }
+
     // These cases seem quite complex because (in theory) they should change the "current package".
     // Let's ban them entirely for now.
     let mut requirements_from_stdin: bool = false;
@@ -180,33 +195,16 @@ pub(crate) async fn run(
                     script.path.user_display()
                 );
             }
-            Pep723Item::Stdin(_) => {
+            Pep723Item::Stdin(..) => {
                 if requirements_from_stdin {
                     bail!("Cannot read both requirements file and script from stdin");
                 }
-                debug!("Reading inline script metadata from `{}`", "stdin");
+                debug!("Reading inline script metadata from stdin");
             }
-            Pep723Item::Remote(_) => {
-                debug!("Reading inline script metadata from `{}`", "remote URL");
+            Pep723Item::Remote(..) => {
+                debug!("Reading inline script metadata from remote URL");
             }
         }
-
-        // Discover the interpreter for the script.
-        let interpreter = ScriptInterpreter::discover(
-            (&script).into(),
-            python.as_deref().map(PythonRequest::parse),
-            python_preference,
-            python_downloads,
-            connectivity,
-            native_tls,
-            allow_insecure_host,
-            &install_mirrors,
-            no_config,
-            cache,
-            printer,
-        )
-        .await?
-        .into_interpreter();
 
         // If a lockfile already exists, lock the script.
         if let Some(target) = script
@@ -216,17 +214,36 @@ pub(crate) async fn run(
         {
             debug!("Found existing lockfile for script");
 
+            // Discover the interpreter for the script.
+            let environment = ScriptEnvironment::get_or_init(
+                (&script).into(),
+                python.as_deref().map(PythonRequest::parse),
+                python_preference,
+                python_downloads,
+                connectivity,
+                native_tls,
+                allow_insecure_host,
+                &install_mirrors,
+                no_config,
+                active.map_or(Some(false), Some),
+                cache,
+                DryRun::Disabled,
+                printer,
+            )
+            .await?
+            .into_environment()?;
+
             // Determine the lock mode.
             let mode = if frozen {
                 LockMode::Frozen
             } else if locked {
-                LockMode::Locked(&interpreter)
+                LockMode::Locked(environment.interpreter())
             } else {
-                LockMode::Write(&interpreter)
+                LockMode::Write(environment.interpreter())
             };
 
             // Generate a lockfile.
-            let lock = project::lock::do_safe_lock(
+            let lock = match project::lock::do_safe_lock(
                 mode,
                 target,
                 settings.as_ref().into(),
@@ -244,19 +261,35 @@ pub(crate) async fn run(
                 printer,
                 preview,
             )
-            .await?
-            .into_lock();
+            .await
+            {
+                Ok(result) => result.into_lock(),
+                Err(ProjectError::Operation(err)) => {
+                    return diagnostics::OperationDiagnostic::native_tls(native_tls)
+                        .with_context("script")
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                }
+                Err(err) => return Err(err.into()),
+            };
 
-            let result = CachedEnvironment::from_lock(
-                InstallTarget::Script {
-                    script: script.as_script().unwrap(),
-                    lock: &lock,
-                },
-                &ExtrasSpecification::default(),
-                &DevGroupsSpecification::default().with_defaults(Vec::new()),
-                InstallOptions::default(),
-                &settings,
-                &interpreter,
+            // Sync the environment.
+            let target = InstallTarget::Script {
+                script: script.as_script().unwrap(),
+                lock: &lock,
+            };
+
+            let install_options = InstallOptions::default();
+
+            match project::sync::do_sync(
+                target,
+                &environment,
+                &extras,
+                &dev.with_defaults(Vec::new()),
+                editable,
+                install_options,
+                modifications,
+                settings.as_ref().into(),
                 &sync_state,
                 if show_resolution {
                     Box::new(DefaultInstallLogger)
@@ -269,13 +302,13 @@ pub(crate) async fn run(
                 native_tls,
                 allow_insecure_host,
                 cache,
+                DryRun::Disabled,
                 printer,
                 preview,
             )
-            .await;
-
-            let environment = match result {
-                Ok(resolution) => resolution,
+            .await
+            {
+                Ok(()) => {}
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::native_tls(native_tls)
                         .with_context("script")
@@ -283,10 +316,7 @@ pub(crate) async fn run(
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                 }
                 Err(err) => return Err(err.into()),
-            };
-
-            // Clear any existing overlay.
-            environment.clear_overlay()?;
+            }
 
             Some(environment.into_interpreter())
         } else {
@@ -304,99 +334,30 @@ pub(crate) async fn run(
                 );
             }
 
-            // Determine the working directory for the script.
-            let script_dir = match &script {
-                Pep723Item::Script(script) => std::path::absolute(&script.path)?
-                    .parent()
-                    .expect("script path has no parent")
-                    .to_owned(),
-                Pep723Item::Stdin(..) | Pep723Item::Remote(..) => std::env::current_dir()?,
-            };
-            let script = script.into_metadata();
-
             // Install the script requirements, if necessary. Otherwise, use an isolated environment.
-            if let Some(dependencies) = script.dependencies {
-                // Collect any `tool.uv.index` from the script.
-                let empty = Vec::default();
-                let script_indexes = match settings.sources {
-                    SourceStrategy::Enabled => script
-                        .tool
-                        .as_ref()
-                        .and_then(|tool| tool.uv.as_ref())
-                        .and_then(|uv| uv.top_level.index.as_deref())
-                        .unwrap_or(&empty),
-                    SourceStrategy::Disabled => &empty,
-                };
+            if let Some(spec) = script_specification((&script).into(), settings.as_ref().into())? {
+                let environment = ScriptEnvironment::get_or_init(
+                    (&script).into(),
+                    python.as_deref().map(PythonRequest::parse),
+                    python_preference,
+                    python_downloads,
+                    connectivity,
+                    native_tls,
+                    allow_insecure_host,
+                    &install_mirrors,
+                    no_config,
+                    active.map_or(Some(false), Some),
+                    cache,
+                    DryRun::Disabled,
+                    printer,
+                )
+                .await?
+                .into_environment()?;
 
-                // Collect any `tool.uv.sources` from the script.
-                let empty = BTreeMap::default();
-                let script_sources = match settings.sources {
-                    SourceStrategy::Enabled => script
-                        .tool
-                        .as_ref()
-                        .and_then(|tool| tool.uv.as_ref())
-                        .and_then(|uv| uv.sources.as_ref())
-                        .unwrap_or(&empty),
-                    SourceStrategy::Disabled => &empty,
-                };
-
-                let requirements = dependencies
-                    .into_iter()
-                    .flat_map(|requirement| {
-                        LoweredRequirement::from_non_workspace_requirement(
-                            requirement,
-                            script_dir.as_ref(),
-                            script_sources,
-                            script_indexes,
-                            &settings.index_locations,
-                        )
-                        .map_ok(LoweredRequirement::into_inner)
-                    })
-                    .collect::<Result<_, _>>()?;
-                let constraints = script
-                    .tool
-                    .as_ref()
-                    .and_then(|tool| tool.uv.as_ref())
-                    .and_then(|uv| uv.constraint_dependencies.as_ref())
-                    .into_iter()
-                    .flatten()
-                    .cloned()
-                    .flat_map(|requirement| {
-                        LoweredRequirement::from_non_workspace_requirement(
-                            requirement,
-                            script_dir.as_ref(),
-                            script_sources,
-                            script_indexes,
-                            &settings.index_locations,
-                        )
-                        .map_ok(LoweredRequirement::into_inner)
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                let overrides = script
-                    .tool
-                    .as_ref()
-                    .and_then(|tool| tool.uv.as_ref())
-                    .and_then(|uv| uv.override_dependencies.as_ref())
-                    .into_iter()
-                    .flatten()
-                    .cloned()
-                    .flat_map(|requirement| {
-                        LoweredRequirement::from_non_workspace_requirement(
-                            requirement,
-                            script_dir.as_ref(),
-                            script_sources,
-                            script_indexes,
-                            &settings.index_locations,
-                        )
-                        .map_ok(LoweredRequirement::into_inner)
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                let spec =
-                    RequirementsSpecification::from_overrides(requirements, constraints, overrides);
-                let result = CachedEnvironment::from_spec(
-                    EnvironmentSpecification::from(spec),
-                    &interpreter,
+                match update_environment(
+                    environment,
+                    spec,
+                    modifications,
                     &settings,
                     &sync_state,
                     if show_resolution {
@@ -415,13 +376,13 @@ pub(crate) async fn run(
                     native_tls,
                     allow_insecure_host,
                     cache,
+                    DryRun::Disabled,
                     printer,
                     preview,
                 )
-                .await;
-
-                let environment = match result {
-                    Ok(resolution) => resolution,
+                .await
+                {
+                    Ok(update) => Some(update.into_environment().into_interpreter()),
                     Err(ProjectError::Operation(err)) => {
                         return diagnostics::OperationDiagnostic::native_tls(native_tls)
                             .with_context("script")
@@ -429,14 +390,26 @@ pub(crate) async fn run(
                             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                     }
                     Err(err) => return Err(err.into()),
-                };
-
-                // Clear any existing overlay.
-                environment.clear_overlay()?;
-
-                Some(environment.into_interpreter())
+                }
             } else {
                 // Create a virtual environment.
+                let interpreter = ScriptInterpreter::discover(
+                    (&script).into(),
+                    python.as_deref().map(PythonRequest::parse),
+                    python_preference,
+                    python_downloads,
+                    connectivity,
+                    native_tls,
+                    allow_insecure_host,
+                    &install_mirrors,
+                    no_config,
+                    active.map_or(Some(false), Some),
+                    cache,
+                    printer,
+                )
+                .await?
+                .into_interpreter();
+
                 temp_dir = cache.venv_dir()?;
                 let environment = uv_virtualenv::create_venv(
                     temp_dir.path(),
@@ -471,7 +444,7 @@ pub(crate) async fn run(
             warn_user!("Extras are not supported for Python scripts with inline metadata");
         }
         for flag in dev.history().as_flags_pretty() {
-            warn_user!("`{flag}` is not supported for Python scripts with inline metadata",);
+            warn_user!("`{flag}` is not supported for Python scripts with inline metadata");
         }
         if all_packages {
             warn_user!(
@@ -656,7 +629,7 @@ pub(crate) async fn run(
                     printer,
                 )
                 .await?
-                .into_environment()
+                .into_environment()?
             };
 
             if no_sync {
@@ -674,21 +647,6 @@ pub(crate) async fn run(
                 }
             } else {
                 // Validate that any referenced dependency groups are defined in the workspace.
-                if !frozen {
-                    let target = match &project {
-                        VirtualProject::Project(project) => {
-                            if all_packages {
-                                DependencyGroupsTarget::Workspace(project.workspace())
-                            } else {
-                                DependencyGroupsTarget::Project(project)
-                            }
-                        }
-                        VirtualProject::NonProject(workspace) => {
-                            DependencyGroupsTarget::Workspace(workspace)
-                        }
-                    };
-                    target.validate(&dev)?;
-                }
 
                 // Determine the default groups to include.
                 let defaults = default_dependency_groups(project.pyproject_toml())?;
@@ -777,12 +735,17 @@ pub(crate) async fn run(
                 };
 
                 let install_options = InstallOptions::default();
+                let dev = dev.with_defaults(defaults);
+
+                // Validate that the set of requested extras and development groups are defined in the lockfile.
+                target.validate_extras(&extras)?;
+                target.validate_groups(&dev)?;
 
                 match project::sync::do_sync(
                     target,
                     &venv,
                     &extras,
-                    &dev.with_defaults(defaults),
+                    &dev,
                     editable,
                     install_options,
                     modifications,
@@ -1080,6 +1043,12 @@ pub(crate) async fn run(
     )?;
     process.env(EnvVars::PATH, new_path);
 
+    // Increment recursion depth counter.
+    process.env(
+        EnvVars::UV_RUN_RECURSION_DEPTH,
+        (recursion_depth + 1).to_string(),
+    );
+
     // Ensure `VIRTUAL_ENV` is set.
     if interpreter.is_virtualenv() {
         process.env(EnvVars::VIRTUAL_ENV, interpreter.sys_prefix().as_os_str());
@@ -1153,7 +1122,8 @@ pub(crate) enum RunCommand {
     /// Execute a `pythonw` GUI script.
     PythonGuiScript(PathBuf, Vec<OsString>),
     /// Execute a Python package containing a `__main__.py` file.
-    PythonPackage(PathBuf, Vec<OsString>),
+    /// If an entrypoint with the target name is installed in the environment, it is preferred.
+    PythonPackage(OsString, PathBuf, Vec<OsString>),
     /// Execute a Python [zipapp].
     /// [zipapp]: <https://docs.python.org/3/library/zipapp.html>
     PythonZipapp(PathBuf, Vec<OsString>),
@@ -1162,7 +1132,7 @@ pub(crate) enum RunCommand {
     /// Execute a `pythonw` script provided via `stdin`.
     PythonGuiStdin(Vec<u8>, Vec<OsString>),
     /// Execute a Python script provided via a remote URL.
-    PythonRemote(tempfile::NamedTempFile, Vec<OsString>),
+    PythonRemote(Url, tempfile::NamedTempFile, Vec<OsString>),
     /// Execute an external command.
     External(OsString, Vec<OsString>),
     /// Execute an empty command (in practice, `python` with no arguments).
@@ -1175,10 +1145,12 @@ impl RunCommand {
         match self {
             Self::Python(_)
             | Self::PythonScript(..)
-            | Self::PythonPackage(..)
             | Self::PythonZipapp(..)
             | Self::PythonRemote(..)
             | Self::Empty => Cow::Borrowed("python"),
+            // N.B. We can't know if we'll invoke `<target>` or `python <target>` without checking
+            // the available scripts in the interpreter — we could improve this message
+            Self::PythonPackage(target, ..) => target.to_string_lossy(),
             Self::PythonModule(..) => Cow::Borrowed("python -m"),
             Self::PythonGuiScript(..) => {
                 if cfg!(windows) {
@@ -1207,15 +1179,30 @@ impl RunCommand {
                 process.args(args);
                 process
             }
-            Self::PythonScript(target, args)
-            | Self::PythonPackage(target, args)
-            | Self::PythonZipapp(target, args) => {
+            Self::PythonPackage(target, path, args) => {
+                let name = PathBuf::from(target).with_extension(std::env::consts::EXE_EXTENSION);
+                let entrypoint = interpreter.scripts().join(name);
+
+                // If the target is an installed, executable script — prefer that
+                if uv_fs::which::is_executable(&entrypoint) {
+                    let mut process = Command::new(entrypoint);
+                    process.args(args);
+                    process
+                // Otherwise, invoke `python <module>`
+                } else {
+                    let mut process = Command::new(interpreter.sys_executable());
+                    process.arg(path);
+                    process.args(args);
+                    process
+                }
+            }
+            Self::PythonScript(target, args) | Self::PythonZipapp(target, args) => {
                 let mut process = Command::new(interpreter.sys_executable());
                 process.arg(target);
                 process.args(args);
                 process
             }
-            Self::PythonRemote(target, args) => {
+            Self::PythonRemote(.., target, args) => {
                 let mut process = Command::new(interpreter.sys_executable());
                 process.arg(target.path());
                 process.args(args);
@@ -1318,9 +1305,14 @@ impl std::fmt::Display for RunCommand {
                 }
                 Ok(())
             }
-            Self::PythonScript(target, args)
-            | Self::PythonPackage(target, args)
-            | Self::PythonZipapp(target, args) => {
+            Self::PythonPackage(target, _path, args) => {
+                write!(f, "{}", target.to_string_lossy())?;
+                for arg in args {
+                    write!(f, " {}", arg.to_string_lossy())?;
+                }
+                Ok(())
+            }
+            Self::PythonScript(target, args) | Self::PythonZipapp(target, args) => {
                 write!(f, "python {}", target.display())?;
                 for arg in args {
                     write!(f, " {}", arg.to_string_lossy())?;
@@ -1431,7 +1423,7 @@ impl RunCommand {
                     writer.write_all(&chunk?)?;
                 }
 
-                return Ok(Self::PythonRemote(file, args.to_vec()));
+                return Ok(Self::PythonRemote(url, file, args.to_vec()));
             }
         }
 
@@ -1462,7 +1454,11 @@ impl RunCommand {
         {
             Ok(Self::PythonGuiScript(target_path, args.to_vec()))
         } else if is_dir && target_path.join("__main__.py").is_file() {
-            Ok(Self::PythonPackage(target_path, args.to_vec()))
+            Ok(Self::PythonPackage(
+                target.clone(),
+                target_path,
+                args.to_vec(),
+            ))
         } else if is_file && is_python_zipapp(&target_path) {
             Ok(Self::PythonZipapp(target_path, args.to_vec()))
         } else {
@@ -1482,4 +1478,25 @@ fn is_python_zipapp(target: &Path) -> bool {
         }
     }
     false
+}
+
+/// Read and parse recursion depth from the environment.
+///
+/// Returns Ok(0) if `EnvVars::UV_RUN_RECURSION_DEPTH` is not set.
+///
+/// Returns an error if `EnvVars::UV_RUN_RECURSION_DEPTH` is set to a value
+/// that cannot ber parsed as an integer.
+fn read_recursion_depth_from_environment_variable() -> anyhow::Result<u32> {
+    let envvar = match std::env::var(EnvVars::UV_RUN_RECURSION_DEPTH) {
+        Ok(val) => val,
+        Err(VarError::NotPresent) => return Ok(0),
+        Err(e) => {
+            return Err(e)
+                .with_context(|| format!("invalid value for {}", EnvVars::UV_RUN_RECURSION_DEPTH))
+        }
+    };
+
+    envvar
+        .parse::<u32>()
+        .with_context(|| format!("invalid value for {}", EnvVars::UV_RUN_RECURSION_DEPTH))
 }

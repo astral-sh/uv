@@ -3,6 +3,7 @@ source: crates/uv/tests/it/ecosystem.rs
 expression: lock
 ---
 version = 1
+revision = 1
 requires-python = ">=3.9.0"
 resolution-markers = [
     "python_full_version >= '3.13' and sys_platform == 'darwin'",
@@ -6076,6 +6077,7 @@ requires-dist = [
     { name = "urllib3", marker = "extra == 'quality'", specifier = "<2.0.0" },
     { name = "uvicorn", marker = "extra == 'serving'" },
 ]
+provides-extras = ["ja", "sklearn", "tf", "tf-cpu", "torch", "accelerate", "retrieval", "flax", "tokenizers", "ftfy", "onnxruntime", "onnx", "modelcreation", "sagemaker", "deepspeed", "optuna", "ray", "sigopt", "integrations", "serving", "audio", "speech", "torch-speech", "tf-speech", "flax-speech", "vision", "timm", "torch-vision", "codecarbon", "video", "sentencepiece", "deepspeed-testing", "quality", "all", "docs-specific", "docs", "torchhub", "agents"]
 
 [package.metadata.requires-dev]
 dev = [

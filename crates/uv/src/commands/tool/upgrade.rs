@@ -7,7 +7,7 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, PreviewMode, TrustedHost};
+use uv_configuration::{Concurrency, DryRun, PreviewMode, TrustedHost};
 use uv_fs::CWD;
 use uv_normalize::PackageName;
 use uv_pypi_types::Requirement;
@@ -352,6 +352,7 @@ async fn upgrade_tool(
             native_tls,
             allow_insecure_host,
             cache,
+            DryRun::Disabled,
             printer,
             preview,
         )

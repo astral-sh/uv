@@ -245,20 +245,18 @@ impl UniversalMarker {
     pub(crate) fn evaluate<P, E, G>(
         self,
         env: &MarkerEnvironment,
-        extras: &[(P, E)],
-        groups: &[(P, G)],
+        extras: impl Iterator<Item = (P, E)>,
+        groups: impl Iterator<Item = (P, G)>,
     ) -> bool
     where
         P: Borrow<PackageName>,
         E: Borrow<ExtraName>,
         G: Borrow<GroupName>,
     {
-        let extras = extras
-            .iter()
-            .map(|(package, extra)| encode_package_extra(package.borrow(), extra.borrow()));
-        let groups = groups
-            .iter()
-            .map(|(package, group)| encode_package_group(package.borrow(), group.borrow()));
+        let extras =
+            extras.map(|(package, extra)| encode_package_extra(package.borrow(), extra.borrow()));
+        let groups =
+            groups.map(|(package, group)| encode_package_group(package.borrow(), group.borrow()));
         self.marker
             .evaluate(env, &extras.chain(groups).collect::<Vec<ExtraName>>())
     }
@@ -421,11 +419,12 @@ impl ConflictMarker {
 
     /// Returns true if this conflict marker is satisfied by the given
     /// list of activated extras and groups.
-    pub(crate) fn evaluate(
-        self,
-        extras: &[(PackageName, ExtraName)],
-        groups: &[(PackageName, GroupName)],
-    ) -> bool {
+    pub(crate) fn evaluate<P, E, G>(self, extras: &[(P, E)], groups: &[(P, G)]) -> bool
+    where
+        P: Borrow<PackageName>,
+        E: Borrow<ExtraName>,
+        G: Borrow<GroupName>,
+    {
         static DUMMY: std::sync::LazyLock<MarkerEnvironment> = std::sync::LazyLock::new(|| {
             MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
                 implementation_name: "",
@@ -444,10 +443,10 @@ impl ConflictMarker {
         });
         let extras = extras
             .iter()
-            .map(|(package, extra)| encode_package_extra(package, extra));
+            .map(|(package, extra)| encode_package_extra(package.borrow(), extra.borrow()));
         let groups = groups
             .iter()
-            .map(|(package, group)| encode_package_group(package, group));
+            .map(|(package, group)| encode_package_group(package.borrow(), group.borrow()));
         self.marker
             .evaluate(&DUMMY, &extras.chain(groups).collect::<Vec<ExtraName>>())
     }
@@ -597,9 +596,10 @@ mod tests {
                 .iter()
                 .copied()
                 .map(|name| (create_package("pkg"), create_extra(name)))
-                .collect::<Vec<_>>();
+                .collect::<Vec<(PackageName, ExtraName)>>();
+            let groups = Vec::<(PackageName, GroupName)>::new();
             assert!(
-                !cm.evaluate(&extras, &[]),
+                !cm.evaluate(&extras, &groups),
                 "expected `{extra_names:?}` to evaluate to `false` in `{cm:?}`"
             );
         }
@@ -619,9 +619,10 @@ mod tests {
                 .iter()
                 .copied()
                 .map(|name| (create_package("pkg"), create_extra(name)))
-                .collect::<Vec<_>>();
+                .collect::<Vec<(PackageName, ExtraName)>>();
+            let groups = Vec::<(PackageName, GroupName)>::new();
             assert!(
-                cm.evaluate(&extras, &[]),
+                cm.evaluate(&extras, &groups),
                 "expected `{extra_names:?}` to evaluate to `true` in `{cm:?}`"
             );
         }
