@@ -31,7 +31,8 @@ use uv_distribution_types::{
     RemoteSource, ResolvedDist, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{relative_to, PortablePath, PortablePathBuf};
-use uv_git::{GitOid, GitReference, RepositoryReference, ResolvedRepositoryReference};
+use uv_git::{RepositoryReference, ResolvedRepositoryReference};
+use uv_git_types::{GitOid, GitReference};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
@@ -2268,7 +2269,7 @@ impl Package {
                 url.set_query(None);
 
                 // Reconstruct the `GitUrl` from the `GitSource`.
-                let git_url = uv_git::GitUrl::from_commit(
+                let git_url = uv_git_types::GitUrl::from_commit(
                     url,
                     GitReference::from(git.kind.clone()),
                     git.precise,
@@ -4345,7 +4346,7 @@ fn normalize_requirement(
 
             // Reconstruct the PEP 508 URL from the underlying data.
             let url = Url::from(ParsedGitUrl {
-                url: uv_git::GitUrl::from_reference(repository.clone(), reference.clone()),
+                url: uv_git_types::GitUrl::from_reference(repository.clone(), reference.clone()),
                 subdirectory: subdirectory.clone(),
             });
 

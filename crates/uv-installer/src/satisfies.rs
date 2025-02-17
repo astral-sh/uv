@@ -7,7 +7,7 @@ use url::Url;
 use uv_cache_info::CacheInfo;
 use uv_cache_key::{CanonicalUrl, RepositoryUrl};
 use uv_distribution_types::{InstalledDirectUrlDist, InstalledDist};
-use uv_git::GitOid;
+use uv_git_types::GitOid;
 use uv_pypi_types::{DirInfo, DirectUrl, RequirementSource, VcsInfo, VcsKind};
 
 #[derive(Debug, Copy, Clone)]
