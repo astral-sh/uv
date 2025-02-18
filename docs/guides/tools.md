@@ -239,23 +239,30 @@ $ uv tool upgrade --all
 
 ## Requesting Python versions
 
-You can specify the Python interpreter to use with the `--python` option when installing or
-upgrading tools.
+By default, uv will use your default Python interpreter (the first it finds) when when running,
+installing, or upgrading tools. You can specify the Python interpreter to use with the `--python`
+option.
 
-To request a specific Python version for the tool installation:
+For example, to request a specific Python version when running a tool:
 
 ```console
-$ uv tool install ruff --python=3.10
+$ uvx --python 3.10 ruff
 ```
 
-To change the Python version of an existing tool during upgrade:
+Or, when installing a tool:
 
 ```console
-$ uv tool upgrade ruff --python=3.10
+$ uv tool install --python 3.10 ruff
+```
+
+Or, when upgrading a tool:
+
+```console
+$ uv tool upgrade --python 3.10 ruff
 ```
 
 For more details on requesting Python versions, see the
-[Requesting a version](../concepts/python-versions.md#requesting-a-version).
+[Python version](../concepts/python-versions.md#requesting-a-version) concept page..
 
 ## Next steps
 
