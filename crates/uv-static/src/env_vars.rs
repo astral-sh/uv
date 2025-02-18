@@ -644,4 +644,9 @@ impl EnvVars {
     /// error.
     #[attr_hidden]
     pub const UV_RUN_MAX_RECURSION_DEPTH: &'static str = "UV_RUN_MAX_RECURSION_DEPTH";
+
+    /// Overrides terminal width used for wrapping.
+    ///
+    /// This is a quasi-standard variable, described e.g. in `ncurses(3x)`.
+    pub const COLUMNS: &'static str = "COLUMNS";
 }

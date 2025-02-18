@@ -563,6 +563,10 @@ impl TestContext {
             // When running the tests in a venv, ignore that venv, otherwise we'll capture warnings.
             .env_remove(EnvVars::VIRTUAL_ENV)
             .env(EnvVars::UV_NO_WRAP, "1")
+            // While we disable wrapping in UV above, other tools may still wrap their output.
+            // Set a fixed COLUMNS value to ensure they wrap consistently, independently of
+            // terminal width.
+            .env(EnvVars::COLUMNS, "100")
             .env(EnvVars::PATH, path)
             .env(EnvVars::HOME, self.home_dir.as_os_str())
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
