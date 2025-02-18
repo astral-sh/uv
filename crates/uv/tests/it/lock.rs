@@ -1897,10 +1897,8 @@ fn lock_project_with_build_constraints() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["anyio==3.7.0"]
 
+        # This should be ignored because none of the dependencies requires `setuptools`
         [tool.uv]
-        constraint-dependencies = ["idna<3.4"]
-
-        # This should be ignored because none of the dependencies requires 'setuptools'
         build-constraint-dependencies = ["setuptools==1"]
         "#,
     )?;
@@ -1934,11 +1932,10 @@ fn lock_project_with_build_constraints() -> Result<()> {
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==3.7.0
-     + idna==3.3
+     + idna==3.6
      + sniffio==1.3.1
     "###);
 
-    //
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -1948,6 +1945,7 @@ fn lock_project_with_build_constraints() -> Result<()> {
         requires-python = ">=3.8"
         dependencies = ["requests==1.2"]
 
+        # This should fail the operation, since `requests` depends on `setuptools` at build time.
         [tool.uv]
         build-constraint-dependencies = ["setuptools==1"]
         "#,
@@ -1972,7 +1970,7 @@ fn lock_project_with_build_constraints() -> Result<()> {
 /// Lock a project with `uv.tool.build-constraint-dependencies` that reference `tool.uv.sources`.
 #[test]
 fn lock_project_with_build_constraint_sources() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.9");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1980,14 +1978,14 @@ fn lock_project_with_build_constraint_sources() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["anyio==3.7.0"]
+        requires-python = ">=3.8"
+        dependencies = ["requests==1.2"]
 
         [tool.uv]
-        constraint-dependencies = ["idna<3.4"]
+        build-constraint-dependencies = ["setuptools==75.8.0"]
 
         [tool.uv.sources]
-        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }
+        setuptools = { url = "https://files.pythonhosted.org/packages/69/8a/b9dc7678803429e4a3bc9ba462fa3dd9066824d3c607490235c6a796be5a/setuptools-75.8.0-py3-none-any.whl" }
         "#,
     )?;
 
@@ -1997,7 +1995,7 @@ fn lock_project_with_build_constraint_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 2 packages in [TIME]
     "###);
 
     // Re-run with `--locked`.
@@ -2007,7 +2005,7 @@ fn lock_project_with_build_constraint_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 2 packages in [TIME]
     "###);
 
     // Install the base dependencies from the lockfile.
@@ -2017,11 +2015,9 @@ fn lock_project_with_build_constraint_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==3.7.0
-     + idna==3.2 (from https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl)
-     + sniffio==1.3.1
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + requests==1.2.0
     "###);
 
     Ok(())

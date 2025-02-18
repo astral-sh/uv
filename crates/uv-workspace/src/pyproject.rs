@@ -479,18 +479,19 @@ pub struct ToolUv {
     )]
     pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
 
-    /// Constrains to build dependencies using the given requirements files when building source
-    /// distributions.
+    /// Constraints to apply when solving build dependencies.
     ///
-    /// Including a package as a constraint will _not_ trigger installation of the package on its
-    /// own; instead, the package must be requested elsewhere in the project's first-party or
-    /// transitive dependencies.
+    /// Build constraints are used to restrict the versions of build dependencies that are selected
+    /// when building a package during resolution or installation.
+    ///
+    /// Including a package as a constraint will _not_ trigger installation of the package during
+    /// a build; instead, the package must be requested elsewhere in the project's build dependency
+    /// graph.
     ///
     /// !!! note
     ///     In `uv lock`, `uv sync`, and `uv run`, uv will only read `build-constraint-dependencies` from
     ///     the `pyproject.toml` at the workspace root, and will ignore any declarations in other
     ///     workspace members or `uv.toml` files.
-    ///
     #[cfg_attr(
         feature = "schemars",
         schemars(
@@ -502,8 +503,8 @@ pub struct ToolUv {
         default = "[]",
         value_type = "list[str]",
         example = r#"
-            # Ensure that the `setuptools 60.0.0` is used to build any packages with a build dependency
-            on `setuptools`.
+            # Ensure that the setuptools v60.0.0 is used whenever a package has a build dependency
+            # on setuptools.
             build-constraint-dependencies = ["setuptools==60.0.0"]
         "#
     )]

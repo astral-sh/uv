@@ -135,9 +135,24 @@ when building runtime dependencies.
 
 Build constraint files are `requirements.txt`-like files that only control the _version_ of a
 build-time requirement. However, including a package in a build constraints file will _not_ trigger
-its installation; instead, constraints apply only when the package is required as a direct or
-transitive build-time dependency. Build constraints can be used to add bounds to dependencies that
-are not explicitly declared as build-time dependencies of the current project.
+its installation at build time; instead, constraints apply only when the package is required as a
+direct or transitive build-time dependency. Build constraints can be used to add bounds to
+dependencies that are not explicitly declared as build-time dependencies of the current project.
+
+For example, if a package defines its build dependencies as follows:
+
+```toml title="pyproject.toml"
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+```
+
+Build constraints could be used to ensure that a specific version of `setuptools` is used for every
+package in the workspace:
+
+```python title="build-constraints.txt"
+setuptools==75.0.0
+```
 
 uv will also read `build-constraint-dependencies` from the `pyproject.toml` at the workspace root,
 and append them to those specified in the build constraints file.

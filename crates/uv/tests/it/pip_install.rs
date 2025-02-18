@@ -7837,7 +7837,7 @@ fn compatible_build_constraint_in_pyproject_toml() -> Result<()> {
     pyproject_toml.write_str(
         r#"[tool.uv]
 build-constraint-dependencies = [
-    "setuptools>=40",
+    "setuptools==40.8.0",
 ]
 "#,
     )?;
@@ -7864,7 +7864,7 @@ build-constraint-dependencies = [
 fn incompatible_build_constraint_merged_with_pyproject_toml() -> Result<()> {
     let context = TestContext::new("3.8");
 
-    // incompatible setuptools version in pyproject.toml, compatible in build_constraints.txt
+    // Incompatible setuptools version in pyproject.toml, compatible in build_constraints.txt.
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
     constraints_txt.write_str("setuptools>=40")?;
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -7892,7 +7892,7 @@ build-constraint-dependencies = [
     "###
     );
 
-    // compatible setuptools version in pyproject.toml, incompatible in build_constraints.txt
+    // Compatible setuptools version in pyproject.toml, incompatible in build_constraints.txt.
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
     constraints_txt.write_str("setuptools==1")?;
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
