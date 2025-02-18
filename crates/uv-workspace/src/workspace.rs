@@ -496,6 +496,20 @@ impl Workspace {
         constraints.clone()
     }
 
+    /// Returns the set of build constraints for the workspace.
+    pub fn build_constraints(&self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
+        let Some(build_constraints) = self
+            .pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.build_constraint_dependencies.as_ref())
+        else {
+            return vec![];
+        };
+        build_constraints.clone()
+    }
+
     /// The path to the workspace root, the directory containing the top level `pyproject.toml` with
     /// the `uv.tool.workspace`, or the `pyproject.toml` in an implicit single workspace project.
     pub fn install_path(&self) -> &PathBuf {
@@ -1725,6 +1739,7 @@ mod tests {
                       "dev-dependencies": null,
                       "override-dependencies": null,
                       "constraint-dependencies": null,
+                      "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
                       "conflicts": null
@@ -1818,6 +1833,7 @@ mod tests {
                       "dev-dependencies": null,
                       "override-dependencies": null,
                       "constraint-dependencies": null,
+                      "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
                       "conflicts": null
@@ -2025,6 +2041,7 @@ mod tests {
                       "dev-dependencies": null,
                       "override-dependencies": null,
                       "constraint-dependencies": null,
+                      "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
                       "conflicts": null
@@ -2130,6 +2147,7 @@ mod tests {
                       "dev-dependencies": null,
                       "override-dependencies": null,
                       "constraint-dependencies": null,
+                      "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
                       "conflicts": null
@@ -2248,6 +2266,7 @@ mod tests {
                       "dev-dependencies": null,
                       "override-dependencies": null,
                       "constraint-dependencies": null,
+                      "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
                       "conflicts": null
@@ -2340,6 +2359,7 @@ mod tests {
                       "dev-dependencies": null,
                       "override-dependencies": null,
                       "constraint-dependencies": null,
+                      "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
                       "conflicts": null

@@ -244,6 +244,8 @@ class CPythonFinder(Finder):
             if not rows:
                 break
             for row in rows:
+                # Sort the assets to ensure deterministic results
+                row["assets"].sort(key=lambda asset: asset["browser_download_url"])
                 for asset in row["assets"]:
                     url = asset["browser_download_url"]
                     download = self._parse_download_url(url)

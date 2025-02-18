@@ -51,6 +51,7 @@ pub(crate) async fn pip_install(
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
+    build_constraints_from_workspace: Vec<Requirement>,
     extras: &ExtrasSpecification,
     groups: &DevGroupsSpecification,
     resolution_mode: ResolutionMode,
@@ -123,10 +124,6 @@ pub(crate) async fn pip_install(
     )
     .await?;
 
-    // Read build constraints.
-    let build_constraints =
-        operations::read_constraints(build_constraints, &client_builder).await?;
-
     let constraints: Vec<NameRequirementSpecification> = constraints
         .iter()
         .cloned()
@@ -146,6 +143,20 @@ pub(crate) async fn pip_install(
                 .map(UnresolvedRequirementSpecification::from),
         )
         .collect();
+
+    // Read build constraints.
+    let build_constraints: Vec<NameRequirementSpecification> =
+        operations::read_constraints(build_constraints, &client_builder)
+            .await?
+            .iter()
+            .cloned()
+            .chain(
+                build_constraints_from_workspace
+                    .iter()
+                    .cloned()
+                    .map(NameRequirementSpecification::from),
+            )
+            .collect();
 
     // Detect the current Python interpreter.
     let environment = if target.is_some() || prefix.is_some() {

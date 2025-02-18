@@ -214,6 +214,10 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
     pyproject_toml.write_str(indoc! {r#"
         [tool.uv]
         unknown = "field"
+
+        [build-system]
+        requires = ["setuptools"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     let mut filters = context.filters();
@@ -7790,6 +7794,166 @@ fn compatible_build_constraint() -> Result<()> {
     "###
     );
 
+    Ok(())
+}
+
+/// Include `build-constraint-dependencies` in pyproject.toml with an incompatible constraint.
+#[test]
+fn incompatible_build_constraint_in_pyproject_toml() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[tool.uv]
+build-constraint-dependencies = [
+    "setuptools==1",
+]
+"#,
+    )?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("requests==1.2"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include a `build_constraints.txt` file with a compatible constraint.
+#[test]
+fn compatible_build_constraint_in_pyproject_toml() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[tool.uv]
+build-constraint-dependencies = [
+    "setuptools==40.8.0",
+]
+"#,
+    )?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("requests==1.2"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + requests==1.2.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Merge `build_constraints.txt` with `build-constraint-dependencies` in pyproject.toml with an incompatible constraint.
+#[test]
+fn incompatible_build_constraint_merged_with_pyproject_toml() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    // Incompatible setuptools version in pyproject.toml, compatible in build_constraints.txt.
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("setuptools>=40")?;
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[tool.uv]
+build-constraint-dependencies = [
+    "setuptools==1",
+]
+"#,
+    )?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("requests==1.2")
+        .arg("--build-constraint")
+        .arg("build_constraints.txt"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    "###
+    );
+
+    // Compatible setuptools version in pyproject.toml, incompatible in build_constraints.txt.
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("setuptools==1")?;
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[tool.uv]
+build-constraint-dependencies = [
+    "setuptools>=40",
+]
+"#,
+    )?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("requests==1.2")
+        .arg("--build-constraint")
+        .arg("build_constraints.txt"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools==1 and setuptools>=40, we can conclude that your requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Merge `build_constraints.txt` with `build-constraint-dependencies` in pyproject.toml with a compatible constraint.
+#[test]
+fn compatible_build_constraint_merged_with_pyproject_toml() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("setuptools>=40")?;
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[tool.uv]
+build-constraint-dependencies = [
+    "setuptools>=1",
+]
+"#,
+    )?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("requests==1.2")
+        .arg("--build-constraint")
+        .arg("build_constraints.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + requests==1.2.0
+    "###
+    );
     Ok(())
 }
 

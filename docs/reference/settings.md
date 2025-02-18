@@ -1,4 +1,35 @@
 ## Project metadata
+### [`build-constraint-dependencies`](#build-constraint-dependencies) {: #build-constraint-dependencies }
+
+Constraints to apply when solving build dependencies.
+
+Build constraints are used to restrict the versions of build dependencies that are selected
+when building a package during resolution or installation.
+
+Including a package as a constraint will _not_ trigger installation of the package during
+a build; instead, the package must be requested elsewhere in the project's build dependency
+graph.
+
+!!! note
+    In `uv lock`, `uv sync`, and `uv run`, uv will only read `build-constraint-dependencies` from
+    the `pyproject.toml` at the workspace root, and will ignore any declarations in other
+    workspace members or `uv.toml` files.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+# Ensure that the setuptools v60.0.0 is used whenever a package has a build dependency
+# on setuptools.
+build-constraint-dependencies = ["setuptools==60.0.0"]
+```
+
+---
+
 ### [`conflicts`](#conflicts) {: #conflicts }
 
 Declare collections of extras or dependency groups that are conflicting

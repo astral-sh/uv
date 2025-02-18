@@ -9714,3 +9714,79 @@ fn repeated_index_cli_reversed() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn add_with_build_constraints() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.8"
+    dependencies = []
+
+    [tool.uv]
+    build-constraint-dependencies = ["setuptools==1"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("requests==1.2"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+      help: `requests` (v1.2.0) was included because `project` (v0.1.0) depends on `requests==1.2`
+    ");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.8"
+    dependencies = []
+
+    [tool.uv]
+    build-constraint-dependencies = ["setuptools>=40"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("requests==1.2"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + requests==1.2.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "git")]
+fn add_unsupported_git_scheme() {
+    let context = TestContext::new("3.12");
+
+    context.init().arg(".").assert().success();
+
+    uv_snapshot!(context.filters(), context.add().arg("git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef`
+      Caused by: Unsupported Git URL scheme `fantasy:` in `fantasy://ferris/dreams/of/urls` (expected one of `https:`, `ssh:`, or `file:`)
+    git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    "###);
+}

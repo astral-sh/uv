@@ -331,6 +331,7 @@ pub struct ToolUv {
     pub top_level: ResolverInstallerOptions,
     pub override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub build_constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub sources: Option<BTreeMap<PackageName, Sources>>,
 }
 

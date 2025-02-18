@@ -2,6 +2,25 @@
 
 <!-- prettier-ignore-start -->
 
+## 0.6.1
+
+### Enhancements
+
+- Allow users to mark platforms as "required" for wheel coverage ([#10067](https://github.com/astral-sh/uv/pull/10067))
+- Warn for builds in non-build and workspace root pyproject.toml ([#11394](https://github.com/astral-sh/uv/pull/11394))
+
+### Bug fixes
+
+- Add `--all` to `uvx --reinstall` message ([#11535](https://github.com/astral-sh/uv/pull/11535))
+- Fallback to `GET` on HTTP 400 when attempting to use range requests for wheel download ([#11539](https://github.com/astral-sh/uv/pull/11539))
+- Prefer local variants in preference selection ([#11546](https://github.com/astral-sh/uv/pull/11546))
+- Respect verbatim executable name in `uvx` ([#11524](https://github.com/astral-sh/uv/pull/11524))
+
+### Documentation
+
+- Add documentation for required environments ([#11542](https://github.com/astral-sh/uv/pull/11542))
+- Note that `main.py` used to be `hello.py` ([#11519](https://github.com/astral-sh/uv/pull/11519))
+
 ## 0.6.0
 
 There have been 31 releases and 1135 pull requests since [0.5.0](https://github.com/astral-sh/uv/releases/tag/0.5.0), our last release with breaking changes. As before, we've accumulated various changes that improve correctness and user experience, but could break some workflows. This release contains those changes; many have been marked as breaking out of an abundance of caution. We expect most users to be able to upgrade without making changes.
@@ -24,7 +43,7 @@ There have been 31 releases and 1135 pull requests since [0.5.0](https://github.
 
 - **Error on non-existent extras, e.g., in `uv sync`** ([#11426](https://github.com/astral-sh/uv/pull/11426))
 
-  Previously, uv would silently ignore non-existent extras requested on the command-line (e.g., via `uv sync --extra foo`). This is _generally_ correct behavior when resolving requests for package extras, because an extra may be present on one compatible version of a package but not another. However, this flexibility doesn't need to apply to the local project and it's less surprising to error here.
+  Previously, uv would silently ignore non-existent extras requested on the command-line (e.g., via `uv sync --extra foo`). This is *generally* correct behavior when resolving requests for package extras, because an extra may be present on one compatible version of a package but not another. However, this flexibility doesn't need to apply to the local project and it's less surprising to error here.
 
 - **Error on missing dependency groups when `--frozen` is provided** ([#11499](https://github.com/astral-sh/uv/pull/11499))
 
@@ -32,10 +51,10 @@ There have been 31 releases and 1135 pull requests since [0.5.0](https://github.
 
 - **Change `-p` to a `--python` alias in `uv pip compile`** ([#11486](https://github.com/astral-sh/uv/pull/11486))
 
-  In `uv pip compile`, `-p` was an alias for `--python-version` while everywhere else in uv's interface it is an alias for `--python`. Additionally, `uv pip compile` did not respect the `UV_PYTHON` environment variable. Now, the semantics of this flag have been updated for parity with the rest of the CLI. 
-  
+  In `uv pip compile`, `-p` was an alias for `--python-version` while everywhere else in uv's interface it is an alias for `--python`. Additionally, `uv pip compile` did not respect the `UV_PYTHON` environment variable. Now, the semantics of this flag have been updated for parity with the rest of the CLI.
+
   However, `--python-version` is unique: if we cannot find an interpreter with the given version, we will not fail. Instead, we'll use an alternative interpreter and override its version tags with the requested version during package resolution. This behavior is retained here for backwards compatibility, `--python <version>` / `-p <version>` will not fail if the version cannot be found. However, if a specific interpreter is requested, e.g., with `--python <path>` or `--python pypy`, and cannot be found — uv will exit with an error.
-  
+
   The breaking changes here are that `UV_PYTHON` is respected and `--python <version>` will no longer fail if the version cannot be found.
 
 - **Bump `alpine` default tag to 3.21 for derived Docker images** ([#11157](https://github.com/astral-sh/uv/pull/11157))
@@ -89,3 +108,4 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
+
