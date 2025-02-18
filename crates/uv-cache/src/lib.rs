@@ -18,7 +18,6 @@ use uv_fs::{cachedir, directories, LockedFile};
 use uv_normalize::PackageName;
 use uv_pypi_types::ResolutionMetadata;
 
-pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
 pub use crate::cli::CacheArgs;
 use crate::removal::Remover;
@@ -27,7 +26,6 @@ pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
 
 mod archive;
-mod by_timestamp;
 #[cfg(feature = "clap")]
 mod cli;
 mod removal;
@@ -1034,7 +1032,7 @@ impl CacheBucket {
             Self::SourceDistributions => "sdists-v8",
             Self::FlatIndex => "flat-index-v2",
             Self::Git => "git-v0",
-            Self::Interpreter => "interpreter-v4",
+            Self::Interpreter => "interpreter-v5",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/it/cache_clean.rs`.
             Self::Simple => "simple-v15",
