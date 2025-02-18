@@ -166,12 +166,6 @@ To install `ruff`:
 $ uv tool install ruff
 ```
 
-You can specify the Python interpreter to use with the `--python` option:
-
-```console
-$ uv tool install ruff --python=3.10
-```
-
 When a tool is installed, its executables are placed in a `bin` directory in the `PATH` which allows
 the tool to be run without uv. If it's not on the `PATH`, a warning will be displayed and
 `uv tool update-shell` can be used to add it to the `PATH`.
@@ -227,12 +221,6 @@ To upgrade a tool, use `uv tool upgrade`:
 $ uv tool upgrade ruff
 ```
 
-You can specify the Python interpreter to use with the `--python` option:
-
-```console
-$ uv tool upgrade ruff --python=3.10
-```
-
 Tool upgrades will respect the version constraints provided when installing the tool. For example,
 `uv tool install ruff >=0.3,<0.4` followed by `uv tool upgrade ruff` will upgrade Ruff to the latest
 version in the range `>=0.3,<0.4`.
@@ -247,6 +235,23 @@ To instead upgrade all tools:
 
 ```console
 $ uv tool upgrade --all
+```
+
+## Requesting Python versions
+
+You can specify the Python interpreter to use with the `--python` option when installing or
+upgrading tools.
+
+To install `ruff` with a specific Python version:
+
+```console
+$ uv tool install ruff --python=3.10
+```
+
+To upgrade `ruff` with a specific Python version:
+
+```console
+$ uv tool upgrade ruff --python=3.10
 ```
 
 ## Next steps
