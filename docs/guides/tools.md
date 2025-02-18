@@ -242,13 +242,13 @@ $ uv tool upgrade --all
 You can specify the Python interpreter to use with the `--python` option when installing or
 upgrading tools.
 
-To install `ruff` with a specific Python version:
+To request a specific Python version for the tool installation:
 
 ```console
 $ uv tool install ruff --python=3.10
 ```
 
-To upgrade `ruff` with a specific Python version:
+To change the Python version of an existing tool during upgrade:
 
 ```console
 $ uv tool upgrade ruff --python=3.10
