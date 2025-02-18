@@ -866,9 +866,10 @@ async fn build_sdist(
                 uv_build_backend::list_source_dist(&source_tree_, uv_version::version())
             })
             .await??;
-
+            let raw_name = filename.to_string();
             BuildMessage::List {
                 filename: DistFilename::SourceDistFilename(filename),
+                raw_name,
                 source_tree: source_tree.to_path_buf(),
                 file_list,
             }
@@ -901,6 +902,7 @@ async fn build_sdist(
                     SourceDistFilename::parsed_normalized_filename(&filename)
                         .map_err(Error::InvalidBuiltSourceDistFilename)?,
                 ),
+                raw_name: filename,
                 output_dir: output_dir.to_path_buf(),
             }
         }
@@ -935,6 +937,7 @@ async fn build_sdist(
                     SourceDistFilename::parsed_normalized_filename(&filename)
                         .map_err(Error::InvalidBuiltSourceDistFilename)?,
                 ),
+                raw_name: filename,
                 output_dir: output_dir.to_path_buf(),
             }
         }
@@ -968,8 +971,10 @@ async fn build_wheel(
                 uv_build_backend::list_wheel(&source_tree_, uv_version::version())
             })
             .await??;
+            let raw_name = filename.to_string();
             BuildMessage::List {
                 filename: DistFilename::WheelFilename(filename),
+                raw_name,
                 source_tree: source_tree.to_path_buf(),
                 file_list,
             }
@@ -997,8 +1002,10 @@ async fn build_wheel(
             })
             .await??;
 
+            let raw_name = filename.to_string();
             BuildMessage::Build {
                 filename: DistFilename::WheelFilename(filename),
+                raw_name,
                 output_dir: output_dir.to_path_buf(),
             }
         }
@@ -1032,6 +1039,7 @@ async fn build_wheel(
                 filename: DistFilename::WheelFilename(
                     WheelFilename::from_str(&filename).map_err(Error::InvalidBuiltWheelFilename)?,
                 ),
+                raw_name: filename,
                 output_dir: output_dir.to_path_buf(),
             }
         }
@@ -1140,6 +1148,8 @@ enum BuildMessage {
     Build {
         /// The name of the built distribution.
         filename: DistFilename,
+        /// The name of the built distribution before parsing and normalization.
+        raw_name: String,
         /// The location of the built distribution.
         output_dir: PathBuf,
     },
@@ -1147,6 +1157,8 @@ enum BuildMessage {
     List {
         /// The name of the build distribution.
         filename: DistFilename,
+        /// The name of the built distribution before parsing and normalization.
+        raw_name: String,
         // All source files are relative to the source tree.
         source_tree: PathBuf,
         // Included file and source file, if not generated.
@@ -1166,28 +1178,26 @@ impl BuildMessage {
     fn print(&self, printer: Printer) -> Result<()> {
         match self {
             BuildMessage::Build {
-                filename,
+                raw_name,
                 output_dir,
+                ..
             } => {
                 writeln!(
                     printer.stderr(),
                     "Successfully built {}",
-                    output_dir
-                        .join(filename.to_string())
-                        .user_display()
-                        .bold()
-                        .cyan()
+                    output_dir.join(raw_name).user_display().bold().cyan()
                 )?;
             }
             BuildMessage::List {
-                filename,
+                raw_name,
                 file_list,
                 source_tree,
+                ..
             } => {
                 writeln!(
                     printer.stdout(),
                     "{}",
-                    format!("Building {filename} will include the following files:").bold()
+                    format!("Building {raw_name} will include the following files:").bold()
                 )?;
                 for (file, source) in file_list {
                     if let Some(source) = source {
