@@ -11,7 +11,9 @@ mod reference;
 
 #[derive(Debug, Error)]
 pub enum GitUrlParseError {
-    #[error("Unsupported Git URL scheme `{0}:` in `{1}`, only `https:`, `ssh:` and `file:` are supported")]
+    #[error(
+        "Unsupported Git URL scheme `{0}:` in `{1}` (expected one of `https:`, `ssh:`, or `file:`)"
+    )]
     UnsupportedGitScheme(String, Url),
 }
 

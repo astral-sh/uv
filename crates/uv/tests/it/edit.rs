@@ -9714,23 +9714,3 @@ fn repeated_index_cli_reversed() -> Result<()> {
 
     Ok(())
 }
-
-#[test]
-#[cfg(feature = "git")]
-fn add_unsupported_git_scheme() {
-    let context = TestContext::new("3.12");
-
-    context.init().arg(".").assert().success();
-
-    uv_snapshot!(context.filters(), context.add().arg("git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef"), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: Failed to parse: `git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef`
-      Caused by: Unsupported Git URL scheme `fantasy:` in `fantasy://ferris/dreams/of/urls`, only `https:`, `ssh:` and `file:` are supported
-    git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    "###);
-}

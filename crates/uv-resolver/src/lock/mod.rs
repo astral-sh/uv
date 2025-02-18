@@ -4335,15 +4335,19 @@ fn normalize_requirement(
             subdirectory,
             url: _,
         } => {
-            let mut repository = git.repository().clone();
-            // Redact the credentials.
-            redact_credentials(&mut repository);
+            // Reconstruct the Git URL.
+            let git = {
+                let mut repository = git.repository().clone();
 
-            // Remove the fragment and query from the URL; they're already present in the source.
-            repository.set_fragment(None);
-            repository.set_query(None);
+                // Redact the credentials.
+                redact_credentials(&mut repository);
 
-            let git = GitUrl::from_fields(repository, git.reference().clone(), git.precise())?;
+                // Remove the fragment and query from the URL; they're already present in the source.
+                repository.set_fragment(None);
+                repository.set_query(None);
+
+                GitUrl::from_fields(repository, git.reference().clone(), git.precise())?
+            };
 
             // Reconstruct the PEP 508 URL from the underlying data.
             let url = Url::from(ParsedGitUrl {

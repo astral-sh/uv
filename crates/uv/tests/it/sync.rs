@@ -7710,7 +7710,7 @@ fn unsupported_git_scheme() -> Result<()> {
     Creating virtual environment at: .venv
       × Failed to build `foo @ file://[TEMP_DIR]/`
       ├─▶ Failed to parse entry: `foo`
-      ╰─▶ Unsupported Git URL scheme `c:` in `c:/home/ferris/projects/foo`, only `https:`, `ssh:` and `file:` are supported
+      ╰─▶ Unsupported Git URL scheme `c:` in `c:/home/ferris/projects/foo` (expected one of `https:`, `ssh:`, or `file:`)
     "###);
     Ok(())
 }
