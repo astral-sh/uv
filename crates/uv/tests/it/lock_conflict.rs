@@ -14128,6 +14128,7 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
             lock,
             @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         resolution-markers = [
             "extra != 'extra-27-resolution-markers-for-days-cpu' and extra == 'extra-27-resolution-markers-for-days-cu124'",
@@ -14377,8 +14378,8 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
 
         [package.optional-dependencies]
         cpu = [
-            { name = "torch", version = "2.6.0", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "sys_platform == 'darwin'" },
-            { name = "torch", version = "2.6.0+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "sys_platform != 'darwin'" },
+            { name = "torch", version = "2.6.0", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-27-resolution-markers-for-days-cpu') or (extra == 'extra-27-resolution-markers-for-days-cpu' and extra == 'extra-27-resolution-markers-for-days-cu124')" },
+            { name = "torch", version = "2.6.0+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-27-resolution-markers-for-days-cpu') or (extra == 'extra-27-resolution-markers-for-days-cpu' and extra == 'extra-27-resolution-markers-for-days-cu124')" },
         ]
         cu124 = [
             { name = "torch", version = "2.6.0+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" } },
@@ -14389,6 +14390,7 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
             { name = "torch", marker = "extra == 'cpu'", specifier = ">=2.6.0", index = "https://astral-sh.github.io/pytorch-mirror/whl/cpu", conflict = { package = "resolution-markers-for-days", extra = "cpu" } },
             { name = "torch", marker = "extra == 'cu124'", specifier = ">=2.6.0", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "resolution-markers-for-days", extra = "cu124" } },
         ]
+        provides-extras = ["cpu", "cu124"]
 
         [[package]]
         name = "setuptools"
@@ -14541,6 +14543,7 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
             lock,
             @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
         resolution-markers = [
             "extra != 'extra-27-resolution-markers-for-days-cpu' and extra == 'extra-27-resolution-markers-for-days-cu124'",
@@ -14790,8 +14793,8 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
 
         [package.optional-dependencies]
         cpu = [
-            { name = "torch", version = "2.6.0", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "sys_platform == 'darwin'" },
-            { name = "torch", version = "2.6.0+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "sys_platform != 'darwin'" },
+            { name = "torch", version = "2.6.0", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-27-resolution-markers-for-days-cpu') or (extra == 'extra-27-resolution-markers-for-days-cpu' and extra == 'extra-27-resolution-markers-for-days-cu124')" },
+            { name = "torch", version = "2.6.0+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-27-resolution-markers-for-days-cpu') or (extra == 'extra-27-resolution-markers-for-days-cpu' and extra == 'extra-27-resolution-markers-for-days-cu124')" },
         ]
         cu124 = [
             { name = "torch", version = "2.6.0+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" } },
@@ -14802,6 +14805,7 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
             { name = "torch", marker = "extra == 'cpu'", specifier = ">=2.6.0", index = "https://astral-sh.github.io/pytorch-mirror/whl/cpu", conflict = { package = "resolution-markers-for-days", extra = "cpu" } },
             { name = "torch", marker = "extra == 'cu124'", specifier = ">=2.6.0", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu124", conflict = { package = "resolution-markers-for-days", extra = "cu124" } },
         ]
+        provides-extras = ["cpu", "cu124"]
 
         [[package]]
         name = "setuptools"
