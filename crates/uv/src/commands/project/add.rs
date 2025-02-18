@@ -907,25 +907,21 @@ fn augment_requirement(
             UnresolvedRequirement::Named(uv_pypi_types::Requirement {
                 source: match requirement.source {
                     RequirementSource::Git {
-                        repository,
-                        reference,
-                        precise,
+                        git,
                         subdirectory,
                         url,
                     } => {
-                        let reference = if let Some(rev) = rev {
-                            GitReference::from_rev(rev.to_string())
+                        let git = if let Some(rev) = rev {
+                            git.with_reference(GitReference::from_rev(rev.to_string()))
                         } else if let Some(tag) = tag {
-                            GitReference::Tag(tag.to_string())
+                            git.with_reference(GitReference::Tag(tag.to_string()))
                         } else if let Some(branch) = branch {
-                            GitReference::Branch(branch.to_string())
+                            git.with_reference(GitReference::Branch(branch.to_string()))
                         } else {
-                            reference
+                            git
                         };
                         RequirementSource::Git {
-                            repository,
-                            reference,
-                            precise,
+                            git,
                             subdirectory,
                             url,
                         }

@@ -6,10 +6,10 @@
 //!
 //! Then lowers them into a dependency specification.
 
+use std::collections::BTreeMap;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::{collections::BTreeMap, mem};
 
 use glob::Pattern;
 use owo_colors::OwoColorize;
@@ -1500,25 +1500,22 @@ impl Source {
                 group: None,
             },
             RequirementSource::Git {
-                repository,
-                mut reference,
-                subdirectory,
-                ..
+                git, subdirectory, ..
             } => {
                 if rev.is_none() && tag.is_none() && branch.is_none() {
-                    let rev = match reference {
-                        GitReference::Branch(ref mut rev) => Some(mem::take(rev)),
-                        GitReference::Tag(ref mut rev) => Some(mem::take(rev)),
-                        GitReference::BranchOrTag(ref mut rev) => Some(mem::take(rev)),
-                        GitReference::BranchOrTagOrCommit(ref mut rev) => Some(mem::take(rev)),
-                        GitReference::NamedRef(ref mut rev) => Some(mem::take(rev)),
+                    let rev = match git.reference() {
+                        GitReference::Branch(rev) => Some(rev),
+                        GitReference::Tag(rev) => Some(rev),
+                        GitReference::BranchOrTag(rev) => Some(rev),
+                        GitReference::BranchOrTagOrCommit(rev) => Some(rev),
+                        GitReference::NamedRef(rev) => Some(rev),
                         GitReference::DefaultBranch => None,
                     };
                     Source::Git {
-                        rev,
+                        rev: rev.cloned(),
                         tag,
                         branch,
-                        git: repository,
+                        git: git.repository().clone(),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,
                         extra: None,
@@ -1529,7 +1526,7 @@ impl Source {
                         rev,
                         tag,
                         branch,
-                        git: repository,
+                        git: git.repository().clone(),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,
                         extra: None,

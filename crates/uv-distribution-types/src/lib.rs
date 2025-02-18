@@ -714,9 +714,7 @@ impl GitSourceDist {
     /// Return the [`ParsedUrl`] for the distribution.
     pub fn parsed_url(&self) -> ParsedUrl {
         ParsedUrl::Git(ParsedGitUrl::from_source(
-            self.git.repository().clone(),
-            self.git.reference().clone(),
-            self.git.precise(),
+            (*self.git).clone(),
             self.subdirectory.clone(),
         ))
     }

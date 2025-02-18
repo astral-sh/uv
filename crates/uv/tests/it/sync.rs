@@ -7681,3 +7681,36 @@ fn sync_locked_script() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn unsupported_git_scheme() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo"]
+
+        [tool.uv.sources]
+        # `c:/...` looks like an absolute path, but this field requires a URL such as `file:///...`.
+        foo = { git = "c:/home/ferris/projects/foo", rev = "7701ffcbae245819b828dc5f885a5201158897ef" }
+        "#},
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+      × Failed to build `foo @ file://[TEMP_DIR]/`
+      ├─▶ Failed to parse entry: `foo`
+      ╰─▶ Unsupported Git URL scheme `c:` in `c:/home/ferris/projects/foo` (expected one of `https:`, `ssh:`, or `file:`)
+    "###);
+    Ok(())
+}
