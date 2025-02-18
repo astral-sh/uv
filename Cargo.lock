@@ -486,29 +486,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cargo-util"
-version = "0.2.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7cccd15f96a29696e13e1d5fa10dd1dbed2e172f58b6e6124a9a4fa695363fdd"
-dependencies = [
- "anyhow",
- "core-foundation",
- "filetime",
- "hex",
- "ignore",
- "jobserver",
- "libc",
- "miow",
- "same-file",
- "sha2",
- "shell-escape",
- "tempfile",
- "tracing",
- "walkdir",
- "windows-sys 0.59.0",
-]
-
-[[package]]
 name = "cast"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -697,7 +674,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2273,15 +2250,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "miow"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "359f76430b20a79f9e20e115b3428614e654f04fab314482fc0fda0ebd3c6044"
-dependencies = [
- "windows-sys 0.48.0",
-]
-
-[[package]]
 name = "munge"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3567,12 +3535,6 @@ checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
 dependencies = [
  "lazy_static",
 ]
-
-[[package]]
-name = "shell-escape"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45bb67a18fa91266cc7807181f62f9178a6873bfad7dc788c42e6430db40184f"
 
 [[package]]
 name = "shellexpand"
@@ -5134,9 +5096,9 @@ name = "uv-git"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "cargo-util",
  "dashmap",
  "fs-err 3.1.0",
+ "owo-colors",
  "reqwest",
  "reqwest-middleware",
  "thiserror 2.0.11",
@@ -6071,7 +6033,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

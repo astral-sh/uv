@@ -4,11 +4,12 @@
 use std::env;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
 use std::str::{self};
 use std::sync::LazyLock;
 
-use anyhow::{Context, Result};
-use cargo_util::{paths, ProcessBuilder};
+use anyhow::{bail, Context, Result};
+use owo_colors::OwoColorize;
 use reqwest::StatusCode;
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::{debug, warn};
@@ -156,10 +157,11 @@ impl GitRepository {
     /// Opens an existing Git repository at `path`.
     pub(crate) fn open(path: &Path) -> Result<GitRepository> {
         // Make sure there is a Git repository at the specified path.
-        ProcessBuilder::new(GIT.as_ref()?)
-            .arg("rev-parse")
-            .cwd(path)
-            .exec_with_output()?;
+        exec_with_output(
+            Command::new(GIT.as_ref()?)
+                .arg("rev-parse")
+                .current_dir(path),
+        )?;
 
         Ok(GitRepository {
             path: path.to_path_buf(),
@@ -175,10 +177,7 @@ impl GitRepository {
         // opts.external_template(false);
 
         // Initialize the repository.
-        ProcessBuilder::new(GIT.as_ref()?)
-            .arg("init")
-            .cwd(path)
-            .exec_with_output()?;
+        exec_with_output(Command::new(GIT.as_ref()?).arg("init").current_dir(path))?;
 
         Ok(GitRepository {
             path: path.to_path_buf(),
@@ -187,11 +186,12 @@ impl GitRepository {
 
     /// Parses the object ID of the given `refname`.
     fn rev_parse(&self, refname: &str) -> Result<GitOid> {
-        let result = ProcessBuilder::new(GIT.as_ref()?)
-            .arg("rev-parse")
-            .arg(refname)
-            .cwd(&self.path)
-            .exec_with_output()?;
+        let result = exec_with_output(
+            Command::new(GIT.as_ref()?)
+                .arg("rev-parse")
+                .arg(refname)
+                .current_dir(&self.path),
+        )?;
 
         let mut result = String::from_utf8(result.stdout)?;
         result.truncate(result.trim_end().len());
@@ -307,12 +307,13 @@ impl GitDatabase {
 
     /// Get a short OID for a `revision`, usually 7 chars or more if ambiguous.
     pub(crate) fn to_short_id(&self, revision: GitOid) -> Result<String> {
-        let output = ProcessBuilder::new(GIT.as_ref()?)
-            .arg("rev-parse")
-            .arg("--short")
-            .arg(revision.as_str())
-            .cwd(&self.repo.path)
-            .exec_with_output()?;
+        let output = exec_with_output(
+            Command::new(GIT.as_ref()?)
+                .arg("rev-parse")
+                .arg("--short")
+                .arg(revision.as_str())
+                .current_dir(&self.repo.path),
+        )?;
 
         let mut result = String::from_utf8(output.stdout)?;
         result.truncate(result.trim_end().len());
@@ -348,25 +349,27 @@ impl GitCheckout {
         // Perform a local clone of the repository, which will attempt to use
         // hardlinks to set up the repository. This should speed up the clone operation
         // quite a bit if it works.
-        let res = ProcessBuilder::new(GIT.as_ref()?)
-            .arg("clone")
-            .arg("--local")
-            // Make sure to pass the local file path and not a file://... url. If given a url,
-            // Git treats the repository as a remote origin and gets confused because we don't
-            // have a HEAD checked out.
-            .arg(database.repo.path.simplified_display().to_string())
-            .arg(into.simplified_display().to_string())
-            .exec_with_output();
+        let res = exec_with_output(
+            Command::new(GIT.as_ref()?)
+                .arg("clone")
+                .arg("--local")
+                // Make sure to pass the local file path and not a file://... url. If given a url,
+                // Git treats the repository as a remote origin and gets confused because we don't
+                // have a HEAD checked out.
+                .arg(database.repo.path.simplified_display().to_string())
+                .arg(into.simplified_display().to_string()),
+        );
 
         if let Err(e) = res {
             debug!("Cloning git repo with --local failed, retrying without hardlinks: {e}");
 
-            ProcessBuilder::new(GIT.as_ref()?)
-                .arg("clone")
-                .arg("--no-hardlinks")
-                .arg(database.repo.path.simplified_display().to_string())
-                .arg(into.simplified_display().to_string())
-                .exec_with_output()?;
+            exec_with_output(
+                Command::new(GIT.as_ref()?)
+                    .arg("clone")
+                    .arg("--no-hardlinks")
+                    .arg(database.repo.path.simplified_display().to_string())
+                    .arg(into.simplified_display().to_string()),
+            )?;
         }
 
         let repo = GitRepository::open(into)?;
@@ -401,28 +404,30 @@ impl GitCheckout {
     /// [`.cargo-ok`]: CHECKOUT_READY_LOCK
     fn reset(&self) -> Result<()> {
         let ok_file = self.repo.path.join(CHECKOUT_READY_LOCK);
-        let _ = paths::remove_file(&ok_file);
+        let _ = fs_err::remove_file(&ok_file);
         debug!("Reset {} to {}", self.repo.path.display(), self.revision);
 
         // Perform the hard reset.
-        ProcessBuilder::new(GIT.as_ref()?)
-            .arg("reset")
-            .arg("--hard")
-            .arg(self.revision.as_str())
-            .cwd(&self.repo.path)
-            .exec_with_output()?;
+        exec_with_output(
+            Command::new(GIT.as_ref()?)
+                .arg("reset")
+                .arg("--hard")
+                .arg(self.revision.as_str())
+                .current_dir(&self.repo.path),
+        )?;
 
         // Update submodules (`git submodule update --recursive`).
-        ProcessBuilder::new(GIT.as_ref()?)
-            .arg("submodule")
-            .arg("update")
-            .arg("--recursive")
-            .arg("--init")
-            .cwd(&self.repo.path)
-            .exec_with_output()
-            .map(drop)?;
+        exec_with_output(
+            Command::new(GIT.as_ref()?)
+                .arg("submodule")
+                .arg("update")
+                .arg("--recursive")
+                .arg("--init")
+                .current_dir(&self.repo.path),
+        )
+        .map(drop)?;
 
-        paths::create(ok_file)?;
+        fs_err::File::create(ok_file)?;
         Ok(())
     }
 }
@@ -577,7 +582,7 @@ fn fetch_with_cli(
     tags: bool,
     disable_ssl: bool,
 ) -> Result<()> {
-    let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+    let mut cmd = Command::new(GIT.as_ref()?);
     cmd.arg("fetch");
     if tags {
         cmd.arg("--tags");
@@ -601,27 +606,20 @@ fn fetch_with_cli(
         .env_remove(EnvVars::GIT_INDEX_FILE)
         .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
         .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
-        .cwd(&repo.path);
+        .current_dir(&repo.path);
 
     // We capture the output to avoid streaming it to the user's console during clones.
     // The required `on...line` callbacks currently do nothing.
     // The output appears to be included in error messages by default.
-    cmd.exec_with_output()?;
+    exec_with_output(&mut cmd)?;
 
     Ok(())
 }
 
-/// A global cache of the `git lfs` command.
-///
-/// Returns an error if Git LFS isn't available.
-/// Caching the command allows us to only check if LFS is installed once.
-static GIT_LFS: LazyLock<Result<ProcessBuilder>> = LazyLock::new(|| {
-    let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
-    cmd.arg("lfs");
-
-    // Run a simple command to verify LFS is installed
-    cmd.clone().arg("version").exec_with_output()?;
-    Ok(cmd)
+/// Whether the `git lfs` subcommand is installed.
+static IS_LFS_INSTALLED: LazyLock<bool> = LazyLock::new(|| {
+    GIT.as_ref()
+        .is_ok_and(|git| exec_with_output(Command::new(git).arg("lfs").arg("version")).is_ok())
 });
 
 /// Attempts to use `git-lfs` CLI to fetch required LFS objects for a given revision.
@@ -631,14 +629,15 @@ fn fetch_lfs(
     revision: &GitOid,
     disable_ssl: bool,
 ) -> Result<()> {
-    let mut cmd = if let Ok(lfs) = GIT_LFS.as_ref() {
-        debug!("Fetching Git LFS objects");
-        lfs.clone()
-    } else {
+    if !*IS_LFS_INSTALLED {
         // Since this feature is opt-in, warn if not available
         warn!("Git LFS is not available, skipping LFS fetch");
         return Ok(());
     };
+
+    debug!("Fetching Git LFS objects");
+    let mut cmd = Command::new(GIT.as_ref()?);
+    cmd.arg("lfs");
 
     if disable_ssl {
         debug!("Disabling SSL verification for Git LFS");
@@ -654,9 +653,9 @@ fn fetch_lfs(
         .env_remove(EnvVars::GIT_INDEX_FILE)
         .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
         .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
-        .cwd(&repo.path);
+        .current_dir(&repo.path);
 
-    cmd.exec_with_output()?;
+    exec_with_output(&mut cmd)?;
     Ok(())
 }
 
@@ -787,4 +786,23 @@ fn is_short_hash_of(rev: &str, oid: GitOid) -> bool {
         Some(truncated_long_hash) => truncated_long_hash.eq_ignore_ascii_case(rev),
         None => false,
     }
+}
+
+fn exec_with_output(command: &mut Command) -> Result<Output> {
+    let output = command.output().context("Failed to run `git` command")?;
+    if !output.status.success() {
+        let mut msg = format!("Failed to run `git` command ({})", output.status);
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if !stdout.trim().is_empty() {
+            msg += &format!("\n\n{}\n{}", "[stdout]".red(), stdout);
+        }
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if !stderr.trim().is_empty() {
+            msg += &format!("\n\n{}\n{}", "[stderr]".red(), stderr);
+        }
+        bail!(msg)
+    }
+    Ok(output)
 }
