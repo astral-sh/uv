@@ -142,11 +142,24 @@ pub(crate) fn setup_logging(
         .from_env()
         .context("Invalid RUST_LOG directives")?;
 
-    let ansi = match color.and_colorchoice(anstream::Stderr::choice(&std::io::stderr())) {
-        ColorChoice::Always => true,
-        ColorChoice::Never => false,
-        ColorChoice::Auto => unreachable!("anstream can't return auto as choice"),
-    };
+    // Determine our final color settings and create an anstream wrapper based on it.
+    //
+    // The tracing `with_ansi` function on affects color tracing adds *on top of* the
+    // log messages. This means that if we `debug!("{}", "hello".green())`,
+    // (a thing we absolutely do throughout uv), then there will still be color
+    // in the logs, which is undesirable.
+    //
+    // So we tell tracing to print to an anstream wrapper around stderr that force-strips ansi.
+    // Given we do this, using `with_ansi` at all is arguably pointless, but it feels morally
+    // correct to still do it? I don't know what would break if we didn't... but why find out?
+    let (ansi, color_choice) =
+        match color.and_colorchoice(anstream::Stderr::choice(&std::io::stderr())) {
+            ColorChoice::Always => (true, anstream::ColorChoice::Always),
+            ColorChoice::Never => (false, anstream::ColorChoice::Never),
+            ColorChoice::Auto => unreachable!("anstream can't return auto as choice"),
+        };
+    let writer = std::sync::Mutex::new(anstream::AutoStream::new(std::io::stderr(), color_choice));
+
     match level {
         Level::Default | Level::Verbose => {
             // Regardless of the tracing level, show messages without any adornment.
@@ -161,7 +174,7 @@ pub(crate) fn setup_logging(
                 .with(
                     tracing_subscriber::fmt::layer()
                         .event_format(format)
-                        .with_writer(std::io::stderr)
+                        .with_writer(writer)
                         .with_ansi(ansi)
                         .with_filter(filter),
                 )
@@ -175,7 +188,7 @@ pub(crate) fn setup_logging(
                     HierarchicalLayer::default()
                         .with_targets(true)
                         .with_timer(Uptime::default())
-                        .with_writer(std::io::stderr)
+                        .with_writer(writer)
                         .with_ansi(ansi)
                         .with_filter(filter),
                 )
