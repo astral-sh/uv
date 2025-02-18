@@ -1824,13 +1824,12 @@ fn tool_run_verbatim_name() {
         .arg("change_wheel_version")
         .arg("--help")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    usage: change_wheel_version [-h] [--local-version LOCAL_VERSION]
-                                [--version VERSION] [--delete-old-wheel]
-                                [--allow-same-version]
+    usage: change_wheel_version [-h] [--local-version LOCAL_VERSION] [--version VERSION]
+                                [--delete-old-wheel] [--allow-same-version]
                                 wheel
 
     positional arguments:
@@ -1851,7 +1850,7 @@ fn tool_run_verbatim_name() {
      + installer==0.7.0
      + packaging==24.0
      + wheel==0.43.0
-    "###);
+    ");
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("change-wheel-version")
@@ -1877,13 +1876,12 @@ fn tool_run_verbatim_name() {
         .arg("change_wheel_version")
         .arg("--help")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    usage: change_wheel_version [-h] [--local-version LOCAL_VERSION]
-                                [--version VERSION] [--delete-old-wheel]
-                                [--allow-same-version]
+    usage: change_wheel_version [-h] [--local-version LOCAL_VERSION] [--version VERSION]
+                                [--delete-old-wheel] [--allow-same-version]
                                 wheel
 
     positional arguments:
@@ -1898,5 +1896,5 @@ fn tool_run_verbatim_name() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    "###);
+    ");
 }

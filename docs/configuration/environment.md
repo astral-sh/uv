@@ -399,6 +399,12 @@ Used to detect Bash shell usage.
 
 Use to control color via `anstyle`.
 
+### `COLUMNS`
+
+Overrides terminal width used for wrapping. This variable is not read by uv directly.
+
+This is a quasi-standard variable, described e.g. in `ncurses(3x)`.
+
 ### `CONDA_DEFAULT_ENV`
 
 Used to determine if an active Conda environment is the base environment or not.
