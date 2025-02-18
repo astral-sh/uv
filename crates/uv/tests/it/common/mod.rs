@@ -562,10 +562,10 @@ impl TestContext {
         command
             // When running the tests in a venv, ignore that venv, otherwise we'll capture warnings.
             .env_remove(EnvVars::VIRTUAL_ENV)
+            // Disable wrapping of uv output for readability / determinism in snapshots.
             .env(EnvVars::UV_NO_WRAP, "1")
-            // While we disable wrapping in UV above, other tools may still wrap their output.
-            // Set a fixed COLUMNS value to ensure they wrap consistently, independently of
-            // terminal width.
+            // While we disable wrapping in uv above, invoked tools may still wrap their output so
+            // we set a fixed `COLUMNS` value for isolation from terminal width.
             .env(EnvVars::COLUMNS, "100")
             .env(EnvVars::PATH, path)
             .env(EnvVars::HOME, self.home_dir.as_os_str())
