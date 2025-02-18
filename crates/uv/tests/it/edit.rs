@@ -4830,6 +4830,112 @@ fn add_group() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        second = [
+            "anyio==3.7.0",
+        ]
+        test = [
+            "anyio==3.7.0",
+            "requests>=2.31.0",
+        ]
+        "#
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("alpha"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Audited 3 packages in [TIME]
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        alpha = [
+            "anyio==3.7.0",
+        ]
+        second = [
+            "anyio==3.7.0",
+        ]
+        test = [
+            "anyio==3.7.0",
+            "requests>=2.31.0",
+        ]
+        "#
+        );
+    });
+
+    assert!(context.temp_dir.join("uv.lock").exists());
+
+    Ok(())
+}
+
+/// Add a requirement to a dependency group when existing dependency group
+/// keys are not sorted.
+#[test]
+fn add_group_to_unsorted() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        test = [
+            "anyio==3.7.0",
+            "requests>=2.31.0",
+        ]
+        second = [
+            "anyio==3.7.0",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("alpha"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
             pyproject_toml, @r###"
         [project]
         name = "project"
@@ -4843,6 +4949,9 @@ fn add_group() -> Result<()> {
             "requests>=2.31.0",
         ]
         second = [
+            "anyio==3.7.0",
+        ]
+        alpha = [
             "anyio==3.7.0",
         ]
         "###
