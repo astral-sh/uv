@@ -79,6 +79,23 @@ impl<'lock> LockTarget<'lock> {
         }
     }
 
+    /// Returns the set of build constraints for the [`LockTarget`].
+    pub(crate) fn build_constraints(self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
+        match self {
+            Self::Workspace(workspace) => workspace.build_constraints(),
+            Self::Script(script) => script
+                .metadata
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.build_constraint_dependencies.as_ref())
+                .into_iter()
+                .flatten()
+                .cloned()
+                .collect(),
+        }
+    }
+
     /// Return the dependency groups that are attached to the target directly, as opposed to being
     /// attached to any members within the target.
     pub(crate) fn dependency_groups(
