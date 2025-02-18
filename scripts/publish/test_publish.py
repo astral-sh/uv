@@ -148,11 +148,11 @@ local_targets: dict[str, TargetConfiguration] = {
         "https://codeberg.org/api/packages/astral-test-user/pypi",
         "https://codeberg.org/api/packages/astral-test-user/pypi/simple/",
     ),
-    # "cloudsmith": TargetConfiguration(
-    #    "astral-test-token",
-    #    "https://python.cloudsmith.io/astral-test/astral-test-1/",
-    #    "https://dl.cloudsmith.io/public/astral-test/astral-test-1/python/simple/",
-    # ),
+    "cloudsmith": TargetConfiguration(
+        "astral-test-token",
+        "https://python.cloudsmith.io/astral-test/astral-test-1/",
+        "https://dl.cloudsmith.io/public/astral-test/astral-test-1/python/simple/",
+    ),
 }
 all_targets: dict[str, TargetConfiguration] = local_targets | {
     "pypi-trusted-publishing": TargetConfiguration(
