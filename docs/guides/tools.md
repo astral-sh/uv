@@ -254,6 +254,9 @@ To change the Python version of an existing tool during upgrade:
 $ uv tool upgrade ruff --python=3.10
 ```
 
+For more details on requesting Python versions, see the
+[Requesting a version](../concepts/python-versions.md#requesting-a-version).
+
 ## Next steps
 
 To learn more about managing tools with uv, see the [Tools concept](../concepts/tools.md) page and
