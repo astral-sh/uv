@@ -1182,7 +1182,7 @@ impl BuildMessage {
     }
 
     /// The filename of the wheel or source distribution before normalization.
-    fn raw_filename(&self) -> &String {
+    fn raw_filename(&self) -> &str {
         match self {
             BuildMessage::Build {
                 raw_filename: name, ..
@@ -1196,18 +1196,18 @@ impl BuildMessage {
     fn print(&self, printer: Printer) -> Result<()> {
         match self {
             BuildMessage::Build {
-                raw_filename: raw_name,
+                raw_filename,
                 output_dir,
                 ..
             } => {
                 writeln!(
                     printer.stderr(),
                     "Successfully built {}",
-                    output_dir.join(raw_name).user_display().bold().cyan()
+                    output_dir.join(raw_filename).user_display().bold().cyan()
                 )?;
             }
             BuildMessage::List {
-                raw_filename: raw_name,
+                raw_filename,
                 file_list,
                 source_tree,
                 ..
@@ -1215,7 +1215,7 @@ impl BuildMessage {
                 writeln!(
                     printer.stdout(),
                     "{}",
-                    format!("Building {raw_name} will include the following files:").bold()
+                    format!("Building {raw_filename} will include the following files:").bold()
                 )?;
                 for (file, source) in file_list {
                     if let Some(source) = source {
