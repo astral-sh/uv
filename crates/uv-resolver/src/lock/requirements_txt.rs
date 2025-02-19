@@ -5,7 +5,6 @@ use std::fmt::Formatter;
 use std::path::{Component, Path, PathBuf};
 
 use either::Either;
-use itertools::Itertools;
 use petgraph::graph::NodeIndex;
 use petgraph::prelude::EdgeRef;
 use petgraph::visit::IntoNodeReferences;
@@ -45,7 +44,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
         install_options: &'lock InstallOptions,
     ) -> Result<Self, LockError> {
         let size_guess = target.lock().packages.len();
-        let mut petgraph = Graph::<Node<'lock>, Edge<'lock>>::with_capacity(size_guess, size_guess);
+        let mut graph = Graph::<Node<'lock>, Edge<'lock>>::with_capacity(size_guess, size_guess);
         let mut inverse = FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
 
         let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
@@ -56,7 +55,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
             Some(FxHashMap::default())
         };
 
-        let root = petgraph.add_node(Node::Root);
+        let root = graph.add_node(Node::Root);
 
         // Add the workspace packages to the queue.
         for root_name in target.roots() {
@@ -73,12 +72,12 @@ impl<'lock> RequirementsTxtExport<'lock> {
             if dev.prod() {
                 // Add the workspace package to the graph.
                 if let Entry::Vacant(entry) = inverse.entry(&dist.id) {
-                    entry.insert(petgraph.add_node(Node::Package(dist)));
+                    entry.insert(graph.add_node(Node::Package(dist)));
                 }
 
                 // Add an edge from the root.
                 let index = inverse[&dist.id];
-                petgraph.add_edge(root, index, Edge::Prod(MarkerTree::TRUE));
+                graph.add_edge(root, index, Edge::Prod(MarkerTree::TRUE));
 
                 // Push its dependencies on the queue.
                 queue.push_back((dist, None));
@@ -124,14 +123,14 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
                 // Add the dependency to the graph.
                 if let Entry::Vacant(entry) = inverse.entry(&dep.package_id) {
-                    entry.insert(petgraph.add_node(Node::Package(dep_dist)));
+                    entry.insert(graph.add_node(Node::Package(dep_dist)));
                 }
 
                 // Add an edge from the root. Development dependencies may be installed without
                 // installing the workspace package itself (which can never have markers on it
                 // anyway), so they're directly connected to the root.
                 let dep_index = inverse[&dep.package_id];
-                petgraph.add_edge(
+                graph.add_edge(
                     root,
                     dep_index,
                     Edge::Dev(group, dep.simplified_marker.as_simplified_marker_tree()),
@@ -214,12 +213,12 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
                     // Add the dependency to the graph.
                     if let Entry::Vacant(entry) = inverse.entry(&dist.id) {
-                        entry.insert(petgraph.add_node(Node::Package(dist)));
+                        entry.insert(graph.add_node(Node::Package(dist)));
                     }
 
                     // Add an edge from the root.
                     let dep_index = inverse[&dist.id];
-                    petgraph.add_edge(root, dep_index, Edge::Prod(marker));
+                    graph.add_edge(root, dep_index, Edge::Prod(marker));
 
                     // Push its dependencies on the queue.
                     if seen.insert((&dist.id, None)) {
@@ -260,12 +259,12 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
                 // Add the dependency to the graph.
                 if let Entry::Vacant(entry) = inverse.entry(&dep.package_id) {
-                    entry.insert(petgraph.add_node(Node::Package(dep_dist)));
+                    entry.insert(graph.add_node(Node::Package(dep_dist)));
                 }
 
                 // Add the edge.
                 let dep_index = inverse[&dep.package_id];
-                petgraph.add_edge(
+                graph.add_edge(
                     index,
                     dep_index,
                     if let Some(extra) = extra {
@@ -288,14 +287,14 @@ impl<'lock> RequirementsTxtExport<'lock> {
         }
 
         // Determine the reachability of each node in the graph.
-        let mut reachability = if let Some(conflicts) = conflicts {
-            conflict_marker_reachability(&petgraph, &[], conflicts)
+        let mut reachability = if let Some(conflicts) = conflicts.as_ref() {
+            conflict_marker_reachability(&graph, &[], conflicts)
         } else {
-            marker_reachability(&petgraph, &[])
+            marker_reachability(&graph, &[])
         };
 
         // Collect all packages.
-        let mut nodes = petgraph
+        let mut nodes = graph
             .node_references()
             .filter_map(|(index, node)| match node {
                 Node::Root => None,
@@ -328,17 +327,18 @@ impl<'lock> RequirementsTxtExport<'lock> {
     }
 }
 
-/// Determine the markers under which a package is reachable in the dependency tree.
+/// Determine the markers under which a package is reachable in the dependency tree, taking into
+/// account conflicts.
 ///
-/// The algorithm is a variant of Dijkstra's algorithm for not totally ordered distances:
-/// Whenever we find a shorter distance to a node (a marker that is not a subset of the existing
-/// marker), we re-queue the node and update all its children. This implicitly handles cycles,
-/// whenever we re-reach a node through a cycle the marker we have is a more
-/// specific marker/longer path, so we don't update the node and don't re-queue it.
+/// This method is structurally similar to [`marker_reachability`], but it _also_ attempts to resolve
+/// conflict markers. Specifically, in addition to tracking the reachability marker for each node,
+/// we also track (for each node) the conditions under which each conflict item is `true`. Then,
+/// when evaluating the marker for the node, we inline the conflict marker conditions, thus removing
+/// all conflict items from the marker expression.
 fn conflict_marker_reachability<'lock>(
     graph: &Graph<Node<'lock>, Edge<'lock>>,
     fork_markers: &[Edge<'lock>],
-    known_conflicts: FxHashMap<ConflictItem, MarkerTree>,
+    known_conflicts: &FxHashMap<ConflictItem, MarkerTree>,
 ) -> FxHashMap<NodeIndex, MarkerTree> {
     // For each node, track the conditions under which each conflict item is enabled.
     let mut conflict_maps =
@@ -384,20 +384,15 @@ fn conflict_marker_reachability<'lock>(
     // Propagate all markers through the graph, so that the eventual marker for each node is the
     // union of the markers of each path we can reach the node by.
     while let Some(parent_index) = queue.pop() {
-        // Resolve any conflicts in the reachability marker.
+        // Resolve any conflicts in the parent marker.
         reachability.entry(parent_index).and_modify(|marker| {
-            let conflict_map = conflict_maps.get(&parent_index).unwrap_or(&known_conflicts);
-            *marker = resolve_conflicts(*marker, &conflict_map);
+            let conflict_map = conflict_maps.get(&parent_index).unwrap_or(known_conflicts);
+            *marker = resolve_conflicts(*marker, conflict_map);
         });
 
-        // When we see an edge like parent [dotenv]> flask, we should take the reachability
+        // When we see an edge like `parent [dotenv]> flask`, we should take the reachability
         // on `parent`, combine it with the marker on the edge, then add `flask[dotenv]` to
         // the inference map on the `flask` node.
-        //
-        // What if there are multiple edges? Combine the maps with an OR?
-        //
-        // Then, at the end, we take the marker on the node, convert to DNF, and replace any
-        // conflict markers with the implied edges.
         for child_edge in graph.edges_directed(parent_index, Direction::Outgoing) {
             let mut parent_marker = reachability[&parent_index];
 
@@ -463,7 +458,7 @@ fn conflict_marker_reachability<'lock>(
                 Entry::Occupied(mut existing) => {
                     let child_map = existing.get_mut();
                     for (key, value) in parent_map {
-                        let mut after = child_map.get(&key).cloned().unwrap_or(MarkerTree::FALSE);
+                        let mut after = child_map.get(&key).copied().unwrap_or(MarkerTree::FALSE);
                         after.or(value);
                         child_map.entry(key).or_insert(MarkerTree::FALSE).or(value);
                     }
@@ -475,7 +470,7 @@ fn conflict_marker_reachability<'lock>(
 
             // Combine the inferred marker with the existing marker on the node.
             match reachability.entry(child_edge.target()) {
-                Entry::Occupied(mut existing) => {
+                Entry::Occupied(existing) => {
                     // If the marker is a subset of the existing marker (A ⊆ B exactly if
                     // A ∪ B = A), updating the child wouldn't change child's marker.
                     parent_marker.or(*existing.get());
