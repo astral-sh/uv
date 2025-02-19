@@ -41,6 +41,7 @@ repo_name: uv
 site_author: charliermarsh
 site_url: https://docs.astral.sh/uv/
 site_dir: site/uv
+edit_uri: blob/main/docs/ # Specify the correct branch and path for docs edit button
 markdown_extensions:
   - admonition
   - pymdownx.details
