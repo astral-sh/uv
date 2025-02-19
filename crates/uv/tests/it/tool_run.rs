@@ -1970,3 +1970,39 @@ fn tool_run_with_nonexistent_pyw_script() {
     hint: Did you mean to run a tool with `uvx script-pyw`?
     ");
 }
+
+#[test]
+fn tool_run_with_from_script() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // We treat arguments before the command as uv arguments
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("script.py")
+        .arg("ruff"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: It looks you have passed a script instead of a package into `--from`
+    ");
+}
+
+#[test]
+fn tool_run_with_script_and_from_script() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // We treat arguments before the command as uv arguments
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("script.py")
+        .arg("other-script.py"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: It looks you have passed a script instead of a package into `--from`
+    ");
+}

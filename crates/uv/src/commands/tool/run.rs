@@ -105,23 +105,35 @@ pub(crate) async fn run(
         return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
     };
 
-    let possible_path = Path::new(target);
-    if possible_path
-        .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
-    {
-        if possible_path.try_exists()? {
+    if let Some(ref f) = from {
+        if Path::new(&f)
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
+        {
             return Err(anyhow::anyhow!(
-                "It looks like you are trying to run a script. Did you mean `{}`?",
-                format!("uv run {}", possible_path.display()).cyan(),
+                "It looks you have passed a script instead of a package into `--from`"
             ));
         }
-        return Err(anyhow::anyhow!(
-            "It looks like you are trying to run a script that doesn't exist. \n\n{}{} Did you mean to run a tool with `uvx {}`?",
-            "hint".bold().cyan(),
-            ":".bold(),
-            PackageName::new(possible_path.to_string_lossy().to_string())?,
-        ));
+    } else {
+        let possible_script = Path::new(target);
+        if possible_script
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
+        {
+            return if possible_script.try_exists()? {
+                Err(anyhow::anyhow!(
+                    "It looks like you are trying to run a script. Did you mean `{}`?",
+                    format!("uv run {}", possible_script.display()).cyan()
+                ))
+            } else {
+                Err(anyhow::anyhow!(
+                    "It looks like you are trying to run a script that doesn't exist. \n\n{}{} Did you mean to run a tool with `uvx {}`?",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    PackageName::new(possible_script.to_string_lossy().to_string())?
+                ))
+            };
+        }
     }
 
     let request = ToolRequest::parse(target, from.as_deref());
