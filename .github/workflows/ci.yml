@@ -768,8 +768,12 @@ jobs:
           name: uv-windows-x86_64-${{ github.sha }}
 
       - name: "Smoke test"
+        shell: powershell
         working-directory: ${{ env.UV_WORKSPACE }}
         run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+
           ./uv venv -v
           ./uv pip install ruff -v
           ./uvx -v ruff --version
@@ -789,6 +793,7 @@ jobs:
 
       - name: "Smoke test"
         working-directory: ${{ env.UV_WORKSPACE }}
+        shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
           $PSNativeCommandUseErrorActionPreference = $true
