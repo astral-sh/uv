@@ -135,6 +135,7 @@ proc-macro2 = { version = "1.0.86" }
 procfs = { version = "0.17.0", default-features = false, features = ["flate2"] }
 pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "b70cf707aa43f21b32f3a61b8a0889b15032d5c4" }
 quote = { version = "1.0.37" }
+r-shquote = { version = "0.1.1" }
 rayon = { version = "1.10.0" }
 reflink-copy = { version = "0.1.19" }
 regex = { version = "1.10.6" }
