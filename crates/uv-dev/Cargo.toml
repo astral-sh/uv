@@ -57,6 +57,9 @@ uv-performance-flate2-backend = { path = "../uv-performance-flate2-backend", opt
 uv-performance-memory-allocator = { path = "../uv-performance-memory-allocator", optional = true }
 walkdir = { workspace = true }
 
+[lib]
+name = "uv_dev"
+
 [[bin]]
 name = "uv-dev"
 # We don't want to build the dev CLI by default, so we skip it by requiring an off-by-default feature
