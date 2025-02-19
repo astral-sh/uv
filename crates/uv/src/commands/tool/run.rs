@@ -108,20 +108,19 @@ pub(crate) async fn run(
     let possible_path = Path::new(target);
     if possible_path
         .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
     {
         if possible_path.try_exists()? {
             return Err(anyhow::anyhow!(
-                "It looks like you are trying to run a script. Try `{}{}`",
-                "uv run ".cyan(),
-                possible_path.to_string_lossy().to_string().cyan(),
+                "It looks like you are trying to run a script. Did you mean `{}`?",
+                format!("uv run {}", possible_path.display()).cyan(),
             ));
         }
         return Err(anyhow::anyhow!(
-            "It looks like you are trying to run a script that doesn't exist. \n\n{}{} Did you mean `uvx {}`?",
+            "It looks like you are trying to run a script that doesn't exist. \n\n{}{} Did you mean to run a tool with `uvx {}`?",
             "hint".bold().cyan(),
             ":".bold(),
-            PackageName::new(possible_path.to_string_lossy().to_string())?.to_string(),
+            PackageName::new(possible_path.to_string_lossy().to_string())?,
         ));
     }
 

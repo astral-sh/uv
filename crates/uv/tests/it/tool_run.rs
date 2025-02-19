@@ -1900,7 +1900,7 @@ fn tool_run_verbatim_name() {
 }
 
 #[test]
-fn tool_run_with_existing_script() -> anyhow::Result<()> {
+fn tool_run_with_existing_py_script() -> anyhow::Result<()> {
     let context = TestContext::new("3.12").with_filtered_counts();
     context.temp_dir.child("script.py").touch()?;
 
@@ -1912,13 +1912,31 @@ fn tool_run_with_existing_script() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: It looks like you are trying to run a script. Try `uv run script.py`
+    error: It looks like you are trying to run a script. Did you mean `uv run script.py`?
     ");
     Ok(())
 }
 
 #[test]
-fn tool_run_with_nonexistent_script() {
+fn tool_run_with_existing_pyw_script() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    context.temp_dir.child("script.pyw").touch()?;
+
+    // We treat arguments before the command as uv arguments
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("script.pyw"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: It looks like you are trying to run a script. Did you mean `uv run script.pyw`?
+    ");
+    Ok(())
+}
+
+#[test]
+fn tool_run_with_nonexistent_py_script() {
     let context = TestContext::new("3.12").with_filtered_counts();
 
     // We treat arguments before the command as uv arguments
@@ -1931,6 +1949,24 @@ fn tool_run_with_nonexistent_script() {
     ----- stderr -----
     error: It looks like you are trying to run a script that doesn't exist.
 
-    hint: Did you mean `uvx script-py`?
+    hint: Did you mean to run a tool with `uvx script-py`?
+    ");
+}
+
+#[test]
+fn tool_run_with_nonexistent_pyw_script() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // We treat arguments before the command as uv arguments
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("script.pyw"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: It looks like you are trying to run a script that doesn't exist.
+
+    hint: Did you mean to run a tool with `uvx script-pyw`?
     ");
 }
