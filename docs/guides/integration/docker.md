@@ -446,6 +446,28 @@ RUN --mount=from=ghcr.io/astral-sh/uv,source=/uv,target=/bin/uv \
     uv sync
 ```
 
+### Running uv as an unprivileged user
+
+As a good security practice, it's better not to run programs as root when it's not necessary.
+
+Here's an example of running uv as a user with UID 101 and GID 102:
+
+```dockerfile title="Dockerfile"
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm
+
+COPY --chown=101:102 ./app /app
+WORKDIR /app
+
+USER 101:102
+
+ENV UV_CACHE_DIR=/app/uv_cache
+RUN uv sync
+
+CMD ["uv", "run", "main.py"]
+```
+
+An unprivileged user may not have write permissions for the usual places uv attempts to create a cache directory in (namely, `$XDG_CACHE_HOME/uv` and `$HOME/.cache/uv`). So, because uv *always* requires a cache direcotry to work, you have to tell it to use a directory that you *do* have read/write access to. In the example above, we do that by setting the `UV_CACHE_DIR` env var. See the [Cache directory](../../concepts/cache.md) documentation for other ways of configuring the cache directory.
+
 ## Using the pip interface
 
 ### Installing a package
