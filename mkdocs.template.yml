@@ -17,6 +17,7 @@ theme:
     - navigation.top
     - content.code.copy
     - content.tabs.link
+    - content.action.edit
   palette:
     # Note: Using the system theme works with the insiders version
     # https://squidfunk.github.io/mkdocs-material/setup/changing-the-colors/#automatic-light-dark-mode
