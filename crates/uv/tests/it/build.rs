@@ -1924,3 +1924,121 @@ fn build_pyproject_toml_not_a_project() -> Result<()> {
     ");
     Ok(())
 }
+
+#[test]
+fn build_with_nonnormalized_name() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .collect::<Vec<_>>();
+
+    let project = context.temp_dir.child("project");
+
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "my.PROJECT"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42,<69"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    project
+        .child("src")
+        .child("my.PROJECT")
+        .child("__init__.py")
+        .touch()?;
+    project.child("README").touch()?;
+
+    // Build the specified path.
+    uv_snapshot!(&filters, context.build().current_dir(&project), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    running egg_info
+    creating src/my.PROJECT.egg-info
+    writing src/my.PROJECT.egg-info/PKG-INFO
+    writing dependency_links to src/my.PROJECT.egg-info/dependency_links.txt
+    writing requirements to src/my.PROJECT.egg-info/requires.txt
+    writing top-level names to src/my.PROJECT.egg-info/top_level.txt
+    writing manifest file 'src/my.PROJECT.egg-info/SOURCES.txt'
+    reading manifest file 'src/my.PROJECT.egg-info/SOURCES.txt'
+    writing manifest file 'src/my.PROJECT.egg-info/SOURCES.txt'
+    running sdist
+    running egg_info
+    writing src/my.PROJECT.egg-info/PKG-INFO
+    writing dependency_links to src/my.PROJECT.egg-info/dependency_links.txt
+    writing requirements to src/my.PROJECT.egg-info/requires.txt
+    writing top-level names to src/my.PROJECT.egg-info/top_level.txt
+    reading manifest file 'src/my.PROJECT.egg-info/SOURCES.txt'
+    writing manifest file 'src/my.PROJECT.egg-info/SOURCES.txt'
+    running check
+    creating my.PROJECT-0.1.0
+    creating my.PROJECT-0.1.0/src
+    creating my.PROJECT-0.1.0/src/my.PROJECT.egg-info
+    copying files to my.PROJECT-0.1.0...
+    copying README -> my.PROJECT-0.1.0
+    copying pyproject.toml -> my.PROJECT-0.1.0
+    copying src/my.PROJECT.egg-info/PKG-INFO -> my.PROJECT-0.1.0/src/my.PROJECT.egg-info
+    copying src/my.PROJECT.egg-info/SOURCES.txt -> my.PROJECT-0.1.0/src/my.PROJECT.egg-info
+    copying src/my.PROJECT.egg-info/dependency_links.txt -> my.PROJECT-0.1.0/src/my.PROJECT.egg-info
+    copying src/my.PROJECT.egg-info/requires.txt -> my.PROJECT-0.1.0/src/my.PROJECT.egg-info
+    copying src/my.PROJECT.egg-info/top_level.txt -> my.PROJECT-0.1.0/src/my.PROJECT.egg-info
+    Writing my.PROJECT-0.1.0/setup.cfg
+    Creating tar archive
+    removing 'my.PROJECT-0.1.0' (and everything under it)
+    Building wheel from source distribution...
+    running egg_info
+    writing src/my.PROJECT.egg-info/PKG-INFO
+    writing dependency_links to src/my.PROJECT.egg-info/dependency_links.txt
+    writing requirements to src/my.PROJECT.egg-info/requires.txt
+    writing top-level names to src/my.PROJECT.egg-info/top_level.txt
+    reading manifest file 'src/my.PROJECT.egg-info/SOURCES.txt'
+    writing manifest file 'src/my.PROJECT.egg-info/SOURCES.txt'
+    running bdist_wheel
+    running build
+    installing to build/bdist.macosx-11.0-arm64/wheel
+    running install
+    running install_egg_info
+    running egg_info
+    writing src/my.PROJECT.egg-info/PKG-INFO
+    writing dependency_links to src/my.PROJECT.egg-info/dependency_links.txt
+    writing requirements to src/my.PROJECT.egg-info/requires.txt
+    writing top-level names to src/my.PROJECT.egg-info/top_level.txt
+    reading manifest file 'src/my.PROJECT.egg-info/SOURCES.txt'
+    writing manifest file 'src/my.PROJECT.egg-info/SOURCES.txt'
+    Copying src/my.PROJECT.egg-info to build/bdist.macosx-11.0-arm64/wheel/my.PROJECT-0.1.0-py3.12.egg-info
+    running install_scripts
+    creating build/bdist.macosx-11.0-arm64/wheel/my.PROJECT-0.1.0.dist-info/WHEEL
+    creating '[TEMP_DIR]/project/dist/[TMP]/wheel' to it
+    adding 'my.PROJECT-0.1.0.dist-info/METADATA'
+    adding 'my.PROJECT-0.1.0.dist-info/WHEEL'
+    adding 'my.PROJECT-0.1.0.dist-info/top_level.txt'
+    adding 'my.PROJECT-0.1.0.dist-info/RECORD'
+    removing build/bdist.macosx-11.0-arm64/wheel
+    Successfully built dist/my.PROJECT-0.1.0.tar.gz
+    Successfully built dist/my.PROJECT-0.1.0-py3-none-any.whl
+    ");
+
+    project
+        .child("dist")
+        .child("my.PROJECT-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    project
+        .child("dist")
+        .child("my.PROJECT-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
+    Ok(())
+}
