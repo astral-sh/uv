@@ -1,5 +1,6 @@
 use std::fmt::Display;
 use std::fmt::Write;
+use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -103,6 +104,26 @@ pub(crate) async fn run(
     let Some(target) = target.to_str() else {
         return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
     };
+
+    let possible_path = Path::new(target);
+    if possible_path
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
+    {
+        if possible_path.try_exists()? {
+            return Err(anyhow::anyhow!(
+                "It looks like you are trying to run a script. Try `{}{}`",
+                "uv run ".cyan(),
+                possible_path.to_string_lossy().to_string().cyan(),
+            ));
+        }
+        return Err(anyhow::anyhow!(
+            "It looks like you are trying to run a script that doesn't exist. \n\n{}{} Did you mean `uvx {}`?",
+            "hint".bold().cyan(),
+            ":".bold(),
+            PackageName::new(possible_path.to_string_lossy().to_string())?.to_string(),
+        ));
+    }
 
     let request = ToolRequest::parse(target, from.as_deref());
 
