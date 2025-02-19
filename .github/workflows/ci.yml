@@ -740,6 +740,8 @@ jobs:
     name: "smoke test | linux"
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: "Download binary"
         uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
@@ -752,9 +754,10 @@ jobs:
 
       - name: "Smoke test"
         run: |
-          ./uv venv -v
-          ./uv pip install ruff -v
-          ./uvx -v ruff --version
+          ./uv run scripts/smoke-test
+
+      - name: "Test shell completions"
+        run: |
           eval "$(./uv generate-shell-completion bash)"
           eval "$(./uvx --generate-shell-completion bash)"
 
@@ -794,6 +797,8 @@ jobs:
     name: "smoke test | macos"
     runs-on: macos-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: "Download binary"
         uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
@@ -806,9 +811,10 @@ jobs:
 
       - name: "Smoke test"
         run: |
-          ./uv venv -v
-          ./uv pip install ruff -v
-          ./uvx -v ruff --version
+          ./uv run scripts/smoke-test
+
+      - name: "Test shell completions"
+        run: |
           eval "$(./uv generate-shell-completion bash)"
           eval "$(./uvx --generate-shell-completion bash)"
 
@@ -818,6 +824,8 @@ jobs:
     name: "smoke test | windows x86_64"
     runs-on: windows-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: "Download binary"
         uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
@@ -826,10 +834,16 @@ jobs:
       - name: "Smoke test"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: |
-          ./uv venv -v
-          ./uv pip install ruff -v
-          ./uvx -v ruff --version
+          ./uv run scripts/smoke-test
+
+      - name: "Test uv shell completions"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
           (& ./uv generate-shell-completion powershell) | Out-String | Invoke-Expression
+
+      - name: "Test uvx shell completions"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
           (& ./uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
 
   smoke-test-windows-aarch64:
@@ -838,6 +852,8 @@ jobs:
     name: "smoke test | windows aarch64"
     runs-on: github-windows-11-aarch64-4
     steps:
+      - uses: actions/checkout@v4
+
       - name: "Download binary"
         uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
@@ -846,13 +862,16 @@ jobs:
       - name: "Smoke test"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: |
-          $ErrorActionPreference = "Stop"
-          $PSNativeCommandUseErrorActionPreference = $true
+          ./uv run scripts/smoke-test
 
-          ./uv venv -v
-          ./uv pip install ruff -v
-          ./uvx -v ruff --version
+      - name: "Test uv shell completions"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
           (& ./uv generate-shell-completion powershell) | Out-String | Invoke-Expression
+
+      - name: "Test uvx shell completions"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
           (& ./uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
 
   integration-test-conda:
