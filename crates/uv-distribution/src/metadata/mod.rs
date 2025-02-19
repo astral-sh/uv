@@ -3,7 +3,7 @@ use std::path::Path;
 
 use thiserror::Error;
 
-use uv_configuration::{LowerBound, SourceStrategy};
+use uv_configuration::SourceStrategy;
 use uv_distribution_types::{GitSourceUrl, IndexLocations};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
@@ -13,8 +13,8 @@ use uv_workspace::WorkspaceError;
 
 pub use crate::metadata::build_requires::BuildRequires;
 pub use crate::metadata::lowering::LoweredRequirement;
-use crate::metadata::lowering::LoweringError;
-pub use crate::metadata::requires_dist::RequiresDist;
+pub use crate::metadata::lowering::LoweringError;
+pub use crate::metadata::requires_dist::{FlatRequiresDist, RequiresDist};
 
 mod build_requires;
 mod lowering;
@@ -50,6 +50,7 @@ pub struct Metadata {
     pub requires_python: Option<VersionSpecifiers>,
     pub provides_extras: Vec<ExtraName>,
     pub dependency_groups: BTreeMap<GroupName, Vec<uv_pypi_types::Requirement>>,
+    pub dynamic: bool,
 }
 
 impl Metadata {
@@ -67,6 +68,7 @@ impl Metadata {
             requires_python: metadata.requires_python,
             provides_extras: metadata.provides_extras,
             dependency_groups: BTreeMap::default(),
+            dynamic: metadata.dynamic,
         }
     }
 
@@ -78,26 +80,26 @@ impl Metadata {
         git_source: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         sources: SourceStrategy,
-        bounds: LowerBound,
     ) -> Result<Self, MetadataError> {
         // Lower the requirements.
         let requires_dist = uv_pypi_types::RequiresDist {
             name: metadata.name,
             requires_dist: metadata.requires_dist,
             provides_extras: metadata.provides_extras,
+            dynamic: metadata.dynamic,
         };
         let RequiresDist {
             name,
             requires_dist,
             provides_extras,
             dependency_groups,
+            dynamic,
         } = RequiresDist::from_project_maybe_workspace(
             requires_dist,
             install_path,
             git_source,
             locations,
             sources,
-            bounds,
         )
         .await?;
 
@@ -109,6 +111,7 @@ impl Metadata {
             requires_python: metadata.requires_python,
             provides_extras,
             dependency_groups,
+            dynamic,
         })
     }
 }

@@ -1,4 +1,9 @@
-# Publishing a package
+---
+title: Building and publishing a package
+description: A guide to using uv to build and publish Python packages to a package index, like PyPI.
+---
+
+# Building and publishing a package
 
 uv supports building Python packages into source and binary distributions via `uv build` and
 uploading them to a registry with `uv publish`.

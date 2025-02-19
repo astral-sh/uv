@@ -3,6 +3,7 @@ source: crates/uv/tests/it/ecosystem.rs
 expression: lock
 ---
 version = 1
+revision = 1
 requires-python = ">=3.8"
 resolution-markers = [
     "python_full_version >= '3.10' and implementation_name == 'pypy' and sys_platform == 'win32'",
@@ -179,7 +180,6 @@ wheels = [
 
 [[package]]
 name = "black"
-version = "24.8.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -224,6 +224,7 @@ requires-dist = [
     { name = "typing-extensions", marker = "python_full_version < '3.11'", specifier = ">=4.0.1" },
     { name = "uvloop", marker = "extra == 'uvloop'", specifier = ">=0.15.2" },
 ]
+provides-extras = ["colorama", "d", "jupyter", "uvloop"]
 
 [[package]]
 name = "click"

@@ -73,8 +73,9 @@ fn add_registry() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -121,7 +122,7 @@ fn add_registry() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -240,8 +241,9 @@ fn add_git() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -297,7 +299,7 @@ fn add_git() -> Result<()> {
         name = "uv-public-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
-        "###
+        "#
         );
     });
 
@@ -379,8 +381,9 @@ fn add_git_private_source() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -401,7 +404,7 @@ fn add_git_private_source() -> Result<()> {
         name = "uv-private-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-private-pypackage#d780faf0ac91257d4d5a4f0c5a0e4509608c0071" }
-        "###
+        "#
         );
     });
 
@@ -485,8 +488,9 @@ fn add_git_private_raw() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -507,7 +511,7 @@ fn add_git_private_raw() -> Result<()> {
         name = "uv-private-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-private-pypackage#d780faf0ac91257d4d5a4f0c5a0e4509608c0071" }
-        "###
+        "#
         );
     });
 
@@ -705,8 +709,9 @@ fn add_git_raw() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -762,7 +767,7 @@ fn add_git_raw() -> Result<()> {
         name = "uv-public-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
-        "###
+        "#
         );
     });
 
@@ -875,6 +880,37 @@ fn add_raw_error() -> Result<()> {
     Ok(())
 }
 
+#[test]
+#[cfg(feature = "git")]
+fn add_editable_error() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    // Provide `--editable` with a non-source tree.
+    uv_snapshot!(context.filters(), context.add().arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl").arg("--editable"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `flask` did not resolve to a local directory, but the `--editable` flag was provided. Editable installs are only supported for local directories.
+    "###);
+
+    Ok(())
+}
+
 /// Add an unnamed requirement.
 #[test]
 #[cfg(feature = "git")]
@@ -938,8 +974,9 @@ fn add_unnamed() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -960,7 +997,7 @@ fn add_unnamed() -> Result<()> {
         name = "uv-public-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
-        "###
+        "#
         );
     });
 
@@ -1044,6 +1081,7 @@ fn add_remove_dev() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -1167,6 +1205,7 @@ fn add_remove_dev() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -1265,6 +1304,7 @@ fn add_remove_optional() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -1304,6 +1344,7 @@ fn add_remove_optional() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "anyio", marker = "extra == 'io'", specifier = "==3.7.0" }]
+        provides-extras = ["io"]
 
         [[package]]
         name = "sniffio"
@@ -1387,6 +1428,7 @@ fn add_remove_optional() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -1396,6 +1438,9 @@ fn add_remove_optional() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
+
+        [package.metadata]
+        provides-extras = ["io"]
         "###
         );
     });
@@ -1622,8 +1667,9 @@ fn add_remove_workspace() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -1650,7 +1696,7 @@ fn add_remove_workspace() -> Result<()> {
         name = "child2"
         version = "0.1.0"
         source = { editable = "child2" }
-        "###
+        "#
         );
     });
 
@@ -1705,8 +1751,9 @@ fn add_remove_workspace() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -1727,7 +1774,7 @@ fn add_remove_workspace() -> Result<()> {
         name = "child2"
         version = "0.1.0"
         source = { editable = "child2" }
-        "###
+        "#
         );
     });
 
@@ -1744,7 +1791,7 @@ fn add_remove_workspace() -> Result<()> {
     Ok(())
 }
 
-/// `uv add --dev` should update `dev-dependencies` (rather than `dependency-group.dev`) if a
+/// `uv add --dev` should update `dev-dependencies` (rather than `dependency-groups.dev`) if a
 /// dependency already exists in `dev-dependencies`.
 #[test]
 fn update_existing_dev() -> Result<()> {
@@ -1815,7 +1862,7 @@ fn update_existing_dev() -> Result<()> {
     Ok(())
 }
 
-/// `uv add --dev` should add to `dev-dependencies` (rather than `dependency-group.dev`) if it
+/// `uv add --dev` should add to `dev-dependencies` (rather than `dependency-groups.dev`) if it
 /// exists.
 #[test]
 fn add_existing_dev() -> Result<()> {
@@ -1880,7 +1927,7 @@ fn add_existing_dev() -> Result<()> {
     Ok(())
 }
 
-/// `uv add --group dev` should update `dev-dependencies` (rather than `dependency-group.dev`) if a
+/// `uv add --group dev` should update `dev-dependencies` (rather than `dependency-groups.dev`) if a
 /// dependency already exists.
 #[test]
 fn update_existing_dev_group() -> Result<()> {
@@ -1945,7 +1992,7 @@ fn update_existing_dev_group() -> Result<()> {
     Ok(())
 }
 
-/// `uv add --group dev` should add to `dependency-group` even if `dev-dependencies` exists.
+/// `uv add --group dev` should add to `dependency-groups` even if `dev-dependencies` exists.
 #[test]
 fn add_existing_dev_group() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2012,7 +2059,7 @@ fn add_existing_dev_group() -> Result<()> {
     Ok(())
 }
 
-/// `uv remove --dev` should remove from both `dev-dependencies` and `dependency-group.dev`.
+/// `uv remove --dev` should remove from both `dev-dependencies` and `dependency-groups.dev`.
 #[test]
 fn remove_both_dev() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2077,7 +2124,7 @@ fn remove_both_dev() -> Result<()> {
     Ok(())
 }
 
-/// `uv remove --group dev` should remove from both `dev-dependencies` and `dependency-group.dev`.
+/// `uv remove --group dev` should remove from both `dev-dependencies` and `dependency-groups.dev`.
 #[test]
 fn remove_both_dev_group() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2186,6 +2233,24 @@ fn add_workspace_editable() -> Result<()> {
     "#})?;
 
     let child1 = context.temp_dir.join("child1");
+
+    // `--no-editable` should error.
+    let mut add_cmd = context.add();
+    add_cmd
+        .arg("child2")
+        .arg("--no-editable")
+        .current_dir(&child1);
+
+    uv_snapshot!(context.filters(), add_cmd, @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Workspace dependency `child2` was marked as `--no-editable`, but workspace dependencies are always added in editable mode. Pass `--no-editable` to `uv sync` or `uv run` to install workspace dependencies in non-editable mode.
+    "###);
+
+    // `--editable` should not.
     let mut add_cmd = context.add();
     add_cmd.arg("child2").arg("--editable").current_dir(&child1);
 
@@ -2234,8 +2299,9 @@ fn add_workspace_editable() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -2268,7 +2334,7 @@ fn add_workspace_editable() -> Result<()> {
         name = "parent"
         version = "0.1.0"
         source = { virtual = "." }
-        "###
+        "#
         );
     });
 
@@ -2358,8 +2424,9 @@ fn add_workspace_path() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -2386,7 +2453,7 @@ fn add_workspace_path() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "child", editable = "child" }]
-        "###
+        "#
         );
     });
 
@@ -2481,8 +2548,9 @@ fn add_path() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -2503,7 +2571,7 @@ fn add_path() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "child", directory = "packages/child" }]
-        "###
+        "#
         );
     });
 
@@ -2688,8 +2756,9 @@ fn update() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -2796,7 +2865,7 @@ fn update() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl", hash = "sha256:450b20ec296a467077128bff42b73080516e71b56ff59a60a02bef2232c4fa9d", size = 121067 },
         ]
-        "###
+        "#
         );
     });
 
@@ -3383,8 +3452,9 @@ fn add_inexact() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -3409,7 +3479,7 @@ fn add_inexact() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
-        "###
+        "#
         );
     });
 
@@ -3522,8 +3592,9 @@ fn remove_registry() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -3533,7 +3604,7 @@ fn remove_registry() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
-        "###
+        "#
         );
     });
 
@@ -4207,6 +4278,7 @@ fn add_lower_bound_optional() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -4246,6 +4318,7 @@ fn add_lower_bound_optional() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "anyio", marker = "extra == 'io'", specifier = ">=4.3.0" }]
+        provides-extras = ["io"]
 
         [[package]]
         name = "sniffio"
@@ -4325,8 +4398,9 @@ fn add_lower_bound_local() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [[package]]
@@ -4348,7 +4422,7 @@ fn add_lower_bound_local() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "local-simple-a", specifier = ">=1.2.3" }]
-        "###
+        "#
         );
     });
 
@@ -4426,8 +4500,9 @@ fn add_non_project() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -4446,7 +4521,7 @@ fn add_non_project() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
         ]
-        "###
+        "#
         );
     });
 
@@ -4545,6 +4620,7 @@ fn add_repeat() -> Result<()> {
 
 /// Add from requirement file.
 #[test]
+#[cfg(feature = "git")]
 fn add_requirements_file() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_counts();
 
@@ -4682,11 +4758,7 @@ fn add_group() -> Result<()> {
 
     let pyproject_toml = context.read("pyproject.toml");
 
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            pyproject_toml, @r###"
+    assert_snapshot!(pyproject_toml, @r###"
         [project]
         name = "project"
         version = "0.1.0"
@@ -4698,8 +4770,7 @@ fn add_group() -> Result<()> {
             "anyio==3.7.0",
         ]
         "###
-        );
-    });
+    );
 
     uv_snapshot!(context.filters(), context.add().arg("requests").arg("--group").arg("test"), @r###"
     success: true
@@ -4718,11 +4789,7 @@ fn add_group() -> Result<()> {
 
     let pyproject_toml = context.read("pyproject.toml");
 
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            pyproject_toml, @r###"
+    assert_snapshot!(pyproject_toml, @r###"
         [project]
         name = "project"
         version = "0.1.0"
@@ -4735,8 +4802,7 @@ fn add_group() -> Result<()> {
             "requests>=2.31.0",
         ]
         "###
-        );
-    });
+    );
 
     uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("second"), @r###"
     success: true
@@ -4750,11 +4816,208 @@ fn add_group() -> Result<()> {
 
     let pyproject_toml = context.read("pyproject.toml");
 
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            pyproject_toml, @r###"
+    assert_snapshot!(pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        second = [
+            "anyio==3.7.0",
+        ]
+        test = [
+            "anyio==3.7.0",
+            "requests>=2.31.0",
+        ]
+        "#
+    );
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("alpha"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Audited 3 packages in [TIME]
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    assert_snapshot!(pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        alpha = [
+            "anyio==3.7.0",
+        ]
+        second = [
+            "anyio==3.7.0",
+        ]
+        test = [
+            "anyio==3.7.0",
+            "requests>=2.31.0",
+        ]
+        "#
+    );
+
+    assert!(context.temp_dir.join("uv.lock").exists());
+
+    Ok(())
+}
+
+/// Add a requirement to a dependency group (sorted before the other groups).
+#[test]
+fn add_group_before_commented_groups() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        # This is our dev group
+        dev = [
+            "anyio==3.7.0",
+        ]
+        # This is our test group
+        test = [
+            "anyio==3.7.0",
+            "requests>=2.31.0",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("alpha"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    assert!(context.temp_dir.join("uv.lock").exists());
+
+    assert_snapshot!(pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        alpha = [
+            "anyio==3.7.0",
+        ]
+        # This is our dev group
+        dev = [
+            "anyio==3.7.0",
+        ]
+        # This is our test group
+        test = [
+            "anyio==3.7.0",
+            "requests>=2.31.0",
+        ]
+        "#
+    );
+
+    Ok(())
+}
+
+/// Add a requirement to dependency group (sorted between the other groups).
+#[test]
+fn add_group_between_commented_groups() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        # This is our dev group
+        dev = [
+            "anyio==3.7.0",
+        ]
+        # This is our test group
+        test = [
+            "anyio==3.7.0",
+            "requests>=2.31.0",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("eta"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    assert!(context.temp_dir.join("uv.lock").exists());
+
+    assert_snapshot!(pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        # This is our dev group
+        dev = [
+            "anyio==3.7.0",
+        ]
+        eta = [
+            "anyio==3.7.0",
+        ]
+        # This is our test group
+        test = [
+            "anyio==3.7.0",
+            "requests>=2.31.0",
+        ]
+        "#
+    );
+
+    Ok(())
+}
+
+/// Add a requirement to a dependency group when existing dependency group
+/// keys are not sorted.
+#[test]
+fn add_group_to_unsorted() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -4769,9 +5032,44 @@ fn add_group() -> Result<()> {
         second = [
             "anyio==3.7.0",
         ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("alpha"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    assert_snapshot!(pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        test = [
+            "anyio==3.7.0",
+            "requests>=2.31.0",
+        ]
+        second = [
+            "anyio==3.7.0",
+        ]
+        alpha = [
+            "anyio==3.7.0",
+        ]
         "###
-        );
-    });
+    );
 
     assert!(context.temp_dir.join("uv.lock").exists());
 
@@ -5388,6 +5686,7 @@ fn add_remove_script_lock() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.11"
 
         [options]
@@ -5570,6 +5869,7 @@ fn add_remove_script_lock() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.11"
 
         [options]
@@ -5774,6 +6074,7 @@ fn add_remove_script_lock() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.11"
 
         [options]
@@ -6743,8 +7044,9 @@ fn add_warn_index_url() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -6769,7 +7071,7 @@ fn add_warn_index_url() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "idna", specifier = ">=3.6" }]
-        "###
+        "#
         );
     });
 
@@ -6844,8 +7146,9 @@ fn add_no_warn_index_url() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -6870,7 +7173,7 @@ fn add_no_warn_index_url() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0" }]
-        "###
+        "#
         );
     });
 
@@ -6880,7 +7183,7 @@ fn add_no_warn_index_url() -> Result<()> {
 /// Add an index provided via `--index`.
 #[test]
 fn add_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -6894,7 +7197,7 @@ fn add_index() -> Result<()> {
         constraint-dependencies = ["markupsafe<3"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").arg("--index").arg("https://pypi.org/simple").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").arg("--index").arg("https://pypi.org/simple"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6936,9 +7239,13 @@ fn add_index() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
 
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
@@ -6962,12 +7269,12 @@ fn add_index() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
-        "###
+        "#
         );
     });
 
     // Adding a subsequent index should put it _above_ the existing index.
-    uv_snapshot!(context.filters(), context.add().arg("jinja2").arg("--index").arg("pytorch=https://download.pytorch.org/whl/cu121").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("jinja2").arg("--index").arg("pytorch=https://astral-sh.github.io/pytorch-mirror/whl/cu121"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6976,7 +7283,7 @@ fn add_index() -> Result<()> {
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + jinja2==3.1.3
+     + jinja2==3.1.4
      + markupsafe==2.1.5
     "###);
 
@@ -6993,7 +7300,7 @@ fn add_index() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "iniconfig==2.0.0",
-            "jinja2>=3.1.3",
+            "jinja2>=3.1.4",
         ]
 
         [tool.uv]
@@ -7001,7 +7308,7 @@ fn add_index() -> Result<()> {
 
         [[tool.uv.index]]
         name = "pytorch"
-        url = "https://download.pytorch.org/whl/cu121"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu121"
 
         [tool.uv.sources]
         jinja2 = { index = "pytorch" }
@@ -7018,9 +7325,13 @@ fn add_index() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
 
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
@@ -7036,19 +7347,20 @@ fn add_index() -> Result<()> {
 
         [[package]]
         name = "jinja2"
-        version = "3.1.3"
-        source = { registry = "https://download.pytorch.org/whl/cu121" }
+        version = "3.1.4"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu121" }
         dependencies = [
             { name = "markupsafe" },
         ]
         wheels = [
-            { url = "https://download.pytorch.org/whl/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa" },
+            { url = "https://download.pytorch.org/whl/Jinja2-3.1.4-py3-none-any.whl" },
         ]
 
         [[package]]
         name = "markupsafe"
         version = "2.1.5"
-        source = { registry = "https://download.pytorch.org/whl/cu121" }
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu121" }
+        sdist = { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5.tar.gz" }
         wheels = [
             { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:8dec4936e9c3100156f8a2dc89c4b88d5c435175ff03413b443469c7c8c5f4d1" },
             { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:3c6b973f22eb18a789b1460b4b91bf04ae3f0c4234a0a6aa6b0a92f6f7b951d4" },
@@ -7070,25 +7382,21 @@ fn add_index() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "iniconfig", specifier = "==2.0.0" },
-            { name = "jinja2", specifier = ">=3.1.3", index = "https://download.pytorch.org/whl/cu121" },
+            { name = "jinja2", specifier = ">=3.1.4", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu121" },
         ]
-        "###
+        "#
         );
     });
 
     // Adding a subsequent index with the same name should replace it.
-    uv_snapshot!(context.filters(), context.add().arg("jinja2").arg("--index").arg("pytorch=https://test.pypi.org/simple").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("jinja2").arg("--index").arg("pytorch=https://test.pypi.org/simple"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
-     - jinja2==3.1.3
-     + jinja2==3.1.4
+    Audited 3 packages in [TIME]
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -7104,7 +7412,7 @@ fn add_index() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "iniconfig==2.0.0",
-            "jinja2>=3.1.3",
+            "jinja2>=3.1.4",
         ]
 
         [tool.uv]
@@ -7129,9 +7437,13 @@ fn add_index() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
 
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
@@ -7187,14 +7499,14 @@ fn add_index() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "iniconfig", specifier = "==2.0.0" },
-            { name = "jinja2", specifier = ">=3.1.3", index = "https://test.pypi.org/simple" },
+            { name = "jinja2", specifier = ">=3.1.4", index = "https://test.pypi.org/simple" },
         ]
-        "###
+        "#
         );
     });
 
     // Adding a subsequent index with the same URL should bump it to the top.
-    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--index").arg("https://pypi.org/simple").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--index").arg("https://pypi.org/simple"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7219,7 +7531,7 @@ fn add_index() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "iniconfig==2.0.0",
-            "jinja2>=3.1.3",
+            "jinja2>=3.1.4",
             "typing-extensions>=4.12.2",
         ]
 
@@ -7245,9 +7557,13 @@ fn add_index() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
 
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
@@ -7304,7 +7620,7 @@ fn add_index() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "iniconfig", specifier = "==2.0.0" },
-            { name = "jinja2", specifier = ">=3.1.3", index = "https://test.pypi.org/simple" },
+            { name = "jinja2", specifier = ">=3.1.4", index = "https://test.pypi.org/simple" },
             { name = "typing-extensions", specifier = ">=4.12.2" },
         ]
 
@@ -7316,12 +7632,12 @@ fn add_index() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d", size = 37438 },
         ]
-        "###
+        "#
         );
     });
 
     // Adding a subsequent index with the same URL should bump it to the top, but retain the name.
-    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--index").arg("https://test.pypi.org/simple").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--index").arg("https://test.pypi.org/simple"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7344,7 +7660,7 @@ fn add_index() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "iniconfig==2.0.0",
-            "jinja2>=3.1.3",
+            "jinja2>=3.1.4",
             "typing-extensions>=4.12.2",
         ]
 
@@ -7370,9 +7686,13 @@ fn add_index() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
 
         [manifest]
         constraints = [{ name = "markupsafe", specifier = "<3" }]
@@ -7429,7 +7749,7 @@ fn add_index() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "iniconfig", specifier = "==2.0.0" },
-            { name = "jinja2", specifier = ">=3.1.3", index = "https://test.pypi.org/simple" },
+            { name = "jinja2", specifier = ">=3.1.4", index = "https://test.pypi.org/simple" },
             { name = "typing-extensions", specifier = ">=4.12.2" },
         ]
 
@@ -7441,7 +7761,7 @@ fn add_index() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d", size = 37438 },
         ]
-        "###
+        "#
         );
     });
 
@@ -7502,8 +7822,9 @@ fn add_default_index_url() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -7528,7 +7849,7 @@ fn add_default_index_url() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0" }]
-        "###
+        "#
         );
     });
 
@@ -7574,8 +7895,9 @@ fn add_default_index_url() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -7613,7 +7935,7 @@ fn add_default_index_url() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
-        "###
+        "#
         );
     });
 
@@ -7674,8 +7996,9 @@ fn add_index_credentials() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -7700,7 +8023,7 @@ fn add_index_credentials() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
-        "###
+        "#
         );
     });
 
@@ -7769,8 +8092,9 @@ fn existing_index_credentials() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -7795,7 +8119,199 @@ fn existing_index_credentials() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// Add an index with a trailing slash.
+#[test]
+fn add_index_with_trailing_slash() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").arg("--index").arg("https://pypi.org/simple/"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig==2.0.0",
+        ]
+
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
+        [[tool.uv.index]]
+        url = "https://pypi.org/simple/"
         "###
+        );
+    });
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple/" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// Add an index without a trailing slash.
+#[test]
+fn add_index_without_trailing_slash() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").arg("--index").arg("https://pypi.org/simple"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig==2.0.0",
+        ]
+
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
+        [[tool.uv.index]]
+        url = "https://pypi.org/simple"
+        "###
+        );
+    });
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
+        "#
         );
     });
 
@@ -7872,6 +8388,7 @@ fn add_group_comment() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.11"
 
         [options]
@@ -8003,8 +8520,9 @@ fn add_index_comments() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -8029,7 +8547,7 @@ fn add_index_comments() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
-        "###
+        "#
         );
     });
 
@@ -8304,8 +8822,9 @@ fn add_direct_url_subdirectory() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -8364,7 +8883,7 @@ fn add_direct_url_subdirectory() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -8442,8 +8961,9 @@ fn add_direct_url_subdirectory_raw() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -8502,7 +9022,7 @@ fn add_direct_url_subdirectory_raw() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -9084,4 +9604,411 @@ fn remove_all_with_comments() -> Result<()> {
     });
 
     Ok(())
+}
+
+/// If an index is repeated by the CLI and an environment variable, the CLI value should take
+/// precedence.
+///
+/// The index that appears in the `pyproject.toml` should also be consistent with the index that
+/// appears in the `uv.lock`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/11312>
+#[test]
+fn repeated_index_cli_environment_variable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context
+        .add()
+        .arg("iniconfig")
+        // Without a trailing slash.
+        .arg("--index")
+        .arg("https://test.pypi.org/simple")
+        // With a trailing slash.
+        .env(EnvVars::UV_DEFAULT_INDEX, "https://test.pypi.org/simple/"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig>=2.0.0",
+        ]
+
+        [[tool.uv.index]]
+        url = "https://test.pypi.org/simple"
+        default = true
+        "###
+        );
+    });
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://test.pypi.org/simple" }
+        sdist = { url = "https://test-files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://test-files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0" }]
+        "#
+        );
+    });
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###);
+
+    Ok(())
+}
+
+/// If an index is repeated on the CLI, the last-provided index should take precedence.
+///
+/// The index that appears in the `pyproject.toml` should also be consistent with the index that
+/// appears in the `uv.lock`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/11312>
+#[test]
+fn repeated_index_cli() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context
+        .add()
+        .arg("iniconfig")
+        // Without a trailing slash.
+        .arg("--index")
+        .arg("https://test.pypi.org/simple")
+        // With a trailing slash.
+        .arg("--index")
+        .arg("https://test.pypi.org/simple/"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig>=2.0.0",
+        ]
+
+        [[tool.uv.index]]
+        url = "https://test.pypi.org/simple"
+        "###
+        );
+    });
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://test.pypi.org/simple" }
+        sdist = { url = "https://test-files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://test-files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0" }]
+        "#
+        );
+    });
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###);
+
+    Ok(())
+}
+
+/// If an index is repeated on the CLI, the last-provided index should take precedence.
+///
+/// The index that appears in the `pyproject.toml` should also be consistent with the index that
+/// appears in the `uv.lock`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/11312>
+#[test]
+fn repeated_index_cli_reversed() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context
+        .add()
+        .arg("iniconfig")
+        // With a trailing slash.
+        .arg("--index")
+        .arg("https://test.pypi.org/simple/")
+        // Without a trailing slash.
+        .arg("--index")
+        .arg("https://test.pypi.org/simple"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig>=2.0.0",
+        ]
+
+        [[tool.uv.index]]
+        url = "https://test.pypi.org/simple/"
+        "###
+        );
+    });
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://test.pypi.org/simple/" }
+        sdist = { url = "https://test-files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://test-files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0" }]
+        "#
+        );
+    });
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn add_with_build_constraints() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.8"
+    dependencies = []
+
+    [tool.uv]
+    build-constraint-dependencies = ["setuptools==1"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("requests==1.2"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+      help: `requests` (v1.2.0) was included because `project` (v0.1.0) depends on `requests==1.2`
+    ");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.8"
+    dependencies = []
+
+    [tool.uv]
+    build-constraint-dependencies = ["setuptools>=40"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("requests==1.2"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + requests==1.2.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "git")]
+fn add_unsupported_git_scheme() {
+    let context = TestContext::new("3.12");
+
+    context.init().arg(".").assert().success();
+
+    uv_snapshot!(context.filters(), context.add().arg("git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef`
+      Caused by: Unsupported Git URL scheme `fantasy:` in `fantasy://ferris/dreams/of/urls` (expected one of `https:`, `ssh:`, or `file:`)
+    git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    "###);
 }

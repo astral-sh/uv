@@ -450,6 +450,13 @@ impl PyProjectTomlMut {
             .as_table_like_mut()
             .ok_or(Error::MalformedDependencies)?;
 
+        let was_sorted = dependency_groups
+            .get_values()
+            .iter()
+            .filter_map(|(dotted_ks, _)| dotted_ks.first())
+            .map(|k| k.get())
+            .is_sorted();
+
         let group = dependency_groups
             .entry(group.as_ref())
             .or_insert(Item::Value(Value::Array(Array::new())))
@@ -458,6 +465,12 @@ impl PyProjectTomlMut {
 
         let name = req.name.clone();
         let added = add_dependency(req, group, source.is_some())?;
+
+        // To avoid churn in pyproject.toml, we only sort new group keys if the
+        // existing keys were sorted.
+        if was_sorted {
+            dependency_groups.sort_values();
+        }
 
         // If `dependency-groups` is an inline table, reformat it.
         //
@@ -1348,7 +1361,7 @@ mod test {
             split_specifiers("flask[dotenv]>=1.0"),
             ("flask[dotenv]", ">=1.0")
         );
-        assert_eq!(split_specifiers("flask[dotenv]",), ("flask[dotenv]", ""));
+        assert_eq!(split_specifiers("flask[dotenv]"), ("flask[dotenv]", ""));
         assert_eq!(split_specifiers("flask @ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"), ("flask", "@ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"));
     }
 }

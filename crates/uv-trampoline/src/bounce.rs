@@ -32,7 +32,7 @@ use windows::Win32::{
     },
 };
 
-use crate::{eprintln, format};
+use crate::{error, format, warn};
 
 const PATH_LEN_SIZE: usize = size_of::<u32>();
 const MAX_PATH_LEN: u32 = 32 * 1024;
@@ -68,8 +68,7 @@ impl TrampolineKind {
 /// depending on the [`TrampolineKind`].
 fn make_child_cmdline() -> CString {
     let executable_name = std::env::current_exe().unwrap_or_else(|_| {
-        eprintln!("Failed to get executable name");
-        exit_with_status(1);
+        error_and_exit("Failed to get executable name");
     });
     let (kind, python_exe) = read_trampoline_metadata(executable_name.as_ref());
     let mut child_cmdline = Vec::<u8>::new();
@@ -94,15 +93,14 @@ fn make_child_cmdline() -> CString {
     child_cmdline.push(b'\0');
 
     // Helpful when debugging trampoline issues
-    // eprintln!(
+    // warn!(
     //     "executable_name: '{}'\nnew_cmdline: {}",
     //     &*executable_name.to_string_lossy(),
     //     std::str::from_utf8(child_cmdline.as_slice()).unwrap()
     // );
 
     CString::from_vec_with_nul(child_cmdline).unwrap_or_else(|_| {
-        eprintln!("Child command line is not correctly null terminated");
-        exit_with_status(1);
+        error_and_exit("Child command line is not correctly null terminated");
     })
 }
 
@@ -217,8 +215,7 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
         buffer.truncate(read_bytes);
 
         let Some(inner_kind) = TrampolineKind::from_buffer(&buffer) else {
-            eprintln!("Magic number 'UVSC' or 'UVPY' not found at the end of the file. Did you append the magic number, the length and the path to the python executable at the end of the file?");
-            exit_with_status(1);
+            error_and_exit("Magic number 'UVSC' or 'UVPY' not found at the end of the file. Did you append the magic number, the length and the path to the python executable at the end of the file?");
         };
         kind = inner_kind;
 
@@ -228,21 +225,18 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
         let path_len = match buffer.get(buffer.len() - PATH_LEN_SIZE..) {
             Some(path_len) => {
                 let path_len = u32::from_le_bytes(path_len.try_into().unwrap_or_else(|_| {
-                    eprintln!("Slice length is not equal to 4 bytes");
-                    exit_with_status(1);
+                    error_and_exit("Slice length is not equal to 4 bytes");
                 }));
 
                 if path_len > MAX_PATH_LEN {
-                    eprintln!("Only paths with a length up to 32KBs are supported but the python path has a length of {}", path_len);
-                    exit_with_status(1);
+                    error_and_exit(&format!("Only paths with a length up to 32KBs are supported but the python path has a length of {}", path_len));
                 }
 
                 // SAFETY: path len is guaranteed to be less than 32KBs
                 path_len as usize
             }
             None => {
-                eprintln!("Python executable length missing. Did you write the length of the path to the Python executable before the Magic number?");
-                exit_with_status(1);
+                error_and_exit("Python executable length missing. Did you write the length of the path to the Python executable before the Magic number?");
             }
         };
 
@@ -253,8 +247,7 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
             buffer.drain(..path_offset);
 
             break String::from_utf8(buffer).unwrap_or_else(|_| {
-                eprintln!("Python executable path is not a valid UTF-8 encoded path");
-                exit_with_status(1);
+                error_and_exit("Python executable path is not a valid UTF-8 encoded path");
             });
         } else {
             // SAFETY: Casting to u32 is safe because `path_len` is guaranteed to be less than 32KBs,
@@ -262,8 +255,7 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
             bytes_to_read = (path_len + kind.magic_number().len() + PATH_LEN_SIZE) as u32;
 
             if u64::from(bytes_to_read) > file_size {
-                eprintln!("The length of the python executable path exceeds the file size. Verify that the path length is appended to the end of the launcher script as a u32 in little endian");
-                exit_with_status(1);
+                error_and_exit("The length of the python executable path exceeds the file size. Verify that the path length is appended to the end of the launcher script as a u32 in little endian");
             }
         }
     };
@@ -275,8 +267,7 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
         let parent_dir = match executable_name.parent() {
             Some(parent) => parent,
             None => {
-                eprintln!("Executable path has no parent directory");
-                exit_with_status(1);
+                error_and_exit("Executable path has no parent directory");
             }
         };
         parent_dir.join(path)
@@ -284,8 +275,7 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
 
     // NOTICE: dunce adds 5kb~
     let path = dunce::canonicalize(path.as_path()).unwrap_or_else(|_| {
-        eprintln!("Failed to canonicalize script path");
-        exit_with_status(1);
+        error_and_exit("Failed to canonicalize script path");
     });
 
     (kind, path)
@@ -373,11 +363,11 @@ fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
     if (si.dwFlags & STARTF_USESTDHANDLES).0 != 0 {
         // ignore errors, if the handles are not inheritable/valid, then nothing we can do
         unsafe { SetHandleInformation(si.hStdInput, HANDLE_FLAG_INHERIT.0, HANDLE_FLAG_INHERIT) }
-            .unwrap_or_else(|_| eprintln!("Making stdin inheritable failed"));
+            .unwrap_or_else(|_| warn!("Making stdin inheritable failed"));
         unsafe { SetHandleInformation(si.hStdOutput, HANDLE_FLAG_INHERIT.0, HANDLE_FLAG_INHERIT) }
-            .unwrap_or_else(|_| eprintln!("Making stdout inheritable failed"));
+            .unwrap_or_else(|_| warn!("Making stdout inheritable failed"));
         unsafe { SetHandleInformation(si.hStdError, HANDLE_FLAG_INHERIT.0, HANDLE_FLAG_INHERIT) }
-            .unwrap_or_else(|_| eprintln!("Making stderr inheritable failed"));
+            .unwrap_or_else(|_| warn!("Making stderr inheritable failed"));
     }
     let mut child_process_info = PROCESS_INFORMATION::default();
     unsafe {
@@ -412,14 +402,14 @@ fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
 // https://github.com/huangqinjin/ucrt/blob/10.0.19041.0/lowio/ioinit.cpp#L190-L223
 fn close_handles(si: &STARTUPINFOA) {
     // See distlib/PC/launcher.c::cleanup_standard_io()
-    // Unlike cleanup_standard_io(), we don't close STD_ERROR_HANDLE to retain eprintln!
+    // Unlike cleanup_standard_io(), we don't close STD_ERROR_HANDLE to retain warn!
     for std_handle in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE] {
         if let Ok(handle) = unsafe { GetStdHandle(std_handle) } {
             unsafe { CloseHandle(handle) }.unwrap_or_else(|_| {
-                eprintln!("Failed to close standard device handle {}", handle.0 as u32);
+                warn!("Failed to close standard device handle {}", handle.0 as u32);
             });
             unsafe { SetStdHandle(std_handle, INVALID_HANDLE_VALUE) }.unwrap_or_else(|_| {
-                eprintln!("Failed to modify standard device handle {}", std_handle.0);
+                warn!("Failed to modify standard device handle {}", std_handle.0);
             });
         }
     }
@@ -443,7 +433,7 @@ fn close_handles(si: &STARTUPINFOA) {
             continue;
         }
         unsafe { CloseHandle(handle) }.unwrap_or_else(|_| {
-            eprintln!("Failed to close child file descriptors at {}", i);
+            warn!("Failed to close child file descriptors at {}", i);
         });
     }
 }
@@ -472,14 +462,14 @@ fn clear_app_starting_state(child_handle: HANDLE) {
     unsafe {
         // End the launcher's "app starting" cursor state.
         PostMessageA(None, 0, WPARAM(0), LPARAM(0)).unwrap_or_else(|_| {
-            eprintln!("Failed to post a message to specified window");
+            warn!("Failed to post a message to specified window");
         });
         if GetMessageA(&mut msg, None, 0, 0) != TRUE {
-            eprintln!("Failed to retrieve posted window message");
+            warn!("Failed to retrieve posted window message");
         }
         // Proxy the child's input idle event.
         if WaitForInputIdle(child_handle, INFINITE) != 0 {
-            eprintln!("Failed to wait for input from window");
+            warn!("Failed to wait for input from window");
         }
         // Signal the process input idle event by creating a window and pumping
         // sent messages. The window class isn't important, so just use the
@@ -526,7 +516,7 @@ pub fn bounce(is_gui: bool) -> ! {
     // (best effort) Switch to some innocuous directory, so we don't hold the original cwd open.
     // See distlib/PC/launcher.c::switch_working_directory
     if std::env::set_current_dir(std::env::temp_dir()).is_err() {
-        eprintln!("Failed to set cwd to temp dir");
+        warn!("Failed to set cwd to temp dir");
     }
 
     // We want to ignore control-C/control-Break/logout/etc.; the same event will
@@ -552,6 +542,12 @@ pub fn bounce(is_gui: bool) -> ! {
 }
 
 #[cold]
+fn error_and_exit(message: &str) -> ! {
+    error!("{}", message);
+    exit_with_status(1);
+}
+
+#[cold]
 fn print_last_error_and_exit(message: &str) -> ! {
     let err = std::io::Error::last_os_error();
     let err_no_str = err
@@ -560,13 +556,13 @@ fn print_last_error_and_exit(message: &str) -> ! {
         .unwrap_or_default();
     // we can't access sys::os::error_string directly so err.kind().to_string()
     // is the closest we can get to while avoiding bringing in a large chunk of core::fmt
-    eprintln!(
+    let message = format!(
         "(uv internal error) {}: {}.{}",
         message,
         err.kind().to_string(),
         err_no_str
     );
-    exit_with_status(1);
+    error_and_exit(&message);
 }
 
 #[cold]

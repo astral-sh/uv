@@ -1,11 +1,11 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use uv_configuration::{LowerBound, SourceStrategy};
+use uv_configuration::SourceStrategy;
 use uv_distribution_types::IndexLocations;
 use uv_normalize::PackageName;
 use uv_workspace::pyproject::ToolUvSources;
-use uv_workspace::{DiscoveryOptions, ProjectWorkspace, Workspace};
+use uv_workspace::{DiscoveryOptions, MemberDiscovery, ProjectWorkspace, Workspace};
 
 use crate::metadata::{LoweredRequirement, MetadataError};
 
@@ -37,23 +37,23 @@ impl BuildRequires {
         install_path: &Path,
         locations: &IndexLocations,
         sources: SourceStrategy,
-        lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
+        let discovery = match sources {
+            SourceStrategy::Enabled => DiscoveryOptions::default(),
+            SourceStrategy::Disabled => DiscoveryOptions {
+                members: MemberDiscovery::None,
+                ..Default::default()
+            },
+        };
+
         // TODO(konsti): Cache workspace discovery.
         let Some(project_workspace) =
-            ProjectWorkspace::from_maybe_project_root(install_path, &DiscoveryOptions::default())
-                .await?
+            ProjectWorkspace::from_maybe_project_root(install_path, &discovery).await?
         else {
             return Ok(Self::from_metadata23(metadata));
         };
 
-        Self::from_project_workspace(
-            metadata,
-            &project_workspace,
-            locations,
-            sources,
-            lower_bound,
-        )
+        Self::from_project_workspace(metadata, &project_workspace, locations, sources)
     }
 
     /// Lower the `build-system.requires` field from a `pyproject.toml` file.
@@ -62,7 +62,6 @@ impl BuildRequires {
         project_workspace: &ProjectWorkspace,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
-        lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
@@ -107,11 +106,10 @@ impl BuildRequires {
                         project_workspace.project_root(),
                         project_sources,
                         project_indexes,
-                        extra.as_ref(),
+                        extra.as_deref(),
                         group,
                         locations,
                         project_workspace.workspace(),
-                        lower_bound,
                         None,
                     )
                     .map(move |requirement| match requirement {
@@ -141,7 +139,6 @@ impl BuildRequires {
         workspace: &Workspace,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
-        lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
@@ -184,11 +181,10 @@ impl BuildRequires {
                         workspace.install_path(),
                         project_sources,
                         project_indexes,
-                        extra.as_ref(),
+                        extra.as_deref(),
                         group,
                         locations,
                         workspace,
-                        lower_bound,
                         None,
                     )
                     .map(move |requirement| match requirement {

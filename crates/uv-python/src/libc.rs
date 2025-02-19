@@ -55,7 +55,7 @@ pub(crate) enum LibcVersion {
 /// inspecting core binaries.
 pub(crate) fn detect_linux_libc() -> Result<LibcVersion, LibcDetectionError> {
     let ld_path = find_ld_path()?;
-    trace!("ld path: {}", ld_path.user_display());
+    trace!("Found `ld` path: {}", ld_path.user_display());
 
     match detect_musl_version(&ld_path) {
         Ok(os) => return Ok(os),

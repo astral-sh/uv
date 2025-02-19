@@ -13,8 +13,8 @@ use uv_tool::InstalledTools;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, Overrides,
-    Reinstall, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification, DryRun,
+    ExtrasSpecification, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -26,7 +26,7 @@ use uv_distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, Name, Resolution,
 };
 use uv_fs::Simplified;
-use uv_install_wheel::linker::LinkMode;
+use uv_install_wheel::LinkMode;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
@@ -54,13 +54,31 @@ pub(crate) async fn read_requirements(
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     extras: &ExtrasSpecification,
+    groups: &DevGroupsSpecification,
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
     // return an error.
     if !extras.is_empty() && !requirements.iter().any(RequirementsSource::allows_extras) {
+        let hint = if requirements.iter().any(|source| {
+            matches!(
+                source,
+                RequirementsSource::Editable(_) | RequirementsSource::SourceTree(_)
+            )
+        }) {
+            "Use `<dir>[extra]` syntax or `-r <file>` instead."
+        } else {
+            "Use `package[extra]` syntax instead."
+        };
         return Err(anyhow!(
-            "Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file."
+            "Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file. {hint}"
+        )
+        .into());
+    }
+    if !groups.is_empty() && !requirements.iter().any(RequirementsSource::allows_groups) {
+        let flags = groups.history().as_flags_pretty().join(" ");
+        return Err(anyhow!(
+            "Requesting groups requires a `pyproject.toml`. Requested via: {flags}"
         )
         .into());
     }
@@ -96,6 +114,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     mut project: Option<PackageName>,
     workspace_members: BTreeSet<PackageName>,
     extras: &ExtrasSpecification,
+    groups: &DevGroupsSpecification,
     preferences: Vec<Preference>,
     installed_packages: InstalledPackages,
     hasher: &HashStrategy,
@@ -149,6 +168,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         if !source_trees.is_empty() {
             let resolutions = SourceTreeResolver::new(
                 extras,
+                groups,
                 hasher,
                 index,
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
@@ -398,7 +418,7 @@ pub(crate) async fn install(
     venv: &PythonEnvironment,
     logger: Box<dyn InstallLogger>,
     installer_metadata: bool,
-    dry_run: bool,
+    dry_run: DryRun,
     printer: Printer,
 ) -> Result<Changelog, Error> {
     let start = std::time::Instant::now();
@@ -419,7 +439,7 @@ pub(crate) async fn install(
         )
         .context("Failed to determine installation plan")?;
 
-    if dry_run {
+    if dry_run.enabled() {
         report_dry_run(resolution, plan, modifications, start, printer)?;
         return Ok(Changelog::default());
     }

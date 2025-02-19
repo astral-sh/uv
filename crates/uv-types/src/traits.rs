@@ -7,9 +7,7 @@ use anyhow::Result;
 use rustc_hash::FxHashSet;
 
 use uv_cache::Cache;
-use uv_configuration::{
-    BuildKind, BuildOptions, BuildOutput, ConfigSettings, LowerBound, SourceStrategy,
-};
+use uv_configuration::{BuildKind, BuildOptions, BuildOutput, ConfigSettings, SourceStrategy};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, DependencyMetadata, DistributionId, IndexCapabilities, IndexLocations,
@@ -83,9 +81,6 @@ pub trait BuildContext {
 
     /// The [`ConfigSettings`] used to build distributions.
     fn config_settings(&self) -> &ConfigSettings;
-
-    /// Whether to warn on missing lower bounds.
-    fn bounds(&self) -> LowerBound;
 
     /// Whether to incorporate `tool.uv.sources` when resolving requirements.
     fn sources(&self) -> SourceStrategy;

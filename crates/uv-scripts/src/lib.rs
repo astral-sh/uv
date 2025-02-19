@@ -7,6 +7,7 @@ use std::sync::LazyLock;
 use memchr::memmem::Finder;
 use serde::Deserialize;
 use thiserror::Error;
+use url::Url;
 
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::PackageName;
@@ -24,7 +25,7 @@ pub enum Pep723Item {
     /// A PEP 723 script provided via `stdin`.
     Stdin(Pep723Metadata),
     /// A PEP 723 script provided via a remote URL.
-    Remote(Pep723Metadata),
+    Remote(Pep723Metadata, Url),
 }
 
 impl Pep723Item {
@@ -33,7 +34,7 @@ impl Pep723Item {
         match self {
             Self::Script(script) => &script.metadata,
             Self::Stdin(metadata) => metadata,
-            Self::Remote(metadata) => metadata,
+            Self::Remote(metadata, ..) => metadata,
         }
     }
 
@@ -42,7 +43,7 @@ impl Pep723Item {
         match self {
             Self::Script(script) => script.metadata,
             Self::Stdin(metadata) => metadata,
-            Self::Remote(metadata) => metadata,
+            Self::Remote(metadata, ..) => metadata,
         }
     }
 
@@ -50,8 +51,8 @@ impl Pep723Item {
     pub fn path(&self) -> Option<&Path> {
         match self {
             Self::Script(script) => Some(&script.path),
-            Self::Stdin(_) => None,
-            Self::Remote(_) => None,
+            Self::Stdin(..) => None,
+            Self::Remote(..) => None,
         }
     }
 
@@ -65,14 +66,14 @@ impl Pep723Item {
 }
 
 /// A reference to a PEP 723 item.
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum Pep723ItemRef<'item> {
     /// A PEP 723 script read from disk.
     Script(&'item Pep723Script),
     /// A PEP 723 script provided via `stdin`.
     Stdin(&'item Pep723Metadata),
     /// A PEP 723 script provided via a remote URL.
-    Remote(&'item Pep723Metadata),
+    Remote(&'item Pep723Metadata, &'item Url),
 }
 
 impl Pep723ItemRef<'_> {
@@ -81,7 +82,7 @@ impl Pep723ItemRef<'_> {
         match self {
             Self::Script(script) => &script.metadata,
             Self::Stdin(metadata) => metadata,
-            Self::Remote(metadata) => metadata,
+            Self::Remote(metadata, ..) => metadata,
         }
     }
 
@@ -89,8 +90,8 @@ impl Pep723ItemRef<'_> {
     pub fn path(&self) -> Option<&Path> {
         match self {
             Self::Script(script) => Some(&script.path),
-            Self::Stdin(_) => None,
-            Self::Remote(_) => None,
+            Self::Stdin(..) => None,
+            Self::Remote(..) => None,
         }
     }
 }
@@ -100,7 +101,7 @@ impl<'item> From<&'item Pep723Item> for Pep723ItemRef<'item> {
         match item {
             Pep723Item::Script(script) => Self::Script(script),
             Pep723Item::Stdin(metadata) => Self::Stdin(metadata),
-            Pep723Item::Remote(metadata) => Self::Remote(metadata),
+            Pep723Item::Remote(metadata, url) => Self::Remote(metadata, url),
         }
     }
 }
@@ -121,13 +122,11 @@ pub struct Pep723Script {
 impl Pep723Script {
     /// Read the PEP 723 `script` metadata from a Python file, if it exists.
     ///
+    /// Returns `None` if the file is missing a PEP 723 metadata block.
+    ///
     /// See: <https://peps.python.org/pep-0723/>
     pub async fn read(file: impl AsRef<Path>) -> Result<Option<Self>, Pep723Error> {
-        let contents = match fs_err::tokio::read(&file).await {
-            Ok(contents) => contents,
-            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
-            Err(err) => return Err(err.into()),
-        };
+        let contents = fs_err::tokio::read(&file).await?;
 
         // Extract the `script` tag.
         let ScriptTag {
@@ -286,13 +285,11 @@ impl Pep723Metadata {
 
     /// Read the PEP 723 `script` metadata from a Python file, if it exists.
     ///
+    /// Returns `None` if the file is missing a PEP 723 metadata block.
+    ///
     /// See: <https://peps.python.org/pep-0723/>
     pub async fn read(file: impl AsRef<Path>) -> Result<Option<Self>, Pep723Error> {
-        let contents = match fs_err::tokio::read(&file).await {
-            Ok(contents) => contents,
-            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
-            Err(err) => return Err(err.into()),
-        };
+        let contents = fs_err::tokio::read(&file).await?;
 
         // Extract the `script` tag.
         let ScriptTag { metadata, .. } = match ScriptTag::parse(&contents) {
@@ -334,6 +331,7 @@ pub struct ToolUv {
     pub top_level: ResolverInstallerOptions,
     pub override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub build_constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub sources: Option<BTreeMap<PackageName, Sources>>,
 }
 
@@ -341,6 +339,8 @@ pub struct ToolUv {
 pub enum Pep723Error {
     #[error("An opening tag (`# /// script`) was found without a closing tag (`# ///`). Ensure that every line between the opening and closing tags (including empty lines) starts with a leading `#`.")]
     UnclosedBlock,
+    #[error("The PEP 723 metadata block is missing from the script.")]
+    MissingTag,
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]

@@ -4,7 +4,7 @@
 #
 # Assumed to run as a subworkflow of .github/workflows/release.yml; specifically, as a local
 # artifacts job within `cargo-dist`.
-name: "Build binaries"
+name: "Build release binaries"
 
 on:
   workflow_call:
@@ -40,8 +40,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -54,6 +52,8 @@ jobs:
           args: --out dist
       - name: "Test sdist"
         run: |
+          # We can't use `--find-links` here, since we need maturin, which means no `--no-index`, and without that option
+          # we run the risk that pip pull uv from PyPI instead.
           pip install dist/${{ env.PACKAGE_NAME }}-*.tar.gz --force-reinstall
           ${{ env.MODULE_NAME }} --help
           python -m ${{ env.MODULE_NAME }} --help
@@ -69,8 +69,6 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -111,8 +109,6 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -126,7 +122,7 @@ jobs:
           args: --release --locked --out dist --features self-update
       - name: "Test wheel - aarch64"
         run: |
-          pip install dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
+          pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
           ${{ env.MODULE_NAME }} --help
           python -m ${{ env.MODULE_NAME }} --help
           uvx --help
@@ -164,10 +160,10 @@ jobs:
             arch: x64
           - target: i686-pc-windows-msvc
             arch: x86
+          - target: aarch64-pc-windows-msvc
+            arch: x64 # not relevant here
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -183,7 +179,7 @@ jobs:
         if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
         shell: bash
         run: |
-          python -m pip install dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
+          pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
           ${{ env.MODULE_NAME }} --help
           python -m ${{ env.MODULE_NAME }} --help
           uvx --help
@@ -217,8 +213,6 @@ jobs:
           - i686-unknown-linux-gnu
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -249,7 +243,7 @@ jobs:
       - name: "Test wheel"
         if: ${{ startsWith(matrix.target, 'x86_64') }}
         run: |
-          pip install dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
+          pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
           ${{ env.MODULE_NAME }} --help
           python -m ${{ env.MODULE_NAME }} --help
           uvx --help
@@ -298,8 +292,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -314,18 +306,20 @@ jobs:
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist --features self-update
       - uses: uraimo/run-on-arch-action@v2
-        name: Test wheel
+        name: "Test wheel"
         with:
           arch: ${{ matrix.platform.arch == 'arm' && 'armv6' || matrix.platform.arch }}
           distro: ${{ matrix.platform.arch == 'arm' && 'bullseye' || 'ubuntu20.04' }}
           githubToken: ${{ github.token }}
           install: |
             apt-get update
-            apt-get install -y --no-install-recommends python3 python3-pip
+            apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
             pip3 install -U pip
           run: |
-            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             ${{ env.MODULE_NAME }} --help
+            # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
+            # python -m ${{ env.MODULE_NAME }} --help
             uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
@@ -366,8 +360,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -382,18 +374,20 @@ jobs:
           args: --release --locked --out dist --features self-update
       - uses: uraimo/run-on-arch-action@v2
         if: matrix.platform.arch != 'ppc64'
-        name: Test wheel
+        name: "Test wheel"
         with:
           arch: ${{ matrix.platform.arch }}
           distro: ubuntu20.04
           githubToken: ${{ github.token }}
           install: |
             apt-get update
-            apt-get install -y --no-install-recommends python3 python3-pip
+            apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
             pip3 install -U pip
           run: |
-            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             ${{ env.MODULE_NAME }} --help
+            # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
+            # python -m ${{ env.MODULE_NAME }} --help
             uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
@@ -440,8 +434,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -461,21 +453,24 @@ jobs:
                 yum repolist
                 yum install -y gcc-powerpc64-linux-gnu
             fi
-      - uses: uraimo/run-on-arch-action@v2
-        if: matrix.platform.arch != 'ppc64'
-        name: Test wheel
-        with:
-          arch: ${{ matrix.platform.arch }}
-          distro: ubuntu20.04
-          githubToken: ${{ github.token }}
-          install: |
-            apt-get update
-            apt-get install -y --no-install-recommends python3 python3-pip
-            pip3 install -U pip
-          run: |
-            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
-            ${{ env.MODULE_NAME }} --help
-            uvx --help
+      # TODO(charlie): Re-enable testing for PPC wheels.
+      # - uses: uraimo/run-on-arch-action@v2
+      #   if: matrix.platform.arch != 'ppc64'
+      #   name: "Test wheel"
+      #   with:
+      #     arch: ${{ matrix.platform.arch }}
+      #     distro: ubuntu20.04
+      #     githubToken: ${{ github.token }}
+      #     install: |
+      #       apt-get update
+      #       apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
+      #       pip3 install -U pip
+      #     run: |
+      #       pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+      #       ${{ env.MODULE_NAME }} --help
+      #       #(konsti) TODO: Enable this test on all platforms,currently `find_uv_bin` is failingto discover uv here.
+      #       # python -m ${{ env.MODULE_NAME }} --helppython -m ${{ env.MODULE_NAME }} --help
+      #       uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
@@ -513,8 +508,6 @@ jobs:
           - i686-unknown-linux-musl
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -582,8 +575,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -598,7 +589,7 @@ jobs:
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
       - uses: uraimo/run-on-arch-action@v2
-        name: Test wheel
+        name: "Test wheel"
         with:
           arch: ${{ matrix.platform.arch }}
           distro: alpine_latest
@@ -607,11 +598,11 @@ jobs:
             apk add python3
           run: |
             python -m venv .venv
-            .venv/bin/pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            .venv/bin/pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             .venv/bin/${{ env.MODULE_NAME }} --help
             .venv/bin/uvx --help
       - uses: uraimo/run-on-arch-action@v2
-        name: Test wheel (manylinux)
+        name: "Test wheel (manylinux)"
         if: matrix.platform.arch == 'aarch64'
         with:
           arch: aarch64
@@ -619,11 +610,13 @@ jobs:
           githubToken: ${{ github.token }}
           install: |
             apt-get update
-            apt-get install -y --no-install-recommends python3 python3-pip
+            apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
             pip3 install -U pip
           run: |
-            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             ${{ env.MODULE_NAME }} --help
+            # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
+            # python -m ${{ env.MODULE_NAME }} --help
             uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4

@@ -578,6 +578,7 @@ fn dev_dependencies_inverted() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
+
         [tool.uv]
         dev-dependencies = ["anyio"]
     "#,
@@ -595,6 +596,18 @@ fn dev_dependencies_inverted() -> Result<()> {
     sniffio v1.3.1
     └── anyio v4.3.0 (*)
     (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert").arg("--no-dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    iniconfig v2.0.0
+    └── project v0.1.0
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
@@ -1233,8 +1246,9 @@ fn script() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 1
         requires-python = ">=3.11"
 
         [options]
@@ -1369,7 +1383,7 @@ fn script() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl", hash = "sha256:450b20ec296a467077128bff42b73080516e71b56ff59a60a02bef2232c4fa9d", size = 121067 },
         ]
-        "###
+        "#
         );
     });
 
@@ -1420,6 +1434,7 @@ fn script() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.11"
 
         [options]

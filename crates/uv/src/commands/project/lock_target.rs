@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 
 use itertools::Either;
 
-use uv_configuration::{LowerBound, SourceStrategy};
+use uv_configuration::SourceStrategy;
 use uv_distribution::LoweredRequirement;
-use uv_distribution_types::IndexLocations;
+use uv_distribution_types::{Index, IndexLocations};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{Conflicts, Requirement, SupportedEnvironments, VerbatimParsedUrl};
@@ -72,6 +72,23 @@ impl<'lock> LockTarget<'lock> {
                 .as_ref()
                 .and_then(|tool| tool.uv.as_ref())
                 .and_then(|uv| uv.constraint_dependencies.as_ref())
+                .into_iter()
+                .flatten()
+                .cloned()
+                .collect(),
+        }
+    }
+
+    /// Returns the set of build constraints for the [`LockTarget`].
+    pub(crate) fn build_constraints(self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
+        match self {
+            Self::Workspace(workspace) => workspace.build_constraints(),
+            Self::Script(script) => script
+                .metadata
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.build_constraint_dependencies.as_ref())
                 .into_iter()
                 .flatten()
                 .cloned()
@@ -151,6 +168,17 @@ impl<'lock> LockTarget<'lock> {
         }
     }
 
+    /// Returns the set of required platforms for the [`LockTarget`].
+    pub(crate) fn required_environments(self) -> Option<&'lock SupportedEnvironments> {
+        match self {
+            Self::Workspace(workspace) => workspace.required_environments(),
+            Self::Script(_) => {
+                // TODO(charlie): Add support for environments in scripts.
+                None
+            }
+        }
+    }
+
     /// Returns the set of conflicts for the [`LockTarget`].
     pub(crate) fn conflicts(self) -> Conflicts {
         match self {
@@ -159,15 +187,44 @@ impl<'lock> LockTarget<'lock> {
         }
     }
 
+    /// Return an iterator over the [`Index`] definitions in the [`LockTarget`].
+    pub(crate) fn indexes(self) -> impl Iterator<Item = &'lock Index> {
+        match self {
+            Self::Workspace(workspace) => Either::Left(workspace.indexes().iter().chain(
+                workspace.packages().values().flat_map(|member| {
+                    member
+                        .pyproject_toml()
+                        .tool
+                        .as_ref()
+                        .and_then(|tool| tool.uv.as_ref())
+                        .and_then(|uv| uv.index.as_ref())
+                        .into_iter()
+                        .flatten()
+                }),
+            )),
+            Self::Script(script) => Either::Right(
+                script
+                    .metadata
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.top_level.index.as_deref())
+                    .into_iter()
+                    .flatten(),
+            ),
+        }
+    }
+
     /// Return the `Requires-Python` bound for the [`LockTarget`].
-    pub(crate) fn requires_python(self) -> Option<RequiresPython> {
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn requires_python(self) -> Result<Option<RequiresPython>, ProjectError> {
         match self {
             Self::Workspace(workspace) => find_requires_python(workspace),
-            Self::Script(script) => script
+            Self::Script(script) => Ok(script
                 .metadata
                 .requires_python
                 .as_ref()
-                .map(RequiresPython::from_specifiers),
+                .map(RequiresPython::from_specifiers)),
         }
     }
 
@@ -275,7 +332,6 @@ impl<'lock> LockTarget<'lock> {
                     workspace,
                     locations,
                     sources,
-                    LowerBound::Warn,
                 )?;
 
                 Ok(metadata
@@ -321,7 +377,6 @@ impl<'lock> LockTarget<'lock> {
                             sources,
                             indexes,
                             locations,
-                            LowerBound::Allow,
                         )
                         .map(move |requirement| match requirement {
                             Ok(requirement) => Ok(requirement.into_inner()),

@@ -1,10 +1,10 @@
 pub use authentication::*;
-pub use bounds::*;
 pub use build_options::*;
 pub use concurrency::*;
 pub use config_settings::*;
 pub use constraints::*;
 pub use dev::*;
+pub use dry_run::*;
 pub use editable::*;
 pub use export_format::*;
 pub use extras::*;
@@ -24,12 +24,12 @@ pub use trusted_publishing::*;
 pub use vcs::*;
 
 mod authentication;
-mod bounds;
 mod build_options;
 mod concurrency;
 mod config_settings;
 mod constraints;
 mod dev;
+mod dry_run;
 mod editable;
 mod export_format;
 mod extras;

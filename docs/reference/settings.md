@@ -1,25 +1,51 @@
 ## Project metadata
+### [`build-constraint-dependencies`](#build-constraint-dependencies) {: #build-constraint-dependencies }
+
+Constraints to apply when solving build dependencies.
+
+Build constraints are used to restrict the versions of build dependencies that are selected
+when building a package during resolution or installation.
+
+Including a package as a constraint will _not_ trigger installation of the package during
+a build; instead, the package must be requested elsewhere in the project's build dependency
+graph.
+
+!!! note
+    In `uv lock`, `uv sync`, and `uv run`, uv will only read `build-constraint-dependencies` from
+    the `pyproject.toml` at the workspace root, and will ignore any declarations in other
+    workspace members or `uv.toml` files.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+# Ensure that the setuptools v60.0.0 is used whenever a package has a build dependency
+# on setuptools.
+build-constraint-dependencies = ["setuptools==60.0.0"]
+```
+
+---
+
 ### [`conflicts`](#conflicts) {: #conflicts }
 
-Conflicting extras or groups may be declared here.
+Declare collections of extras or dependency groups that are conflicting
+(i.e., mutually exclusive).
 
-It's useful to declare conflicts when, for example, two or more extras
-have mutually incompatible dependencies. Extra `foo` might depend
-on `numpy==2.0.0` while extra `bar` might depend on `numpy==2.1.0`.
-These extras cannot be activated at the same time. This usually isn't
-a problem for pip-style workflows, but when using projects in uv that
-support with universal resolution, it will try to produce a resolution
-that satisfies both extras simultaneously.
+It's useful to declare conflicts when two or more extras have mutually
+incompatible dependencies. For example, extra `foo` might depend
+on `numpy==2.0.0` while extra `bar` depends on `numpy==2.1.0`. While these
+dependencies conflict, it may be the case that users are not expected to
+activate both `foo` and `bar` at the same time, making it possible to
+generate a universal resolution for the project despite the incompatibility.
 
-When this happens, resolution will fail, because one cannot install
-both `numpy 2.0.0` and `numpy 2.1.0` into the same environment.
-
-To work around this, you may specify `foo` and `bar` as conflicting
-extras (you can do the same with groups). When doing universal
-resolution in project mode, these extras will get their own "forks"
-distinct from one another in order to permit conflicting dependencies.
-In exchange, if one tries to install from the lock file with both
-conflicting extras activated, installation will fail.
+By making such conflicts explicit, uv can generate a universal resolution
+for a project, taking into account that certain combinations of extras and
+groups are mutually exclusive. In exchange, installation will fail if a
+user attempts to activate both conflicting extras.
 
 **Default value**: `[]`
 
@@ -29,21 +55,22 @@ conflicting extras activated, installation will fail.
 
 ```toml title="pyproject.toml"
 [tool.uv]
-# Require that `package[test1]` and `package[test2]`
-# requirements are resolved in different forks so that they
-# cannot conflict with one another.
+# Require that `package[extra1]` and `package[extra2]` are resolved
+# in different forks so that they cannot conflict with one another.
 conflicts = [
     [
-        { extra = "test1" },
-        { extra = "test2" },
+        { extra = "extra1" },
+        { extra = "extra2" },
     ]
 ]
 
-# Or, to declare conflicting groups:
+# Require that the dependency groups `group1` and `group2`
+# are resolved in different forks so that they cannot conflict
+# with one another.
 conflicts = [
     [
-        { group = "test1" },
-        { group = "test2" },
+        { group = "group1" },
+        { group = "group2" },
     ]
 ]
 ```
@@ -75,7 +102,7 @@ transitive dependencies.
 ```toml title="pyproject.toml"
 [tool.uv]
 # Ensure that the grpcio version is always less than 1.65, if it's requested by a
-# transitive dependency.
+# direct or transitive dependency.
 constraint-dependencies = ["grpcio<1.65"]
 ```
 
@@ -107,8 +134,8 @@ not appear in the project's published metadata.
 
 Use of this field is not recommend anymore. Instead, use the `dependency-groups.dev` field
 which is a standardized way to declare development dependencies. The contents of
-`tool.uv.dev-dependencies` and `dependency-groups.dev` are combined to determine the the
-final requirements of the `dev` dependency group.
+`tool.uv.dev-dependencies` and `dependency-groups.dev` are combined to determine the final
+requirements of the `dev` dependency group.
 
 **Default value**: `[]`
 
@@ -131,7 +158,7 @@ By default, uv will resolve for all possible environments during a `uv lock` ope
 However, you can restrict the set of supported environments to improve performance and avoid
 unsatisfiable branches in the solution space.
 
-These environments will also respected when `uv pip compile` is invoked with the
+These environments will also be respected when `uv pip compile` is invoked with the
 `--universal` flag.
 
 **Default value**: `[]`
@@ -161,7 +188,7 @@ higher priority than any indexes specified via [`index_url`](#index-url) or
 [`extra_index_url`](#extra-index-url). uv will only consider the first index that contains
 a given package, unless an alternative [index strategy](#index-strategy) is specified.
 
-If an index is marked as `explicit = true`, it will be used exclusively for those
+If an index is marked as `explicit = true`, it will be used exclusively for the
 dependencies that select it explicitly via `[tool.uv.sources]`, as in:
 
 ```toml
@@ -269,6 +296,45 @@ that the project adheres to a structure that adheres to the build backend's expe
 ```toml title="pyproject.toml"
 [tool.uv]
 package = false
+```
+
+---
+
+### [`required-environments`](#required-environments) {: #required-environments }
+
+A list of required platforms, for packages that lack source distributions.
+
+When a package does not have a source distribution, it's availability will be limited to
+the platforms supported by its built distributions (wheels). For example, if a package only
+publishes wheels for Linux, then it won't be installable on macOS or Windows.
+
+By default, uv requires each package to include at least one wheel that is compatible with
+the designated Python version. The `required-environments` setting can be used to ensure that
+the resulting resolution contains wheels for specific platforms, or fails if no such wheels
+are available.
+
+While the `environments` setting _limits_ the set of environments that uv will consider when
+resolving dependencies, `required-environments` _expands_ the set of platforms that uv _must_
+support when resolving dependencies.
+
+For example, `environments = ["sys_platform == 'darwin'"]` would limit uv to solving for
+macOS (and ignoring Linux and Windows). On the other hand, `required-environments = ["sys_platform == 'darwin'"]`
+would _require_ that any package without a source distribution include a wheel for macOS in
+order to be installable.
+
+**Default value**: `[]`
+
+**Type**: `str | list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+# Require that the package is available for macOS ARM and x86 (Intel).
+required-environments = [
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+]
 ```
 
 ---
@@ -2525,7 +2591,7 @@ are already installed.
 <span id="no-deps"></span>
 
 Ignore package dependencies, instead only add those packages explicitly listed
-on the command line to the resulting the requirements file.
+on the command line to the resulting requirements file.
 
 **Default value**: `false`
 

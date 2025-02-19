@@ -189,6 +189,7 @@ fn list_outdated_freeze() {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn list_outdated_git() -> Result<()> {
     let context = TestContext::new("3.12");
 

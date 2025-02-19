@@ -92,36 +92,48 @@ impl PythonInstallation {
         let request = request.unwrap_or(&PythonRequest::Default);
 
         // Search for the installation
-        match Self::find(request, environments, preference, cache) {
-            Ok(venv) => Ok(venv),
-            // If missing and allowed, perform a fetch
-            Err(Error::MissingPython(err))
-                if preference.allows_managed()
-                    && python_downloads.is_automatic()
-                    && client_builder.connectivity.is_online() =>
-            {
-                if let Some(request) = PythonDownloadRequest::from_request(request) {
-                    debug!("Requested Python not found, checking for available download...");
-                    match Self::fetch(
-                        request.fill()?,
-                        client_builder,
-                        cache,
-                        reporter,
-                        python_install_mirror,
-                        pypy_install_mirror,
-                    )
-                    .await
-                    {
-                        Ok(installation) => Ok(installation),
-                        Err(Error::Download(downloads::Error::NoDownloadFound(_))) => {
-                            Err(Error::MissingPython(err))
-                        }
-                        Err(err) => Err(err),
-                    }
-                } else {
-                    Err(Error::MissingPython(err))
-                }
-            }
+        let err = match Self::find(request, environments, preference, cache) {
+            Ok(installation) => return Ok(installation),
+            Err(err) => err,
+        };
+
+        let downloads_enabled = preference.allows_managed()
+            && python_downloads.is_automatic()
+            && client_builder.connectivity.is_online();
+
+        if !downloads_enabled {
+            return Err(err);
+        }
+
+        match err {
+            // If Python is missing, we should attempt a download
+            Error::MissingPython(_) => {}
+            // If we raised a non-critical error, we should attempt a download
+            Error::Discovery(ref err) if !err.is_critical() => {}
+            // Otherwise, this is fatal
+            _ => return Err(err),
+        }
+
+        // If we can't convert the request to a download, throw the original error
+        let Some(request) = PythonDownloadRequest::from_request(request) else {
+            return Err(err);
+        };
+
+        debug!("Requested Python not found, checking for available download...");
+        match Self::fetch(
+            request.fill()?,
+            client_builder,
+            cache,
+            reporter,
+            python_install_mirror,
+            pypy_install_mirror,
+        )
+        .await
+        {
+            Ok(installation) => Ok(installation),
+            // Throw the original error if we couldn't find a download
+            Err(Error::Download(downloads::Error::NoDownloadFound(_))) => Err(err),
+            // But if the download failed, throw that error
             Err(err) => Err(err),
         }
     }
@@ -161,14 +173,17 @@ impl PythonInstallation {
             DownloadResult::Fetched(path) => path,
         };
 
-        let installed = ManagedPythonInstallation::new(path)?;
+        let installed = ManagedPythonInstallation::new(path, download);
         installed.ensure_externally_managed()?;
         installed.ensure_sysconfig_patched()?;
         installed.ensure_canonical_executables()?;
+        if let Err(e) = installed.ensure_dylib_patched() {
+            e.warn_user(&installed);
+        }
 
         Ok(Self {
             source: PythonSource::Managed,
-            interpreter: Interpreter::query(installed.executable(), cache)?,
+            interpreter: Interpreter::query(installed.executable(false), cache)?,
         })
     }
 
@@ -279,7 +294,7 @@ impl PythonInstallationKey {
         }
     }
 
-    pub fn new_from_version(
+    fn new_from_version(
         implementation: LenientImplementationName,
         version: &PythonVersion,
         os: Os,
@@ -315,6 +330,11 @@ impl PythonInstallationKey {
                 .unwrap_or_default()
         ))
         .expect("Python installation keys must have valid Python versions")
+    }
+
+    /// The version in `x.y.z` format.
+    pub fn sys_version(&self) -> String {
+        format!("{}.{}.{}", self.major, self.minor, self.patch)
     }
 
     pub fn arch(&self) -> &Arch {

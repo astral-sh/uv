@@ -1,0 +1,41 @@
+name: Bug report
+description: Report an error or unexpected behavior
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Please review [our guide on interacting with the issue tracker](https://github.com/astral-sh/uv/issues/9452) before opening a new issue.**
+
+  - type: textarea
+    attributes:
+      label: Summary
+      description: |
+        A clear and concise description of the bug, including [a minimal reproducible example](https://docs.astral.sh/uv/reference/troubleshooting/reproducible-examples/).
+        If we cannot reproduce the bug, it is unlikely that we will be able to help you.
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: Platform
+      description: What operating system and architecture are you using? (see `uname -orsm`)
+      placeholder: e.g., macOS 14 arm64, Windows 11 x86_64, Ubuntu 20.04 amd64
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: Version
+      description: What version of uv are you using? (see `uv version`)
+      placeholder: e.g., uv 0.5.20 (1c17662b3 2025-01-15)
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: Python version
+      description: What version of Python are you using? (see `uv run python --version`)
+      placeholder: e.g., Python 3.12.6
+    validations:
+      required: false

@@ -72,7 +72,11 @@ uv run [OPTIONS] [COMMAND]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--all-extras</code></dt><dd><p>Include all optional dependencies.</p>
+<dl class="cli-reference"><dt><code>--active</code></dt><dd><p>Prefer the active virtual environment over the project&#8217;s virtual environment.</p>
+
+<p>If the project virtual environment is active or no virtual environment is active, this has no effect.</p>
+
+</dd><dt><code>--all-extras</code></dt><dd><p>Include all optional dependencies.</p>
 
 <p>Optional dependencies are defined via <code>project.optional-dependencies</code> in a <code>pyproject.toml</code>.</p>
 
@@ -205,7 +209,7 @@ uv run [OPTIONS] [COMMAND]
 
 </dd><dt><code>--gui-script</code></dt><dd><p>Run the given path as a Python GUI script.</p>
 
-<p>Using <code>--gui-script</code> will attempt to parse the path as a PEP 723 script and run it with pythonw.exe, irrespective of its extension. Only available on Windows.</p>
+<p>Using <code>--gui-script</code> will attempt to parse the path as a PEP 723 script and run it with <code>pythonw.exe</code>, irrespective of its extension. Only available on Windows.</p>
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
@@ -295,8 +299,10 @@ uv run [OPTIONS] [COMMAND]
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -320,9 +326,13 @@ uv run [OPTIONS] [COMMAND]
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
-</dd><dt><code>--no-dev</code></dt><dd><p>Omit the development dependency group.</p>
+</dd><dt><code>--no-default-groups</code></dt><dd><p>Ignore the the default dependency groups.</p>
 
-<p>This option is an alias of <code>--no-group dev</code>.</p>
+<p>uv includes the groups defined in <code>tool.uv.default-groups</code> by default. This disables that option, however, specific groups can still be included with <code>--group</code>.</p>
+
+</dd><dt><code>--no-dev</code></dt><dd><p>Disable the development dependency group.</p>
+
+<p>This option is an alias of <code>--no-group dev</code>. See <code>--no-default-groups</code> to disable all default groups instead.</p>
 
 <p>This option is only available when running in a project.</p>
 
@@ -335,7 +345,9 @@ uv run [OPTIONS] [COMMAND]
 
 <p>May be provided multiple times.</p>
 
-</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified dependency group.</p>
+</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
+
+<p>This options always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 
 <p>May be provided multiple times.</p>
 
@@ -354,7 +366,7 @@ uv run [OPTIONS] [COMMAND]
 
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--no-sync</code></dt><dd><p>Avoid syncing the virtual environment.</p>
 
@@ -368,15 +380,15 @@ uv run [OPTIONS] [COMMAND]
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--only-dev</code></dt><dd><p>Only include the development dependency group.</p>
 
-<p>Omit other dependencies. The project itself will also be omitted.</p>
+<p>The project and its dependencies will be omitted.</p>
 
-<p>This option is an alias for <code>--only-group dev</code>.</p>
+<p>This option is an alias for <code>--only-group dev</code>. Implies <code>--no-default-groups</code>.</p>
 
 </dd><dt><code>--only-group</code> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 
-<p>May be provided multiple times.</p>
+<p>The project and its dependencies will be omitted.</p>
 
-<p>The project itself will also be omitted.</p>
+<p>May be provided multiple times. Implies <code>--no-default-groups</code>.</p>
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Run the command in a specific package in the workspace.</p>
 
@@ -475,7 +487,7 @@ uv run [OPTIONS] [COMMAND]
 
 <p>When used in a project, these dependencies will be layered on top of the project environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified by the project.</p>
 
-</dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Run with the given packages installed as editables.</p>
+</dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Run with the given packages installed in editable mode.</p>
 
 <p>When used in a project, these dependencies will be layered on top of the project environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified by the project.</p>
 
@@ -547,6 +559,10 @@ uv init [OPTIONS] [PATH]
 
 <li><code>none</code>:  Do not infer the author information</li>
 </ul>
+</dd><dt><code>--bare</code></dt><dd><p>Only create a <code>pyproject.toml</code>.</p>
+
+<p>Disables creating extra files like <code>README.md</code>, the <code>src/</code> tree, <code>.python-version</code> files, etc.</p>
+
 </dd><dt><code>--build-backend</code> <i>build-backend</i></dt><dd><p>Initialize a build-backend of choice for the project.</p>
 
 <p>Implicitly sets <code>--package</code>.</p>
@@ -624,6 +640,8 @@ uv init [OPTIONS] [PATH]
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
+</dd><dt><code>--no-description</code></dt><dd><p>Disable the description for the project</p>
+
 </dd><dt><code>--no-package</code></dt><dd><p>Do not set up the project to be built as a Python package.</p>
 
 <p>Does not include a <code>[build-system]</code> for the project.</p>
@@ -750,7 +768,11 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+<dl class="cli-reference"><dt><code>--active</code></dt><dd><p>Prefer the active virtual environment over the project&#8217;s virtual environment.</p>
+
+<p>If the project virtual environment is active or no virtual environment is active, this has no effect.</p>
+
+</dd><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 
 <p>Can be provided multiple times.</p>
 
@@ -938,8 +960,10 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -972,7 +996,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--no-sync</code></dt><dd><p>Avoid syncing the virtual environment</p>
 
@@ -1119,7 +1143,11 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+<dl class="cli-reference"><dt><code>--active</code></dt><dd><p>Prefer the active virtual environment over the project&#8217;s virtual environment.</p>
+
+<p>If the project virtual environment is active or no virtual environment is active, this has no effect.</p>
+
+</dd><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 
 <p>Can be provided multiple times.</p>
 
@@ -1295,8 +1323,10 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -1329,7 +1359,7 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--no-sync</code></dt><dd><p>Avoid syncing the virtual environment after re-locking the project</p>
 
@@ -1456,7 +1486,11 @@ uv sync [OPTIONS]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--all-extras</code></dt><dd><p>Include all optional dependencies.</p>
+<dl class="cli-reference"><dt><code>--active</code></dt><dd><p>Sync dependencies to the active virtual environment.</p>
+
+<p>Instead of creating or updating the virtual environment for the project or script, the active virtual environment will be preferred, if the <code>VIRTUAL_ENV</code> environment variable is set.</p>
+
+</dd><dt><code>--all-extras</code></dt><dd><p>Include all optional dependencies.</p>
 
 <p>When two or more extras are declared as conflicting in <code>tool.uv.conflicts</code>, using this flag will always result in an error.</p>
 
@@ -1527,6 +1561,10 @@ uv sync [OPTIONS]
 <p>Relative paths are resolved with the given directory as the base.</p>
 
 <p>See <code>--project</code> to only change the project root directory.</p>
+
+</dd><dt><code>--dry-run</code></dt><dd><p>Perform a dry run, without writing the lockfile or modifying the project environment.</p>
+
+<p>In dry-run mode, uv will resolve the project&#8217;s dependencies and report on the resulting changes to both the lockfile and the project environment, but will not modify either.</p>
 
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 
@@ -1660,8 +1698,10 @@ uv sync [OPTIONS]
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -1685,9 +1725,13 @@ uv sync [OPTIONS]
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
-</dd><dt><code>--no-dev</code></dt><dd><p>Omit the development dependency group.</p>
+</dd><dt><code>--no-default-groups</code></dt><dd><p>Ignore the the default dependency groups.</p>
 
-<p>This option is an alias for <code>--no-group dev</code>.</p>
+<p>uv includes the groups defined in <code>tool.uv.default-groups</code> by default. This disables that option, however, specific groups can still be included with <code>--group</code>.</p>
+
+</dd><dt><code>--no-dev</code></dt><dd><p>Disable the development dependency group.</p>
+
+<p>This option is an alias of <code>--no-group dev</code>. See <code>--no-default-groups</code> to disable all default groups instead.</p>
 
 </dd><dt><code>--no-editable</code></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
 
@@ -1695,7 +1739,9 @@ uv sync [OPTIONS]
 
 <p>May be provided multiple times.</p>
 
-</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified dependency group.</p>
+</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
+
+<p>This options always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 
 <p>May be provided multiple times.</p>
 
@@ -1720,7 +1766,7 @@ uv sync [OPTIONS]
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -1729,15 +1775,15 @@ uv sync [OPTIONS]
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--only-dev</code></dt><dd><p>Only include the development dependency group.</p>
 
-<p>Omit other dependencies. The project itself will also be omitted.</p>
+<p>The project and its dependencies will be omitted.</p>
 
-<p>This option is an alias for <code>--only-group dev</code>.</p>
+<p>This option is an alias for <code>--only-group dev</code>. Implies <code>--no-default-groups</code>.</p>
 
 </dd><dt><code>--only-group</code> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 
-<p>May be provided multiple times.</p>
+<p>The project and its dependencies will be omitted.</p>
 
-<p>The project itself will also be omitted.</p>
+<p>May be provided multiple times. Implies <code>--no-default-groups</code>.</p>
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Sync for a specific package in the workspace.</p>
 
@@ -1822,6 +1868,10 @@ uv sync [OPTIONS]
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
+</dd><dt><code>--script</code> <i>script</i></dt><dd><p>Sync the environment for a Python script, rather than the current project.</p>
+
+<p>If provided, uv will sync the dependencies based on the script&#8217;s inline metadata table, in adherence with PEP 723.</p>
+
 </dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
 </dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
@@ -2021,8 +2071,10 @@ uv lock [OPTIONS]
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -2055,7 +2107,7 @@ uv lock [OPTIONS]
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -2366,8 +2418,10 @@ uv export [OPTIONS]
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -2391,9 +2445,13 @@ uv export [OPTIONS]
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
-</dd><dt><code>--no-dev</code></dt><dd><p>Omit the development dependency group.</p>
+</dd><dt><code>--no-default-groups</code></dt><dd><p>Ignore the the default dependency groups.</p>
 
-<p>This option is an alias for <code>--no-group dev</code>.</p>
+<p>uv includes the groups defined in <code>tool.uv.default-groups</code> by default. This disables that option, however, specific groups can still be included with <code>--group</code>.</p>
+
+</dd><dt><code>--no-dev</code></dt><dd><p>Disable the development dependency group.</p>
+
+<p>This option is an alias of <code>--no-group dev</code>. See <code>--no-default-groups</code> to disable all default groups instead.</p>
 
 </dd><dt><code>--no-editable</code></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
 
@@ -2413,7 +2471,9 @@ uv export [OPTIONS]
 
 <p>May be provided multiple times.</p>
 
-</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified dependency group.</p>
+</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
+
+<p>This options always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 
 <p>May be provided multiple times.</p>
 
@@ -2430,7 +2490,7 @@ uv export [OPTIONS]
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -2439,15 +2499,15 @@ uv export [OPTIONS]
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--only-dev</code></dt><dd><p>Only include the development dependency group.</p>
 
-<p>Omit other dependencies. The project itself will also be omitted.</p>
+<p>The project and its dependencies will be omitted.</p>
 
-<p>This option is an alias for <code>--only-group dev</code>.</p>
+<p>This option is an alias for <code>--only-group dev</code>. Implies <code>--no-default-groups</code>.</p>
 
 </dd><dt><code>--only-group</code> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 
-<p>May be provided multiple times.</p>
+<p>The project and its dependencies will be omitted.</p>
 
-<p>The project itself will also be omitted.</p>
+<p>May be provided multiple times. Implies <code>--no-default-groups</code>.</p>
 
 </dd><dt><code>--output-file</code>, <code>-o</code> <i>output-file</i></dt><dd><p>Write the exported requirements to the given file</p>
 
@@ -2738,8 +2798,10 @@ uv tree [OPTIONS]
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -2765,11 +2827,17 @@ uv tree [OPTIONS]
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
 </dd><dt><code>--no-dedupe</code></dt><dd><p>Do not de-duplicate repeated dependencies. Usually, when a package has already displayed its dependencies, further occurrences will not re-display its dependencies, and will include a (*) to indicate it has already been shown. This flag will cause those duplicates to be repeated</p>
 
-</dd><dt><code>--no-dev</code></dt><dd><p>Omit the development dependency group.</p>
+</dd><dt><code>--no-default-groups</code></dt><dd><p>Ignore the the default dependency groups.</p>
 
-<p>This option is an alias for <code>--no-group dev</code>.</p>
+<p>uv includes the groups defined in <code>tool.uv.default-groups</code> by default. This disables that option, however, specific groups can still be included with <code>--group</code>.</p>
 
-</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified dependency group.</p>
+</dd><dt><code>--no-dev</code></dt><dd><p>Disable the development dependency group.</p>
+
+<p>This option is an alias of <code>--no-group dev</code>. See <code>--no-default-groups</code> to disable all default groups instead.</p>
+
+</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
+
+<p>This options always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 
 <p>May be provided multiple times.</p>
 
@@ -2782,7 +2850,7 @@ uv tree [OPTIONS]
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -2791,15 +2859,15 @@ uv tree [OPTIONS]
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--only-dev</code></dt><dd><p>Only include the development dependency group.</p>
 
-<p>Omit other dependencies. The project itself will also be omitted.</p>
+<p>The project and its dependencies will be omitted.</p>
 
-<p>This option is an alias for <code>--only-group dev</code>.</p>
+<p>This option is an alias for <code>--only-group dev</code>. Implies <code>--no-default-groups</code>.</p>
 
 </dd><dt><code>--only-group</code> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 
-<p>May be provided multiple times.</p>
+<p>The project and its dependencies will be omitted.</p>
 
-<p>The project itself will also be omitted.</p>
+<p>May be provided multiple times. Implies <code>--no-default-groups</code>.</p>
 
 </dd><dt><code>--outdated</code></dt><dd><p>Show the latest available version of each package in the tree</p>
 
@@ -3021,6 +3089,8 @@ By default, the package to install is assumed to match the command name.
 
 The name of the command can include an exact version in the format `<package>@<version>`, e.g., `uv tool run ruff@0.3.0`. If more complex version specification is desired or if the command is provided by a different package, use `--from`.
 
+`uvx` can be used to invoke Python, e.g., with `uvx python` or `uvx python@<version>`. A Python interpreter will be started in an isolated virtual environment.
+
 If the tool was previously installed, i.e., via `uv tool install`, the installed version will be used unless a version is requested or the `--isolated` flag is used.
 
 `uvx` is provided as a convenient alias for `uv tool run`, their behavior is identical.
@@ -3203,8 +3273,10 @@ uv tool run [OPTIONS] [COMMAND]
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -3237,7 +3309,7 @@ uv tool run [OPTIONS] [COMMAND]
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -3329,7 +3401,7 @@ uv tool run [OPTIONS] [COMMAND]
 
 </dd><dt><code>--with</code> <i>with</i></dt><dd><p>Run with the given packages installed</p>
 
-</dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Run with the given packages installed as editables</p>
+</dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Run with the given packages installed in editable mode</p>
 
 <p>When used in a project, these dependencies will be layered on top of the uv tool&#8217;s environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified.</p>
 
@@ -3422,7 +3494,9 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
-</dd><dt><code>--editable</code>, <code>-e</code></dt><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
+</dd><dt><code>--editable</code>, <code>-e</code></dt><dd><p>Install the target package in editable mode, such that changes in the package&#8217;s source directory are reflected without reinstallation</p>
+
+</dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
 
@@ -3530,8 +3604,10 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -3564,7 +3640,7 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -3663,7 +3739,7 @@ uv tool install [OPTIONS] <PACKAGE>
 
 </dd><dt><code>--with</code> <i>with</i></dt><dd><p>Include the following extra requirements</p>
 
-</dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Include the given packages as editables</p>
+</dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Include the given packages in editable mode</p>
 
 </dd><dt><code>--with-requirements</code> <i>with-requirements</i></dt><dd><p>Run all requirements listed in the given <code>requirements.txt</code> files</p>
 
@@ -3853,8 +3929,10 @@ uv tool upgrade [OPTIONS] <NAME>...
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -3887,7 +3965,7 @@ uv tool upgrade [OPTIONS] <NAME>...
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -4636,6 +4714,16 @@ uv python list [OPTIONS]
 
 <p>By default, available downloads for the current platform are shown.</p>
 
+</dd><dt><code>--output-format</code> <i>output-format</i></dt><dd><p>Select the output format</p>
+
+<p>[default: text]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>text</code>:  Plain text (for humans)</li>
+
+<li><code>json</code>:  JSON (for computers)</li>
+</ul>
 </dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
@@ -4680,13 +4768,13 @@ uv python list [OPTIONS]
 
 Download and install Python versions.
 
-Multiple Python versions may be requested.
-
-Supports CPython and PyPy. CPython distributions are downloaded from the Astral `python-build-standalone` project. PyPy distributions are downloaded from `python.org`.
+Supports CPython and PyPy. CPython distributions are downloaded from the Astral `python-build-standalone` project. PyPy distributions are downloaded from `python.org`. The available Python versions are bundled with each uv release. To install new Python versions, you may need upgrade uv.
 
 Python versions are installed into the uv Python directory, which can be retrieved with `uv python dir`.
 
 A `python` executable is not made globally available, managed Python versions are only used in uv commands or in active virtual environments. There is experimental support for adding Python executables to the `PATH` — use the `--preview` flag to enable this behavior.
+
+Multiple Python versions may be requested.
 
 See `uv help python` to view supported request formats.
 
@@ -4700,7 +4788,7 @@ uv python install [OPTIONS] [TARGETS]...
 
 <dl class="cli-reference"><dt><code>TARGETS</code></dt><dd><p>The Python version(s) to install.</p>
 
-<p>If not provided, the requested Python version(s) will be read from the <code>.python-versions</code> or <code>.python-version</code> files. If neither file is present, uv will check if it has installed any Python versions. If not, it will install the latest stable version of Python.</p>
+<p>If not provided, the requested Python version(s) will be read from the <code>UV_PYTHON</code> environment variable then <code>.python-versions</code> or <code>.python-version</code> files. If none of the above are present, uv will check if it has installed any Python versions. If not, it will install the latest stable version of Python.</p>
 
 <p>See <a href="#uv-python">uv python</a> to view supported request formats.</p>
 
@@ -5685,7 +5773,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 </dd><dt><code>--no-cache</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
-</dd><dt><code>--no-deps</code></dt><dd><p>Ignore package dependencies, instead only add those packages explicitly listed on the command line to the resulting the requirements file</p>
+</dd><dt><code>--no-deps</code></dt><dd><p>Ignore package dependencies, instead only add those packages explicitly listed on the command line to the resulting requirements file</p>
 
 </dd><dt><code>--no-emit-package</code> <i>no-emit-package</i></dt><dd><p>Specify a package to omit from the output resolution. Its dependencies will still be included in the resolution. Equivalent to pip-compile&#8217;s <code>--unsafe-package</code> option</p>
 
@@ -5700,7 +5788,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--no-strip-extras</code></dt><dd><p>Include extras in the output file.</p>
 
@@ -5760,17 +5848,21 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt><code>--python</code> <i>python</i></dt><dd><p>The Python interpreter to use during resolution.</p>
+</dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use during resolution.</p>
 
 <p>A Python interpreter is required for building source distributions to determine package metadata when there are not wheels.</p>
 
 <p>The interpreter is also used to determine the default minimum Python version, unless <code>--python-version</code> is provided.</p>
+
+<p>This option respects <code>UV_PYTHON</code>, but when set via environment variable, it is overridden by <code>--python-version</code>.</p>
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--python-platform</code> <i>python-platform</i></dt><dd><p>The platform for which requirements should be resolved.</p>
 
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
+
+<p>When targeting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
 
 <p>Possible values:</p>
 
@@ -5865,7 +5957,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
 </ul>
-</dd><dt><code>--python-version</code>, <code>-p</code> <i>python-version</i></dt><dd><p>The Python version to use for resolution.</p>
+</dd><dt><code>--python-version</code> <i>python-version</i></dt><dd><p>The Python version to use for resolution.</p>
 
 <p>For example, <code>3.8</code> or <code>3.8.17</code>.</p>
 
@@ -6132,7 +6224,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--no-verify-hashes</code></dt><dd><p>Disable validation of hashes in the requirements file.</p>
 
@@ -6174,6 +6266,8 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 </dd><dt><code>--python-platform</code> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
 
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
+
+<p>When targeting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
 
 <p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
 
@@ -6565,7 +6659,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--no-verify-hashes</code></dt><dd><p>Disable validation of hashes in the requirements file.</p>
 
@@ -6632,6 +6726,8 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 </dd><dt><code>--python-platform</code> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
 
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
+
+<p>When targeting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
 
 <p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
 
@@ -7183,7 +7279,7 @@ uv pip list [OPTIONS]
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
 <p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
-</dd><dt><code>--format</code> <i>format</i></dt><dd><p>Select the output format between: <code>columns</code> (default), <code>freeze</code>, or <code>json</code></p>
+</dd><dt><code>--format</code> <i>format</i></dt><dd><p>Select the output format</p>
 
 <p>[default: columns]</p>
 <p>Possible values:</p>
@@ -8025,7 +8121,7 @@ uv venv [OPTIONS] [PATH]
 
 <p>By default, the prompt is dependent on whether a path was provided to <code>uv venv</code>. If provided (e.g, <code>uv venv project</code>), the prompt is set to the directory name. If not provided (<code>uv venv</code>), the prompt is set to the current directory&#8217;s name.</p>
 
-<p>If &quot;.&quot; is provided, the the current directory name will be used regardless of whether a path was provided to <code>uv venv</code>.</p>
+<p>If &quot;.&quot; is provided, the current directory name will be used regardless of whether a path was provided to <code>uv venv</code>.</p>
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for the virtual environment.</p>
 
@@ -8052,6 +8148,10 @@ uv venv [OPTIONS] [PATH]
 </ul>
 </dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
+</dd><dt><code>--refresh</code></dt><dd><p>Refresh all cached data</p>
+
+</dd><dt><code>--refresh-package</code> <i>refresh-package</i></dt><dd><p>Refresh cached data for a specific package</p>
+
 </dd><dt><code>--relocatable</code></dt><dd><p>Make the virtual environment relocatable.</p>
 
 <p>A relocatable virtual environment can be moved around and redistributed without invalidating its associated entrypoint and activation scripts.</p>
@@ -8062,8 +8162,9 @@ uv venv [OPTIONS] [PATH]
 
 </dd><dt><code>--seed</code></dt><dd><p>Install seed packages (one or more of: <code>pip</code>, <code>setuptools</code>, and <code>wheel</code>) into the virtual environment.</p>
 
-<p>Note <code>setuptools</code> and <code>wheel</code> are not included in Python 3.12+ environments.</p>
+<p>Note that <code>setuptools</code> and <code>wheel</code> are not included in Python 3.12+ environments.</p>
 
+<p>May also be set with the <code>UV_VENV_SEED</code> environment variable.</p>
 </dd><dt><code>--system-site-packages</code></dt><dd><p>Give the virtual environment access to the system site packages directory.</p>
 
 <p>Unlike <code>pip</code>, when a virtual environment is created with <code>--system-site-packages</code>, uv will <em>not</em> take system site packages into account when running commands like <code>uv pip list</code> or <code>uv pip install</code>. The <code>--system-site-packages</code> flag will provide the virtual environment with access to the system site packages directory at runtime, but will not affect the behavior of uv commands.</p>
@@ -8274,8 +8375,10 @@ uv build [OPTIONS] [SRC]
 
 <p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
 
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
 </dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -8310,7 +8413,7 @@ uv build [OPTIONS] [SRC]
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 
 </dd><dt><code>--no-verify-hashes</code></dt><dd><p>Disable validation of hashes in the requirements file.</p>
 

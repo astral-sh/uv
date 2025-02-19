@@ -18,6 +18,9 @@ pub struct VirtualEnvironment {
     /// (Unix, Python 3.11).
     pub executable: PathBuf,
 
+    /// The path to the base executable for the environment, within the `home` directory.
+    pub base_executable: PathBuf,
+
     /// The [`Scheme`] paths for the virtualenv, as returned by (e.g.) `sysconfig.get_paths()`.
     pub scheme: Scheme,
 }

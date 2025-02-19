@@ -1,4 +1,4 @@
-use std::{fmt::Debug, num::NonZeroUsize, path::PathBuf};
+use std::{fmt::Debug, num::NonZeroUsize, path::Path, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -9,9 +9,9 @@ use uv_configuration::{
     TargetTriple, TrustedHost, TrustedPublishing,
 };
 use uv_distribution_types::{
-    Index, IndexUrl, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
+    Index, IndexUrl, IndexUrlError, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
 };
-use uv_install_wheel::linker::LinkMode;
+use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::Requirement;
@@ -108,7 +108,13 @@ pub struct Options {
     pub constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub build_constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
     pub environments: Option<SupportedEnvironments>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub required_environments: Option<SupportedEnvironments>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
@@ -143,6 +149,15 @@ impl Options {
             top_level,
             ..Default::default()
         }
+    }
+
+    /// Resolve the [`Options`] relative to the given root directory.
+    pub fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        Ok(Self {
+            top_level: self.top_level.relative_to(root_dir)?,
+            pip: self.pip.map(|pip| pip.relative_to(root_dir)).transpose()?,
+            ..self
+        })
     }
 }
 
@@ -723,6 +738,46 @@ pub struct ResolverInstallerOptions {
     pub no_binary_package: Option<Vec<PackageName>>,
 }
 
+impl ResolverInstallerOptions {
+    /// Resolve the [`ResolverInstallerOptions`] relative to the given root directory.
+    pub fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        Ok(Self {
+            index: self
+                .index
+                .map(|index| {
+                    index
+                        .into_iter()
+                        .map(|index| index.relative_to(root_dir))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()?,
+            index_url: self
+                .index_url
+                .map(|index_url| index_url.relative_to(root_dir))
+                .transpose()?,
+            extra_index_url: self
+                .extra_index_url
+                .map(|extra_index_url| {
+                    extra_index_url
+                        .into_iter()
+                        .map(|extra_index_url| extra_index_url.relative_to(root_dir))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()?,
+            find_links: self
+                .find_links
+                .map(|find_links| {
+                    find_links
+                        .into_iter()
+                        .map(|find_link| find_link.relative_to(root_dir))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()?,
+            ..self
+        })
+    }
+}
+
 /// Shared settings, relevant to all operations that might create managed python installations.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(rename_all = "kebab-case")]
@@ -1063,7 +1118,7 @@ pub struct PipOptions {
     )]
     pub no_extra: Option<Vec<ExtraName>>,
     /// Ignore package dependencies, instead only add those packages explicitly listed
-    /// on the command line to the resulting the requirements file.
+    /// on the command line to the resulting requirements file.
     #[option(
         default = "false",
         value_type = "bool",
@@ -1480,6 +1535,46 @@ pub struct PipOptions {
     pub reinstall_package: Option<Vec<PackageName>>,
 }
 
+impl PipOptions {
+    /// Resolve the [`PipOptions`] relative to the given root directory.
+    pub fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        Ok(Self {
+            index: self
+                .index
+                .map(|index| {
+                    index
+                        .into_iter()
+                        .map(|index| index.relative_to(root_dir))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()?,
+            index_url: self
+                .index_url
+                .map(|index_url| index_url.relative_to(root_dir))
+                .transpose()?,
+            extra_index_url: self
+                .extra_index_url
+                .map(|extra_index_url| {
+                    extra_index_url
+                        .into_iter()
+                        .map(|extra_index_url| extra_index_url.relative_to(root_dir))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()?,
+            find_links: self
+                .find_links
+                .map(|find_links| {
+                    find_links
+                        .into_iter()
+                        .map(|find_link| find_link.relative_to(root_dir))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()?,
+            ..self
+        })
+    }
+}
+
 impl From<ResolverInstallerOptions> for ResolverOptions {
     fn from(value: ResolverInstallerOptions) -> Self {
         Self {
@@ -1700,7 +1795,9 @@ pub struct OptionsWire {
     // They're respected in both `pyproject.toml` and `uv.toml` files.
     override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    build_constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     environments: Option<SupportedEnvironments>,
+    required_environments: Option<SupportedEnvironments>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
@@ -1765,7 +1862,9 @@ impl From<OptionsWire> for Options {
             cache_keys,
             override_dependencies,
             constraint_dependencies,
+            build_constraint_dependencies,
             environments,
+            required_environments,
             conflicts,
             publish_url,
             trusted_publishing,
@@ -1828,7 +1927,9 @@ impl From<OptionsWire> for Options {
             cache_keys,
             override_dependencies,
             constraint_dependencies,
+            build_constraint_dependencies,
             environments,
+            required_environments,
             install_mirrors: PythonInstallMirrors::resolve(
                 python_install_mirror,
                 pypy_install_mirror,

@@ -12,7 +12,7 @@ use tracing::trace;
 use uv_distribution_types::{
     DerivationChain, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl, RequestedDist,
 };
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 use uv_pep440::{LocalVersionSlice, Version};
 use uv_platform_tags::Tags;
 use uv_static::EnvVars;
@@ -47,13 +47,6 @@ pub enum ResolveError {
 
     #[error("Attempted to wait on an unregistered task: `{_0}`")]
     UnregisteredTask(String),
-
-    #[error("Found conflicting extra `{extra}` unconditionally enabled in `{requirement}`")]
-    ConflictingExtra {
-        // Boxed because `Requirement` is large.
-        requirement: Box<uv_pypi_types::Requirement>,
-        extra: ExtraName,
-    },
 
     #[error(
         "Requirements contain conflicting URLs for package `{package_name}`{}:\n- {}",
@@ -119,6 +112,19 @@ pub enum ResolveError {
 
     #[error("Package `{0}` is unavailable")]
     PackageUnavailable(PackageName),
+
+    #[error("Invalid extra value in conflict marker: {reason}: {raw_extra}")]
+    InvalidExtraInConflictMarker {
+        reason: String,
+        raw_extra: ExtraName,
+    },
+
+    #[error("Invalid {kind} value in conflict marker: {name_error}")]
+    InvalidValueInConflictMarker {
+        kind: &'static str,
+        #[source]
+        name_error: InvalidNameError,
+    },
 }
 
 impl<T> From<tokio::sync::mpsc::error::SendError<T>> for ResolveError {
@@ -447,6 +453,7 @@ impl std::fmt::Display for NoSolutionError {
             &self.fork_urls,
             &self.fork_indexes,
             &self.env,
+            self.tags.as_ref(),
             &self.workspace_members,
             &self.options,
             &mut additional_hints,

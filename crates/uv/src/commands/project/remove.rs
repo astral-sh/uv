@@ -10,10 +10,9 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{
-    Concurrency, DevGroupsManifest, EditableMode, ExtrasSpecification, InstallOptions, LowerBound,
+    Concurrency, DevGroupsSpecification, DryRun, EditableMode, ExtrasSpecification, InstallOptions,
     PreviewMode, TrustedHost,
 };
-use uv_dispatch::SharedState;
 use uv_fs::Simplified;
 use uv_normalize::DEV_DEPENDENCIES;
 use uv_pep508::PackageName;
@@ -32,7 +31,8 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, ProjectError, ProjectInterpreter, ScriptInterpreter,
+    default_dependency_groups, ProjectEnvironment, ProjectError, ProjectInterpreter,
+    ScriptInterpreter, UniversalState,
 };
 use crate::commands::{diagnostics, project, ExitStatus};
 use crate::printer::Printer;
@@ -44,6 +44,7 @@ pub(crate) async fn remove(
     project_dir: &Path,
     locked: bool,
     frozen: bool,
+    active: Option<bool>,
     no_sync: bool,
     packages: Vec<PackageName>,
     dependency_type: DependencyType,
@@ -210,6 +211,7 @@ pub(crate) async fn remove(
                     allow_insecure_host,
                     &install_mirrors,
                     no_config,
+                    active,
                     cache,
                     printer,
                 )
@@ -219,7 +221,7 @@ pub(crate) async fn remove(
                 AddTarget::Project(project, Box::new(PythonTarget::Interpreter(interpreter)))
             } else {
                 // Discover or create the virtual environment.
-                let venv = project::get_or_init_environment(
+                let environment = ProjectEnvironment::get_or_init(
                     project.workspace(),
                     python.as_deref().map(PythonRequest::parse),
                     &install_mirrors,
@@ -229,12 +231,15 @@ pub(crate) async fn remove(
                     native_tls,
                     allow_insecure_host,
                     no_config,
+                    active,
                     cache,
+                    DryRun::Disabled,
                     printer,
                 )
-                .await?;
+                .await?
+                .into_environment()?;
 
-                AddTarget::Project(project, Box::new(PythonTarget::Environment(venv)))
+                AddTarget::Project(project, Box::new(PythonTarget::Environment(environment)))
             }
         }
         RemoveTarget::Script(script) => {
@@ -248,6 +253,7 @@ pub(crate) async fn remove(
                 allow_insecure_host,
                 &install_mirrors,
                 no_config,
+                active,
                 cache,
                 printer,
             )
@@ -266,14 +272,13 @@ pub(crate) async fn remove(
     };
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let state = UniversalState::default();
 
     // Lock and sync the environment, if necessary.
     let lock = match project::lock::do_safe_lock(
         mode,
         (&target).into(),
         settings.as_ref().into(),
-        LowerBound::Allow,
         &state,
         Box::new(DefaultResolveLogger),
         connectivity,
@@ -288,7 +293,7 @@ pub(crate) async fn remove(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
+            return diagnostics::OperationDiagnostic::native_tls(native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
@@ -326,15 +331,18 @@ pub(crate) async fn remove(
         },
     };
 
+    let state = state.fork();
+
     match project::sync::do_sync(
         target,
         venv,
         &extras,
-        &DevGroupsManifest::from_defaults(defaults),
+        &DevGroupsSpecification::default().with_defaults(defaults),
         EditableMode::Editable,
         install_options,
         Modifications::Exact,
         settings.as_ref().into(),
+        &state,
         Box::new(DefaultInstallLogger),
         installer_metadata,
         connectivity,
@@ -342,6 +350,7 @@ pub(crate) async fn remove(
         native_tls,
         allow_insecure_host,
         cache,
+        DryRun::Disabled,
         printer,
         preview,
     )
@@ -349,7 +358,7 @@ pub(crate) async fn remove(
     {
         Ok(()) => {}
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
+            return diagnostics::OperationDiagnostic::native_tls(native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }

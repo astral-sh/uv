@@ -228,6 +228,11 @@ impl PubGrubPackage {
         }
     }
 
+    /// Returns `true` if this PubGrub package is the root package.
+    pub(crate) fn is_root(&self) -> bool {
+        matches!(&**self, PubGrubPackageInner::Root(_))
+    }
+
     /// Returns `true` if this PubGrub package is a proxy package.
     pub(crate) fn is_proxy(&self) -> bool {
         matches!(
@@ -272,6 +277,11 @@ impl PubGrubPackage {
             PubGrubPackageInner::Dev { .. } => "dev",
             PubGrubPackageInner::Marker { .. } => "marker",
         }
+    }
+
+    /// Returns a new [`PubGrubPackage`] representing the base package with the given name.
+    pub(crate) fn base(name: &PackageName) -> Self {
+        Self::from_package(name.clone(), None, None, MarkerTree::TRUE)
     }
 }
 
@@ -347,5 +357,11 @@ impl std::fmt::Display for PubGrubPackageInner {
                 dev: Some(_),
             } => unreachable!(),
         }
+    }
+}
+
+impl From<&PubGrubPackage> for PubGrubPackage {
+    fn from(package: &PubGrubPackage) -> Self {
+        package.clone()
     }
 }

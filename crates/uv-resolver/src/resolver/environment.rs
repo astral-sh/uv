@@ -8,7 +8,7 @@ use crate::pubgrub::{PubGrubDependency, PubGrubPackage};
 use crate::requires_python::RequiresPythonRange;
 use crate::resolver::ForkState;
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
-use crate::{PythonRequirement, RequiresPython};
+use crate::{PythonRequirement, RequiresPython, ResolveError};
 
 /// Represents one or more marker environments for a resolution.
 ///
@@ -303,7 +303,10 @@ impl ResolverEnvironment {
     /// with an initial set of forked resolver states (e.g., those present in
     /// a lock file), then this creates the initial set of forks from that
     /// configuration.
-    pub(crate) fn initial_forked_states(&self, init: ForkState) -> Vec<ForkState> {
+    pub(crate) fn initial_forked_states(
+        &self,
+        init: ForkState,
+    ) -> Result<Vec<ForkState>, ResolveError> {
         let Kind::Universal {
             ref initial_forks,
             markers: ref _markers,
@@ -311,17 +314,28 @@ impl ResolverEnvironment {
             exclude: ref _exclude,
         } = self.kind
         else {
-            return vec![init];
+            return Ok(vec![init]);
         };
         if initial_forks.is_empty() {
-            return vec![init];
+            return Ok(vec![init]);
         }
         initial_forks
             .iter()
             .rev()
-            .map(|initial_fork| {
-                init.clone()
-                    .with_env(self.narrow_environment(*initial_fork))
+            .filter_map(|&initial_fork| {
+                let combined = UniversalMarker::from_combined(initial_fork);
+                let (include, exclude) = match combined.conflict().filter_rules() {
+                    Ok(rules) => rules,
+                    Err(err) => return Some(Err(err)),
+                };
+                let mut env = self.filter_by_group(
+                    include
+                        .into_iter()
+                        .map(Ok)
+                        .chain(exclude.into_iter().map(Err)),
+                )?;
+                env = env.narrow_environment(combined.pep508());
+                Some(Ok(init.clone().with_env(env)))
             })
             .collect()
     }
@@ -690,17 +704,14 @@ mod tests {
     }
 
     /// Inside a fork whose marker's Python requirement is equal
-    /// to our Requires-Python means that narrowing produces a
-    /// result, but is unchanged from what we started with.
+    /// to our Requires-Python means that narrowing does not produce
+    /// a result.
     #[test]
     fn narrow_python_requirement_forking_no_op() {
         let pyreq = python_requirement("3.10");
         let resolver_env = ResolverEnvironment::universal(vec![])
             .narrow_environment(marker("python_version >= '3.10'"));
-        assert_eq!(
-            resolver_env.narrow_python_requirement(&pyreq),
-            Some(python_requirement("3.10")),
-        );
+        assert_eq!(resolver_env.narrow_python_requirement(&pyreq), None);
     }
 
     /// In this test, we narrow a more relaxed requirement compared to the

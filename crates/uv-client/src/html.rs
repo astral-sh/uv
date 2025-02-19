@@ -1,12 +1,13 @@
 use std::str::FromStr;
 
+use jiff::Timestamp;
 use tl::HTMLTag;
-use tracing::{instrument, warn};
+use tracing::{debug, instrument, warn};
 use url::Url;
 
 use uv_pep440::VersionSpecifiers;
-use uv_pypi_types::LenientVersionSpecifiers;
 use uv_pypi_types::{BaseUrl, CoreMetadata, File, Hashes, Yanked};
+use uv_pypi_types::{HashError, LenientVersionSpecifiers};
 
 /// A parsed structure from PyPI "HTML" index format for a single package.
 #[derive(Debug, Clone)]
@@ -92,13 +93,33 @@ impl SimpleHtml {
         // Extract the hash, which should be in the fragment.
         let decoded = html_escape::decode_html_entities(href);
         let (path, hashes) = if let Some((path, fragment)) = decoded.split_once('#') {
-            let fragment = urlencoding::decode(fragment)?;
+            let fragment = percent_encoding::percent_decode_str(fragment).decode_utf8()?;
             (
                 path,
                 if fragment.trim().is_empty() {
                     Hashes::default()
                 } else {
-                    Hashes::parse_fragment(&fragment)?
+                    match Hashes::parse_fragment(&fragment) {
+                        Ok(hashes) => hashes,
+                        Err(
+                            err
+                            @ (HashError::InvalidFragment(..) | HashError::InvalidStructure(..)),
+                        ) => {
+                            // If the URL includes an irrelevant hash (e.g., `#main`), ignore it.
+                            debug!("{err}");
+                            Hashes::default()
+                        }
+                        Err(HashError::UnsupportedHashAlgorithm(fragment)) => {
+                            if fragment == "egg" {
+                                // If the URL references an egg hash, ignore it.
+                                debug!("{}", HashError::UnsupportedHashAlgorithm(fragment));
+                                Hashes::default()
+                            } else {
+                                // If the URL references a hash, but it's unsupported, error.
+                                return Err(HashError::UnsupportedHashAlgorithm(fragment).into());
+                            }
+                        }
+                    }
                 },
             )
         } else {
@@ -116,7 +137,8 @@ impl SimpleHtml {
         let filename = filename.split('?').next().unwrap_or(filename);
 
         // Unquote the filename.
-        let filename = urlencoding::decode(filename)
+        let filename = percent_encoding::percent_decode_str(filename)
+            .decode_utf8()
             .map_err(|_| Error::UnsupportedFilename(filename.to_string()))?;
 
         // Extract the `requires-python` value, which should be set on the
@@ -167,6 +189,28 @@ impl SimpleHtml {
             None
         };
 
+        // Extract the `size` field, which should be set on the `data-size` attribute. This isn't
+        // included in PEP 700, which omits the HTML API, but we respect it anyway. Since this
+        // field isn't standardized, we discard errors.
+        let size = link
+            .attributes()
+            .get("data-size")
+            .flatten()
+            .and_then(|size| std::str::from_utf8(size.as_bytes()).ok())
+            .map(|size| html_escape::decode_html_entities(size))
+            .and_then(|size| size.parse().ok());
+
+        // Extract the `upload-time` field, which should be set on the `data-upload-time` attribute. This isn't
+        // included in PEP 700, which omits the HTML API, but we respect it anyway. Since this
+        // field isn't standardized, we discard errors.
+        let upload_time = link
+            .attributes()
+            .get("data-upload-time")
+            .flatten()
+            .and_then(|upload_time| std::str::from_utf8(upload_time.as_bytes()).ok())
+            .map(|upload_time| html_escape::decode_html_entities(upload_time))
+            .and_then(|upload_time| Timestamp::from_str(&upload_time).ok());
+
         Ok(Some(File {
             core_metadata,
             dist_info_metadata: None,
@@ -176,8 +220,8 @@ impl SimpleHtml {
             hashes,
             filename: filename.to_string(),
             url: decoded.to_string(),
-            size: None,
-            upload_time: None,
+            size,
+            upload_time,
         }))
     }
 }
@@ -209,7 +253,7 @@ pub enum Error {
     MissingHash(String),
 
     #[error(transparent)]
-    FragmentParse(#[from] uv_pypi_types::HashError),
+    FragmentParse(#[from] HashError),
 
     #[error("Invalid `requires-python` specifier: {0}")]
     Pep440(#[source] uv_pep440::VersionSpecifiersParseError),
@@ -813,20 +857,119 @@ mod tests {
     }
 
     #[test]
-    fn parse_missing_hash_value() {
+    fn parse_unknown_fragment() {
         let text = r#"
 <!DOCTYPE html>
 <html>
 <body>
 <h1>Links for jinja2</h1>
-<a href="/whl/Jinja2-3.1.2-py3-none-any.whl#sha256">Jinja2-3.1.2-py3-none-any.whl</a><br/>
+<a href="/whl/Jinja2-3.1.2-py3-none-any.whl#main">Jinja2-3.1.2-py3-none-any.whl</a><br/>
 </body>
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap_err();
-        insta::assert_snapshot!(result, @"Unexpected fragment (expected `#sha256=...` or similar) on URL: sha256");
+        let result = SimpleHtml::parse(text, &base);
+        insta::assert_debug_snapshot!(result, @r###"
+        Ok(
+            SimpleHtml {
+                base: BaseUrl(
+                    Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "download.pytorch.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/whl/jinja2/",
+                        query: None,
+                        fragment: None,
+                    },
+                ),
+                files: [
+                    File {
+                        core_metadata: None,
+                        dist_info_metadata: None,
+                        data_dist_info_metadata: None,
+                        filename: "Jinja2-3.1.2-py3-none-any.whl",
+                        hashes: Hashes {
+                            md5: None,
+                            sha256: None,
+                            sha384: None,
+                            sha512: None,
+                        },
+                        requires_python: None,
+                        size: None,
+                        upload_time: None,
+                        url: "/whl/Jinja2-3.1.2-py3-none-any.whl#main",
+                        yanked: None,
+                    },
+                ],
+            },
+        )
+        "###);
+    }
+
+    #[test]
+    fn parse_egg_fragment() {
+        let text = r#"
+<!DOCTYPE html>
+<html>
+<body>
+<h1>Links for jinja2</h1>
+<a href="/whl/Jinja2-3.1.2-py3-none-any.whl#main">Jinja2-3.1.2-py3-none-any.whl#egg=public-hello-0.1</a><br/>
+</body>
+</html>
+<!--TIMESTAMP 1703347410-->
+    "#;
+        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleHtml::parse(text, &base);
+        insta::assert_debug_snapshot!(result, @r###"
+        Ok(
+            SimpleHtml {
+                base: BaseUrl(
+                    Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "download.pytorch.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/whl/jinja2/",
+                        query: None,
+                        fragment: None,
+                    },
+                ),
+                files: [
+                    File {
+                        core_metadata: None,
+                        dist_info_metadata: None,
+                        data_dist_info_metadata: None,
+                        filename: "Jinja2-3.1.2-py3-none-any.whl",
+                        hashes: Hashes {
+                            md5: None,
+                            sha256: None,
+                            sha384: None,
+                            sha512: None,
+                        },
+                        requires_python: None,
+                        size: None,
+                        upload_time: None,
+                        url: "/whl/Jinja2-3.1.2-py3-none-any.whl#main",
+                        yanked: None,
+                    },
+                ],
+            },
+        )
+        "###);
     }
 
     #[test]

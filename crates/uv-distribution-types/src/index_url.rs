@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock, RwLock};
 
@@ -16,15 +17,53 @@ use crate::{Index, Verbatim};
 static PYPI_URL: LazyLock<Url> = LazyLock::new(|| Url::parse("https://pypi.org/simple").unwrap());
 
 static DEFAULT_INDEX: LazyLock<Index> = LazyLock::new(|| {
-    Index::from_index_url(IndexUrl::Pypi(VerbatimUrl::from_url(PYPI_URL.clone())))
+    Index::from_index_url(IndexUrl::Pypi(Arc::new(VerbatimUrl::from_url(
+        PYPI_URL.clone(),
+    ))))
 });
 
 /// The URL of an index to use for fetching packages (e.g., PyPI).
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub enum IndexUrl {
-    Pypi(VerbatimUrl),
-    Url(VerbatimUrl),
-    Path(VerbatimUrl),
+    Pypi(Arc<VerbatimUrl>),
+    Url(Arc<VerbatimUrl>),
+    Path(Arc<VerbatimUrl>),
+}
+
+impl IndexUrl {
+    /// Parse an [`IndexUrl`] from a string, relative to an optional root directory.
+    ///
+    /// If no root directory is provided, relative paths are resolved against the current working
+    /// directory.
+    pub fn parse(path: &str, root_dir: Option<&Path>) -> Result<Self, IndexUrlError> {
+        let url = match split_scheme(path) {
+            Some((scheme, ..)) => {
+                match Scheme::parse(scheme) {
+                    Some(_) => {
+                        // Ex) `https://pypi.org/simple`
+                        VerbatimUrl::parse_url(path)?
+                    }
+                    None => {
+                        // Ex) `C:\Users\user\index`
+                        if let Some(root_dir) = root_dir {
+                            VerbatimUrl::from_path(path, root_dir)?
+                        } else {
+                            VerbatimUrl::from_absolute_path(std::path::absolute(path)?)?
+                        }
+                    }
+                }
+            }
+            None => {
+                // Ex) `/Users/user/index`
+                if let Some(root_dir) = root_dir {
+                    VerbatimUrl::from_path(path, root_dir)?
+                } else {
+                    VerbatimUrl::from_absolute_path(std::path::absolute(path)?)?
+                }
+            }
+        };
+        Ok(Self::from(url.with_given(path)))
+    }
 }
 
 #[cfg(feature = "schemars")]
@@ -59,9 +98,9 @@ impl IndexUrl {
     /// Convert the index URL into a [`Url`].
     pub fn into_url(self) -> Url {
         match self {
-            Self::Pypi(url) => url.into_url(),
-            Self::Url(url) => url.into_url(),
-            Self::Path(url) => url.into_url(),
+            Self::Pypi(url) => url.to_url(),
+            Self::Url(url) => url.to_url(),
+            Self::Path(url) => url.to_url(),
         }
     }
 
@@ -114,25 +153,7 @@ impl FromStr for IndexUrl {
     type Err = IndexUrlError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let url = match split_scheme(s) {
-            Some((scheme, ..)) => {
-                match Scheme::parse(scheme) {
-                    Some(_) => {
-                        // Ex) `https://pypi.org/simple`
-                        VerbatimUrl::parse_url(s)?
-                    }
-                    None => {
-                        // Ex) `C:\Users\user\index`
-                        VerbatimUrl::from_absolute_path(std::path::absolute(s)?)?
-                    }
-                }
-            }
-            None => {
-                // Ex) `/Users/user/index`
-                VerbatimUrl::from_absolute_path(std::path::absolute(s)?)?
-            }
-        };
-        Ok(Self::from(url.with_given(s)))
+        Self::parse(s, None)
     }
 }
 
@@ -158,11 +179,11 @@ impl<'de> serde::de::Deserialize<'de> for IndexUrl {
 impl From<VerbatimUrl> for IndexUrl {
     fn from(url: VerbatimUrl) -> Self {
         if url.scheme() == "file" {
-            Self::Path(url)
+            Self::Path(Arc::new(url))
         } else if *url.raw() == *PYPI_URL {
-            Self::Pypi(url)
+            Self::Pypi(Arc::new(url))
         } else {
-            Self::Url(url)
+            Self::Url(Arc::new(url))
         }
     }
 }
@@ -366,6 +387,13 @@ pub struct IndexUrls {
 }
 
 impl<'a> IndexUrls {
+    pub fn from_indexes(indexes: Vec<Index>) -> Self {
+        Self {
+            indexes,
+            no_index: false,
+        }
+    }
+
     /// Return the default [`Index`] entry.
     ///
     /// If `--no-index` is set, return `None`.
@@ -412,6 +440,44 @@ impl<'a> IndexUrls {
         self.implicit_indexes()
             .chain(self.default_index())
             .filter(|index| !index.explicit)
+    }
+
+    /// Return an iterator over all user-defined [`Index`] entries in order.
+    ///
+    /// Prioritizes the `[tool.uv.index]` definitions over the `--extra-index-url` definitions
+    /// over the `--index-url` definition.
+    ///
+    /// Unlike [`IndexUrl::indexes`], this includes explicit indexes and does _not_ insert PyPI
+    /// as a fallback default.
+    ///
+    /// If `no_index` was enabled, then this always returns an empty
+    /// iterator.
+    pub fn defined_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
+        if self.no_index {
+            Either::Left(std::iter::empty())
+        } else {
+            Either::Right(
+                {
+                    let mut seen = FxHashSet::default();
+                    self.indexes
+                        .iter()
+                        .filter(move |index| {
+                            index.name.as_ref().map_or(true, |name| seen.insert(name))
+                        })
+                        .filter(|index| !index.default)
+                }
+                .chain({
+                    let mut seen = FxHashSet::default();
+                    self.indexes
+                        .iter()
+                        .filter(move |index| {
+                            index.name.as_ref().map_or(true, |name| seen.insert(name))
+                        })
+                        .find(|index| index.default)
+                        .into_iter()
+                }),
+            )
+        }
     }
 }
 

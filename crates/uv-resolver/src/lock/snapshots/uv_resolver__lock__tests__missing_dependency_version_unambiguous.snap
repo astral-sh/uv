@@ -5,11 +5,13 @@ expression: result
 Ok(
     Lock {
         version: 1,
+        revision: 0,
         fork_markers: [],
         conflicts: Conflicts(
             [],
         ),
         supported_environments: [],
+        required_environments: [],
         requires_python: RequiresPython {
             specifiers: VersionSpecifiers(
                 [
@@ -42,7 +44,9 @@ Ok(
                     name: PackageName(
                         "a",
                     ),
-                    version: "0.1.0",
+                    version: Some(
+                        "0.1.0",
+                    ),
                     source: Registry(
                         Url(
                             UrlString(
@@ -78,6 +82,7 @@ Ok(
                 dependency_groups: {},
                 metadata: PackageMetadata {
                     requires_dist: {},
+                    provides_extras: [],
                     dependency_groups: {},
                 },
             },
@@ -86,7 +91,9 @@ Ok(
                     name: PackageName(
                         "b",
                     ),
-                    version: "0.1.0",
+                    version: Some(
+                        "0.1.0",
+                    ),
                     source: Registry(
                         Url(
                             UrlString(
@@ -123,7 +130,9 @@ Ok(
                             name: PackageName(
                                 "a",
                             ),
-                            version: "0.1.0",
+                            version: Some(
+                                "0.1.0",
+                            ),
                             source: Registry(
                                 Url(
                                     UrlString(
@@ -143,6 +152,7 @@ Ok(
                 dependency_groups: {},
                 metadata: PackageMetadata {
                     requires_dist: {},
+                    provides_extras: [],
                     dependency_groups: {},
                 },
             },
@@ -152,7 +162,9 @@ Ok(
                 name: PackageName(
                     "a",
                 ),
-                version: "0.1.0",
+                version: Some(
+                    "0.1.0",
+                ),
                 source: Registry(
                     Url(
                         UrlString(
@@ -165,7 +177,9 @@ Ok(
                 name: PackageName(
                     "b",
                 ),
-                version: "0.1.0",
+                version: Some(
+                    "0.1.0",
+                ),
                 source: Registry(
                     Url(
                         UrlString(

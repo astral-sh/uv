@@ -47,7 +47,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           # Install a specific version of uv.
-          version: "0.5.18"
+          version: "0.6.1"
 ```
 
 ## Setting up Python
@@ -126,7 +126,7 @@ jobs:
 
 ## Multiple Python versions
 
-When using a matrix test test multiple Python versions, set the Python version using
+When using a matrix to test multiple Python versions, set the Python version using
 `astral-sh/setup-uv`, which will override the Python version specification in the `pyproject.toml`
 or `.python-version` files:
 

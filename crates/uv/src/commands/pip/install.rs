@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 use std::fmt::Write;
+use std::sync::Arc;
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -8,8 +9,9 @@ use tracing::{debug, enabled, Level};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, LowerBound, PreviewMode, Reinstall, SourceStrategy, TrustedHost, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification, DryRun,
+    ExtrasSpecification, HashCheckingMode, IndexStrategy, PreviewMode, Reinstall, SourceStrategy,
+    TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -18,7 +20,7 @@ use uv_distribution_types::{
     UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
-use uv_install_wheel::linker::LinkMode;
+use uv_install_wheel::LinkMode;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_pep508::PackageName;
 use uv_pypi_types::{Conflicts, Requirement};
@@ -49,7 +51,9 @@ pub(crate) async fn pip_install(
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
+    build_constraints_from_workspace: Vec<Requirement>,
     extras: &ExtrasSpecification,
+    groups: &DevGroupsSpecification,
     resolution_mode: ResolutionMode,
     prerelease_mode: PrereleaseMode,
     dependency_mode: DependencyMode,
@@ -84,7 +88,7 @@ pub(crate) async fn pip_install(
     native_tls: bool,
     allow_insecure_host: &[TrustedHost],
     cache: Cache,
-    dry_run: bool,
+    dry_run: DryRun,
     printer: Printer,
     preview: PreviewMode,
 ) -> anyhow::Result<ExitStatus> {
@@ -115,13 +119,10 @@ pub(crate) async fn pip_install(
         constraints,
         overrides,
         extras,
+        groups,
         &client_builder,
     )
     .await?;
-
-    // Read build constraints.
-    let build_constraints =
-        operations::read_constraints(build_constraints, &client_builder).await?;
 
     let constraints: Vec<NameRequirementSpecification> = constraints
         .iter()
@@ -142,6 +143,20 @@ pub(crate) async fn pip_install(
                 .map(UnresolvedRequirementSpecification::from),
         )
         .collect();
+
+    // Read build constraints.
+    let build_constraints: Vec<NameRequirementSpecification> =
+        operations::read_constraints(build_constraints, &client_builder)
+            .await?
+            .iter()
+            .cloned()
+            .chain(
+                build_constraints_from_workspace
+                    .iter()
+                    .cloned()
+                    .map(NameRequirementSpecification::from),
+            )
+            .collect();
 
     // Detect the current Python interpreter.
     let environment = if target.is_some() || prefix.is_some() {
@@ -243,7 +258,7 @@ pub(crate) async fn pip_install(
                     }
                 }
                 DefaultInstallLogger.on_audit(requirements.len(), start, printer)?;
-                if dry_run {
+                if dry_run.enabled() {
                     writeln!(printer.stderr(), "Would make no changes")?;
                 }
 
@@ -308,7 +323,11 @@ pub(crate) async fn pip_install(
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
-            uv_auth::store_credentials(index.raw_url(), credentials);
+            let credentials = Arc::new(credentials);
+            uv_auth::store_credentials(index.raw_url(), credentials.clone());
+            if let Some(root_url) = index.root_url() {
+                uv_auth::store_credentials(&root_url, credentials.clone());
+            }
         }
     }
 
@@ -382,7 +401,6 @@ pub(crate) async fn pip_install(
         &build_options,
         &build_hasher,
         exclude_newer,
-        LowerBound::Warn,
         sources,
         concurrency,
         preview,
@@ -406,6 +424,7 @@ pub(crate) async fn pip_install(
         project,
         BTreeSet::default(),
         extras,
+        groups,
         preferences,
         site_packages.clone(),
         &hasher,
@@ -428,7 +447,7 @@ pub(crate) async fn pip_install(
     {
         Ok(graph) => Resolution::from(graph),
         Err(err) => {
-            return diagnostics::OperationDiagnostic::default()
+            return diagnostics::OperationDiagnostic::native_tls(native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
@@ -462,7 +481,7 @@ pub(crate) async fn pip_install(
     {
         Ok(_) => {}
         Err(err) => {
-            return diagnostics::OperationDiagnostic::default()
+            return diagnostics::OperationDiagnostic::native_tls(native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
@@ -472,7 +491,7 @@ pub(crate) async fn pip_install(
     operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
     // Notify the user of any environment diagnostics.
-    if strict && !dry_run {
+    if strict && !dry_run.enabled() {
         operations::diagnose_environment(&resolution, &environment, &marker_env, printer)?;
     }
 

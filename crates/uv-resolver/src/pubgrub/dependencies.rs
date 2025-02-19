@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::iter;
 
 use either::Either;
@@ -26,7 +27,7 @@ pub(crate) struct PubGrubDependency {
 impl PubGrubDependency {
     pub(crate) fn from_requirement<'a>(
         conflicts: &Conflicts,
-        requirement: &'a Requirement,
+        requirement: Cow<'a, Requirement>,
         dev: Option<&'a GroupName>,
         source_name: Option<&'a PackageName>,
     ) -> impl Iterator<Item = Self> + 'a {
@@ -89,58 +90,60 @@ impl PubGrubDependency {
         };
 
         // Add the package, plus any extra variants.
-        iter.map(|(extra, group)| PubGrubRequirement::from_requirement(requirement, extra, group))
-            .map(move |requirement| {
-                let PubGrubRequirement {
+        iter.map(move |(extra, group)| {
+            PubGrubRequirement::from_requirement(&requirement, extra, group)
+        })
+        .map(move |requirement| {
+            let PubGrubRequirement {
+                package,
+                version,
+                url,
+            } = requirement;
+            match &*package {
+                PubGrubPackageInner::Package { .. } => PubGrubDependency {
                     package,
                     version,
                     url,
-                } = requirement;
-                match &*package {
-                    PubGrubPackageInner::Package { .. } => PubGrubDependency {
-                        package: package.clone(),
-                        version: version.clone(),
-                        url,
-                    },
-                    PubGrubPackageInner::Marker { .. } => PubGrubDependency {
-                        package: package.clone(),
-                        version: version.clone(),
-                        url,
-                    },
-                    PubGrubPackageInner::Extra { name, .. } => {
-                        // Detect self-dependencies.
-                        if dev.is_none() {
-                            debug_assert!(
-                                source_name.is_none_or(|source_name| source_name != name),
-                                "extras not flattened for {name}"
-                            );
-                        }
-                        PubGrubDependency {
-                            package: package.clone(),
-                            version: version.clone(),
-                            url,
-                        }
+                },
+                PubGrubPackageInner::Marker { .. } => PubGrubDependency {
+                    package,
+                    version,
+                    url,
+                },
+                PubGrubPackageInner::Extra { name, .. } => {
+                    // Detect self-dependencies.
+                    if dev.is_none() {
+                        debug_assert!(
+                            source_name.is_none_or(|source_name| source_name != name),
+                            "extras not flattened for {name}"
+                        );
                     }
-                    PubGrubPackageInner::Dev { name, .. } => {
-                        // Detect self-dependencies.
-                        if dev.is_none() {
-                            debug_assert!(
-                                source_name.is_none_or(|source_name| source_name != name),
-                                "group not flattened for {name}"
-                            );
-                        }
-                        PubGrubDependency {
-                            package: package.clone(),
-                            version: version.clone(),
-                            url,
-                        }
-                    }
-                    PubGrubPackageInner::Root(_) => unreachable!("root package in dependencies"),
-                    PubGrubPackageInner::Python(_) => {
-                        unreachable!("python package in dependencies")
+                    PubGrubDependency {
+                        package,
+                        version,
+                        url,
                     }
                 }
-            })
+                PubGrubPackageInner::Dev { name, .. } => {
+                    // Detect self-dependencies.
+                    if dev.is_none() {
+                        debug_assert!(
+                            source_name.is_none_or(|source_name| source_name != name),
+                            "group not flattened for {name}"
+                        );
+                    }
+                    PubGrubDependency {
+                        package,
+                        version,
+                        url,
+                    }
+                }
+                PubGrubPackageInner::Root(_) => unreachable!("root package in dependencies"),
+                PubGrubPackageInner::Python(_) => {
+                    unreachable!("python package in dependencies")
+                }
+            }
+        })
     }
 }
 
@@ -178,18 +181,12 @@ impl PubGrubRequirement {
                 (url, parsed_url)
             }
             RequirementSource::Git {
-                repository,
-                reference,
-                precise,
+                git,
                 url,
                 subdirectory,
             } => {
-                let parsed_url = ParsedUrl::Git(ParsedGitUrl::from_source(
-                    repository.clone(),
-                    reference.clone(),
-                    *precise,
-                    subdirectory.clone(),
-                ));
+                let parsed_url =
+                    ParsedUrl::Git(ParsedGitUrl::from_source(git.clone(), subdirectory.clone()));
                 (url, parsed_url)
             }
             RequirementSource::Path {

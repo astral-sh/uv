@@ -16,15 +16,15 @@ use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, DevMode, EditableMode,
-    ExtrasSpecification, GroupsSpecification, InstallOptions, LowerBound, PreviewMode,
-    SourceStrategy, TrustedHost,
+    Concurrency, Constraints, DevGroupsSpecification, DevMode, DryRun, EditableMode,
+    ExtrasSpecification, InstallOptions, PreviewMode, SourceStrategy, TrustedHost,
 };
-use uv_dispatch::{BuildDispatch, SharedState};
+use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_distribution_types::{Index, IndexName, UnresolvedRequirement, VersionId};
+use uv_distribution_types::{Index, IndexName, IndexUrls, UnresolvedRequirement, VersionId};
 use uv_fs::Simplified;
-use uv_git::{GitReference, GIT_STORE};
+use uv_git::GIT_STORE;
+use uv_git_types::GitReference;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_pep508::{ExtraName, Requirement, UnnamedRequirement, VersionOrUrl};
 use uv_pypi_types::{redact_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
@@ -47,7 +47,8 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    init_script_python_requirement, ProjectError, ProjectInterpreter, ScriptInterpreter,
+    init_script_python_requirement, PlatformState, ProjectEnvironment, ProjectError,
+    ProjectInterpreter, ScriptInterpreter, UniversalState,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{diagnostics, project, ExitStatus};
@@ -60,6 +61,7 @@ pub(crate) async fn add(
     project_dir: &Path,
     locked: bool,
     frozen: bool,
+    active: Option<bool>,
     no_sync: bool,
     requirements: Vec<RequirementsSource>,
     editable: Option<bool>,
@@ -164,6 +166,7 @@ pub(crate) async fn add(
             allow_insecure_host,
             &install_mirrors,
             no_config,
+            active,
             cache,
             printer,
         )
@@ -212,6 +215,7 @@ pub(crate) async fn add(
                 allow_insecure_host,
                 &install_mirrors,
                 no_config,
+                active,
                 cache,
                 printer,
             )
@@ -221,7 +225,7 @@ pub(crate) async fn add(
             AddTarget::Project(project, Box::new(PythonTarget::Interpreter(interpreter)))
         } else {
             // Discover or create the virtual environment.
-            let venv = project::get_or_init_environment(
+            let environment = ProjectEnvironment::get_or_init(
                 project.workspace(),
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
@@ -231,12 +235,15 @@ pub(crate) async fn add(
                 native_tls,
                 allow_insecure_host,
                 no_config,
+                active,
                 cache,
+                DryRun::Disabled,
                 printer,
             )
-            .await?;
+            .await?
+            .into_environment()?;
 
-            AddTarget::Project(project, Box::new(PythonTarget::Environment(venv)))
+            AddTarget::Project(project, Box::new(PythonTarget::Environment(environment)))
         }
     };
 
@@ -251,7 +258,7 @@ pub(crate) async fn add(
         RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let state = PlatformState::default();
 
     // Resolve any unnamed requirements.
     let requirements = {
@@ -285,7 +292,11 @@ pub(crate) async fn add(
             // Add all authenticated sources to the cache.
             for index in settings.index_locations.allowed_indexes() {
                 if let Some(credentials) = index.credentials() {
-                    uv_auth::store_credentials(index.raw_url(), credentials);
+                    let credentials = Arc::new(credentials);
+                    uv_auth::store_credentials(index.raw_url(), credentials.clone());
+                    if let Some(root_url) = index.root_url() {
+                        uv_auth::store_credentials(&root_url, credentials.clone());
+                    }
                 }
             }
 
@@ -327,7 +338,7 @@ pub(crate) async fn add(
                 &settings.index_locations,
                 &flat_index,
                 &settings.dependency_metadata,
-                state.clone(),
+                state.clone().into_inner(),
                 settings.index_strategy,
                 &settings.config_setting,
                 build_isolation,
@@ -335,7 +346,6 @@ pub(crate) async fn add(
                 &settings.build_options,
                 &build_hasher,
                 settings.exclude_newer,
-                LowerBound::default(),
                 sources,
                 concurrency,
                 preview,
@@ -553,10 +563,11 @@ pub(crate) async fn add(
         });
     }
 
-    // Add any indexes that were provided on the command-line.
+    // Add any indexes that were provided on the command-line, in priority order.
     if !raw_sources {
-        for index in indexes {
-            toml.add_index(&index)?;
+        let urls = IndexUrls::from_indexes(indexes);
+        for index in urls.defined_indexes() {
+            toml.add_index(index)?;
         }
     }
 
@@ -606,11 +617,16 @@ pub(crate) async fn add(
         }
     });
 
-    match lock_and_sync(
+    // Use separate state for locking and syncing.
+    let lock_state = state.fork();
+    let sync_state = state;
+
+    match Box::pin(lock_and_sync(
         target,
         &mut toml,
         &edits,
-        state,
+        lock_state,
+        sync_state,
         locked,
         &dependency_type,
         raw_sources,
@@ -623,7 +639,7 @@ pub(crate) async fn add(
         cache,
         printer,
         preview,
-    )
+    ))
     .await
     {
         Ok(()) => Ok(ExitStatus::Success),
@@ -632,7 +648,7 @@ pub(crate) async fn add(
                 let _ = snapshot.revert();
             }
             match err {
-                ProjectError::Operation(err) => diagnostics::OperationDiagnostic::with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()))
+                ProjectError::Operation(err) => diagnostics::OperationDiagnostic::native_tls(native_tls).with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()))
                     .report(err)
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
                 err => Err(err.into()),
@@ -647,7 +663,8 @@ async fn lock_and_sync(
     mut target: AddTarget,
     toml: &mut PyProjectTomlMut,
     edits: &[DependencyEdit],
-    state: SharedState,
+    lock_state: UniversalState,
+    sync_state: PlatformState,
     locked: bool,
     dependency_type: &DependencyType,
     raw_sources: bool,
@@ -669,8 +686,7 @@ async fn lock_and_sync(
         },
         (&target).into(),
         settings.into(),
-        LowerBound::default(),
-        &state,
+        &lock_state,
         Box::new(DefaultResolveLogger),
         connectivity,
         concurrency,
@@ -690,7 +706,9 @@ async fn lock_and_sync(
             FxHashMap::with_capacity_and_hasher(lock.packages().len(), FxBuildHasher);
         for dist in lock.packages() {
             let name = dist.name();
-            let version = dist.version();
+            let Some(version) = dist.version() else {
+                continue;
+            };
             match minimum_version.entry(name) {
                 Entry::Vacant(entry) => {
                     entry.insert(version);
@@ -774,7 +792,7 @@ async fn lock_and_sync(
                 let url = Url::from_file_path(project.project_root())
                     .expect("project root is a valid URL");
                 let version_id = VersionId::from_url(&url);
-                let existing = state.index().distributions().remove(&version_id);
+                let existing = lock_state.index().distributions().remove(&version_id);
                 debug_assert!(existing.is_some(), "distribution should exist");
             }
 
@@ -788,8 +806,7 @@ async fn lock_and_sync(
                 },
                 (&target).into(),
                 settings.into(),
-                LowerBound::default(),
-                &state,
+                &lock_state,
                 Box::new(SummaryResolveLogger),
                 connectivity,
                 concurrency,
@@ -818,23 +835,22 @@ async fn lock_and_sync(
     let (extras, dev) = match dependency_type {
         DependencyType::Production => {
             let extras = ExtrasSpecification::None;
-            let dev = DevGroupsSpecification::from(DevMode::Exclude);
+            let dev = DevGroupsSpecification::from_dev_mode(DevMode::Exclude);
             (extras, dev)
         }
         DependencyType::Dev => {
             let extras = ExtrasSpecification::None;
-            let dev = DevGroupsSpecification::from(DevMode::Include);
+            let dev = DevGroupsSpecification::from_dev_mode(DevMode::Include);
             (extras, dev)
         }
         DependencyType::Optional(ref extra_name) => {
             let extras = ExtrasSpecification::Some(vec![extra_name.clone()]);
-            let dev = DevGroupsSpecification::from(DevMode::Exclude);
+            let dev = DevGroupsSpecification::from_dev_mode(DevMode::Exclude);
             (extras, dev)
         }
         DependencyType::Group(ref group_name) => {
             let extras = ExtrasSpecification::None;
-            let dev =
-                DevGroupsSpecification::from(GroupsSpecification::from_group(group_name.clone()));
+            let dev = DevGroupsSpecification::from_group(group_name.clone());
             (extras, dev)
         }
     };
@@ -856,11 +872,12 @@ async fn lock_and_sync(
         target,
         venv,
         &extras,
-        &DevGroupsManifest::from_spec(dev),
+        &dev.with_defaults(Vec::new()),
         EditableMode::Editable,
         InstallOptions::default(),
         Modifications::Sufficient,
         settings.into(),
+        &sync_state,
         Box::new(DefaultInstallLogger),
         installer_metadata,
         connectivity,
@@ -868,6 +885,7 @@ async fn lock_and_sync(
         native_tls,
         allow_insecure_host,
         cache,
+        DryRun::Disabled,
         printer,
         preview,
     )
@@ -889,25 +907,21 @@ fn augment_requirement(
             UnresolvedRequirement::Named(uv_pypi_types::Requirement {
                 source: match requirement.source {
                     RequirementSource::Git {
-                        repository,
-                        reference,
-                        precise,
+                        git,
                         subdirectory,
                         url,
                     } => {
-                        let reference = if let Some(rev) = rev {
-                            GitReference::from_rev(rev.to_string())
+                        let git = if let Some(rev) = rev {
+                            git.with_reference(GitReference::from_rev(rev.to_string()))
                         } else if let Some(tag) = tag {
-                            GitReference::Tag(tag.to_string())
+                            git.with_reference(GitReference::Tag(tag.to_string()))
                         } else if let Some(branch) = branch {
-                            GitReference::Branch(branch.to_string())
+                            git.with_reference(GitReference::Branch(branch.to_string()))
                         } else {
-                            reference
+                            git
                         };
                         RequirementSource::Git {
-                            repository,
-                            reference,
-                            precise,
+                            git,
                             subdirectory,
                             url,
                         }

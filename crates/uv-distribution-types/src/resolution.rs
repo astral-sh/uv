@@ -220,14 +220,19 @@ impl Edge {
 impl From<&ResolvedDist> for RequirementSource {
     fn from(resolved_dist: &ResolvedDist) -> Self {
         match resolved_dist {
-            ResolvedDist::Installable { dist, version } => match dist {
-                Dist::Built(BuiltDist::Registry(wheels)) => RequirementSource::Registry {
-                    specifier: uv_pep440::VersionSpecifiers::from(
-                        uv_pep440::VersionSpecifier::equals_version(version.clone()),
-                    ),
-                    index: Some(wheels.best_wheel().index.url().clone()),
-                    conflict: None,
-                },
+            ResolvedDist::Installable { dist, .. } => match dist {
+                Dist::Built(BuiltDist::Registry(wheels)) => {
+                    let wheel = wheels.best_wheel();
+                    RequirementSource::Registry {
+                        specifier: uv_pep440::VersionSpecifiers::from(
+                            uv_pep440::VersionSpecifier::equals_version(
+                                wheel.filename.version.clone(),
+                            ),
+                        ),
+                        index: Some(wheel.index.url().clone()),
+                        conflict: None,
+                    }
+                }
                 Dist::Built(BuiltDist::DirectUrl(wheel)) => {
                     let mut location = wheel.url.to_url();
                     location.set_fragment(None);
@@ -261,10 +266,8 @@ impl From<&ResolvedDist> for RequirementSource {
                     }
                 }
                 Dist::Source(SourceDist::Git(sdist)) => RequirementSource::Git {
+                    git: (*sdist.git).clone(),
                     url: sdist.url.clone(),
-                    repository: sdist.git.repository().clone(),
-                    reference: sdist.git.reference().clone(),
-                    precise: sdist.git.precise(),
                     subdirectory: sdist.subdirectory.clone(),
                 },
                 Dist::Source(SourceDist::Path(sdist)) => RequirementSource::Path {

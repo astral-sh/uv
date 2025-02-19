@@ -392,7 +392,7 @@ impl Implementation {
             },
             // Ex) `pypy39_pp73`
             Self::PyPy => AbiTag::PyPy {
-                python_version,
+                python_version: Some(python_version),
                 implementation_version,
             },
             // Ex) `graalpy310_graalpy240_310_native

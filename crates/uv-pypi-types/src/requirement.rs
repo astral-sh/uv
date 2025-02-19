@@ -8,7 +8,7 @@ use url::Url;
 use uv_distribution_filename::DistExtension;
 
 use uv_fs::{relative_to, PortablePath, PortablePathBuf, CWD};
-use uv_git::{GitReference, GitSha, GitUrl};
+use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError, OidParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{
@@ -29,7 +29,9 @@ pub enum RequirementError {
     #[error(transparent)]
     UrlParseError(#[from] url::ParseError),
     #[error(transparent)]
-    OidParseError(#[from] uv_git::OidParseError),
+    OidParseError(#[from] OidParseError),
+    #[error(transparent)]
+    GitUrlParse(#[from] GitUrlParseError),
 }
 
 /// A representation of dependency on a package, an extension over a PEP 508's requirement.
@@ -226,25 +228,16 @@ impl From<Requirement> for uv_pep508::Requirement<VerbatimParsedUrl> {
                     verbatim: url,
                 })),
                 RequirementSource::Git {
-                    repository,
-                    reference,
-                    precise,
+                    git,
                     subdirectory,
                     url,
-                } => {
-                    let git_url = if let Some(precise) = precise {
-                        GitUrl::from_commit(repository, reference, precise)
-                    } else {
-                        GitUrl::from_reference(repository, reference)
-                    };
-                    Some(VersionOrUrl::Url(VerbatimParsedUrl {
-                        parsed_url: ParsedUrl::Git(ParsedGitUrl {
-                            url: git_url,
-                            subdirectory,
-                        }),
-                        verbatim: url,
-                    }))
-                }
+                } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
+                    parsed_url: ParsedUrl::Git(ParsedGitUrl {
+                        url: git,
+                        subdirectory,
+                    }),
+                    verbatim: url,
+                })),
                 RequirementSource::Path {
                     install_path,
                     ext,
@@ -336,13 +329,11 @@ impl Display for Requirement {
             }
             RequirementSource::Git {
                 url: _,
-                repository,
-                reference,
-                precise: _,
+                git,
                 subdirectory,
             } => {
-                write!(f, " @ git+{repository}")?;
-                if let Some(reference) = reference.as_str() {
+                write!(f, " @ git+{}", git.repository())?;
+                if let Some(reference) = git.reference().as_str() {
                     write!(f, "@{reference}")?;
                 }
                 if let Some(subdirectory) = subdirectory {
@@ -401,12 +392,8 @@ pub enum RequirementSource {
     },
     /// A remote Git repository, over either HTTPS or SSH.
     Git {
-        /// The repository URL (without the `git+` prefix).
-        repository: Url,
-        /// Optionally, the revision, tag, or branch to use.
-        reference: GitReference,
-        /// The precise commit to use, if known.
-        precise: Option<GitSha>,
+        /// The repository URL and reference to the commit to use.
+        git: GitUrl,
         /// The path to the source distribution if it is not in the repository root.
         subdirectory: Option<PathBuf>,
         /// The PEP 508 style url in the format
@@ -457,10 +444,8 @@ impl RequirementSource {
                 url,
             },
             ParsedUrl::Git(git) => RequirementSource::Git {
+                git: git.url.clone(),
                 url,
-                repository: git.url.repository().clone(),
-                reference: git.url.reference().clone(),
-                precise: git.url.precise(),
                 subdirectory: git.subdirectory,
             },
             ParsedUrl::Archive(archive) => RequirementSource::Url {
@@ -470,12 +455,6 @@ impl RequirementSource {
                 ext: archive.ext,
             },
         }
-    }
-
-    /// Construct a [`RequirementSource`] for a URL source, given a URL parsed into components.
-    pub fn from_verbatim_parsed_url(parsed_url: ParsedUrl) -> Self {
-        let verbatim_url = VerbatimUrl::from_url(Url::from(parsed_url.clone()));
-        Self::from_parsed_url(parsed_url, verbatim_url)
     }
 
     /// Convert the source to a [`VerbatimParsedUrl`], if it's a URL source.
@@ -522,16 +501,12 @@ impl RequirementSource {
                 verbatim: url.clone(),
             }),
             Self::Git {
-                repository,
-                reference,
-                precise,
+                git,
                 subdirectory,
                 url,
             } => Some(VerbatimParsedUrl {
                 parsed_url: ParsedUrl::Git(ParsedGitUrl::from_source(
-                    repository.clone(),
-                    reference.clone(),
-                    *precise,
+                    git.clone(),
                     subdirectory.clone(),
                 )),
                 verbatim: url.clone(),
@@ -634,13 +609,11 @@ impl Display for RequirementSource {
             }
             Self::Git {
                 url: _,
-                repository,
-                reference,
-                precise: _,
+                git,
                 subdirectory,
             } => {
-                write!(f, " git+{repository}")?;
-                if let Some(reference) = reference.as_str() {
+                write!(f, " git+{}", git.repository())?;
+                if let Some(reference) = git.reference().as_str() {
                     write!(f, "@{reference}")?;
                 }
                 if let Some(subdirectory) = subdirectory {
@@ -712,13 +685,11 @@ impl From<RequirementSource> for RequirementSourceWire {
                 subdirectory: subdirectory.map(PortablePathBuf::from),
             },
             RequirementSource::Git {
-                repository,
-                reference,
-                precise,
+                git,
                 subdirectory,
                 url: _,
             } => {
-                let mut url = repository;
+                let mut url = git.repository().clone();
 
                 // Redact the credentials.
                 redact_credentials(&mut url);
@@ -739,28 +710,23 @@ impl From<RequirementSource> for RequirementSourceWire {
                 }
 
                 // Put the requested reference in the query.
-                match reference {
+                match git.reference() {
                     GitReference::Branch(branch) => {
-                        url.query_pairs_mut()
-                            .append_pair("branch", branch.to_string().as_str());
+                        url.query_pairs_mut().append_pair("branch", branch.as_str());
                     }
                     GitReference::Tag(tag) => {
-                        url.query_pairs_mut()
-                            .append_pair("tag", tag.to_string().as_str());
+                        url.query_pairs_mut().append_pair("tag", tag.as_str());
                     }
-                    GitReference::ShortCommit(rev)
-                    | GitReference::BranchOrTag(rev)
+                    GitReference::BranchOrTag(rev)
                     | GitReference::BranchOrTagOrCommit(rev)
-                    | GitReference::NamedRef(rev)
-                    | GitReference::FullCommit(rev) => {
-                        url.query_pairs_mut()
-                            .append_pair("rev", rev.to_string().as_str());
+                    | GitReference::NamedRef(rev) => {
+                        url.query_pairs_mut().append_pair("rev", rev.as_str());
                     }
                     GitReference::DefaultBranch => {}
                 }
 
                 // Put the precise commit in the fragment.
-                if let Some(precise) = precise {
+                if let Some(precise) = git.precise() {
                     url.set_fragment(Some(&precise.to_string()));
                 }
 
@@ -830,7 +796,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                     };
                 }
 
-                let precise = repository.fragment().map(GitSha::from_str).transpose()?;
+                let precise = repository.fragment().map(GitOid::from_str).transpose()?;
 
                 // Clear out any existing state.
                 repository.set_fragment(None);
@@ -850,9 +816,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 let url = VerbatimUrl::from_url(url);
 
                 Ok(Self::Git {
-                    repository,
-                    reference,
-                    precise,
+                    git: GitUrl::from_fields(repository, reference, precise)?,
                     subdirectory: subdirectory.map(PathBuf::from),
                     url,
                 })
@@ -876,10 +840,12 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
             }
             // TODO(charlie): The use of `CWD` here is incorrect. These should be resolved relative
             // to the workspace root, but we don't have access to it here. When comparing these
-            // sources in the lockfile, we replace the URL anyway.
+            // sources in the lockfile, we replace the URL anyway. Ideally, we'd either remove the
+            // URL field or make it optional.
             RequirementSourceWire::Path { path } => {
                 let path = PathBuf::from(path);
-                let url = VerbatimUrl::from_path(&path, &*CWD)?;
+                let url =
+                    VerbatimUrl::from_normalized_path(uv_fs::normalize_path_buf(CWD.join(&path)))?;
                 Ok(Self::Path {
                     ext: DistExtension::from_path(path.as_path())
                         .map_err(|err| ParsedUrlError::MissingExtensionPath(path.clone(), err))?,
@@ -889,7 +855,9 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
             }
             RequirementSourceWire::Directory { directory } => {
                 let directory = PathBuf::from(directory);
-                let url = VerbatimUrl::from_path(&directory, &*CWD)?;
+                let url = VerbatimUrl::from_normalized_path(uv_fs::normalize_path_buf(
+                    CWD.join(&directory),
+                ))?;
                 Ok(Self::Directory {
                     install_path: directory,
                     editable: false,
@@ -899,7 +867,9 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
             }
             RequirementSourceWire::Editable { editable } => {
                 let editable = PathBuf::from(editable);
-                let url = VerbatimUrl::from_path(&editable, &*CWD)?;
+                let url = VerbatimUrl::from_normalized_path(uv_fs::normalize_path_buf(
+                    CWD.join(&editable),
+                ))?;
                 Ok(Self::Directory {
                     install_path: editable,
                     editable: true,
@@ -909,7 +879,9 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
             }
             RequirementSourceWire::Virtual { r#virtual } => {
                 let r#virtual = PathBuf::from(r#virtual);
-                let url = VerbatimUrl::from_path(&r#virtual, &*CWD)?;
+                let url = VerbatimUrl::from_normalized_path(uv_fs::normalize_path_buf(
+                    CWD.join(&r#virtual),
+                ))?;
                 Ok(Self::Directory {
                     install_path: r#virtual,
                     editable: false,

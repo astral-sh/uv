@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.5.18"
+version = "0.6.1"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -31,6 +31,7 @@ uv-distribution-types = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-git = { workspace = true }
+uv-git-types = { workspace = true }
 uv-install-wheel = { workspace = true, default-features = false }
 uv-installer = { workspace = true }
 uv-normalize = { workspace = true }
@@ -133,8 +134,8 @@ ignored = [
 ]
 
 [features]
-default = ["python", "python-managed", "pypi", "git", "performance", "crates-io"]
-# Use better memory allocators, etc. — also turns-on self-update.
+default = ["python", "python-managed", "pypi", "git", "performance", "crates-io", "slow-tests", "test-ecosystem"]
+# Use better memory allocators, etc.
 performance = [
     "performance-memory-allocator",
     "performance-flate2-backend",
@@ -156,5 +157,9 @@ pypi = []
 git = []
 # Introduces a dependency on crates.io.
 crates-io = []
+# Include "slow" test cases.
+slow-tests = []
+# Includes test cases that require ecosystem packages
+test-ecosystem = []
 # Adds self-update functionality.
 self-update = ["axoupdater", "uv-cli/self-update"]

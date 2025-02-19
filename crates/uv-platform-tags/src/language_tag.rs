@@ -34,6 +34,34 @@ pub enum LanguageTag {
     Pyston { python_version: (u8, u8) },
 }
 
+impl LanguageTag {
+    /// Return a pretty string representation of the language tag.
+    pub fn pretty(self) -> Option<String> {
+        match self {
+            Self::None => None,
+            Self::Python { major, minor } => {
+                if let Some(minor) = minor {
+                    Some(format!("Python {major}.{minor}"))
+                } else {
+                    Some(format!("Python {major}"))
+                }
+            }
+            Self::CPython {
+                python_version: (major, minor),
+            } => Some(format!("CPython {major}.{minor}")),
+            Self::PyPy {
+                python_version: (major, minor),
+            } => Some(format!("PyPy {major}.{minor}")),
+            Self::GraalPy {
+                python_version: (major, minor),
+            } => Some(format!("GraalPy {major}.{minor}")),
+            Self::Pyston {
+                python_version: (major, minor),
+            } => Some(format!("Pyston {major}.{minor}")),
+        }
+    }
+}
+
 impl std::fmt::Display for LanguageTag {
     /// Format a [`LanguageTag`] as a string.
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

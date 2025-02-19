@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 use std::env;
 use std::path::Path;
+use std::str::FromStr;
+use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
@@ -11,8 +13,9 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, IndexStrategy,
-    LowerBound, NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy, TrustedHost, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification,
+    ExtrasSpecification, IndexStrategy, NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy,
+    TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -21,7 +24,7 @@ use uv_distribution_types::{
     Origin, UnresolvedRequirementSpecification, Verbatim,
 };
 use uv_fs::Simplified;
-use uv_install_wheel::linker::LinkMode;
+use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pypi_types::{Conflicts, Requirement, SupportedEnvironments};
 use uv_python::{
@@ -53,8 +56,10 @@ pub(crate) async fn pip_compile(
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
+    build_constraints_from_workspace: Vec<Requirement>,
     environments: SupportedEnvironments,
     extras: ExtrasSpecification,
+    groups: DevGroupsSpecification,
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PrereleaseMode,
@@ -83,14 +88,14 @@ pub(crate) async fn pip_compile(
     no_build_isolation: bool,
     no_build_isolation_package: Vec<PackageName>,
     build_options: BuildOptions,
-    python_version: Option<PythonVersion>,
+    mut python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     universal: bool,
     exclude_newer: Option<ExcludeNewer>,
     sources: SourceStrategy,
     annotation_style: AnnotationStyle,
     link_mode: LinkMode,
-    python: Option<String>,
+    mut python: Option<String>,
     system: bool,
     python_preference: PythonPreference,
     concurrency: Concurrency,
@@ -100,6 +105,29 @@ pub(crate) async fn pip_compile(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
+    // Respect `UV_PYTHON`
+    if python.is_none() && python_version.is_none() {
+        if let Ok(request) = std::env::var("UV_PYTHON") {
+            if !request.is_empty() {
+                python = Some(request);
+            }
+        }
+    }
+
+    // If `--python` / `-p` is a simple Python version request, we treat it as `--python-version`
+    // for backwards compatibility. `-p` was previously aliased to `--python-version` but changed to
+    // `--python` for consistency with the rest of the CLI in v0.6.0. Since we assume metadata is
+    // consistent across wheels, it's okay for us to build wheels (to determine metadata) with an
+    // alternative Python interpreter as long as we solve with the proper Python version tags.
+    if python_version.is_none() {
+        if let Some(request) = python.as_ref() {
+            if let Ok(version) = PythonVersion::from_str(request) {
+                python_version = Some(version);
+                python = None;
+            }
+        }
+    }
+
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
     // return an error.
     if !extras.is_empty() && !requirements.iter().any(RequirementsSource::allows_extras) {
@@ -157,8 +185,17 @@ pub(crate) async fn pip_compile(
         .collect();
 
     // Read build constraints.
-    let build_constraints =
-        operations::read_constraints(build_constraints, &client_builder).await?;
+    let build_constraints: Vec<NameRequirementSpecification> =
+        operations::read_constraints(build_constraints, &client_builder)
+            .await?
+            .iter()
+            .cloned()
+            .chain(
+                build_constraints_from_workspace
+                    .into_iter()
+                    .map(NameRequirementSpecification::from),
+            )
+            .collect();
 
     // If all the metadata could be statically resolved, validate that every extra was used. If we
     // need to resolve metadata via PEP 517, we don't know which extras are used until much later.
@@ -186,8 +223,8 @@ pub(crate) async fn pip_compile(
         let request = PythonRequest::parse(python);
         PythonInstallation::find(&request, environment_preference, python_preference, &cache)
     } else {
-        // TODO(zanieb): The split here hints at a problem with the abstraction; we should be able to use
-        // `PythonInstallation::find(...)` here.
+        // TODO(zanieb): The split here hints at a problem with the request abstraction; we should
+        // be able to use `PythonInstallation::find(...)` here.
         let request = if let Some(version) = python_version.as_ref() {
             // TODO(zanieb): We should consolidate `VersionRequest` and `PythonVersion`
             PythonRequest::Version(VersionRequest::from(version))
@@ -213,6 +250,7 @@ pub(crate) async fn pip_compile(
                 && python_version.minor() == interpreter.python_minor()
         };
         if no_build.is_none()
+            && python.is_none()
             && python_version.version() != interpreter.python_version()
             && (python_version.patch().is_some() || !matches_without_patch)
         {
@@ -290,7 +328,11 @@ pub(crate) async fn pip_compile(
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
-            uv_auth::store_credentials(index.raw_url(), credentials);
+            let credentials = Arc::new(credentials);
+            uv_auth::store_credentials(index.raw_url(), credentials.clone());
+            if let Some(root_url) = index.root_url() {
+                uv_auth::store_credentials(&root_url, credentials.clone());
+            }
         }
     }
 
@@ -354,7 +396,6 @@ pub(crate) async fn pip_compile(
         &build_options,
         &build_hashes,
         exclude_newer,
-        LowerBound::Warn,
         sources,
         concurrency,
         preview,
@@ -379,6 +420,7 @@ pub(crate) async fn pip_compile(
         project,
         BTreeSet::default(),
         &extras,
+        &groups,
         preferences,
         EmptyInstalledPackages,
         &hasher,
@@ -401,7 +443,7 @@ pub(crate) async fn pip_compile(
     {
         Ok(resolution) => resolution,
         Err(err) => {
-            return diagnostics::OperationDiagnostic::default()
+            return diagnostics::OperationDiagnostic::native_tls(native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }

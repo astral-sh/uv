@@ -1,3 +1,10 @@
+---
+title: Using tools
+description:
+  A guide to using uv to run tools published as Python packages, including one-off invocations with
+  uvx, requesting specific tool versions, installing tools, upgrading tools, and more.
+---
+
 # Using tools
 
 Many Python packages provide applications that can be used as tools. uv has specialized support for
@@ -229,6 +236,33 @@ To instead upgrade all tools:
 ```console
 $ uv tool upgrade --all
 ```
+
+## Requesting Python versions
+
+By default, uv will use your default Python interpreter (the first it finds) when when running,
+installing, or upgrading tools. You can specify the Python interpreter to use with the `--python`
+option.
+
+For example, to request a specific Python version when running a tool:
+
+```console
+$ uvx --python 3.10 ruff
+```
+
+Or, when installing a tool:
+
+```console
+$ uv tool install --python 3.10 ruff
+```
+
+Or, when upgrading a tool:
+
+```console
+$ uv tool upgrade --python 3.10 ruff
+```
+
+For more details on requesting Python versions, see the
+[Python version](../concepts/python-versions.md#requesting-a-version) concept page..
 
 ## Next steps
 

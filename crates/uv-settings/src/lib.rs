@@ -49,8 +49,16 @@ impl FilesystemOptions {
                 validate_uv_toml(&file, &options)?;
                 Ok(Some(Self(options)))
             }
-            Err(Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(Error::Io(err)) if err.kind() == std::io::ErrorKind::NotADirectory => Ok(None),
+            Err(Error::Io(err))
+                if matches!(
+                    err.kind(),
+                    std::io::ErrorKind::NotFound
+                        | std::io::ErrorKind::NotADirectory
+                        | std::io::ErrorKind::PermissionDenied
+                ) =>
+            {
+                Ok(None)
+            }
             Err(err) => Err(err),
         }
     }
@@ -100,8 +108,9 @@ impl FilesystemOptions {
         let path = dir.join("uv.toml");
         match fs_err::read_to_string(&path) {
             Ok(content) => {
-                let options: Options = toml::from_str(&content)
-                    .map_err(|err| Error::UvToml(path.clone(), Box::new(err)))?;
+                let options = toml::from_str::<Options>(&content)
+                    .map_err(|err| Error::UvToml(path.clone(), Box::new(err)))?
+                    .relative_to(&std::path::absolute(dir)?)?;
 
                 // If the directory also contains a `[tool.uv]` table in a `pyproject.toml` file,
                 // warn.
@@ -146,6 +155,8 @@ impl FilesystemOptions {
                     );
                     return Ok(None);
                 };
+
+                let options = options.relative_to(&std::path::absolute(dir)?)?;
 
                 tracing::debug!("Found workspace configuration at `{}`", path.display());
                 return Ok(Some(Self(options)));
@@ -244,8 +255,13 @@ fn system_config_file() -> Option<PathBuf> {
 /// Load [`Options`] from a `uv.toml` file.
 fn read_file(path: &Path) -> Result<Options, Error> {
     let content = fs_err::read_to_string(path)?;
-    let options: Options =
-        toml::from_str(&content).map_err(|err| Error::UvToml(path.to_path_buf(), Box::new(err)))?;
+    let options = toml::from_str::<Options>(&content)
+        .map_err(|err| Error::UvToml(path.to_path_buf(), Box::new(err)))?;
+    let options = if let Some(parent) = std::path::absolute(path)?.parent() {
+        options.relative_to(parent)?
+    } else {
+        options
+    };
     Ok(options)
 }
 
@@ -285,6 +301,9 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
 pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Index(#[from] uv_distribution_types::IndexUrlError),
 
     #[error("Failed to parse: `{}`", _0.user_display())]
     PyprojectToml(PathBuf, #[source] Box<toml::de::Error>),
@@ -345,6 +364,26 @@ mod test {
             ))
             .unwrap(),
             first_config.path()
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_locate_system_config_xdg_unix_permissions() -> Result<(), FixtureError> {
+        let context = assert_fs::TempDir::new()?;
+        let config = context.child("uv").child("uv.toml");
+        config.write_str("")?;
+        fs_err::set_permissions(
+            &context,
+            std::os::unix::fs::PermissionsExt::from_mode(0o000),
+        )
+        .unwrap();
+
+        assert_eq!(
+            locate_system_config_xdg(Some(context.to_str().unwrap())),
+            None
         );
 
         Ok(())

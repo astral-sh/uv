@@ -13,7 +13,7 @@ use url::Url;
 use uv_configuration::{DevGroupsManifest, EditableMode, ExtrasSpecification, InstallOptions};
 use uv_distribution_filename::{DistExtension, SourceDistExtension};
 use uv_fs::Simplified;
-use uv_git::GitReference;
+use uv_git_types::GitReference;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
@@ -298,7 +298,12 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
         for Requirement { package, marker } in &self.nodes {
             match &package.id.source {
                 Source::Registry(_) => {
-                    write!(f, "{}=={}", package.id.name, package.id.version)?;
+                    let version = package
+                        .id
+                        .version
+                        .as_ref()
+                        .expect("registry package without version");
+                    write!(f, "{}=={}", package.id.name, version)?;
                 }
                 Source::Git(url, git) => {
                     // Remove the fragment and query from the URL; they're already present in the
@@ -308,11 +313,12 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                     url.set_query(None);
 
                     // Reconstruct the `GitUrl` from the `GitSource`.
-                    let git_url = uv_git::GitUrl::from_commit(
+                    let git_url = uv_git_types::GitUrl::from_commit(
                         url,
                         GitReference::from(git.kind.clone()),
                         git.precise,
-                    );
+                    )
+                    .expect("Internal Git URLs must have supported schemes");
 
                     // Reconstruct the PEP 508-compatible URL from the `GitSource`.
                     let url = Url::from(ParsedGitUrl {

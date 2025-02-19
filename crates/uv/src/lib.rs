@@ -25,9 +25,9 @@ use uv_cli::{
 use uv_cli::{PythonCommand, PythonNamespace, ToolCommand, ToolNamespace, TopLevelArgs};
 #[cfg(feature = "self-update")]
 use uv_cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
-use uv_fs::CWD;
+use uv_fs::{Simplified, CWD};
 use uv_requirements::RequirementsSource;
-use uv_scripts::{Pep723Item, Pep723Metadata, Pep723Script};
+use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
 use uv_settings::{Combine, FilesystemOptions, Options};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
@@ -168,45 +168,71 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     // If the target is a PEP 723 script, parse it.
     let script = if let Commands::Project(command) = &*cli.command {
-        if let ProjectCommand::Run(uv_cli::RunArgs { .. }) = &**command {
-            match run_command.as_ref() {
+        match &**command {
+            ProjectCommand::Run(uv_cli::RunArgs { .. }) => match run_command.as_ref() {
                 Some(
                     RunCommand::PythonScript(script, _) | RunCommand::PythonGuiScript(script, _),
-                ) => Pep723Script::read(&script).await?.map(Pep723Item::Script),
-                Some(RunCommand::PythonRemote(script, _)) => {
-                    Pep723Metadata::read(&script).await?.map(Pep723Item::Remote)
+                ) => match Pep723Script::read(&script).await {
+                    Ok(Some(script)) => Some(Pep723Item::Script(script)),
+                    Ok(None) => None,
+                    Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => None,
+                    Err(err) => return Err(err.into()),
+                },
+                Some(RunCommand::PythonRemote(url, script, _)) => {
+                    match Pep723Metadata::read(&script).await {
+                        Ok(Some(metadata)) => Some(Pep723Item::Remote(metadata, url.clone())),
+                        Ok(None) => None,
+                        Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                            None
+                        }
+                        Err(err) => return Err(err.into()),
+                    }
                 }
                 Some(
                     RunCommand::PythonStdin(contents, _) | RunCommand::PythonGuiStdin(contents, _),
                 ) => Pep723Metadata::parse(contents)?.map(Pep723Item::Stdin),
                 _ => None,
-            }
-        } else if let ProjectCommand::Remove(uv_cli::RemoveArgs {
-            script: Some(script),
-            ..
-        }) = &**command
-        {
-            Pep723Script::read(&script).await?.map(Pep723Item::Script)
-        } else if let ProjectCommand::Lock(uv_cli::LockArgs {
-            script: Some(script),
-            ..
-        }) = &**command
-        {
-            Pep723Script::read(&script).await?.map(Pep723Item::Script)
-        } else if let ProjectCommand::Tree(uv_cli::TreeArgs {
-            script: Some(script),
-            ..
-        }) = &**command
-        {
-            Pep723Script::read(&script).await?.map(Pep723Item::Script)
-        } else if let ProjectCommand::Export(uv_cli::ExportArgs {
-            script: Some(script),
-            ..
-        }) = &**command
-        {
-            Pep723Script::read(&script).await?.map(Pep723Item::Script)
-        } else {
-            None
+            },
+            ProjectCommand::Remove(uv_cli::RemoveArgs {
+                script: Some(script),
+                ..
+            })
+            | ProjectCommand::Lock(uv_cli::LockArgs {
+                script: Some(script),
+                ..
+            })
+            | ProjectCommand::Sync(uv_cli::SyncArgs {
+                script: Some(script),
+                ..
+            })
+            | ProjectCommand::Tree(uv_cli::TreeArgs {
+                script: Some(script),
+                ..
+            })
+            | ProjectCommand::Export(uv_cli::ExportArgs {
+                script: Some(script),
+                ..
+            }) => match Pep723Script::read(&script).await {
+                Ok(Some(script)) => Some(Pep723Item::Script(script)),
+                Ok(None) => {
+                    // TODO(charlie): `uv lock --script` should initialize the tag, if it doesn't
+                    // exist.
+                    bail!(
+                        "`{}` does not contain a PEP 723 metadata tag; run `{}` to initialize the script",
+                        script.user_display().cyan(),
+                        format!("uv init --script {}", script.user_display()).green()
+                    )
+                }
+                Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                    bail!(
+                        "Failed to read `{}` (not found); run `{}` to create a PEP 723 script",
+                        script.user_display().cyan(),
+                        format!("uv init --script {}", script.user_display()).green()
+                    )
+                }
+                Err(err) => return Err(err.into()),
+            },
+            _ => None,
         }
     } else {
         None
@@ -233,7 +259,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         let package_version = uv_pep440::Version::from_str(uv_version::version())?;
         if !required_version.contains(&package_version) {
             return Err(anyhow::anyhow!(
-                "Required version `{required_version}` does not match the running version `{package_version}`",
+                "Required uv version `{required_version}` does not match the running version `{package_version}`",
             ));
         }
     }
@@ -363,8 +389,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &build_constraints,
                 args.constraints_from_workspace,
                 args.overrides_from_workspace,
+                args.build_constraints_from_workspace,
                 args.environments,
                 args.settings.extras,
+                args.settings.groups,
                 args.settings.output_file.as_deref(),
                 args.settings.resolution,
                 args.settings.prerelease,
@@ -534,7 +562,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &build_constraints,
                 args.constraints_from_workspace,
                 args.overrides_from_workspace,
+                args.build_constraints_from_workspace,
                 &args.settings.extras,
+                &args.settings.groups,
                 args.settings.resolution,
                 args.settings.prerelease,
                 args.settings.dependency_mode,
@@ -819,7 +849,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             // Since we use ".venv" as the default name, we use "." as the default prompt.
             let prompt = args.prompt.or_else(|| {
@@ -1134,6 +1168,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.all_platforms,
                 args.all_arches,
                 args.show_urls,
+                args.output_format,
                 globals.python_preference,
                 globals.python_downloads,
                 &cache,
@@ -1174,7 +1209,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::PythonUninstallSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::python_uninstall(args.install_dir, args.targets, args.all, printer).await
+            commands::python_uninstall(
+                args.install_dir,
+                args.targets,
+                args.all,
+                printer,
+                globals.preview,
+            )
+            .await
         }
         Commands::Python(PythonNamespace {
             command: PythonCommand::Find(args),
@@ -1228,10 +1270,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }
         Commands::Publish(args) => {
             show_settings!(args);
-
-            if globals.preview.is_disabled() {
-                warn_user_once!("`uv publish` is experimental and may change without warning");
-            }
 
             if args.skip_existing {
                 bail!(
@@ -1369,11 +1407,6 @@ async fn run_project(
                 return Ok(ExitStatus::Success);
             }
         };
-        ($arg:expr, false) => {
-            if globals.show_settings {#
-                writeln!(printer.stdout(), "{:#?}", $arg)?;
-            }
-        };
     }
 
     match *project_command {
@@ -1391,12 +1424,14 @@ async fn run_project(
                 args.name,
                 args.package,
                 args.kind,
+                args.bare,
                 args.description,
+                args.no_description,
                 args.vcs,
                 args.build_backend,
                 args.no_readme,
                 args.author_from,
-                args.no_pin_python,
+                args.pin_python,
                 args.python,
                 args.install_mirrors,
                 args.no_workspace,
@@ -1448,6 +1483,7 @@ async fn run_project(
                 args.show_resolution || globals.verbose > 0,
                 args.locked,
                 args.frozen,
+                args.active,
                 args.no_sync,
                 args.isolated,
                 args.all_packages,
@@ -1473,6 +1509,7 @@ async fn run_project(
                 args.env_file,
                 args.no_env_file,
                 globals.preview,
+                args.max_recursion_depth,
             ))
             .await
         }
@@ -1488,10 +1525,19 @@ async fn run_project(
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
-            commands::sync(
+            // Unwrap the script.
+            let script = script.map(|script| match script {
+                Pep723Item::Script(script) => script,
+                Pep723Item::Stdin(..) => unreachable!("`uv lock` does not support stdin"),
+                Pep723Item::Remote(..) => unreachable!("`uv lock` does not support remote files"),
+            });
+
+            Box::pin(commands::sync(
                 project_dir,
                 args.locked,
                 args.frozen,
+                args.dry_run,
+                args.active,
                 args.all_packages,
                 args.package,
                 args.extras,
@@ -1504,6 +1550,7 @@ async fn run_project(
                 globals.python_preference,
                 globals.python_downloads,
                 args.settings,
+                script,
                 globals.installer_metadata,
                 globals.connectivity,
                 globals.concurrency,
@@ -1513,7 +1560,7 @@ async fn run_project(
                 &cache,
                 printer,
                 globals.preview,
-            )
+            ))
             .await
         }
         ProjectCommand::Lock(args) => {
@@ -1530,8 +1577,8 @@ async fn run_project(
             // Unwrap the script.
             let script = script.map(|script| match script {
                 Pep723Item::Script(script) => script,
-                Pep723Item::Stdin(_) => unreachable!("`uv lock` does not support stdin"),
-                Pep723Item::Remote(_) => unreachable!("`uv lock` does not support remote files"),
+                Pep723Item::Stdin(..) => unreachable!("`uv lock` does not support stdin"),
+                Pep723Item::Remote(..) => unreachable!("`uv lock` does not support remote files"),
             });
 
             Box::pin(commands::lock(
@@ -1583,6 +1630,7 @@ async fn run_project(
                 project_dir,
                 args.locked,
                 args.frozen,
+                args.active,
                 args.no_sync,
                 requirements,
                 args.editable,
@@ -1627,14 +1675,15 @@ async fn run_project(
             // Unwrap the script.
             let script = script.map(|script| match script {
                 Pep723Item::Script(script) => script,
-                Pep723Item::Stdin(_) => unreachable!("`uv remove` does not support stdin"),
-                Pep723Item::Remote(_) => unreachable!("`uv remove` does not support remote files"),
+                Pep723Item::Stdin(..) => unreachable!("`uv remove` does not support stdin"),
+                Pep723Item::Remote(..) => unreachable!("`uv remove` does not support remote files"),
             });
 
             Box::pin(commands::remove(
                 project_dir,
                 args.locked,
                 args.frozen,
+                args.active,
                 args.no_sync,
                 args.packages,
                 args.dependency_type,
@@ -1668,8 +1717,8 @@ async fn run_project(
             // Unwrap the script.
             let script = script.map(|script| match script {
                 Pep723Item::Script(script) => script,
-                Pep723Item::Stdin(_) => unreachable!("`uv tree` does not support stdin"),
-                Pep723Item::Remote(_) => unreachable!("`uv tree` does not support remote files"),
+                Pep723Item::Stdin(..) => unreachable!("`uv tree` does not support stdin"),
+                Pep723Item::Remote(..) => unreachable!("`uv tree` does not support remote files"),
             });
 
             Box::pin(commands::tree(
@@ -1714,8 +1763,8 @@ async fn run_project(
             // Unwrap the script.
             let script = script.map(|script| match script {
                 Pep723Item::Script(script) => script,
-                Pep723Item::Stdin(_) => unreachable!("`uv export` does not support stdin"),
-                Pep723Item::Remote(_) => unreachable!("`uv export` does not support remote files"),
+                Pep723Item::Stdin(..) => unreachable!("`uv export` does not support stdin"),
+                Pep723Item::Remote(..) => unreachable!("`uv export` does not support remote files"),
             });
 
             commands::export(
@@ -1757,16 +1806,35 @@ async fn run_project(
 
 /// The main entry point for a uv invocation.
 ///
-/// WARNING: This entry point is not recommended for external consumption, the
-/// uv binary interface is the official public API. When using this entry
-/// point, uv assumes it is running in a process it controls and that the
-/// entire process lifetime is managed by uv. Unexpected behavior may be
-/// encountered if this entry point is called multiple times in a single process.
-pub fn main<I, T>(args: I) -> ExitCode
+/// # Usage
+///
+/// This entry point is not recommended for external consumption, the uv binary interface is the
+/// official public API.
+///
+/// When using this entry point, uv assumes it is running in a process it controls and that the
+/// entire process lifetime is managed by uv. Unexpected behavior may be encountered if this entry
+/// point is called multiple times in a single process.
+///
+/// # Safety
+///
+/// It is only safe to call this routine when it is known that multiple threads are not running.
+#[allow(unsafe_code)]
+pub unsafe fn main<I, T>(args: I) -> ExitCode
 where
     I: IntoIterator<Item = T>,
     T: Into<OsString> + Clone,
 {
+    // Set the `UV` variable to the current executable so it is implicitly propagated to all child
+    // processes, e.g., in `uv run`.
+    if let Ok(current_exe) = std::env::current_exe() {
+        // SAFETY: The proof obligation must be satisfied by the caller.
+        unsafe {
+            // This will become unsafe in Rust 2024
+            // See https://doc.rust-lang.org/std/env/fn.set_var.html#safety
+            std::env::set_var(EnvVars::UV, current_exe);
+        }
+    }
+
     // `std::env::args` is not `Send` so we parse before passing to our runtime
     // https://github.com/rust-lang/rust/pull/48005
     let cli = match Cli::try_parse_from(args) {
@@ -1818,45 +1886,51 @@ where
         }
     };
 
-    // Windows has a default stack size of 1MB, which is lower than the linux and mac default.
+    // Running out of stack has been an issue for us. We box types and futures in various places
+    // to mitigate this, with this being an especially important case.
+    //
+    // Non-main threads should all have 2MB, as Rust forces platform consistency there,
+    // but that can be overridden with the RUST_MIN_STACK environment variable if you need more.
+    //
+    // Main thread stack-size is the real issue. There's BIG variety here across platforms
+    // and it's harder to control (which is why Rust doesn't by default). Notably
+    // on macOS and Linux you will typically get 8MB main thread, while on Windows you will
+    // typically get 1MB, which is *tiny*:
     // https://learn.microsoft.com/en-us/cpp/build/reference/stack-stack-allocations?view=msvc-170
-    // We support increasing the stack size to avoid stack overflows in debug mode on Windows. In
-    // addition, we box types and futures in various places. This includes the `Box::pin(run())`
-    // here, which prevents the large (non-send) main future alone from overflowing the stack.
-    let result = if let Ok(stack_size) = std::env::var(EnvVars::UV_STACK_SIZE) {
-        let stack_size = stack_size.parse().expect("Invalid stack size");
-        let tokio_main = move || {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .thread_stack_size(stack_size)
-                .build()
-                .expect("Failed building the Runtime");
-            // Box the large main future to avoid stack overflows.
-            let result = runtime.block_on(Box::pin(run(cli)));
-            // Avoid waiting for pending tasks to complete.
-            //
-            // The resolver may have kicked off HTTP requests during resolution that
-            // turned out to be unnecessary. Waiting for those to complete can cause
-            // the CLI to hang before exiting.
-            runtime.shutdown_background();
-            result
-        };
-        std::thread::Builder::new()
-            .stack_size(stack_size)
-            .spawn(tokio_main)
-            .expect("Tokio executor failed, was there a panic?")
-            .join()
-            .expect("Tokio executor failed, was there a panic?")
-    } else {
+    //
+    // To normalize this we just spawn a new thread called main2 with a size we can set
+    // ourselves. 2MB is typically too small (especially for our debug builds), while 4MB
+    // seems fine. Also we still try to respect RUST_MIN_STACK if it's set, in case useful,
+    // but don't let it ask for a smaller stack to avoid messy misconfiguration since we
+    // know we use quite a bit of main stack space.
+    let main_stack_size = std::env::var(EnvVars::RUST_MIN_STACK)
+        .ok()
+        .and_then(|var| var.parse::<usize>().ok())
+        .unwrap_or(0)
+        .max(4 * 1024 * 1024);
+
+    let main2 = move || {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .expect("Failed building the Runtime");
         // Box the large main future to avoid stack overflows.
         let result = runtime.block_on(Box::pin(run(cli)));
+        // Avoid waiting for pending tasks to complete.
+        //
+        // The resolver may have kicked off HTTP requests during resolution that
+        // turned out to be unnecessary. Waiting for those to complete can cause
+        // the CLI to hang before exiting.
         runtime.shutdown_background();
         result
     };
+    let result = std::thread::Builder::new()
+        .name("main2".to_owned())
+        .stack_size(main_stack_size)
+        .spawn(main2)
+        .expect("Tokio executor failed, was there a panic?")
+        .join()
+        .expect("Tokio executor failed, was there a panic?");
 
     match result {
         Ok(code) => code.into(),

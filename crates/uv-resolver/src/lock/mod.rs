@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::Infallible;
+use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -8,16 +9,18 @@ use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::Serializer;
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
+use tracing::debug;
 use url::Url;
 
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::BuildOptions;
-use uv_distribution::DistributionDatabase;
+use uv_distribution::{DistributionDatabase, FlatRequiresDist, RequiresDist};
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
@@ -28,11 +31,14 @@ use uv_distribution_types::{
     RemoteSource, ResolvedDist, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{relative_to, PortablePath, PortablePathBuf};
-use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
+use uv_git::{RepositoryReference, ResolvedRepositoryReference};
+use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
-use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
+use uv_platform_tags::{
+    AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
+};
 use uv_pypi_types::{
     redact_credentials, ConflictPackage, Conflicts, HashDigest, ParsedArchiveUrl, ParsedGitUrl,
     Requirement, RequirementSource,
@@ -60,6 +66,9 @@ mod tree;
 
 /// The current version of the lockfile format.
 pub const VERSION: u32 = 1;
+
+/// The current revision of the lockfile format.
+const REVISION: u32 = 1;
 
 static LINUX_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'linux'").unwrap();
@@ -96,7 +105,21 @@ static X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
 pub struct Lock {
+    /// The (major) version of the lockfile format.
+    ///
+    /// Changes to the major version indicate backwards- and forwards-incompatible changes to the
+    /// lockfile format. A given uv version only supports a single major version of the lockfile
+    /// format.
+    ///
+    /// In other words, a version of uv that supports version 2 of the lockfile format will not be
+    /// able to read lockfiles generated under version 1 or 3.
     version: u32,
+    /// The revision of the lockfile format.
+    ///
+    /// Changes to the revision indicate backwards-compatible changes to the lockfile format.
+    /// In other words, versions of uv that only support revision 1 _will_ be able to read lockfiles
+    /// with a revision greater than 1 (though they may ignore newer fields).
+    revision: u32,
     /// If this lockfile was built from a forking resolution with non-identical forks, store the
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
     fork_markers: Vec<UniversalMarker>,
@@ -104,6 +127,8 @@ pub struct Lock {
     conflicts: Conflicts,
     /// The list of supported environments specified by the user.
     supported_environments: Vec<MarkerTree>,
+    /// The list of required platforms specified by the user.
+    required_environments: Vec<MarkerTree>,
     /// The range of supported Python versions.
     requires_python: RequiresPython,
     /// We discard the lockfile if these options don't match.
@@ -257,11 +282,13 @@ impl Lock {
         };
         let lock = Self::new(
             VERSION,
+            REVISION,
             packages,
             requires_python,
             options,
             ResolverManifest::default(),
             Conflicts::empty(),
+            vec![],
             vec![],
             resolution.fork_markers.clone(),
         )?;
@@ -292,19 +319,13 @@ impl Lock {
             // a single disjointness check with the intersection is sufficient, so we have one
             // constant per platform.
             let platform_tags = wheel.filename.platform_tags();
-            if platform_tags
-                .iter()
-                .all(uv_platform_tags::PlatformTag::is_linux)
-            {
+            if platform_tags.iter().all(PlatformTag::is_linux) {
                 if graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS) {
                     return false;
                 }
             }
 
-            if platform_tags
-                .iter()
-                .all(uv_platform_tags::PlatformTag::is_windows)
-            {
+            if platform_tags.iter().all(PlatformTag::is_windows) {
                 // TODO(charlie): This omits `win_ia64`, which is accepted by Warehouse.
                 if graph.graph[node_index]
                     .marker()
@@ -314,28 +335,19 @@ impl Lock {
                 }
             }
 
-            if platform_tags
-                .iter()
-                .all(uv_platform_tags::PlatformTag::is_macos)
-            {
+            if platform_tags.iter().all(PlatformTag::is_macos) {
                 if graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS) {
                     return false;
                 }
             }
 
-            if platform_tags
-                .iter()
-                .all(uv_platform_tags::PlatformTag::is_arm)
-            {
+            if platform_tags.iter().all(PlatformTag::is_arm) {
                 if graph.graph[node_index].marker().is_disjoint(*ARM_MARKERS) {
                     return false;
                 }
             }
 
-            if platform_tags
-                .iter()
-                .all(uv_platform_tags::PlatformTag::is_x86_64)
-            {
+            if platform_tags.iter().all(PlatformTag::is_x86_64) {
                 if graph.graph[node_index]
                     .marker()
                     .is_disjoint(*X86_64_MARKERS)
@@ -344,10 +356,7 @@ impl Lock {
                 }
             }
 
-            if platform_tags
-                .iter()
-                .all(uv_platform_tags::PlatformTag::is_x86)
-            {
+            if platform_tags.iter().all(PlatformTag::is_x86) {
                 if graph.graph[node_index].marker().is_disjoint(*X86_MARKERS) {
                     return false;
                 }
@@ -360,12 +369,14 @@ impl Lock {
     /// Initialize a [`Lock`] from a list of [`Package`] entries.
     fn new(
         version: u32,
+        revision: u32,
         mut packages: Vec<Package>,
         requires_python: RequiresPython,
         options: ResolverOptions,
         manifest: ResolverManifest,
         conflicts: Conflicts,
         supported_environments: Vec<MarkerTree>,
+        required_environments: Vec<MarkerTree>,
         fork_markers: Vec<UniversalMarker>,
     ) -> Result<Self, LockError> {
         // Put all dependencies for each package in a canonical order and
@@ -513,9 +524,11 @@ impl Lock {
         }
         let lock = Self {
             version,
+            revision,
             fork_markers,
             conflicts,
             supported_environments,
+            required_environments,
             requires_python,
             options,
             packages,
@@ -558,9 +571,24 @@ impl Lock {
         self
     }
 
+    /// Record the required platforms that were used to generate this lock.
+    #[must_use]
+    pub fn with_required_environments(mut self, required_environments: Vec<MarkerTree>) -> Self {
+        self.required_environments = required_environments
+            .into_iter()
+            .map(|marker| self.requires_python.complexify_markers(marker))
+            .collect();
+        self
+    }
+
     /// Returns the lockfile version.
     pub fn version(&self) -> u32 {
         self.version
+    }
+
+    /// Returns the lockfile revision.
+    pub fn revision(&self) -> u32 {
+        self.revision
     }
 
     /// Returns the number of packages in the lockfile.
@@ -613,6 +641,11 @@ impl Lock {
         &self.supported_environments
     }
 
+    /// Returns the required platforms that were used to generate this lock.
+    pub fn required_environments(&self) -> &[MarkerTree] {
+        &self.required_environments
+    }
+
     /// Returns the workspace members that were used to generate this lock.
     pub fn members(&self) -> &BTreeSet<PackageName> {
         &self.manifest.members
@@ -655,6 +688,16 @@ impl Lock {
             .collect()
     }
 
+    /// Returns the required platforms that were used to generate this
+    /// lock.
+    pub fn simplified_required_environments(&self) -> Vec<MarkerTree> {
+        self.required_environments()
+            .iter()
+            .copied()
+            .map(|marker| self.simplify_environment(marker))
+            .collect()
+    }
+
     /// Simplify the given marker environment with respect to the lockfile's
     /// `requires-python` setting.
     pub fn simplify_environment(&self, marker: MarkerTree) -> MarkerTree {
@@ -674,12 +717,15 @@ impl Lock {
         let mut doc = toml_edit::DocumentMut::new();
         doc.insert("version", value(i64::from(self.version)));
 
+        if self.revision > 0 {
+            doc.insert("revision", value(i64::from(self.revision)));
+        }
+
         doc.insert("requires-python", value(self.requires_python.to_string()));
 
         if !self.fork_markers.is_empty() {
             let fork_markers = each_element_on_its_line_array(
-                deduplicated_simplified_pep508_markers(&self.fork_markers, &self.requires_python)
-                    .into_iter(),
+                simplified_universal_markers(&self.fork_markers, &self.requires_python).into_iter(),
             );
             if !fork_markers.is_empty() {
                 doc.insert("resolution-markers", value(fork_markers));
@@ -695,6 +741,17 @@ impl Lock {
                     .filter_map(SimplifiedMarkerTree::try_to_string),
             );
             doc.insert("supported-markers", value(supported_environments));
+        }
+
+        if !self.required_environments.is_empty() {
+            let required_environments = each_element_on_its_line_array(
+                self.required_environments
+                    .iter()
+                    .copied()
+                    .map(|marker| SimplifiedMarkerTree::new(&self.requires_python, marker))
+                    .filter_map(SimplifiedMarkerTree::try_to_string),
+            );
+            doc.insert("required-markers", value(required_environments));
         }
 
         if !self.conflicts.is_empty() {
@@ -964,6 +1021,94 @@ impl Lock {
         dist
     }
 
+    /// Return a [`SatisfiesResult`] if the given [`RequiresDist`] does not match the [`Package`].
+    fn satisfies_requires_dist<'lock>(
+        metadata: RequiresDist,
+        package: &'lock Package,
+        root: &Path,
+    ) -> Result<SatisfiesResult<'lock>, LockError> {
+        // Special-case: if the version is dynamic, compare the flattened requirements.
+        let flattened = if package.is_dynamic() {
+            Some(
+                FlatRequiresDist::from_requirements(
+                    metadata.requires_dist.clone(),
+                    &package.id.name,
+                )
+                .into_iter()
+                .map(|requirement| normalize_requirement(requirement, root))
+                .collect::<Result<BTreeSet<_>, _>>()?,
+            )
+        } else {
+            None
+        };
+
+        // Validate the `requires-dist` metadata.
+        let expected: BTreeSet<_> = metadata
+            .requires_dist
+            .into_iter()
+            .map(|requirement| normalize_requirement(requirement, root))
+            .collect::<Result<_, _>>()?;
+        let actual: BTreeSet<_> = package
+            .metadata
+            .requires_dist
+            .iter()
+            .cloned()
+            .map(|requirement| normalize_requirement(requirement, root))
+            .collect::<Result<_, _>>()?;
+
+        if expected != actual && flattened.is_none_or(|expected| expected != actual) {
+            return Ok(SatisfiesResult::MismatchedPackageRequirements(
+                &package.id.name,
+                package.id.version.as_ref(),
+                expected,
+                actual,
+            ));
+        }
+
+        // Validate the `dependency-groups` metadata.
+        let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = metadata
+            .dependency_groups
+            .into_iter()
+            .filter(|(_, requirements)| !requirements.is_empty())
+            .map(|(group, requirements)| {
+                Ok::<_, LockError>((
+                    group,
+                    requirements
+                        .into_iter()
+                        .map(|requirement| normalize_requirement(requirement, root))
+                        .collect::<Result<_, _>>()?,
+                ))
+            })
+            .collect::<Result<_, _>>()?;
+        let actual: BTreeMap<GroupName, BTreeSet<Requirement>> = package
+            .metadata
+            .dependency_groups
+            .iter()
+            .filter(|(_, requirements)| !requirements.is_empty())
+            .map(|(group, requirements)| {
+                Ok::<_, LockError>((
+                    group.clone(),
+                    requirements
+                        .iter()
+                        .cloned()
+                        .map(|requirement| normalize_requirement(requirement, root))
+                        .collect::<Result<_, _>>()?,
+                ))
+            })
+            .collect::<Result<_, _>>()?;
+
+        if expected != actual {
+            return Ok(SatisfiesResult::MismatchedPackageDependencyGroups(
+                &package.id.name,
+                package.id.version.as_ref(),
+                expected,
+                actual,
+            ));
+        }
+
+        Ok(SatisfiesResult::Satisfied)
+    }
+
     /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
     pub async fn satisfies<Context: BuildContext>(
         &self,
@@ -993,43 +1138,17 @@ impl Lock {
             }
         }
 
-        // Validate that the member sources have not changed.
-        {
-            // E.g., that they've switched from virtual to non-virtual or vice versa.
-            for (name, member) in packages {
-                let expected = !member.pyproject_toml().is_package();
-                let actual = self
-                    .find_by_name(name)
-                    .ok()
-                    .flatten()
-                    .map(|package| matches!(package.id.source, Source::Virtual(_)));
-                if actual != Some(expected) {
-                    return Ok(SatisfiesResult::MismatchedSources(name.clone(), expected));
-                }
-            }
-
-            // E.g., that the version has changed.
-            for (name, member) in packages {
-                let Some(expected) = member
-                    .pyproject_toml()
-                    .project
-                    .as_ref()
-                    .and_then(|project| project.version.as_ref())
-                else {
-                    continue;
-                };
-                let actual = self
-                    .find_by_name(name)
-                    .ok()
-                    .flatten()
-                    .map(|package| &package.id.version);
-                if actual != Some(expected) {
-                    return Ok(SatisfiesResult::MismatchedVersion(
-                        name.clone(),
-                        expected.clone(),
-                        actual.cloned(),
-                    ));
-                }
+        // Validate that the member sources have not changed (e.g., that they've switched from
+        // virtual to non-virtual or vice versa).
+        for (name, member) in packages {
+            let expected = !member.pyproject_toml().is_package();
+            let actual = self
+                .find_by_name(name)
+                .ok()
+                .flatten()
+                .map(|package| matches!(package.id.source, Source::Virtual(_)));
+            if actual != Some(expected) {
+                return Ok(SatisfiesResult::MismatchedVirtual(name.clone(), expected));
             }
         }
 
@@ -1196,20 +1315,24 @@ impl Lock {
                             .as_ref()
                             .is_some_and(|remotes| !remotes.contains(url))
                         {
-                            return Ok(SatisfiesResult::MissingRemoteIndex(
-                                &package.id.name,
-                                &package.id.version,
-                                url,
-                            ));
+                            let name = &package.id.name;
+                            let version = &package
+                                .id
+                                .version
+                                .as_ref()
+                                .expect("version for registry source");
+                            return Ok(SatisfiesResult::MissingRemoteIndex(name, version, url));
                         }
                     }
                     RegistrySource::Path(path) => {
                         if locals.as_ref().is_some_and(|locals| !locals.contains(path)) {
-                            return Ok(SatisfiesResult::MissingLocalIndex(
-                                &package.id.name,
-                                &package.id.version,
-                                path,
-                            ));
+                            let name = &package.id.name;
+                            let version = &package
+                                .id
+                                .version
+                                .as_ref()
+                                .expect("version for registry source");
+                            return Ok(SatisfiesResult::MissingLocalIndex(name, version, path));
                         }
                     }
                 };
@@ -1220,132 +1343,180 @@ impl Lock {
                 continue;
             }
 
-            // Get the metadata for the distribution.
-            let dist = package.to_dist(
-                root,
-                // When validating, it's okay to use wheels that don't match the current platform.
-                TagPolicy::Preferred(tags),
-                // When validating, it's okay to use (e.g.) a source distribution with `--no-build`.
-                // We're just trying to determine whether the lockfile is up-to-date. If we end
-                // up needing to build a source distribution in order to do so, below, we'll error
-                // there.
-                &BuildOptions::default(),
-            )?;
+            if let Some(version) = package.id.version.as_ref() {
+                // For a non-dynamic package, fetch the metadata from the distribution database.
+                let dist =
+                    package.to_dist(root, TagPolicy::Preferred(tags), &BuildOptions::default())?;
 
-            // Fetch the metadata for the distribution.
-            let metadata = {
-                let id = dist.version_id();
-                if let Some(archive) =
-                    index
-                        .distributions()
-                        .get(&id)
-                        .as_deref()
-                        .and_then(|response| {
-                            if let MetadataResponse::Found(archive, ..) = response {
-                                Some(archive)
-                            } else {
-                                None
-                            }
-                        })
-                {
-                    // If the metadata is already in the index, return it.
-                    archive.metadata.clone()
-                } else {
-                    // Run the PEP 517 build process to extract metadata from the source distribution.
-                    let archive = database
-                        .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
-                        .await
-                        .map_err(|err| LockErrorKind::Resolution {
-                            id: package.id.clone(),
-                            err,
-                        })?;
+                let metadata = {
+                    let id = dist.version_id();
+                    if let Some(archive) =
+                        index
+                            .distributions()
+                            .get(&id)
+                            .as_deref()
+                            .and_then(|response| {
+                                if let MetadataResponse::Found(archive, ..) = response {
+                                    Some(archive)
+                                } else {
+                                    None
+                                }
+                            })
+                    {
+                        // If the metadata is already in the index, return it.
+                        archive.metadata.clone()
+                    } else {
+                        // Run the PEP 517 build process to extract metadata from the source distribution.
+                        let archive = database
+                            .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
+                            .await
+                            .map_err(|err| LockErrorKind::Resolution {
+                                id: package.id.clone(),
+                                err,
+                            })?;
 
-                    let metadata = archive.metadata.clone();
+                        let metadata = archive.metadata.clone();
 
-                    // Insert the metadata into the index.
-                    index
-                        .distributions()
-                        .done(id, Arc::new(MetadataResponse::Found(archive)));
+                        // Insert the metadata into the index.
+                        index
+                            .distributions()
+                            .done(id, Arc::new(MetadataResponse::Found(archive)));
 
-                    metadata
+                        metadata
+                    }
+                };
+
+                // If this is a local package, validate that it hasn't become dynamic (in which
+                // case, we'd expect the version to be omitted).
+                if package.id.source.is_source_tree() {
+                    if metadata.dynamic {
+                        return Ok(SatisfiesResult::MismatchedDynamic(&package.id.name, false));
+                    }
                 }
-            };
 
-            // Validate the `version` metadata.
-            if metadata.version != package.id.version {
-                return Ok(SatisfiesResult::MismatchedVersion(
-                    package.id.name.clone(),
-                    package.id.version.clone(),
-                    Some(metadata.version.clone()),
-                ));
-            }
-
-            // Validate the `requires-dist` metadata.
-            {
-                let expected: BTreeSet<_> = metadata
-                    .requires_dist
-                    .into_iter()
-                    .map(|requirement| normalize_requirement(requirement, root))
-                    .collect::<Result<_, _>>()?;
-                let actual: BTreeSet<_> = package
-                    .metadata
-                    .requires_dist
-                    .iter()
-                    .cloned()
-                    .map(|requirement| normalize_requirement(requirement, root))
-                    .collect::<Result<_, _>>()?;
-
-                if expected != actual {
-                    return Ok(SatisfiesResult::MismatchedPackageRequirements(
+                // Validate the `version` metadata.
+                if metadata.version != *version {
+                    return Ok(SatisfiesResult::MismatchedVersion(
                         &package.id.name,
-                        &package.id.version,
-                        expected,
-                        actual,
+                        version.clone(),
+                        Some(metadata.version.clone()),
                     ));
                 }
-            }
 
-            // Validate the `dependency-groups` metadata.
-            {
-                let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = metadata
-                    .dependency_groups
-                    .into_iter()
-                    .filter(|(_, requirements)| !requirements.is_empty())
-                    .map(|(group, requirements)| {
-                        Ok::<_, LockError>((
-                            group,
-                            requirements
-                                .into_iter()
-                                .map(|requirement| normalize_requirement(requirement, root))
-                                .collect::<Result<_, _>>()?,
-                        ))
-                    })
-                    .collect::<Result<_, _>>()?;
-                let actual: BTreeMap<GroupName, BTreeSet<Requirement>> = package
-                    .metadata
-                    .dependency_groups
-                    .iter()
-                    .filter(|(_, requirements)| !requirements.is_empty())
-                    .map(|(group, requirements)| {
-                        Ok::<_, LockError>((
-                            group.clone(),
-                            requirements
-                                .iter()
-                                .cloned()
-                                .map(|requirement| normalize_requirement(requirement, root))
-                                .collect::<Result<_, _>>()?,
-                        ))
-                    })
-                    .collect::<Result<_, _>>()?;
-
-                if expected != actual {
-                    return Ok(SatisfiesResult::MismatchedPackageDependencyGroups(
-                        &package.id.name,
-                        &package.id.version,
-                        expected,
-                        actual,
-                    ));
+                // Validate that the requirements are unchanged.
+                match Self::satisfies_requires_dist(RequiresDist::from(metadata), package, root)? {
+                    SatisfiesResult::Satisfied => {}
+                    result => return Ok(result),
                 }
+            } else if let Some(source_tree) = package.id.source.as_source_tree() {
+                // For dynamic packages, we don't need the version. We only need to know that the
+                // package is still dynamic, and that the requirements are unchanged.
+                //
+                // If the distribution is a source tree, attempt to extract the requirements from the
+                // `pyproject.toml` directly. The distribution database will do this too, but we can be
+                // even more aggressive here since we _only_ need the requirements. So, for example,
+                // even if the version is dynamic, we can still extract the requirements without
+                // performing a build, unlike in the database where we typically construct a "complete"
+                // metadata object.
+                let metadata = database
+                    .requires_dist(root.join(source_tree))
+                    .await
+                    .map_err(|err| LockErrorKind::Resolution {
+                        id: package.id.clone(),
+                        err,
+                    })?;
+
+                let satisfied = metadata.is_some_and(|metadata| {
+                    // Validate that the package is still dynamic.
+                    if !metadata.dynamic {
+                        debug!("Static `requires-dist` for `{}` is out-of-date; falling back to distribution database", package.id);
+                        return false;
+                    }
+
+                    // Validate that the requirements are unchanged.
+                    match Self::satisfies_requires_dist(metadata, package, root) {
+                        Ok(SatisfiesResult::Satisfied) => {
+                            debug!("Static `requires-dist` for `{}` is up-to-date", package.id);
+                            true
+                        },
+                        Ok(..) => {
+                            debug!("Static `requires-dist` for `{}` is out-of-date; falling back to distribution database", package.id);
+                            false
+                        },
+                        Err(..) => {
+                            debug!("Static `requires-dist` for `{}` is invalid; falling back to distribution database", package.id);
+                            false
+                        },
+                    }
+                });
+
+                // If the `requires-dist` metadata matches the requirements, we're done; otherwise,
+                // fetch the "full" metadata, which may involve invoking the build system. In some
+                // cases, build backends return metadata that does _not_ match the `pyproject.toml`
+                // exactly. For example, `hatchling` will flatten any recursive (or self-referential)
+                // extras, while `setuptools` will not.
+                if !satisfied {
+                    let dist = package.to_dist(
+                        root,
+                        TagPolicy::Preferred(tags),
+                        &BuildOptions::default(),
+                    )?;
+
+                    let metadata = {
+                        let id = dist.version_id();
+                        if let Some(archive) =
+                            index
+                                .distributions()
+                                .get(&id)
+                                .as_deref()
+                                .and_then(|response| {
+                                    if let MetadataResponse::Found(archive, ..) = response {
+                                        Some(archive)
+                                    } else {
+                                        None
+                                    }
+                                })
+                        {
+                            // If the metadata is already in the index, return it.
+                            archive.metadata.clone()
+                        } else {
+                            // Run the PEP 517 build process to extract metadata from the source distribution.
+                            let archive = database
+                                .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
+                                .await
+                                .map_err(|err| LockErrorKind::Resolution {
+                                    id: package.id.clone(),
+                                    err,
+                                })?;
+
+                            let metadata = archive.metadata.clone();
+
+                            // Insert the metadata into the index.
+                            index
+                                .distributions()
+                                .done(id, Arc::new(MetadataResponse::Found(archive)));
+
+                            metadata
+                        }
+                    };
+
+                    // Validate that the package is still dynamic.
+                    if !metadata.dynamic {
+                        return Ok(SatisfiesResult::MismatchedDynamic(&package.id.name, true));
+                    }
+
+                    // Validate that the requirements are unchanged.
+                    match Self::satisfies_requires_dist(
+                        RequiresDist::from(metadata),
+                        package,
+                        root,
+                    )? {
+                        SatisfiesResult::Satisfied => {}
+                        result => return Ok(result),
+                    }
+                }
+            } else {
+                return Ok(SatisfiesResult::MissingVersion(&package.id.name));
             }
 
             // Recurse.
@@ -1406,10 +1577,12 @@ pub enum SatisfiesResult<'lock> {
     Satisfied,
     /// The lockfile uses a different set of workspace members.
     MismatchedMembers(BTreeSet<PackageName>, &'lock BTreeSet<PackageName>),
-    /// The lockfile uses a different set of sources for its workspace members.
-    MismatchedSources(PackageName, bool),
+    /// A workspace member switched from virtual to non-virtual or vice versa.
+    MismatchedVirtual(PackageName, bool),
+    /// A source tree switched from dynamic to non-dynamic or vice versa.
+    MismatchedDynamic(&'lock PackageName, bool),
     /// The lockfile uses a different set of version for its workspace members.
-    MismatchedVersion(PackageName, Version, Option<Version>),
+    MismatchedVersion(&'lock PackageName, Version, Option<Version>),
     /// The lockfile uses a different set of requirements.
     MismatchedRequirements(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of constraints.
@@ -1432,17 +1605,19 @@ pub enum SatisfiesResult<'lock> {
     /// A package in the lockfile contains different `requires-dist` metadata than expected.
     MismatchedPackageRequirements(
         &'lock PackageName,
-        &'lock Version,
+        Option<&'lock Version>,
         BTreeSet<Requirement>,
         BTreeSet<Requirement>,
     ),
-    /// A package in the lockfile contains different `dependency-group` metadata than expected.
+    /// A package in the lockfile contains different `dependency-groups` metadata than expected.
     MismatchedPackageDependencyGroups(
         &'lock PackageName,
-        &'lock Version,
+        Option<&'lock Version>,
         BTreeMap<GroupName, BTreeSet<Requirement>>,
         BTreeMap<GroupName, BTreeSet<Requirement>>,
     ),
+    /// The lockfile is missing a version.
+    MissingVersion(&'lock PackageName),
 }
 
 /// We discard the lockfile if these options match.
@@ -1557,6 +1732,7 @@ impl ResolverManifest {
 #[serde(rename_all = "kebab-case")]
 struct LockWire {
     version: u32,
+    revision: Option<u32>,
     requires_python: RequiresPython,
     /// If this lockfile was built from a forking resolution with non-identical forks, store the
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
@@ -1564,6 +1740,8 @@ struct LockWire {
     fork_markers: Vec<SimplifiedMarkerTree>,
     #[serde(rename = "supported-markers", default)]
     supported_environments: Vec<SimplifiedMarkerTree>,
+    #[serde(rename = "required-markers", default)]
+    required_environments: Vec<SimplifiedMarkerTree>,
     #[serde(rename = "conflicts", default)]
     conflicts: Option<Conflicts>,
     /// We discard the lockfile if these options match.
@@ -1589,8 +1767,8 @@ impl TryFrom<LockWire> for Lock {
             if ambiguous.contains(&dist.id.name) {
                 continue;
             }
-            if unambiguous_package_ids.remove(&dist.id.name).is_some() {
-                ambiguous.insert(dist.id.name.clone());
+            if let Some(id) = unambiguous_package_ids.remove(&dist.id.name) {
+                ambiguous.insert(id.name);
                 continue;
             }
             unambiguous_package_ids.insert(dist.id.name.clone(), dist.id.clone());
@@ -1606,24 +1784,27 @@ impl TryFrom<LockWire> for Lock {
             .into_iter()
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
             .collect();
+        let required_environments = wire
+            .required_environments
+            .into_iter()
+            .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
+            .collect();
         let fork_markers = wire
             .fork_markers
             .into_iter()
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
-            // TODO(ag): Consider whether this should also deserialize a conflict marker.
-            // We currently aren't serializing. Dropping it completely is likely to be wrong.
-            .map(|complexified_marker| {
-                UniversalMarker::new(complexified_marker, ConflictMarker::TRUE)
-            })
+            .map(UniversalMarker::from_combined)
             .collect();
         let lock = Lock::new(
             wire.version,
+            wire.revision.unwrap_or(0),
             packages,
             wire.requires_python,
             wire.options,
             wire.manifest,
             wire.conflicts.unwrap_or_else(Conflicts::empty),
             supported_environments,
+            required_environments,
             fork_markers,
         )?;
 
@@ -1690,6 +1871,16 @@ impl Package {
                 .collect::<Result<_, _>>()
                 .map_err(LockErrorKind::RequirementRelativePath)?
         };
+        let provides_extras = if id.source.is_immutable() {
+            Vec::default()
+        } else {
+            annotated_dist
+                .metadata
+                .as_ref()
+                .expect("metadata is present")
+                .provides_extras
+                .clone()
+        };
         let dependency_groups = if id.source.is_immutable() {
             BTreeMap::default()
         } else {
@@ -1720,6 +1911,7 @@ impl Package {
             dependency_groups: BTreeMap::default(),
             metadata: PackageMetadata {
                 requires_dist,
+                provides_extras,
                 dependency_groups,
             },
         })
@@ -1923,16 +2115,92 @@ impl Package {
                 id: self.id.clone(),
             }
             .into()),
-            (false, false) if self.id.source.is_wheel() => {
-                Err(LockErrorKind::IncompatibleWheelOnly {
+            (false, false) if self.id.source.is_wheel() => Err(LockError {
+                kind: Box::new(LockErrorKind::IncompatibleWheelOnly {
                     id: self.id.clone(),
+                }),
+                hint: self.tag_hint(tag_policy),
+            }),
+            (false, false) => Err(LockError {
+                kind: Box::new(LockErrorKind::NeitherSourceDistNorWheel {
+                    id: self.id.clone(),
+                }),
+                hint: self.tag_hint(tag_policy),
+            }),
+        }
+    }
+
+    /// Generate a [`LockErrorHint`] based on wheel-tag incompatibilities.
+    fn tag_hint(&self, tag_policy: TagPolicy<'_>) -> Option<LockErrorHint> {
+        let incompatibility = self
+            .wheels
+            .iter()
+            .map(|wheel| {
+                tag_policy.tags().compatibility(
+                    wheel.filename.python_tags(),
+                    wheel.filename.abi_tags(),
+                    wheel.filename.platform_tags(),
+                )
+            })
+            .max()?;
+        match incompatibility {
+            TagCompatibility::Incompatible(IncompatibleTag::Python) => {
+                let best = tag_policy.tags().python_tag();
+                let tags = self.python_tags().collect::<BTreeSet<_>>();
+                if tags.is_empty() {
+                    None
+                } else {
+                    Some(LockErrorHint::LanguageTags {
+                        package: self.id.name.clone(),
+                        version: self.id.version.clone(),
+                        tags,
+                        best,
+                    })
                 }
-                .into())
             }
-            (false, false) => Err(LockErrorKind::NeitherSourceDistNorWheel {
-                id: self.id.clone(),
+            TagCompatibility::Incompatible(IncompatibleTag::Abi) => {
+                let best = tag_policy.tags().abi_tag();
+                let tags = self
+                    .abi_tags()
+                    // Ignore `none`, which is universally compatible.
+                    //
+                    // As an example, `none` can appear here if we're solving for Python 3.13, and
+                    // the distribution includes a wheel for `cp312-none-macosx_11_0_arm64`.
+                    //
+                    // In that case, the wheel isn't compatible, but when solving for Python 3.13,
+                    // the `cp312` Python tag _can_ be compatible (e.g., for `cp312-abi3-macosx_11_0_arm64.whl`),
+                    // so this is considered an ABI incompatibility rather than Python incompatibility.
+                    .filter(|tag| *tag != AbiTag::None)
+                    .collect::<BTreeSet<_>>();
+                if tags.is_empty() {
+                    None
+                } else {
+                    Some(LockErrorHint::AbiTags {
+                        package: self.id.name.clone(),
+                        version: self.id.version.clone(),
+                        tags,
+                        best,
+                    })
+                }
             }
-            .into()),
+            TagCompatibility::Incompatible(IncompatibleTag::Platform) => {
+                let best = tag_policy.tags().platform_tag().cloned();
+                let tags = self
+                    .platform_tags(tag_policy.tags())
+                    .cloned()
+                    .collect::<BTreeSet<_>>();
+                if tags.is_empty() {
+                    None
+                } else {
+                    Some(LockErrorHint::PlatformTags {
+                        package: self.id.name.clone(),
+                        version: self.id.version.clone(),
+                        tags,
+                        best,
+                    })
+                }
+            }
+            _ => None,
         }
     }
 
@@ -1953,7 +2221,7 @@ impl Package {
                 let install_path = absolute_path(workspace_root, path)?;
                 let path_dist = PathSourceDist {
                     name: self.id.name.clone(),
-                    version: Some(self.id.version.clone()),
+                    version: self.id.version.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
                     install_path,
                     ext,
@@ -2001,11 +2269,11 @@ impl Package {
                 url.set_query(None);
 
                 // Reconstruct the `GitUrl` from the `GitSource`.
-                let git_url = uv_git::GitUrl::from_commit(
+                let git_url = uv_git_types::GitUrl::from_commit(
                     url,
                     GitReference::from(git.kind.clone()),
                     git.precise,
-                );
+                )?;
 
                 // Reconstruct the PEP 508-compatible URL from the `GitSource`.
                 let url = Url::from(ParsedGitUrl {
@@ -2035,7 +2303,7 @@ impl Package {
                 });
                 let direct_dist = DirectUrlSourceDist {
                     name: self.id.name.clone(),
-                    location,
+                    location: Box::new(location),
                     subdirectory: subdirectory.clone(),
                     ext,
                     url: VerbatimUrl::from_url(url),
@@ -2047,9 +2315,16 @@ impl Package {
                     return Ok(None);
                 };
 
+                let name = &self.id.name;
+                let version = self
+                    .id
+                    .version
+                    .as_ref()
+                    .expect("version for registry source");
+
                 let file_url = sdist.url().ok_or_else(|| LockErrorKind::MissingUrl {
-                    name: self.id.name.clone(),
-                    version: self.id.version.clone(),
+                    name: name.clone(),
+                    version: version.clone(),
                 })?;
                 let filename = sdist
                     .filename()
@@ -2076,8 +2351,8 @@ impl Package {
                 ));
 
                 let reg_dist = RegistrySourceDist {
-                    name: self.id.name.clone(),
-                    version: self.id.version.clone(),
+                    name: name.clone(),
+                    version: version.clone(),
                     file,
                     ext,
                     index,
@@ -2090,9 +2365,16 @@ impl Package {
                     return Ok(None);
                 };
 
+                let name = &self.id.name;
+                let version = self
+                    .id
+                    .version
+                    .as_ref()
+                    .expect("version for registry source");
+
                 let file_path = sdist.path().ok_or_else(|| LockErrorKind::MissingPath {
-                    name: self.id.name.clone(),
-                    version: self.id.version.clone(),
+                    name: name.clone(),
+                    version: version.clone(),
                 })?;
                 let file_url = Url::from_file_path(workspace_root.join(path).join(file_path))
                     .map_err(|()| LockErrorKind::PathToUrl)?;
@@ -2121,8 +2403,8 @@ impl Package {
                 );
 
                 let reg_dist = RegistrySourceDist {
-                    name: self.id.name.clone(),
-                    version: self.id.version.clone(),
+                    name: name.clone(),
+                    version: version.clone(),
                     file,
                     ext,
                     index,
@@ -2146,8 +2428,7 @@ impl Package {
 
         if !self.fork_markers.is_empty() {
             let fork_markers = each_element_on_its_line_array(
-                deduplicated_simplified_pep508_markers(&self.fork_markers, requires_python)
-                    .into_iter(),
+                simplified_universal_markers(&self.fork_markers, requires_python).into_iter(),
             );
             if !fork_markers.is_empty() {
                 table.insert("resolution-markers", value(fork_markers));
@@ -2257,12 +2538,63 @@ impl Package {
                 }
             }
 
+            if !self.metadata.provides_extras.is_empty() {
+                let provides_extras = self
+                    .metadata
+                    .provides_extras
+                    .iter()
+                    .map(|extra| {
+                        serde::Serialize::serialize(&extra, toml_edit::ser::ValueSerializer::new())
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                // This is just a list of names, so linebreaking it is excessive.
+                let provides_extras = Array::from_iter(provides_extras);
+                metadata_table.insert("provides-extras", value(provides_extras));
+            }
+
             if !metadata_table.is_empty() {
                 table.insert("metadata", Item::Table(metadata_table));
             }
         }
 
         Ok(table)
+    }
+
+    /// Returns an iterator over the compatible Python tags of the available wheels.
+    fn python_tags(&self) -> impl Iterator<Item = LanguageTag> + '_ {
+        self.wheels
+            .iter()
+            .flat_map(|wheel| wheel.filename.python_tags())
+            .copied()
+    }
+
+    /// Returns an iterator over the compatible Python tags of the available wheels.
+    fn abi_tags(&self) -> impl Iterator<Item = AbiTag> + '_ {
+        self.wheels
+            .iter()
+            .flat_map(|wheel| wheel.filename.abi_tags())
+            .copied()
+    }
+
+    /// Returns the set of platform tags for the distribution that are ABI-compatible with the given
+    /// tags.
+    pub fn platform_tags<'a>(
+        &'a self,
+        tags: &'a Tags,
+    ) -> impl Iterator<Item = &'a PlatformTag> + 'a {
+        self.wheels.iter().flat_map(move |wheel| {
+            if wheel.filename.python_tags().iter().any(|wheel_py| {
+                wheel
+                    .filename
+                    .abi_tags()
+                    .iter()
+                    .any(|wheel_abi| tags.is_compatible_abi(*wheel_py, *wheel_abi))
+            }) {
+                wheel.filename.platform_tags().iter()
+            } else {
+                [].iter()
+            }
+        })
     }
 
     fn find_best_wheel(&self, tag_policy: TagPolicy<'_>) -> Option<usize> {
@@ -2302,8 +2634,8 @@ impl Package {
     }
 
     /// Returns the [`Version`] of the package.
-    pub fn version(&self) -> &Version {
-        &self.id.version
+    pub fn version(&self) -> Option<&Version> {
+        self.id.version.as_ref()
     }
 
     /// Return the fork markers for this package, if any.
@@ -2358,14 +2690,30 @@ impl Package {
             _ => Ok(None),
         }
     }
+
+    /// Returns `true` if the package is a dynamic source tree.
+    fn is_dynamic(&self) -> bool {
+        self.id.version.is_none()
+    }
+
+    /// Returns the extras the package provides, if any.
+    pub fn provides_extras(&self) -> &[ExtraName] {
+        &self.metadata.provides_extras
+    }
+
+    /// Returns the dependency groups the package provides, if any.
+    pub fn dependency_groups(&self) -> &BTreeMap<GroupName, BTreeSet<Requirement>> {
+        &self.metadata.dependency_groups
+    }
 }
 
-/// Attempts to construct a `VerbatimUrl` from the given `Path`.
+/// Attempts to construct a `VerbatimUrl` from the given normalized `Path`.
 fn verbatim_url(path: &Path, id: &PackageId) -> Result<VerbatimUrl, LockError> {
-    let url = VerbatimUrl::from_absolute_path(path).map_err(|err| LockErrorKind::VerbatimUrl {
-        id: id.clone(),
-        err,
-    })?;
+    let url =
+        VerbatimUrl::from_normalized_path(path).map_err(|err| LockErrorKind::VerbatimUrl {
+            id: id.clone(),
+            err,
+        })?;
     Ok(url)
 }
 
@@ -2402,6 +2750,8 @@ struct PackageWire {
 struct PackageMetadata {
     #[serde(default)]
     requires_dist: BTreeSet<Requirement>,
+    #[serde(default)]
+    provides_extras: Vec<ExtraName>,
     #[serde(default, rename = "requires-dev", alias = "dependency-groups")]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
 }
@@ -2426,11 +2776,7 @@ impl PackageWire {
                 .fork_markers
                 .into_iter()
                 .map(|simplified_marker| simplified_marker.into_marker(requires_python))
-                // TODO(ag): Consider whether this should also deserialize a conflict marker.
-                // We currently aren't serializing. Dropping it completely is likely to be wrong.
-                .map(|complexified_marker| {
-                    UniversalMarker::new(complexified_marker, ConflictMarker::TRUE)
-                })
+                .map(UniversalMarker::from_combined)
                 .collect(),
             dependencies: unwire_deps(self.dependencies)?,
             optional_dependencies: self
@@ -2452,7 +2798,7 @@ impl PackageWire {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 pub(crate) struct PackageId {
     pub(crate) name: PackageName,
-    pub(crate) version: Version,
+    pub(crate) version: Option<Version>,
     source: Source,
 }
 
@@ -2461,9 +2807,20 @@ impl PackageId {
         annotated_dist: &AnnotatedDist,
         root: &Path,
     ) -> Result<PackageId, LockError> {
-        let name = annotated_dist.name.clone();
-        let version = annotated_dist.version.clone();
+        // Identify the source of the package.
         let source = Source::from_resolved_dist(&annotated_dist.dist, root)?;
+        // Omit versions for dynamic source trees.
+        let version = if source.is_source_tree()
+            && annotated_dist
+                .metadata
+                .as_ref()
+                .is_some_and(|metadata| metadata.dynamic)
+        {
+            None
+        } else {
+            Some(annotated_dist.version.clone())
+        };
+        let name = annotated_dist.name.clone();
         Ok(Self {
             name,
             version,
@@ -2481,7 +2838,9 @@ impl PackageId {
         let count = dist_count_by_name.and_then(|map| map.get(&self.name).copied());
         table.insert("name", value(self.name.to_string()));
         if count.map(|count| count > 1).unwrap_or(true) {
-            table.insert("version", value(self.version.to_string()));
+            if let Some(version) = &self.version {
+                table.insert("version", value(version.to_string()));
+            }
             self.source.to_toml(table);
         }
     }
@@ -2489,7 +2848,11 @@ impl PackageId {
 
 impl Display for PackageId {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}=={} @ {}", self.name, self.version, self.source)
+        if let Some(version) = &self.version {
+            write!(f, "{}=={} @ {}", self.name, version, self.source)
+        } else {
+            write!(f, "{} @ {}", self.name, self.source)
+        }
     }
 }
 
@@ -2506,15 +2869,6 @@ impl PackageIdForDependency {
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<PackageId, LockError> {
         let unambiguous_package_id = unambiguous_package_ids.get(&self.name);
-        let version = self.version.map(Ok::<_, LockError>).unwrap_or_else(|| {
-            let Some(dist_id) = unambiguous_package_id else {
-                return Err(LockErrorKind::MissingDependencyVersion {
-                    name: self.name.clone(),
-                }
-                .into());
-            };
-            Ok(dist_id.version.clone())
-        })?;
         let source = self.source.map(Ok::<_, LockError>).unwrap_or_else(|| {
             let Some(package_id) = unambiguous_package_id else {
                 return Err(LockErrorKind::MissingDependencySource {
@@ -2524,6 +2878,24 @@ impl PackageIdForDependency {
             };
             Ok(package_id.source.clone())
         })?;
+        let version = if let Some(version) = self.version {
+            Some(version)
+        } else {
+            if let Some(package_id) = unambiguous_package_id {
+                package_id.version.clone()
+            } else {
+                // If the package is a source tree, assume that the missing `self.version` field is
+                // indicative of a dynamic version.
+                if source.is_source_tree() {
+                    None
+                } else {
+                    return Err(LockErrorKind::MissingDependencyVersion {
+                        name: self.name.clone(),
+                    }
+                    .into());
+                }
+            }
+        };
         Ok(PackageId {
             name: self.name,
             version,
@@ -2536,7 +2908,7 @@ impl From<PackageId> for PackageIdForDependency {
     fn from(id: PackageId) -> PackageIdForDependency {
         PackageIdForDependency {
             name: id.name,
-            version: Some(id.version),
+            version: id.version,
             source: Some(id.source),
         }
     }
@@ -2739,6 +3111,22 @@ impl Source {
             Source::Virtual(..) => false,
             Source::Git(..) => false,
             Source::Registry(..) => false,
+        }
+    }
+
+    /// Returns `true` if the source is that of a source tree.
+    fn is_source_tree(&self) -> bool {
+        match self {
+            Source::Directory(..) | Source::Editable(..) | Source::Virtual(..) => true,
+            Source::Path(..) | Source::Git(..) | Source::Registry(..) | Source::Direct(..) => false,
+        }
+    }
+
+    /// Returns the path to the source tree, if the source is a source tree.
+    fn as_source_tree(&self) -> Option<&Path> {
+        match self {
+            Source::Directory(path) | Source::Editable(path) | Source::Virtual(path) => Some(path),
+            Source::Path(..) | Source::Git(..) | Source::Registry(..) | Source::Direct(..) => None,
         }
     }
 
@@ -2998,7 +3386,7 @@ struct DirectSource {
 /// canonical ordering of package entries.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 struct GitSource {
-    precise: GitSha,
+    precise: GitOid,
     subdirectory: Option<PathBuf>,
     kind: GitSourceKind,
 }
@@ -3025,7 +3413,7 @@ impl GitSource {
                 _ => continue,
             };
         }
-        let precise = GitSha::from_str(url.fragment().ok_or(GitSourceError::MissingSha)?)
+        let precise = GitOid::from_str(url.fragment().ok_or(GitSourceError::MissingSha)?)
             .map_err(|_| GitSourceError::InvalidSha)?;
 
         Ok(GitSource {
@@ -3324,11 +3712,9 @@ impl From<GitReference> for GitSourceKind {
         match value {
             GitReference::Branch(branch) => GitSourceKind::Branch(branch.to_string()),
             GitReference::Tag(tag) => GitSourceKind::Tag(tag.to_string()),
-            GitReference::ShortCommit(rev) => GitSourceKind::Rev(rev.to_string()),
             GitReference::BranchOrTag(rev) => GitSourceKind::Rev(rev.to_string()),
             GitReference::BranchOrTagOrCommit(rev) => GitSourceKind::Rev(rev.to_string()),
             GitReference::NamedRef(rev) => GitSourceKind::Rev(rev.to_string()),
-            GitReference::FullCommit(rev) => GitSourceKind::Rev(rev.to_string()),
             GitReference::DefaultBranch => GitSourceKind::DefaultBranch,
         }
     }
@@ -3371,20 +3757,15 @@ fn locked_git_url(git_dist: &GitSourceDist) -> Url {
     // Put the requested reference in the query.
     match git_dist.git.reference() {
         GitReference::Branch(branch) => {
-            url.query_pairs_mut()
-                .append_pair("branch", branch.to_string().as_str());
+            url.query_pairs_mut().append_pair("branch", branch.as_str());
         }
         GitReference::Tag(tag) => {
-            url.query_pairs_mut()
-                .append_pair("tag", tag.to_string().as_str());
+            url.query_pairs_mut().append_pair("tag", tag.as_str());
         }
-        GitReference::ShortCommit(rev)
-        | GitReference::BranchOrTag(rev)
+        GitReference::BranchOrTag(rev)
         | GitReference::BranchOrTagOrCommit(rev)
-        | GitReference::NamedRef(rev)
-        | GitReference::FullCommit(rev) => {
-            url.query_pairs_mut()
-                .append_pair("rev", rev.to_string().as_str());
+        | GitReference::NamedRef(rev) => {
+            url.query_pairs_mut().append_pair("rev", rev.as_str());
         }
         GitReference::DefaultBranch => {}
     }
@@ -3395,7 +3776,7 @@ fn locked_git_url(git_dist: &GitSourceDist) -> Url {
             .git
             .precise()
             .as_ref()
-            .map(GitSha::to_string)
+            .map(GitOid::to_string)
             .as_deref(),
     );
 
@@ -3824,21 +4205,22 @@ impl Dependency {
 
 impl Display for Dependency {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if self.extra.is_empty() {
-            write!(
+        match (self.extra.is_empty(), self.package_id.version.as_ref()) {
+            (true, Some(version)) => write!(f, "{}=={}", self.package_id.name, version),
+            (true, None) => write!(f, "{}", self.package_id.name),
+            (false, Some(version)) => write!(
                 f,
-                "{}=={} @ {}",
-                self.package_id.name, self.package_id.version, self.package_id.source
-            )
-        } else {
-            write!(
-                f,
-                "{}[{}]=={} @ {}",
+                "{}[{}]=={}",
                 self.package_id.name,
                 self.extra.iter().join(","),
-                self.package_id.version,
-                self.package_id.source
-            )
+                version
+            ),
+            (false, None) => write!(
+                f,
+                "{}[{}]",
+                self.package_id.name,
+                self.extra.iter().join(",")
+            ),
         }
     }
 }
@@ -3938,25 +4320,38 @@ fn normalize_url(mut url: Url) -> UrlString {
 /// 2. Ensures that the lock and install paths are appropriately framed with respect to the
 ///    current [`Workspace`].
 /// 3. Removes the `origin` field, which is only used in `requirements.txt`.
-fn normalize_requirement(requirement: Requirement, root: &Path) -> Result<Requirement, LockError> {
+fn normalize_requirement(
+    mut requirement: Requirement,
+    root: &Path,
+) -> Result<Requirement, LockError> {
+    // Sort the extras and groups for consistency.
+    requirement.extras.sort();
+    requirement.groups.sort();
+
+    // Normalize the requirement source.
     match requirement.source {
         RequirementSource::Git {
-            mut repository,
-            reference,
-            precise,
+            git,
             subdirectory,
             url: _,
         } => {
-            // Redact the credentials.
-            redact_credentials(&mut repository);
+            // Reconstruct the Git URL.
+            let git = {
+                let mut repository = git.repository().clone();
 
-            // Remove the fragment and query from the URL; they're already present in the source.
-            repository.set_fragment(None);
-            repository.set_query(None);
+                // Redact the credentials.
+                redact_credentials(&mut repository);
+
+                // Remove the fragment and query from the URL; they're already present in the source.
+                repository.set_fragment(None);
+                repository.set_query(None);
+
+                GitUrl::from_fields(repository, git.reference().clone(), git.precise())?
+            };
 
             // Reconstruct the PEP 508 URL from the underlying data.
             let url = Url::from(ParsedGitUrl {
-                url: uv_git::GitUrl::from_reference(repository.clone(), reference.clone()),
+                url: git.clone(),
                 subdirectory: subdirectory.clone(),
             });
 
@@ -3966,9 +4361,7 @@ fn normalize_requirement(requirement: Requirement, root: &Path) -> Result<Requir
                 groups: requirement.groups,
                 marker: requirement.marker,
                 source: RequirementSource::Git {
-                    repository,
-                    reference,
-                    precise,
+                    git,
                     subdirectory,
                     url: VerbatimUrl::from_url(url),
                 },
@@ -3981,7 +4374,7 @@ fn normalize_requirement(requirement: Requirement, root: &Path) -> Result<Requir
             url: _,
         } => {
             let install_path = uv_fs::normalize_path_buf(root.join(&install_path));
-            let url = VerbatimUrl::from_absolute_path(&install_path)
+            let url = VerbatimUrl::from_normalized_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
             Ok(Requirement {
@@ -4004,7 +4397,7 @@ fn normalize_requirement(requirement: Requirement, root: &Path) -> Result<Requir
             url: _,
         } => {
             let install_path = uv_fs::normalize_path_buf(root.join(&install_path));
-            let url = VerbatimUrl::from_absolute_path(&install_path)
+            let url = VerbatimUrl::from_normalized_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
             Ok(Requirement {
@@ -4078,14 +4471,32 @@ fn normalize_requirement(requirement: Requirement, root: &Path) -> Result<Requir
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-#[error(transparent)]
-pub struct LockError(Box<LockErrorKind>);
+#[derive(Debug)]
+pub struct LockError {
+    kind: Box<LockErrorKind>,
+    hint: Option<LockErrorHint>,
+}
+
+impl std::error::Error for LockError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.kind.source()
+    }
+}
+
+impl std::fmt::Display for LockError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.kind)?;
+        if let Some(hint) = &self.hint {
+            write!(f, "\n\n{hint}")?;
+        }
+        Ok(())
+    }
+}
 
 impl LockError {
     /// Returns true if the [`LockError`] is a resolver error.
     pub fn is_resolution(&self) -> bool {
-        matches!(&*self.0, LockErrorKind::Resolution { .. })
+        matches!(&*self.kind, LockErrorKind::Resolution { .. })
     }
 }
 
@@ -4094,7 +4505,246 @@ where
     LockErrorKind: From<E>,
 {
     fn from(err: E) -> Self {
-        LockError(Box::new(LockErrorKind::from(err)))
+        LockError {
+            kind: Box::new(LockErrorKind::from(err)),
+            hint: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::enum_variant_names)]
+enum LockErrorHint {
+    /// None of the available wheels for a package have a compatible Python language tag (e.g.,
+    /// `cp310` in `cp310-abi3-manylinux_2_17_x86_64.whl`).
+    LanguageTags {
+        package: PackageName,
+        version: Option<Version>,
+        tags: BTreeSet<LanguageTag>,
+        best: Option<LanguageTag>,
+    },
+    /// None of the available wheels for a package have a compatible ABI tag (e.g., `abi3` in
+    /// `cp310-abi3-manylinux_2_17_x86_64.whl`).
+    AbiTags {
+        package: PackageName,
+        version: Option<Version>,
+        tags: BTreeSet<AbiTag>,
+        best: Option<AbiTag>,
+    },
+    /// None of the available wheels for a package have a compatible platform tag (e.g.,
+    /// `manylinux_2_17_x86_64` in `cp310-abi3-manylinux_2_17_x86_64.whl`).
+    PlatformTags {
+        package: PackageName,
+        version: Option<Version>,
+        tags: BTreeSet<PlatformTag>,
+        best: Option<PlatformTag>,
+    },
+}
+
+impl std::fmt::Display for LockErrorHint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::LanguageTags {
+                package,
+                version,
+                tags,
+                best,
+            } => {
+                if let Some(best) = best {
+                    let s = if tags.len() == 1 { "" } else { "s" };
+                    let best = if let Some(pretty) = best.pretty() {
+                        format!("{} (`{}`)", pretty.cyan(), best.cyan())
+                    } else {
+                        format!("{}", best.cyan())
+                    };
+                    if let Some(version) = version {
+                        write!(
+                            f,
+                            "{}{} You're using {}, but `{}` ({}) only has wheels with the following Python implementation tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            best,
+                            package.cyan(),
+                            format!("v{version}").cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    } else {
+                        write!(
+                            f,
+                            "{}{} You're using {}, but `{}` only has wheels with the following Python implementation tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            best,
+                            package.cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    }
+                } else {
+                    let s = if tags.len() == 1 { "" } else { "s" };
+                    if let Some(version) = version {
+                        write!(
+                            f,
+                            "{}{} Wheels are available for `{}` ({}) with the following Python implementation tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            package.cyan(),
+                            format!("v{version}").cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    } else {
+                        write!(
+                            f,
+                            "{}{} Wheels are available for `{}` with the following Python implementation tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            package.cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    }
+                }
+            }
+            Self::AbiTags {
+                package,
+                version,
+                tags,
+                best,
+            } => {
+                if let Some(best) = best {
+                    let s = if tags.len() == 1 { "" } else { "s" };
+                    let best = if let Some(pretty) = best.pretty() {
+                        format!("{} (`{}`)", pretty.cyan(), best.cyan())
+                    } else {
+                        format!("{}", best.cyan())
+                    };
+                    if let Some(version) = version {
+                        write!(
+                            f,
+                            "{}{} You're using {}, but  `{}` ({}) only has wheels with the following Python ABI tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            best,
+                            package.cyan(),
+                            format!("v{version}").cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    } else {
+                        write!(
+                            f,
+                            "{}{} You're using {}, but `{}` only has wheels with the following Python ABI tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            best,
+                            package.cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    }
+                } else {
+                    let s = if tags.len() == 1 { "" } else { "s" };
+                    if let Some(version) = version {
+                        write!(
+                            f,
+                            "{}{} Wheels are available for `{}` ({}) with the following Python ABI tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            package.cyan(),
+                            format!("v{version}").cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    } else {
+                        write!(
+                            f,
+                            "{}{} Wheels are available for `{}` with the following Python ABI tag{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            package.cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    }
+                }
+            }
+            Self::PlatformTags {
+                package,
+                version,
+                tags,
+                best,
+            } => {
+                let s = if tags.len() == 1 { "" } else { "s" };
+                if let Some(best) = best {
+                    let best = if let Some(pretty) = best.pretty() {
+                        format!("{} (`{}`)", pretty.cyan(), best.cyan())
+                    } else {
+                        format!("`{}`", best.cyan())
+                    };
+                    if let Some(version) = version {
+                        write!(
+                            f,
+                            "{}{} You're on {}, but `{}` ({}) only has wheels for the following platform{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            best,
+                            package.cyan(),
+                            format!("v{version}").cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    } else {
+                        write!(
+                            f,
+                            "{}{} You're on {}, but `{}` only has wheels for the following platform{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            best,
+                            package.cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    }
+                } else {
+                    if let Some(version) = version {
+                        write!(
+                            f,
+                            "{}{} Wheels are available for `{}` ({}) on the following platform{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            package.cyan(),
+                            format!("v{version}").cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    } else {
+                        write!(
+                            f,
+                            "{}{} Wheels are available for `{}` on the following platform{s}: {}",
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            package.cyan(),
+                            tags.iter()
+                                .map(|tag| format!("`{}`", tag.cyan()))
+                                .join(", "),
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -4108,14 +4758,14 @@ where
 enum LockErrorKind {
     /// An error that occurs when multiple packages with the same
     /// ID were found.
-    #[error("Found duplicate package `{id}`")]
+    #[error("Found duplicate package `{id}`", id = id.cyan())]
     DuplicatePackage {
         /// The ID of the conflicting package.
         id: PackageId,
     },
     /// An error that occurs when there are multiple dependencies for the
     /// same package that have identical identifiers.
-    #[error("For package `{id}`, found duplicate dependency `{dependency}`")]
+    #[error("For package `{id}`, found duplicate dependency `{dependency}`", id = id.cyan(), dependency = dependency.cyan())]
     DuplicateDependency {
         /// The ID of the package for which a duplicate dependency was
         /// found.
@@ -4126,7 +4776,7 @@ enum LockErrorKind {
     /// An error that occurs when there are multiple dependencies for the
     /// same package that have identical identifiers, as part of the
     /// that package's optional dependencies.
-    #[error("For package `{id}[{extra}]`, found duplicate dependency `{dependency}`")]
+    #[error("For package `{id}`, found duplicate dependency `{dependency}`", id = format!("{id}[{extra}]").cyan(), dependency = dependency.cyan())]
     DuplicateOptionalDependency {
         /// The ID of the package for which a duplicate dependency was
         /// found.
@@ -4139,7 +4789,7 @@ enum LockErrorKind {
     /// An error that occurs when there are multiple dependencies for the
     /// same package that have identical identifiers, as part of the
     /// that package's development dependencies.
-    #[error("For package `{id}:{group}`, found duplicate dependency `{dependency}`")]
+    #[error("For package `{id}`, found duplicate dependency `{dependency}`", id = format!("{id}:{group}").cyan(), dependency = dependency.cyan())]
     DuplicateDevDependency {
         /// The ID of the package for which a duplicate dependency was
         /// found.
@@ -4162,8 +4812,8 @@ enum LockErrorKind {
     /// for a given wheel or source distribution.
     #[error("Failed to parse file extension; expected one of: {0}")]
     MissingExtension(#[from] ExtensionError),
-    /// Failed to parse a git source URL.
-    #[error("Failed to parse source git URL")]
+    /// Failed to parse a Git source URL.
+    #[error("Failed to parse Git URL")]
     InvalidGitSourceUrl(
         /// The underlying error that occurred. This includes the
         /// errant URL in the message.
@@ -4173,7 +4823,7 @@ enum LockErrorKind {
     /// An error that occurs when there's an unrecognized dependency.
     ///
     /// That is, a dependency for a package that isn't in the lockfile.
-    #[error("For package `{id}`, found dependency `{dependency}` with no locked package")]
+    #[error("For package `{id}`, found dependency `{dependency}` with no locked package", id = id.cyan(), dependency = dependency.cyan())]
     UnrecognizedDependency {
         /// The ID of the package that has an unrecognized dependency.
         id: PackageId,
@@ -4183,7 +4833,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a hash is expected (or not) for a particular
     /// artifact, but one was not found (or was).
-    #[error("Since the package `{id}` comes from a {source} dependency, a hash was {expected} but one was not found for {artifact_type}", source = id.source.name(), expected = if *expected { "expected" } else { "not expected" })]
+    #[error("Since the package `{id}` comes from a {source} dependency, a hash was {expected} but one was not found for {artifact_type}", id = id.cyan(), source = id.source.name(), expected = if *expected { "expected" } else { "not expected" })]
     Hash {
         /// The ID of the package that has a missing hash.
         id: PackageId,
@@ -4195,7 +4845,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a package is included with an extra name,
     /// but no corresponding base package (i.e., without the extra) exists.
-    #[error("Found package `{id}` with extra `{extra}` but no base package")]
+    #[error("Found package `{id}` with extra `{extra}` but no base package", id = id.cyan(), extra = extra.cyan())]
     MissingExtraBase {
         /// The ID of the package that has a missing base.
         id: PackageId,
@@ -4205,9 +4855,7 @@ enum LockErrorKind {
     /// An error that occurs when a package is included with a development
     /// dependency group, but no corresponding base package (i.e., without
     /// the group) exists.
-    #[error(
-        "found package `{id}` with development dependency group `{group}` but no base package"
-    )]
+    #[error("Found package `{id}` with development dependency group `{group}` but no base package", id = id.cyan())]
     MissingDevBase {
         /// The ID of the package that has a missing base.
         id: PackageId,
@@ -4225,7 +4873,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a distribution indicates that it is sourced from a remote
     /// registry, but is missing a URL.
-    #[error("Found registry distribution `{name}=={version}` without a valid URL")]
+    #[error("Found registry distribution `{name}` ({version}) without a valid URL", name = name.cyan(), version = format!("v{version}").cyan())]
     MissingUrl {
         /// The name of the distribution that is missing a URL.
         name: PackageName,
@@ -4234,7 +4882,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a distribution indicates that it is sourced from a local registry,
     /// but is missing a path.
-    #[error("Found registry distribution `{name}=={version}` without a valid path")]
+    #[error("Found registry distribution `{name}` ({version}) without a valid path", name = name.cyan(), version = format!("v{version}").cyan())]
     MissingPath {
         /// The name of the distribution that is missing a path.
         name: PackageName,
@@ -4243,55 +4891,53 @@ enum LockErrorKind {
     },
     /// An error that occurs when a distribution indicates that it is sourced from a registry, but
     /// is missing a filename.
-    #[error("Found registry distribution `{id}` without a valid filename")]
+    #[error("Found registry distribution `{id}` without a valid filename", id = id.cyan())]
     MissingFilename {
         /// The ID of the distribution that is missing a filename.
         id: PackageId,
     },
     /// An error that occurs when a distribution is included with neither wheels nor a source
     /// distribution.
-    #[error("Distribution `{id}` can't be installed because it doesn't have a source distribution or wheel for the current platform")]
+    #[error("Distribution `{id}` can't be installed because it doesn't have a source distribution or wheel for the current platform", id = id.cyan())]
     NeitherSourceDistNorWheel {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a distribution is marked as both `--no-binary` and `--no-build`.
-    #[error("Distribution `{id}` can't be installed because it is marked as both `--no-binary` and `--no-build`")]
+    #[error("Distribution `{id}` can't be installed because it is marked as both `--no-binary` and `--no-build`", id = id.cyan())]
     NoBinaryNoBuild {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a distribution is marked as `--no-binary`, but no source
     /// distribution is available.
-    #[error("Distribution `{id}` can't be installed because it is marked as `--no-binary` but has no source distribution")]
+    #[error("Distribution `{id}` can't be installed because it is marked as `--no-binary` but has no source distribution", id = id.cyan())]
     NoBinary {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a distribution is marked as `--no-build`, but no binary
     /// distribution is available.
-    #[error("Distribution `{id}` can't be installed because it is marked as `--no-build` but has no binary distribution")]
+    #[error("Distribution `{id}` can't be installed because it is marked as `--no-build` but has no binary distribution", id = id.cyan())]
     NoBuild {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a wheel-only distribution is incompatible with the current
     /// platform.
-    #[error(
-        "distribution `{id}` can't be installed because the binary distribution is incompatible with the current platform"
-    )]
+    #[error("Distribution `{id}` can't be installed because the binary distribution is incompatible with the current platform", id = id.cyan())]
     IncompatibleWheelOnly {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a wheel-only source is marked as `--no-binary`.
-    #[error("Distribution `{id}` can't be installed because it is marked as `--no-binary` but is itself a binary distribution")]
+    #[error("Distribution `{id}` can't be installed because it is marked as `--no-binary` but is itself a binary distribution", id = id.cyan())]
     NoBinaryWheelOnly {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when converting between URLs and paths.
-    #[error("Found dependency `{id}` with no locked distribution")]
+    #[error("Found dependency `{id}` with no locked distribution", id = id.cyan())]
     VerbatimUrl {
         /// The ID of the distribution that has a missing base.
         id: PackageId,
@@ -4322,20 +4968,14 @@ enum LockErrorKind {
     ),
     /// An error that occurs when an ambiguous `package.dependency` is
     /// missing a `version` field.
-    #[error(
-        "Dependency `{name}` has missing `version` \
-         field but has more than one matching package"
-    )]
+    #[error("Dependency `{name}` has missing `version` field but has more than one matching package", name = name.cyan())]
     MissingDependencyVersion {
         /// The name of the dependency that is missing a `version` field.
         name: PackageName,
     },
     /// An error that occurs when an ambiguous `package.dependency` is
     /// missing a `source` field.
-    #[error(
-        "Dependency `{name}` has missing `source` \
-         field but has more than one matching package"
-    )]
+    #[error("Dependency `{name}` has missing `source` field but has more than one matching package", name = name.cyan())]
     MissingDependencySource {
         /// The name of the dependency that is missing a `source` field.
         name: PackageName,
@@ -4369,19 +5009,19 @@ enum LockErrorKind {
     UrlToPath,
     /// An error that occurs when multiple packages with the same
     /// name were found when identifying the root packages.
-    #[error("Found multiple packages matching `{name}`")]
+    #[error("Found multiple packages matching `{name}`", name = name.cyan())]
     MultipleRootPackages {
         /// The ID of the package.
         name: PackageName,
     },
     /// An error that occurs when a root package can't be found.
-    #[error("Could not find root package `{name}`")]
+    #[error("Could not find root package `{name}`", name = name.cyan())]
     MissingRootPackage {
         /// The ID of the package.
         name: PackageName,
     },
     /// An error that occurs when resolving metadata for a package.
-    #[error("Failed to generate package metadata for `{id}`")]
+    #[error("Failed to generate package metadata for `{id}`", id = id.cyan())]
     Resolution {
         /// The ID of the distribution that failed to resolve.
         id: PackageId,
@@ -4389,6 +5029,18 @@ enum LockErrorKind {
         #[source]
         err: uv_distribution::Error,
     },
+    #[error(
+        "Found conflicting extras `{package1}[{extra1}]` \
+         and `{package2}[{extra2}]` enabled simultaneously"
+    )]
+    ConflictingExtra {
+        package1: PackageName,
+        extra1: ExtraName,
+        package2: PackageName,
+        extra2: ExtraName,
+    },
+    #[error(transparent)]
+    GitUrlParse(#[from] GitUrlParseError),
 }
 
 /// An error that occurs when a source string could not be parsed.
@@ -4458,47 +5110,56 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
 
 /// Returns the simplified string-ified version of each marker given.
 ///
-/// If a marker is a duplicate of a previous marker or is always true after
-/// simplification, then it is omitted from the `Vec` returned. (And indeed,
-/// the `Vec` returned may be empty.)
-fn deduplicated_simplified_pep508_markers(
+/// Note that the marker strings returned will include conflict markers if they
+/// are present.
+fn simplified_universal_markers(
     markers: &[UniversalMarker],
     requires_python: &RequiresPython,
 ) -> Vec<String> {
-    // NOTE(ag): It's possible that `resolution-markers` should actually
-    // include conflicting marker info. In which case, we should serialize
-    // the entire `UniversalMarker` (taking care to still make the PEP 508
-    // simplified). At present, we don't include that info. And as a result,
-    // this can lead to duplicate markers, since each represents a fork with
-    // the same PEP 508 marker but a different conflict marker. We strip the
-    // conflict marker, which can leave duplicate PEP 508 markers.
-    //
-    // So if we did include the conflict marker, then we wouldn't need to do
-    // deduplication.
-    //
-    // Why don't we include conflict markers though? At present, it's just
-    // not clear that they are necessary. So by the principle of being
-    // conservative, we don't write them. In particular, I believe the original
-    // reason for `resolution-markers` is to prevent non-deterministic locking.
-    // But it's not clear that that can occur for conflict markers.
-    let mut simplified = vec![];
-    // Deduplicate without changing order.
+    let mut pep508_only = vec![];
     let mut seen = FxHashSet::default();
     for marker in markers {
-        let simplified_marker = SimplifiedMarkerTree::new(requires_python, marker.pep508());
-        let Some(simplified_string) = simplified_marker.try_to_string() else {
-            continue;
-        };
-        if seen.insert(simplified_string.clone()) {
-            simplified.push(simplified_string);
+        let simplified =
+            SimplifiedMarkerTree::new(requires_python, marker.pep508()).as_simplified_marker_tree();
+        if seen.insert(simplified) {
+            pep508_only.push(simplified);
         }
     }
-    simplified
+    let any_overlap = pep508_only
+        .iter()
+        .tuple_combinations()
+        .any(|(&marker1, &marker2)| !marker1.is_disjoint(marker2));
+    let markers = if !any_overlap {
+        pep508_only
+    } else {
+        markers
+            .iter()
+            .map(|marker| {
+                SimplifiedMarkerTree::new(requires_python, marker.combined())
+                    .as_simplified_marker_tree()
+            })
+            .collect()
+    };
+    markers
+        .into_iter()
+        .filter_map(MarkerTree::try_to_string)
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
+    use uv_warnings::anstream;
+
     use super::*;
+
+    /// Assert a given display snapshot, stripping ANSI color codes.
+    macro_rules! assert_stripped_snapshot {
+        ($expr:expr, @$snapshot:literal) => {{
+            let expr = format!("{}", $expr);
+            let expr = format!("{}", anstream::adapter::strip_str(&expr));
+            insta::assert_snapshot!(expr, @$snapshot);
+        }};
+    }
 
     #[test]
     fn missing_dependency_source_unambiguous() {
@@ -4509,13 +5170,13 @@ requires-python = ">=3.12"
 [[package]]
 name = "a"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "b"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package.dependencies]]
@@ -4535,18 +5196,18 @@ requires-python = ">=3.12"
 [[package]]
 name = "a"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "b"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package.dependencies]]
 name = "a"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
         insta::assert_debug_snapshot!(result);
@@ -4561,13 +5222,13 @@ requires-python = ">=3.12"
 [[package]]
 name = "a"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
 name = "b"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package.dependencies]]
@@ -4586,71 +5247,7 @@ requires-python = ">=3.12"
 [[package]]
 name = "a"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package]]
-name = "a"
-version = "0.1.1"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package]]
-name = "b"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package.dependencies]]
-name = "a"
-version = "0.1.0"
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn missing_dependency_version_ambiguous() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "a"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package]]
-name = "a"
-version = "0.1.1"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package]]
-name = "b"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package.dependencies]]
-name = "a"
-source =  { registry = "https://pypi.org/simple" }
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn missing_dependency_source_version_ambiguous() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "a"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package]]
@@ -4662,13 +5259,107 @@ sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d
 [[package]]
 name = "b"
 version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package.dependencies]]
+name = "a"
+version = "0.1.0"
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(result, @"Dependency `a` has missing `source` field but has more than one matching package");
+    }
+
+    #[test]
+    fn missing_dependency_version_ambiguous() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "a"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package.dependencies]]
+name = "a"
+source = { registry = "https://pypi.org/simple" }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(result, @"Dependency `a` has missing `version` field but has more than one matching package");
+    }
+
+    #[test]
+    fn missing_dependency_source_version_ambiguous() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "a"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
 [[package.dependencies]]
 name = "a"
 "#;
-        let result: Result<Lock, _> = toml::from_str(data);
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(result, @"Dependency `a` has missing `source` field but has more than one matching package");
+    }
+
+    #[test]
+    fn missing_dependency_version_dynamic() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+source = { editable = "path/to/a" }
+
+[[package]]
+name = "a"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package.dependencies]]
+name = "a"
+source = { editable = "path/to/a" }
+"#;
+        let result = toml::from_str::<Lock>(data);
         insta::assert_debug_snapshot!(result);
     }
 

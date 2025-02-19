@@ -19,7 +19,7 @@ workspace = true
 uv-cache-key = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio", "schemars"] }
-uv-git = { workspace = true }
+uv-git-types = { workspace = true }
 uv-macros = { workspace = true }
 uv-normalize = { workspace = true }
 uv-options-metadata = { workspace = true }
@@ -34,7 +34,6 @@ glob = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
 rustc-hash = { workspace = true }
-same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
@@ -50,6 +49,9 @@ assert_fs = { version = "1.1.2" }
 insta = { version = "1.40.0", features = ["filters", "json", "redactions"] }
 regex = { workspace = true }
 tempfile = { workspace = true }
+
+[features]
+schemars = ["dep:schemars", "uv-pypi-types/schemars"]
 
 [package.metadata.cargo-shear]
 ignored = ["uv-options-metadata"]

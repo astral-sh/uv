@@ -43,11 +43,13 @@ use uv_distribution_filename::{
     DistExtension, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
 use uv_fs::normalize_absolute_path;
-use uv_git::GitUrl;
+use uv_git_types::GitUrl;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::{Pep508Url, VerbatimUrl};
-use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
+use uv_pypi_types::{
+    ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
+};
 
 pub use crate::annotation::*;
 pub use crate::any::*;
@@ -64,6 +66,7 @@ pub use crate::index::*;
 pub use crate::index_name::*;
 pub use crate::index_url::*;
 pub use crate::installed::*;
+pub use crate::known_platform::*;
 pub use crate::origin::*;
 pub use crate::pip_index::*;
 pub use crate::prioritized_distribution::*;
@@ -88,6 +91,7 @@ mod index;
 mod index_name;
 mod index_url;
 mod installed;
+mod known_platform;
 mod origin;
 mod pip_index;
 mod prioritized_distribution;
@@ -291,7 +295,7 @@ pub struct DirectUrlSourceDist {
     /// like using e.g. `foo @ https://github.com/org/repo/archive/master.zip`
     pub name: PackageName,
     /// The URL without the subdirectory fragment.
-    pub location: Url,
+    pub location: Box<Url>,
     /// The subdirectory within the archive in which the source distribution is located.
     pub subdirectory: Option<PathBuf>,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
@@ -370,7 +374,7 @@ impl Dist {
             DistExtension::Source(ext) => {
                 Ok(Self::Source(SourceDist::DirectUrl(DirectUrlSourceDist {
                     name,
-                    location,
+                    location: Box::new(location),
                     subdirectory,
                     ext,
                     url,
@@ -662,6 +666,72 @@ impl RegistryBuiltDist {
     }
 }
 
+impl DirectUrlBuiltDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Archive(ParsedArchiveUrl::from_source(
+            (*self.location).clone(),
+            None,
+            DistExtension::Wheel,
+        ))
+    }
+}
+
+impl PathBuiltDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Path(ParsedPathUrl::from_source(
+            self.install_path.clone(),
+            DistExtension::Wheel,
+            self.url.to_url(),
+        ))
+    }
+}
+
+impl PathSourceDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Path(ParsedPathUrl::from_source(
+            self.install_path.clone(),
+            DistExtension::Source(self.ext),
+            self.url.to_url(),
+        ))
+    }
+}
+
+impl DirectUrlSourceDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Archive(ParsedArchiveUrl::from_source(
+            (*self.location).clone(),
+            self.subdirectory.clone(),
+            DistExtension::Source(self.ext),
+        ))
+    }
+}
+
+impl GitSourceDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Git(ParsedGitUrl::from_source(
+            (*self.git).clone(),
+            self.subdirectory.clone(),
+        ))
+    }
+}
+
+impl DirectorySourceDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
+            self.install_path.clone(),
+            self.editable,
+            self.r#virtual,
+            self.url.to_url(),
+        ))
+    }
+}
+
 impl Name for RegistryBuiltWheel {
     fn name(&self) -> &PackageName {
         &self.filename.name
@@ -853,7 +923,7 @@ impl RemoteSource for Url {
         let last = path_segments.last().expect("path segments is non-empty");
 
         // Decode the filename, which may be percent-encoded.
-        let filename = urlencoding::decode(last)?;
+        let filename = percent_encoding::percent_decode_str(last).decode_utf8()?;
 
         Ok(filename)
     }
@@ -873,7 +943,7 @@ impl RemoteSource for UrlString {
             .ok_or_else(|| Error::MissingPathSegments(self.to_string()))?;
 
         // Decode the filename, which may be percent-encoded.
-        let filename = urlencoding::decode(last)?;
+        let filename = percent_encoding::percent_decode_str(last).decode_utf8()?;
 
         Ok(filename)
     }
@@ -1343,10 +1413,10 @@ mod test {
     /// Ensure that we don't accidentally grow the `Dist` sizes.
     #[test]
     fn dist_size() {
-        assert!(size_of::<Dist>() <= 232, "{}", size_of::<Dist>());
-        assert!(size_of::<BuiltDist>() <= 216, "{}", size_of::<BuiltDist>());
+        assert!(size_of::<Dist>() <= 200, "{}", size_of::<Dist>());
+        assert!(size_of::<BuiltDist>() <= 200, "{}", size_of::<BuiltDist>());
         assert!(
-            size_of::<SourceDist>() <= 232,
+            size_of::<SourceDist>() <= 176,
             "{}",
             size_of::<SourceDist>()
         );

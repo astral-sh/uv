@@ -6,17 +6,15 @@ use either::Either;
 use thiserror::Error;
 use url::Url;
 
-use uv_configuration::LowerBound;
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{Index, IndexLocations, IndexName, Origin};
-use uv_git::GitReference;
+use uv_git_types::{GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{looks_like_git_repository, MarkerTree, VerbatimUrl, VersionOrUrl};
 use uv_pypi_types::{
     ConflictItem, ParsedUrlError, Requirement, RequirementSource, VerbatimParsedUrl,
 };
-use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
 use uv_workspace::Workspace;
 
@@ -45,7 +43,7 @@ impl LoweredRequirement {
         group: Option<&GroupName>,
         locations: &'data IndexLocations,
         workspace: &'data Workspace,
-        lower_bound: LowerBound,
+
         git_member: Option<&'data GitWorkspaceMember<'data>>,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + 'data {
         // Identify the source from the `tool.uv.sources` table.
@@ -136,19 +134,6 @@ impl LoweredRequirement {
         }
 
         let Some(sources) = sources else {
-            let has_sources = !project_sources.is_empty() || !workspace.sources().is_empty();
-            if matches!(lower_bound, LowerBound::Warn) {
-                // Support recursive editable inclusions.
-                if has_sources
-                    && requirement.version_or_url.is_none()
-                    && project_name.is_none_or(|project_name| *project_name != requirement.name)
-                {
-                    warn_user_once!(
-                        "Missing version constraint (e.g., a lower bound) for `{}`",
-                        requirement.name
-                    );
-                }
-            }
             return Either::Left(std::iter::once(Ok(Self(Requirement::from(requirement)))));
         };
 
@@ -252,12 +237,7 @@ impl LoweredRequirement {
                                     })
                                 }
                             });
-                            let source = registry_source(
-                                &requirement,
-                                index.into_url(),
-                                conflict,
-                                lower_bound,
-                            );
+                            let source = registry_source(&requirement, index.into_url(), conflict);
                             (source, marker)
                         }
                         Source::Workspace {
@@ -311,9 +291,7 @@ impl LoweredRequirement {
                                         .expect("Workspace member must be relative");
                                 let subdirectory = uv_fs::normalize_path_buf(subdirectory);
                                 RequirementSource::Git {
-                                    repository: git_member.git_source.git.repository().clone(),
-                                    reference: git_member.git_source.git.reference().clone(),
-                                    precise: git_member.git_source.git.precise(),
+                                    git: git_member.git_source.git.clone(),
                                     subdirectory: if subdirectory == PathBuf::new() {
                                         None
                                     } else {
@@ -367,7 +345,6 @@ impl LoweredRequirement {
         sources: &'data BTreeMap<PackageName, Sources>,
         indexes: &'data [Index],
         locations: &'data IndexLocations,
-        lower_bound: LowerBound,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + 'data {
         let source = sources.get(&requirement.name).cloned();
 
@@ -383,7 +360,7 @@ impl LoweredRequirement {
                     requirement
                         .marker
                         .top_level_extra_name()
-                        .is_some_and(|extra| extra == *target)
+                        .is_some_and(|extra| &*extra == target)
                 })
             })
             .cloned()
@@ -473,12 +450,7 @@ impl LoweredRequirement {
                                 ));
                             };
                             let conflict = None;
-                            let source = registry_source(
-                                &requirement,
-                                index.into_url(),
-                                conflict,
-                                lower_bound,
-                            );
+                            let source = registry_source(&requirement, index.into_url(), conflict);
                             (source, marker)
                         }
                         Source::Workspace { .. } => {
@@ -523,6 +495,8 @@ pub enum LoweringError {
     UndeclaredWorkspacePackage(PackageName),
     #[error("Can only specify one of: `rev`, `tag`, or `branch`")]
     MoreThanOneGitRef,
+    #[error(transparent)]
+    GitUrlParse(#[from] GitUrlParseError),
     #[error("Package `{0}` references an undeclared index: `{1}`")]
     MissingIndex(PackageName, IndexName),
     #[error("Workspace members are not allowed in non-workspace contexts")]
@@ -601,9 +575,7 @@ fn git_source(
 
     Ok(RequirementSource::Git {
         url,
-        repository,
-        reference,
-        precise: None,
+        git: GitUrl::from_reference(repository, reference)?,
         subdirectory,
     })
 }
@@ -652,40 +624,23 @@ fn registry_source(
     requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
     index: Url,
     conflict: Option<ConflictItem>,
-    bounds: LowerBound,
 ) -> RequirementSource {
     match &requirement.version_or_url {
-        None => {
-            if matches!(bounds, LowerBound::Warn) {
-                warn_user_once!(
-                    "Missing version constraint (e.g., a lower bound) for `{}`",
-                    requirement.name
-                );
-            }
-            RequirementSource::Registry {
-                specifier: VersionSpecifiers::empty(),
-                index: Some(index),
-                conflict,
-            }
-        }
+        None => RequirementSource::Registry {
+            specifier: VersionSpecifiers::empty(),
+            index: Some(index),
+            conflict,
+        },
         Some(VersionOrUrl::VersionSpecifier(version)) => RequirementSource::Registry {
             specifier: version.clone(),
             index: Some(index),
             conflict,
         },
-        Some(VersionOrUrl::Url(_)) => {
-            if matches!(bounds, LowerBound::Warn) {
-                warn_user_once!(
-                    "Missing version constraint (e.g., a lower bound) for `{}` due to use of a URL specifier",
-                    requirement.name
-                );
-            }
-            RequirementSource::Registry {
-                specifier: VersionSpecifiers::empty(),
-                index: Some(index),
-                conflict,
-            }
-        }
+        Some(VersionOrUrl::Url(_)) => RequirementSource::Registry {
+            specifier: VersionSpecifiers::empty(),
+            index: Some(index),
+            conflict,
+        },
     }
 }
 
@@ -722,9 +677,7 @@ fn path_source(
                 .expect("Workspace member must be relative");
             let subdirectory = uv_fs::normalize_path_buf(subdirectory);
             return Ok(RequirementSource::Git {
-                repository: git_member.git_source.git.repository().clone(),
-                reference: git_member.git_source.git.reference().clone(),
-                precise: git_member.git_source.git.precise(),
+                git: git_member.git_source.git.clone(),
                 subdirectory: if subdirectory == PathBuf::new() {
                     None
                 } else {

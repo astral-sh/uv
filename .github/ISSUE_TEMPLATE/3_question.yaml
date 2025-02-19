@@ -1,0 +1,31 @@
+name: Question
+description: Ask a question about uv
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Please review [our guide on interacting with the issue tracker](https://github.com/astral-sh/uv/issues/9452) before opening a new issue.**
+
+  - type: textarea
+    attributes:
+      label: Question
+      description: Describe your question in detail.
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: Platform
+      description: What operating system and architecture are you using? (see `uname -orsm`)
+      placeholder: e.g., macOS 14 arm64, Windows 11 x86_64, Ubuntu 20.04 amd64
+    validations:
+      required: false
+
+  - type: input
+    attributes:
+      label: Version
+      description: What version of uv are you using? (see `uv version`)
+      placeholder: e.g., uv 0.5.20 (1c17662b3 2025-01-15)
+    validations:
+      required: false

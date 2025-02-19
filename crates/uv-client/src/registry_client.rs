@@ -10,6 +10,7 @@ use http::HeaderMap;
 use itertools::Either;
 use reqwest::{Client, Response, StatusCode};
 use reqwest_middleware::ClientWithMiddleware;
+use tokio::sync::Semaphore;
 use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
@@ -214,6 +215,11 @@ impl RegistryClient {
         self.client.uncached().for_host(url)
     }
 
+    /// Returns `true` if SSL verification is disabled for the given URL.
+    pub fn disable_ssl(&self, url: &Url) -> bool {
+        self.client.uncached().disable_ssl(url)
+    }
+
     /// Return the [`Connectivity`] mode used by this client.
     pub fn connectivity(&self) -> Connectivity {
         self.connectivity
@@ -235,6 +241,7 @@ impl RegistryClient {
         package_name: &PackageName,
         index: Option<&'index IndexUrl>,
         capabilities: &IndexCapabilities,
+        download_concurrency: &Semaphore,
     ) -> Result<Vec<(&'index IndexUrl, OwnedArchive<SimpleMetadata>)>, Error> {
         let indexes = if let Some(index) = index {
             Either::Left(std::iter::once(index))
@@ -253,6 +260,7 @@ impl RegistryClient {
             // If we're searching for the first index that contains the package, fetch serially.
             IndexStrategy::FirstIndex => {
                 for index in it {
+                    let _permit = download_concurrency.acquire().await;
                     if let Some(metadata) = self
                         .simple_single_index(package_name, index, capabilities)
                         .await?
@@ -265,9 +273,9 @@ impl RegistryClient {
 
             // Otherwise, fetch concurrently.
             IndexStrategy::UnsafeBestMatch | IndexStrategy::UnsafeFirstMatch => {
-                // TODO(charlie): Respect concurrency limits.
                 results = futures::stream::iter(it)
                     .map(|index| async move {
+                        let _permit = download_concurrency.acquire().await;
                         let metadata = self
                             .simple_single_index(package_name, index, capabilities)
                             .await?;
@@ -334,6 +342,13 @@ impl RegistryClient {
                     .map_err(ErrorKind::Io)?,
             ),
             Connectivity::Offline => CacheControl::AllowStale,
+        };
+
+        // Acquire an advisory lock, to guard against concurrent writes.
+        #[cfg(windows)]
+        let _lock = {
+            let lock_entry = cache_entry.with_file(format!("{package_name}.lock"));
+            lock_entry.lock().await.map_err(ErrorKind::CacheWrite)?
         };
 
         let result = if matches!(index, IndexUrl::Path(_)) {
@@ -614,6 +629,13 @@ impl RegistryClient {
                 Connectivity::Offline => CacheControl::AllowStale,
             };
 
+            // Acquire an advisory lock, to guard against concurrent writes.
+            #[cfg(windows)]
+            let _lock = {
+                let lock_entry = cache_entry.with_file(format!("{}.lock", filename.stem()));
+                lock_entry.lock().await.map_err(ErrorKind::CacheWrite)?
+            };
+
             let response_callback = |response: Response| async {
                 let bytes = response
                     .bytes()
@@ -675,6 +697,13 @@ impl RegistryClient {
                     .map_err(ErrorKind::Io)?,
             ),
             Connectivity::Offline => CacheControl::AllowStale,
+        };
+
+        // Acquire an advisory lock, to guard against concurrent writes.
+        #[cfg(windows)]
+        let _lock = {
+            let lock_entry = cache_entry.with_file(format!("{}.lock", filename.stem()));
+            lock_entry.lock().await.map_err(ErrorKind::CacheWrite)?
         };
 
         // Attempt to fetch via a range request.

@@ -1,3 +1,10 @@
+---
+title: Running scripts
+description:
+  A guide to using uv to run Python scripts, including support for inline dependency metadata,
+  reproducible scripts, and more.
+---
+
 # Running scripts
 
 A Python script is a file intended for standalone execution, e.g., with `python <script>.py`. Using
@@ -209,6 +216,25 @@ print(Point)
 `uv run` will search for and use the required Python version. The Python version will download if it
 is not installed — see the documentation on [Python versions](../concepts/python-versions.md) for
 more details.
+
+## Using alternative package indexes
+
+If you wish to use an alternative [package index](../configuration/indexes.md) to resolve
+dependencies, you can provide the index with the `--index` option:
+
+```console
+$ uv add --index "https://example.com/simple" --script example.py 'requests<3' 'rich'
+```
+
+This will include the package data in the inline metadata:
+
+```python
+# [[tool.uv.index]]
+# url = "https://example.com/simple"
+```
+
+If you require authentication to access the package index, then please refer to the
+[package index](../configuration/indexes.md) documentation.
 
 ## Locking dependencies
 

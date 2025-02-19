@@ -56,7 +56,7 @@ impl std::fmt::Display for SysconfigData {
             self.0.serialize(&mut serializer).unwrap();
             String::from_utf8(buf).unwrap()
         };
-        write!(f, "{output}",)
+        write!(f, "{output}")
     }
 }
 

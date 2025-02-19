@@ -45,7 +45,7 @@ to reproduce it with pip:
 ```console
 $ uv venv -p 3.13 --seed
 $ source .venv/bin/activate
-$ pip install --use-pep517 'numpy==1.19.5'
+$ pip install --use-pep517 --no-cache --force-reinstall 'numpy==1.19.5'
 Collecting numpy==1.19.5
   Using cached numpy-1.19.5.zip (7.3 MB)
   Installing build dependencies ... done
@@ -79,7 +79,7 @@ ModuleNotFoundError: No module named 'distutils'
 !!! important
 
     The `--use-pep517` flag should be included with the `pip install` invocation to ensure the same
-    build isolation behavior. uv always uses [build isolation by default](../pip/compatibility.md#pep-517-build-isolation).
+    build isolation behavior. uv always uses [build isolation by default](../../pip/compatibility.md#pep-517-build-isolation).
 
     We also recommend including the `--force-reinstall` and `--no-cache` options when reproducing
     failures.
@@ -210,7 +210,7 @@ installed.
 ### Module is missing or cannot be imported
 
 If the build error mentions a failing import, consider
-[disabling build isolation](../concepts/projects/config.md#build-isolation).
+[disabling build isolation](../../concepts/projects/config.md#build-isolation).
 
 For example, some packages assume that `pip` is available without declaring it as a build
 dependency:
@@ -258,7 +258,7 @@ dependencies of the package, e.g, `setuptools`.
 ### Old version of the package is built
 
 If a package fails to build during resolution and the version that failed to build is older than the
-version you want to use, try adding a [constraint](./settings.md#constraint-dependencies) with a
+version you want to use, try adding a [constraint](../settings.md#constraint-dependencies) with a
 lower bound (e.g. `numpy>=1.17`). Sometimes, due to algorithmic limitations, the uv resolver tries
 to find a fitting version using unreasonably old packages, which can be prevented by using lower
 bounds.
@@ -286,12 +286,34 @@ Adding a lower bound constraint, e.g., `apache-beam<=2.49.0,>2.30.0`, resolves t
 uv will avoid using an old version of `apache-beam`.
 
 Constraints can also be defined for indirect dependencies using `constraints.txt` files or the
-[`constraint-dependencies`](./settings.md#constraint-dependencies) setting.
+[`constraint-dependencies`](../settings.md#constraint-dependencies) setting.
+
+### Old Version of a build dependency is used
+
+If a package fails to build because `uv` selects an incompatible or outdated version of a build-time
+dependency, you can enforce constraints specifically for build dependencies. The
+[`build-constraint-dependencies`](../settings.md#build-constraint-dependencies) setting (or an
+analogous `build-constraints.txt` file) can be used to ensure that `uv` selects an appropriate
+version of a given build requirements.
+
+For example, the issue described in
+[#5551](https://github.com/astral-sh/uv/issues/5551#issuecomment-2256055975) could be addressed by
+specifying a build constraint that excludes `setuptools` version `72.0.0`:
+
+```toml title="pyproject.toml"
+[tool.uv]
+# Prevent setuptools version 72.0.0 from being used as a build dependency.
+build-constraint-dependencies = ["setuptools!=72.0.0"]
+```
+
+The build constraint will thus ensure that any package requiring `setuptools` during the build
+process will avoid using the problematic version, preventing build failures caused by incompatible
+build dependencies.
 
 ### Package is only needed for an unused platform
 
 If locking fails due to building a package from a platform you do not need to support, consider
-[limiting resolution](../concepts/projects/config.md#limited-resolution-environments) to your
+[limiting resolution](../../concepts/projects/config.md#limited-resolution-environments) to your
 supported platforms.
 
 ### Package does not support all Python versions
@@ -309,6 +331,6 @@ numpy<1.23; python_version < "3.10"
 ### Package is only usable on a specific platform
 
 If locking fails due to building a package that is only usable on another platform, you can
-[provide dependency metadata manually](./settings.md#dependency-metadata) to skip the build. uv can
+[provide dependency metadata manually](../settings.md#dependency-metadata) to skip the build. uv can
 not verify this information, so it is important to specify correct metadata when using this
 override.

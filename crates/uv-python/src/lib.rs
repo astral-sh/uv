@@ -30,19 +30,25 @@ mod implementation;
 mod installation;
 mod interpreter;
 mod libc;
+pub mod macos_dylib;
 pub mod managed;
 #[cfg(windows)]
 mod microsoft_store;
 pub mod platform;
 mod pointer_size;
 mod prefix;
-#[cfg(windows)]
-mod py_launcher;
 mod python_version;
 mod sysconfig;
 mod target;
 mod version_files;
 mod virtualenv;
+#[cfg(windows)]
+pub mod windows_registry;
+
+#[cfg(windows)]
+pub(crate) const COMPANY_KEY: &str = "Astral";
+#[cfg(windows)]
+pub(crate) const COMPANY_DISPLAY_NAME: &str = "Astral Software Inc.";
 
 #[cfg(not(test))]
 pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
@@ -59,6 +65,9 @@ pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
     #[error(transparent)]
     VirtualEnv(#[from] virtualenv::Error),
 
@@ -110,7 +119,7 @@ mod tests {
 
     use crate::{
         discovery::{
-            find_best_python_installation, find_python_installation, EnvironmentPreference,
+            self, find_best_python_installation, find_python_installation, EnvironmentPreference,
         },
         PythonPreference,
     };
@@ -283,7 +292,7 @@ mod tests {
             fs_err::write(
                 path,
                 formatdoc! {r"
-                #!/bin/bash
+                #!/bin/sh
                 echo '{json}'
                 "},
             )?;
@@ -305,7 +314,7 @@ mod tests {
             fs_err::write(
                 path,
                 formatdoc! {r"
-                #!/bin/bash
+                #!/bin/sh
                 echo '{output}' 1>&2
                 "},
             )?;
@@ -501,7 +510,7 @@ mod tests {
             matches!(
                 interpreter,
                 PythonInstallation {
-                    source: PythonSource::SearchPath,
+                    source: PythonSource::SearchPathFirst,
                     interpreter: _
                 }
             ),
@@ -526,7 +535,7 @@ mod tests {
         fs_err::write(
             children[0].join(format!("python{}", env::consts::EXE_SUFFIX)),
             formatdoc! {r"
-        #!/bin/bash
+        #!/bin/sh
         echo 'foo'
         "},
         )?;
@@ -588,11 +597,10 @@ mod tests {
                 PythonPreference::default(),
                 &context.cache,
             )
-        })?;
+        });
         assert!(
-            matches!(result, Err(PythonNotFound { .. })),
-            // TODO(zanieb): We could improve the error handling to hint this to the user
-            "If only Python 2 is available, we should not find a python; got {result:?}"
+            matches!(result, Err(discovery::Error::Query(..))),
+            "If only Python 2 is available, we should report the interpreter query error; got {result:?}"
         );
 
         Ok(())
@@ -931,7 +939,7 @@ mod tests {
             matches!(
             python,
             PythonInstallation {
-                source: PythonSource::SearchPath,
+                source: PythonSource::SearchPathFirst,
                 interpreter: _
             }
         ),
@@ -2422,7 +2430,7 @@ mod tests {
             matches!(
                 python,
                 PythonInstallation {
-                    source: PythonSource::SearchPath,
+                    source: PythonSource::SearchPathFirst,
                     interpreter: _
                 }
             ),
@@ -2474,7 +2482,7 @@ mod tests {
             matches!(
                 python,
                 PythonInstallation {
-                    source: PythonSource::SearchPath,
+                    source: PythonSource::SearchPathFirst,
                     interpreter: _
                 }
             ),

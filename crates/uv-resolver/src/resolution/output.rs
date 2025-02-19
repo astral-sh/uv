@@ -93,6 +93,13 @@ impl ResolutionGraphNode {
             }
         }
     }
+
+    pub(crate) fn package_name(&self) -> Option<&PackageName> {
+        match *self {
+            ResolutionGraphNode::Root => None,
+            ResolutionGraphNode::Dist(ref dist) => Some(&dist.name),
+        }
+    }
 }
 
 impl Display for ResolutionGraphNode {
@@ -443,7 +450,7 @@ impl ResolverOutput {
             (
                 ResolvedDist::Installable {
                     dist,
-                    version: version.clone(),
+                    version: Some(version.clone()),
                 },
                 hashes,
                 Some(metadata),

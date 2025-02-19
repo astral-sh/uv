@@ -1,27 +1,24 @@
 use std::borrow::Cow;
-use std::collections::VecDeque;
 use std::path::Path;
-use std::slice;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use futures::stream::FuturesOrdered;
 use futures::TryStreamExt;
-use rustc_hash::FxHashSet;
 use url::Url;
 
-use uv_configuration::ExtrasSpecification;
-use uv_distribution::{DistributionDatabase, Reporter, RequiresDist};
+use uv_configuration::{DevGroupsSpecification, ExtrasSpecification};
+use uv_distribution::{DistributionDatabase, FlatRequiresDist, Reporter, RequiresDist};
 use uv_distribution_types::{
     BuildableSource, DirectorySourceUrl, HashGeneration, HashPolicy, SourceUrl, VersionId,
 };
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
-use uv_pep508::{MarkerTree, RequirementOrigin};
+use uv_pep508::RequirementOrigin;
 use uv_pypi_types::Requirement;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
-
+use uv_warnings::warn_user_once;
 #[derive(Debug, Clone)]
 pub struct SourceTreeResolution {
     /// The requirements sourced from the source trees.
@@ -39,6 +36,8 @@ pub struct SourceTreeResolution {
 pub struct SourceTreeResolver<'a, Context: BuildContext> {
     /// The extras to include when resolving requirements.
     extras: &'a ExtrasSpecification,
+    /// The groups to include when resolving requirements.
+    groups: &'a DevGroupsSpecification,
     /// The hash policy to enforce.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -51,12 +50,14 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
     /// Instantiate a new [`SourceTreeResolver`] for a given set of `source_trees`.
     pub fn new(
         extras: &'a ExtrasSpecification,
+        groups: &'a DevGroupsSpecification,
         hasher: &'a HashStrategy,
         index: &'a InMemoryIndex,
         database: DistributionDatabase<'a, Context>,
     ) -> Self {
         Self {
             extras,
+            groups,
             hasher,
             index,
             database,
@@ -88,7 +89,6 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
     /// Infer the dependencies for a directory dependency.
     async fn resolve_source_tree(&self, path: &Path) -> Result<SourceTreeResolution> {
         let metadata = self.resolve_requires_dist(path).await?;
-
         let origin = RequirementOrigin::Project(path.to_path_buf(), metadata.name.clone());
 
         // Determine the extras to include when resolving the requirements.
@@ -98,69 +98,40 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             .cloned()
             .collect::<Vec<_>>();
 
-        let dependencies = metadata
-            .requires_dist
-            .into_iter()
-            .map(|requirement| Requirement {
-                origin: Some(origin.clone()),
-                marker: requirement.marker.simplify_extras(&extras),
-                ..requirement
-            })
-            .collect::<Vec<_>>();
+        let mut requirements = Vec::new();
 
-        // Transitively process all extras that are recursively included, starting with the current
-        // extra.
-        let mut requirements = dependencies.clone();
-        let mut seen = FxHashSet::<(ExtraName, MarkerTree)>::default();
-        let mut queue: VecDeque<_> = requirements
-            .iter()
-            .filter(|req| req.name == metadata.name)
-            .flat_map(|req| {
-                req.extras
-                    .iter()
-                    .cloned()
-                    .map(|extra| (extra, req.marker.simplify_extras(&extras)))
-            })
-            .collect();
-        while let Some((extra, marker)) = queue.pop_front() {
-            if !seen.insert((extra.clone(), marker)) {
-                continue;
-            }
-
-            // Find the requirements for the extra.
-            for requirement in &dependencies {
-                if requirement.marker.top_level_extra_name().as_ref() == Some(&extra) {
-                    let requirement = {
-                        let mut marker = marker;
-                        marker.and(requirement.marker);
-                        Requirement {
-                            name: requirement.name.clone(),
-                            extras: requirement.extras.clone(),
-                            groups: requirement.groups.clone(),
-                            source: requirement.source.clone(),
-                            origin: requirement.origin.clone(),
-                            marker: marker.simplify_extras(slice::from_ref(&extra)),
-                        }
-                    };
-                    if requirement.name == metadata.name {
-                        // Add each transitively included extra.
-                        queue.extend(
-                            requirement
-                                .extras
-                                .iter()
-                                .cloned()
-                                .map(|extra| (extra, requirement.marker)),
-                        );
-                    } else {
-                        // Add the requirements for that extra.
-                        requirements.push(requirement);
-                    }
-                }
-            }
+        // Flatten any transitive extras and include dependencies
+        // (unless something like --only-group was passed)
+        if self.groups.prod() {
+            requirements.extend(
+                FlatRequiresDist::from_requirements(metadata.requires_dist, &metadata.name)
+                    .into_iter()
+                    .map(|requirement| Requirement {
+                        origin: Some(origin.clone()),
+                        marker: requirement.marker.simplify_extras(&extras),
+                        ..requirement
+                    }),
+            );
         }
 
-        // Drop all the self-requirements now that we flattened them out.
-        requirements.retain(|req| req.name != metadata.name);
+        // Apply dependency-groups
+        for (group_name, group) in &metadata.dependency_groups {
+            if self.groups.contains(group_name) {
+                requirements.extend(group.iter().cloned());
+            }
+        }
+        // Complain if dependency groups are named that don't appear.
+        // This is only a warning because *technically* we support passing in
+        // multiple pyproject.tomls, but at this level of abstraction we can't see them all,
+        // so hard erroring on "no pyproject.toml mentions this" is a bit difficult.
+        for name in self.groups.explicit_names() {
+            if !metadata.dependency_groups.contains_key(name) {
+                warn_user_once!(
+                    "The dependency-group '{name}' is not defined in {}",
+                    path.display()
+                );
+            }
+        }
 
         let project = metadata.name;
         let extras = metadata.provides_extras;

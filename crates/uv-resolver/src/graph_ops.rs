@@ -1,10 +1,10 @@
+use std::collections::hash_map::Entry;
+
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::visit::EdgeRef;
 use petgraph::{Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
-use std::collections::hash_map::Entry;
 
-use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{ConflictItem, Conflicts};
 
@@ -160,7 +160,10 @@ pub(crate) fn simplify_conflict_markers(
                 set.insert(ConflictItem::from((package.clone(), group.clone())));
             }
         }
-        let sets = activated.get(&parent_index).cloned().unwrap_or_default();
+        let sets = activated
+            .get(&parent_index)
+            .cloned()
+            .unwrap_or_else(|| vec![FxHashSet::default()]);
         for child_edge in graph.edges_directed(parent_index, Direction::Outgoing) {
             let mut change = false;
             for set in sets.clone() {
@@ -222,7 +225,21 @@ pub(crate) fn simplify_conflict_markers(
     }
 
     for edge_index in (0..graph.edge_count()).map(EdgeIndex::new) {
-        let (from_index, _) = graph.edge_endpoints(edge_index).unwrap();
+        let (from_index, to_index) = graph.edge_endpoints(edge_index).unwrap();
+        // If there are ambiguous edges (i.e., two or more edges
+        // with the same package name), then we specifically skip
+        // conflict marker simplification. It seems that in some
+        // cases, the logic encoded in `inferences` isn't quite enough
+        // to perfectly disambiguate between them. It's plausible we
+        // could do better here, but it requires smarter simplification
+        // logic. ---AG
+        let ambiguous_edges = graph
+            .edges_directed(from_index, Direction::Outgoing)
+            .filter(|edge| graph[to_index].package_name() == graph[edge.target()].package_name())
+            .count();
+        if ambiguous_edges > 1 {
+            continue;
+        }
         let Some(inference_sets) = inferences.get(&from_index) else {
             continue;
         };
@@ -237,18 +254,18 @@ pub(crate) fn simplify_conflict_markers(
                     if !inf.included {
                         return None;
                     }
-                    Some((inf.item.package().clone(), inf.item.extra()?.clone()))
+                    Some((inf.item.package(), inf.item.extra()?))
                 })
-                .collect::<Vec<(PackageName, ExtraName)>>();
+                .collect::<Vec<_>>();
             let groups = set
                 .iter()
                 .filter_map(|inf| {
                     if !inf.included {
                         return None;
                     }
-                    Some((inf.item.package().clone(), inf.item.group()?.clone()))
+                    Some((inf.item.package(), inf.item.group()?))
                 })
-                .collect::<Vec<(PackageName, GroupName)>>();
+                .collect::<Vec<_>>();
             graph[edge_index].conflict().evaluate(&extras, &groups)
         });
         if !all_paths_satisfied {

@@ -1,7 +1,9 @@
 use std::fmt::{Display, Formatter};
 
+use either::Either;
 use itertools::Itertools;
 use pubgrub::Range;
+use smallvec::SmallVec;
 use tracing::{debug, trace};
 
 use uv_configuration::IndexStrategy;
@@ -11,7 +13,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_types::InstalledPackagesProvider;
 
-use crate::preferences::Preferences;
+use crate::preferences::{Entry, Preferences};
 use crate::prerelease::{AllowPrerelease, PrereleaseStrategy};
 use crate::resolution_mode::ResolutionStrategy;
 use crate::universal_marker::UniversalMarker;
@@ -178,23 +180,52 @@ impl CandidateSelector {
         index: Option<&'a IndexUrl>,
         env: &ResolverEnvironment,
     ) -> Option<Candidate<'a>> {
-        // In the branches, we "sort" the preferences by marker-matching through an iterator that
-        // first has the matching half and then the mismatching half.
-        let preferences_match = preferences
-            .get(package_name)
-            .filter(|(marker, _index, _version)| env.included_by_marker(marker.pep508()));
-        let preferences_mismatch = preferences
-            .get(package_name)
-            .filter(|(marker, _index, _version)| !env.included_by_marker(marker.pep508()));
-        let preferences = preferences_match.chain(preferences_mismatch).filter_map(
-            |(marker, source, version)| {
-                // If the package is mapped to an explicit index, only consider preferences that
-                // match the index.
-                index
-                    .map_or(true, |index| source == Some(index))
-                    .then_some((marker, version))
-            },
-        );
+        let preferences = preferences.get(package_name);
+
+        // If there are multiple preferences for the same package, we need to sort them by priority.
+        let preferences = match preferences {
+            [] => return None,
+            [entry] => {
+                // Filter out preferences that map to a conflicting index.
+                if index.is_some_and(|index| !entry.index().matches(index)) {
+                    return None;
+                }
+                Either::Left(std::iter::once((entry.marker(), entry.pin().version())))
+            }
+            [..] => {
+                type Entries<'a> = SmallVec<[&'a Entry; 3]>;
+
+                let mut preferences = preferences.iter().collect::<Entries>();
+
+                // Filter out preferences that map to a conflicting index.
+                preferences.retain(|entry| index.is_none_or(|index| entry.index().matches(index)));
+
+                // Sort the preferences by priority.
+                let highest = self.use_highest_version(package_name, env);
+                preferences.sort_by_key(|entry| {
+                    let marker = entry.marker();
+
+                    // Prefer preferences that match the current environment.
+                    let matches_env = env.included_by_marker(marker.pep508());
+
+                    // Prefer the latest (or earliest) version.
+                    let version = if highest {
+                        Either::Left(entry.pin().version())
+                    } else {
+                        Either::Right(std::cmp::Reverse(entry.pin().version()))
+                    };
+
+                    std::cmp::Reverse((matches_env, version))
+                });
+
+                Either::Right(
+                    preferences
+                        .into_iter()
+                        .map(|entry| (entry.marker(), entry.pin().version())),
+                )
+            }
+        };
+
         self.get_preferred_from_iter(
             preferences,
             package_name,
@@ -267,10 +298,38 @@ impl CandidateSelector {
             }
 
             // Check for a remote distribution that matches the preferred version
-            if let Some(file) = version_maps
+            if let Some((version_map, file)) = version_maps
                 .iter()
-                .find_map(|version_map| version_map.get(version))
+                .find_map(|version_map| version_map.get(version).map(|dist| (version_map, dist)))
             {
+                // If the preferred version has a local variant, prefer that.
+                if version_map.local() {
+                    for local in version_map
+                        .versions()
+                        .rev()
+                        .take_while(|local| *local > version)
+                    {
+                        if !local.is_local() {
+                            continue;
+                        }
+                        if local.clone().without_local() != *version {
+                            continue;
+                        }
+                        if !range.contains(local) {
+                            continue;
+                        }
+                        if let Some(dist) = version_map.get(local) {
+                            debug!("Preferring local version `{package_name}` (v{local})");
+                            return Some(Candidate::new(
+                                package_name,
+                                local,
+                                dist,
+                                VersionChoiceKind::Preference,
+                            ));
+                        }
+                    }
+                }
+
                 return Some(Candidate::new(
                     package_name,
                     version,

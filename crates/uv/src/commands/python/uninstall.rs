@@ -7,9 +7,10 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, warn};
+
+use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
 use uv_python::managed::{python_executable_dir, ManagedPythonInstallations};
@@ -25,15 +26,15 @@ pub(crate) async fn uninstall(
     install_dir: Option<PathBuf>,
     targets: Vec<String>,
     all: bool,
-
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     let installations = ManagedPythonInstallations::from_settings(install_dir)?.init()?;
 
     let _lock = installations.lock().await?;
 
     // Perform the uninstallation.
-    do_uninstall(&installations, targets, all, printer).await?;
+    do_uninstall(&installations, targets, all, printer, preview).await?;
 
     // Clean up any empty directories.
     if uv_fs::directories(installations.root()).all(|path| uv_fs::is_temporary(&path)) {
@@ -41,7 +42,7 @@ pub(crate) async fn uninstall(
 
         if let Some(top_level) = installations.root().parent() {
             // Remove the `toolchains` symlink.
-            match uv_fs::remove_symlink(top_level.join("toolchains")) {
+            match fs_err::tokio::remove_file(top_level.join("toolchains")).await {
                 Ok(()) => {}
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
                 Err(err) => return Err(err.into()),
@@ -62,6 +63,7 @@ async fn do_uninstall(
     targets: Vec<String>,
     all: bool,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
@@ -107,6 +109,16 @@ async fn do_uninstall(
             matching_installations.insert(installation.clone());
         }
         if !found {
+            // Clear any remnants in the registry
+            if preview.is_enabled() {
+                #[cfg(windows)]
+                {
+                    uv_python::windows_registry::remove_orphan_registry_entries(
+                        &installed_installations,
+                    );
+                }
+            }
+
             if matches!(requests.as_slice(), [PythonRequest::Default]) {
                 writeln!(printer.stderr(), "No Python installations found")?;
                 return Ok(ExitStatus::Failure);
@@ -190,10 +202,20 @@ async fn do_uninstall(
     let mut errors = vec![];
     while let Some((key, result)) = tasks.next().await {
         if let Err(err) = result {
-            errors.push((key.clone(), err));
+            errors.push((key.clone(), anyhow::Error::new(err)));
         } else {
             uninstalled.push(key.clone());
         }
+    }
+
+    #[cfg(windows)]
+    if preview.is_enabled() {
+        uv_python::windows_registry::remove_registry_entry(
+            &matching_installations,
+            all,
+            &mut errors,
+        );
+        uv_python::windows_registry::remove_orphan_registry_entries(&installed_installations);
     }
 
     // Report on any uninstalled installations.
