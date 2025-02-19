@@ -912,8 +912,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 }),
         }) => commands::self_update(target_version, token, printer).await,
         Commands::Self_(SelfNamespace {
-            command: SelfCommand::Uninstall(SelfUninstallArgs { clean_stored_data }),
-        }) => commands::self_uninstall(&cache, printer, clean_stored_data),
+            command: SelfCommand::Uninstall(SelfUninstallArgs { remove_data }),
+        }) => commands::self_uninstall(&cache, printer, remove_data),
         #[cfg(not(feature = "self-update"))]
         Commands::Self_(_) => {
             anyhow::bail!(

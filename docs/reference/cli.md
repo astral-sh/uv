@@ -9288,8 +9288,6 @@ uv self uninstall [OPTIONS]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--clean-stored-data</code></dt><dd><p>true iff should run <code>uv cache clean</code> and remove directories pointed to by <code>uv python dir</code> and <code>uv tool dir</code></p>
-
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
 <p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
@@ -9370,6 +9368,8 @@ uv self uninstall [OPTIONS]
 <li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
 </ul>
 </dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
+
+</dd><dt><code>--remove-data</code></dt><dd><p>true iff should run <code>uv cache clean</code> and remove directories pointed to by <code>uv python dir</code> and <code>uv tool dir</code></p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
