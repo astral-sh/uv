@@ -41,7 +41,7 @@ be activated as normal for a virtual environment.
 
 When `uv run` is invoked, it will create the project environment if it does not exist yet or ensure
 it is up-to-date if it exists. The project environment can also be explicitly created with
-`uv sync`.
+`uv sync`. See the [Locking and syncing](./sync.md) documentation for details.
 
 It is _not_ recommended to modify the project environment manually, e.g., with `uv pip install`. For
 project dependencies, use `uv add` to add a package to the environment. For one-off requirements,
@@ -75,8 +75,9 @@ A lockfile ensures that developers working on the project are using a consistent
 versions. Additionally, it ensures when deploying the project as an application that the exact set
 of used package versions is known.
 
-The lockfile is created and updated during uv invocations that use the project environment, i.e.,
-`uv sync` and `uv run`. The lockfile may also be explicitly updated using `uv lock`.
+The lockfile is [automatically created and updated](./sync.md#automatic-lock-and-sync) during uv
+invocations that use the project environment, i.e., `uv sync` and `uv run`. The lockfile may also be
+explicitly updated using `uv lock`.
 
 `uv.lock` is a human-readable TOML file but is managed by uv and should not be edited manually.
 There is no Python standard for lockfiles at this time, so the format of this file is specific to uv
