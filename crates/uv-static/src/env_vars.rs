@@ -649,4 +649,22 @@ impl EnvVars {
     ///
     /// This is a quasi-standard variable, described e.g. in `ncurses(3x)`.
     pub const COLUMNS: &'static str = "COLUMNS";
+
+    /// Overrides `sys.prefix`.
+    pub const PYTHONHOME: &'static str = "PYTHONHOME";
+
+    /// Don't prepend a potentially unsafe path to `sys.path`.
+    pub const PYTHONSAFEPATH: &'static str = "PYTHONSAFEPATH";
+
+    /// Overrides `sys.platlibdir`.
+    pub const PYTHONPLATLIBDIR: &'static str = "PYTHONPLATLIBDIR";
+
+    /// Don't add the user site packages to `sys.path`.
+    pub const PYTHONNOUSERSITE: &'static str = "PYTHONNOUSERSITE";
+
+    /// Overrides `site.USER_BASE`.
+    pub const PYTHONUSERBASE: &'static str = "PYTHONUSERBASE";
+
+    /// The base path for user site packages on Windows.
+    pub const APPDATA: &'static str = "APPDATA";
 }
