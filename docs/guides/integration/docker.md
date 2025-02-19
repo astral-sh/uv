@@ -466,7 +466,7 @@ RUN uv sync
 CMD ["uv", "run", "main.py"]
 ```
 
-An unprivileged user may not have write permissions for the usual places uv attempts to create a cache directory in (namely, `$XDG_CACHE_HOME/uv` and `$HOME/.cache/uv`). So, because uv *always* requires a cache direcotry to work, you have to tell it to use a directory that you *do* have read/write access to. In the example above, we do that by setting the `UV_CACHE_DIR` env var. See the [Cache directory](../../concepts/cache.md) documentation for other ways of configuring the cache directory.
+An unprivileged user may not have write permissions for the usual places uv attempts to create a cache directory in (namely, `$XDG_CACHE_HOME/uv` and `$HOME/.cache/uv`). So, because uv *always* requires a cache directory to work, you have to tell it to use a directory that you *do* have read/write access to. In the example above, we do that by setting the `UV_CACHE_DIR` env var. See the [Cache directory](../../concepts/cache.md) documentation for other ways of configuring the cache directory.
 
 ## Using the pip interface
 
