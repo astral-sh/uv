@@ -554,7 +554,7 @@ pub(crate) async fn install(
     }
 
     if compile {
-        compile_bytecode(venv, cache, printer).await?;
+        compile_bytecode(venv, &concurrency, cache, printer).await?;
     }
 
     // Construct a summary of the changes made to the environment.

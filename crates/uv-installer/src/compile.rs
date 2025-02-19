@@ -1,4 +1,3 @@
-use std::num::NonZeroUsize;
 use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -14,6 +13,7 @@ use tokio::sync::oneshot;
 use tracing::{debug, instrument};
 use walkdir::WalkDir;
 
+use uv_configuration::Concurrency;
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
@@ -71,6 +71,7 @@ pub enum CompileError {
 pub async fn compile_tree(
     dir: &Path,
     python_executable: &Path,
+    concurrency: &Concurrency,
     cache: &Path,
 ) -> Result<usize, CompileError> {
     debug_assert!(
@@ -78,13 +79,10 @@ pub async fn compile_tree(
         "compileall doesn't work with relative paths: `{}`",
         dir.display()
     );
-    let worker_count = std::thread::available_parallelism().unwrap_or_else(|err| {
-        warn_user!("Couldn't determine number of cores, compiling with a single thread: {err}");
-        NonZeroUsize::MIN
-    });
+    let worker_count = concurrency.installs;
 
     // A larger buffer is significantly faster than just 1 or the worker count.
-    let (sender, receiver) = async_channel::bounded::<PathBuf>(worker_count.get() * 10);
+    let (sender, receiver) = async_channel::bounded::<PathBuf>(worker_count * 10);
 
     // Running Python with an actual file will produce better error messages.
     let tempdir = tempdir_in(cache).map_err(CompileError::TempFile)?;
@@ -92,7 +90,7 @@ pub async fn compile_tree(
 
     debug!("Starting {} bytecode compilation workers", worker_count);
     let mut worker_handles = Vec::new();
-    for _ in 0..worker_count.get() {
+    for _ in 0..worker_count {
         let (tx, rx) = oneshot::channel();
 
         let worker = worker(
