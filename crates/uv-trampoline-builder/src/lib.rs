@@ -70,7 +70,7 @@ impl Launcher {
     /// returns errors instead of panicking. Unlike the utility there, we don't assume that the
     /// file we are reading is a trampoline.
     #[allow(clippy::cast_possible_wrap)]
-    pub fn try_from_path(path: &Path) -> Result<Option<Self>, Error> {
+    pub fn try_from_path(path: &Path) -> Result<Self, Error> {
         let mut file = File::open(path)?;
 
         // If the trampoline is a script (UVSC), parse the ZIP file at the end and skip it.
@@ -78,9 +78,7 @@ impl Launcher {
         let zip_size = zip_utils::read_zip_part(&mut file).unwrap_or(0) as usize;
 
         // Read the magic number
-        let Some(kind) = LauncherKind::try_from_file(&mut file, zip_size)? else {
-            return Ok(None);
-        };
+        let kind = LauncherKind::try_from_file(&mut file, zip_size)?;
 
         // Seek to the start of the path length.
         let path_length_offset = (zip_size + MAGIC_NUMBER_SIZE + PATH_LENGTH_SIZE) as i64;
@@ -120,10 +118,10 @@ impl Launcher {
             String::from_utf8(buffer).map_err(|err| Error::InvalidPath(err.utf8_error()))?,
         );
 
-        Ok(Some(Self {
+        Ok(Self {
             kind,
             python_path: path,
-        }))
+        })
     }
 }
 
@@ -167,19 +165,19 @@ impl LauncherKind {
     /// If the file cannot be read, an [`io::Error`] is returned. If the path is not a launcher,
     /// `None` is returned.
     #[allow(clippy::cast_possible_wrap)]
-    pub fn try_from_file(file: &mut File, skip_bytes: usize) -> Result<Option<Self>, Error> {
+    pub fn try_from_file(file: &mut File, skip_bytes: usize) -> Result<Self, Error> {
         // If the file is less than four bytes, it's not a launcher.
-        let Ok(_) = file.seek(io::SeekFrom::End(
-            -((skip_bytes + MAGIC_NUMBER_SIZE) as i64),
-        )) else {
-            return Ok(None);
-        };
+        let magic_number_offset = (skip_bytes + MAGIC_NUMBER_SIZE) as i64;
+        file.seek(io::SeekFrom::End(-magic_number_offset))
+            .map_err(|err| {
+                Error::InvalidLauncherSeek("magic number".to_string(), magic_number_offset, err)
+            })?;
 
         let mut buffer = [0; MAGIC_NUMBER_SIZE];
         file.read_exact(&mut buffer)
             .map_err(|err| Error::InvalidLauncherRead("magic number".to_string(), err))?;
 
-        Ok(Self::try_from_bytes(buffer))
+        Self::try_from_bytes(buffer).ok_or(Error::InvalidMagic)
     }
 }
 
@@ -196,6 +194,8 @@ pub enum Error {
     InvalidLauncherSeek(String, i64, #[source] io::Error),
     #[error("Failed to read launcher {0}")]
     InvalidLauncherRead(String, #[source] io::Error),
+    #[error("Invalid magic number in launcher")]
+    InvalidMagic,
     #[error(
         "Unable to create Windows launcher for: {0} (only x86_64, x86, and arm64 are supported)"
     )]
@@ -489,8 +489,7 @@ if __name__ == "__main__":
             .stderr(stderr_predicate);
 
         let launcher = Launcher::try_from_path(console_bin_path.path())
-            .expect("We should succeed at reading the launcher")
-            .expect("The launcher should be valid");
+            .expect("We should succeed at reading the launcher");
 
         assert!(launcher.kind == LauncherKind::Script);
         assert!(launcher.python_path == python_executable_path);
@@ -527,8 +526,7 @@ if __name__ == "__main__":
             .stdout("Hello from Python Launcher\r\n");
 
         let launcher = Launcher::try_from_path(console_bin_path.path())
-            .expect("We should succeed at reading the launcher")
-            .expect("The launcher should be valid");
+            .expect("We should succeed at reading the launcher");
 
         assert!(launcher.kind == LauncherKind::Python);
         assert!(launcher.python_path == python_executable_path);

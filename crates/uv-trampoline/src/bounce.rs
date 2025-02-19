@@ -125,9 +125,7 @@ fn read_zip_part(file_handle: &mut File, file_size: u64) -> Option<u64> {
     // Read the entire end of central directory (EOCD) of the ZIP file, which is 22 bytes long.
     let mut eocd_buf: Vec<u8> = vec![0; 22];
 
-    file_handle
-        .seek(SeekFrom::Start(file_size - 22))
-        .ok()?;
+    file_handle.seek(SeekFrom::Start(file_size - 22)).ok()?;
 
     file_handle.read_exact(&mut eocd_buf).ok()?;
 

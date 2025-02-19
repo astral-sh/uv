@@ -615,7 +615,7 @@ impl ManagedPythonInstallation {
         if cfg!(unix) {
             is_same_file(path, self.executable(false)).unwrap_or_default()
         } else if cfg!(windows) {
-            let Some(launcher) = Launcher::try_from_path(path).unwrap_or_default() else {
+            let Ok(launcher) = Launcher::try_from_path(path) else {
                 return false;
             };
             if !matches!(launcher.kind, uv_trampoline_builder::LauncherKind::Python) {
