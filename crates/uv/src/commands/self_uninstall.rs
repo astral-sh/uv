@@ -4,8 +4,8 @@ use crate::commands::cache_clean;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 use std::env;
-use std::fs;
 use std::path::Path;
+use uv_cache::rm_rf;
 use uv_cache::Cache;
 use uv_python::managed::ManagedPythonInstallations;
 use uv_tool::InstalledTools;
@@ -22,12 +22,12 @@ pub(crate) fn self_uninstall(
         // rm -r "$(uv python dir)"
         let installed_toolchains = ManagedPythonInstallations::from_settings(None)?;
         let python_directory = installed_toolchains.root();
-        fs::remove_dir_all(python_directory)?;
+        rm_rf(python_directory)?;
 
         // rm -r "$(uv tool dir)"
         let installed_tools = InstalledTools::from_settings()?;
         let tools_path = installed_tools.root();
-        fs::remove_dir_all(tools_path)?;
+        rm_rf(tools_path)?;
     }
 
     // Remove uv and uvx binaries
@@ -35,10 +35,14 @@ pub(crate) fn self_uninstall(
     let home_dir = env::var("HOME").unwrap();
     let home_path = Path::new(&home_dir);
 
-    let uv_path = home_path.join(".local").join("bin").join("uv.exe");
-    let uvx_path = home_path.join(".local").join("bin").join("uvx.exe");
-    fs::remove_file(uv_path)?;
-    fs::remove_file(uvx_path)?;
+    let target_is_windows = cfg!(target_os = "windows");
+    let uv_executable = if target_is_windows { "uv.exe" } else { "uv" };
+    let uvx_executable = if target_is_windows { "uvx.exe" } else { "uvx" };
+
+    let uv_path = home_path.join(".local").join("bin").join(uv_executable);
+    let uvx_path = home_path.join(".local").join("bin").join(uvx_executable);
+    rm_rf(uv_path)?;
+    rm_rf(uvx_path)?;
 
     Ok(ExitStatus::Success)
 }
