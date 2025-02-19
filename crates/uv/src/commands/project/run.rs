@@ -413,7 +413,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 temp_dir = cache.venv_dir()?;
                 let environment = uv_virtualenv::create_venv(
                     temp_dir.path(),
-                    interpreter,
+                    &interpreter,
                     uv_virtualenv::Prompt::None,
                     cache,
                     false,
@@ -604,7 +604,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 temp_dir = cache.venv_dir()?;
                 uv_virtualenv::create_venv(
                     temp_dir.path(),
-                    interpreter,
+                    &interpreter,
                     uv_virtualenv::Prompt::None,
                     cache,
                     false,
@@ -832,7 +832,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 temp_dir = cache.venv_dir()?;
                 let venv = uv_virtualenv::create_venv(
                     temp_dir.path(),
-                    interpreter,
+                    &interpreter,
                     uv_virtualenv::Prompt::None,
                     cache,
                     false,
