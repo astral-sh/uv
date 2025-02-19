@@ -15,6 +15,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
 
 use uv_dev::run;
+use uv_static::EnvVars;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
