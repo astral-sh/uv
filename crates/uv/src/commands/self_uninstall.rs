@@ -4,7 +4,6 @@ use crate::commands::cache_clean;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 use std::env;
-use std::path::Path;
 use uv_cache::rm_rf;
 use uv_cache::Cache;
 use uv_python::managed::ManagedPythonInstallations;
@@ -32,14 +31,13 @@ pub(crate) fn self_uninstall(
 
     // Remove uv and uvx binaries
     // rm ~/.local/bin/uv ~/.local/bin/uvx
-    let home_dir = env::var("HOME").unwrap();
-    let home_path = Path::new(&home_dir);
 
-    let uv_executable = format!("uv{}", std::env::consts::EXE_SUFFIX);
-    let uvx_executable = format!("uvx{}", std::env::consts::EXE_SUFFIX);
+    let uv_executable = env::current_exe().unwrap();
+    let uv_path = uv_executable.as_path();
+    // We assume uvx executable is in same directory as uv executable
+    let uvx_executable = uv_path.with_file_name(format!("uvx{}", std::env::consts::EXE_SUFFIX));
+    let uvx_path = uvx_executable.as_path();
 
-    let uv_path = home_path.join(".local").join("bin").join(uv_executable);
-    let uvx_path = home_path.join(".local").join("bin").join(uvx_executable);
     rm_rf(uv_path)?;
     rm_rf(uvx_path)?;
 
