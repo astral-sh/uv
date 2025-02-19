@@ -30,7 +30,7 @@ def run_command(command: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(command, capture_output=True, text=True, env=env)
 
 
-def report_result(result: subprocess.CompletedProcess) -> str:
+def report_result(result: subprocess.CompletedProcess):
     print("=============================================")
     print(f"command: {' '.join(result.args)}")
     print(f"exit code: {result.returncode}")
@@ -48,9 +48,12 @@ def main():
     for result in results:
         report_result(result)
 
+    print("=============================================")
     if failed:
-        print("{failed}/{len(results)} commands failed")
+        print(f"FAILURE - {failed}/{len(results)} commands failed")
         sys.exit(1)
+    else:
+        print(f"SUCCESS - {len(results)}/{len(results)} commands succeeded")
 
 
 main()
