@@ -3,6 +3,7 @@ use std::fmt::Formatter;
 use std::sync::Arc;
 
 use indexmap::IndexSet;
+use itertools::max;
 use pubgrub::{
     DefaultStringReporter, DerivationTree, Derived, External, Range, Ranges, Reporter, Term,
 };
@@ -24,12 +25,12 @@ use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter};
 use crate::python_requirement::PythonRequirement;
-use crate::requires_python::LowerBound;
+use crate::requires_python::{LowerBound, UpperBound};
 use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{
     MetadataUnavailable, ResolverEnvironment, UnavailablePackage, UnavailableReason,
 };
-use crate::{InMemoryIndex, Options};
+use crate::{InMemoryIndex, Options, RequiresPythonRange};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
@@ -312,19 +313,23 @@ impl NoSolutionError {
     }
 
     /// Given a [`DerivationTree`], identify the largest required Python version that is missing.
-    pub fn find_requires_python(&self) -> LowerBound {
-        fn find(derivation_tree: &ErrorTree, minimum: &mut LowerBound) {
+    pub fn find_requires_python(&self) -> RequiresPythonRange {
+        fn find(derivation_tree: &ErrorTree, minimum: &mut LowerBound, maximum: &mut UpperBound) {
             match derivation_tree {
                 DerivationTree::Derived(derived) => {
-                    find(derived.cause1.as_ref(), minimum);
-                    find(derived.cause2.as_ref(), minimum);
+                    find(derived.cause1.as_ref(), minimum, maximum);
+                    find(derived.cause2.as_ref(), minimum, maximum);
                 }
                 DerivationTree::External(External::FromDependencyOf(.., package, version)) => {
                     if let PubGrubPackageInner::Python(_) = &**package {
-                        if let Some((lower, ..)) = version.bounding_range() {
+                        if let Some((lower, upper)) = version.bounding_range() {
                             let lower = LowerBound::new(lower.cloned());
                             if lower > *minimum {
                                 *minimum = lower;
+                            }
+                            let upper = UpperBound::new(upper.cloned());
+                            if upper > *maximum {
+                                *maximum = upper;
                             }
                         }
                     }
@@ -334,8 +339,9 @@ impl NoSolutionError {
         }
 
         let mut minimum = LowerBound::default();
-        find(&self.error, &mut minimum);
-        minimum
+        let mut maximum = UpperBound::default();
+        find(&self.error, &mut minimum, &mut maximum);
+        RequiresPythonRange::new(minimum, maximum)
     }
 
     /// Initialize a [`NoSolutionHeader`] for this error.

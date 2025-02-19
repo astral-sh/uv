@@ -89,10 +89,11 @@ pub(crate) async fn refine_interpreter(
 
     // Infer the `requires-python` constraint from the error.
     let requires_python = no_solution_err.find_requires_python();
+    let requires_python_specifiers = requires_python.specifiers();
 
     // If the existing interpreter already satisfies the `requires-python` constraint, we don't need
     // to refine it. We'd expect to fail again anyway.
-    if requires_python.contains(interpreter.python_version()) {
+    if requires_python_specifiers.contains(interpreter.python_version()) {
         return Ok(None);
     }
 
@@ -113,24 +114,28 @@ pub(crate) async fn refine_interpreter(
     // `requires-python` constraints, and we didn't see them in the initial solve. It can also fail
     // if the tool's requirements don't publish wheels for this interpreter version, though that's
     // rarer.
-    let lower_bound = match requires_python.as_ref() {
+    let lower_bound = match requires_python.lower().as_ref() {
         Bound::Included(version) => VersionSpecifier::greater_than_equal_version(version.clone()),
         Bound::Excluded(version) => VersionSpecifier::greater_than_version(version.clone()),
         Bound::Unbounded => unreachable!("`requires-python` should never be unbounded"),
     };
 
-    let upper_bound = match requires_python.as_ref() {
-        Bound::Included(version) => {
-            let major = version.release().first().copied().unwrap_or(0);
-            let minor = version.release().get(1).copied().unwrap_or(0);
-            VersionSpecifier::less_than_version(Version::new([major, minor + 1]))
-        }
-        Bound::Excluded(version) => {
-            let major = version.release().first().copied().unwrap_or(0);
-            let minor = version.release().get(1).copied().unwrap_or(0);
-            VersionSpecifier::less_than_version(Version::new([major, minor + 1]))
-        }
-        Bound::Unbounded => unreachable!("`requires-python` should never be unbounded"),
+    let upper_bound = match requires_python.upper().as_ref() {
+        Bound::Included(version) => VersionSpecifier::less_than_equal_version(version.clone()),
+        Bound::Excluded(version) => VersionSpecifier::less_than_version(version.clone()),
+        Bound::Unbounded => match requires_python.lower().as_ref() {
+            Bound::Included(version) => {
+                let major = version.release().first().copied().unwrap_or(0);
+                let minor = version.release().get(1).copied().unwrap_or(0);
+                VersionSpecifier::less_than_version(Version::new([major, minor + 1]))
+            }
+            Bound::Excluded(version) => {
+                let major = version.release().first().copied().unwrap_or(0);
+                let minor = version.release().get(1).copied().unwrap_or(0);
+                VersionSpecifier::less_than_version(Version::new([major, minor + 1]))
+            }
+            Bound::Unbounded => unreachable!("`requires-python` should never be unbounded"),
+        },
     };
 
     let python_request = PythonRequest::Version(VersionRequest::Range(
