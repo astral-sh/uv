@@ -318,7 +318,7 @@ impl SourceBuild {
         } else {
             uv_virtualenv::create_venv(
                 temp_dir.path(),
-                interpreter.clone(),
+                interpreter,
                 uv_virtualenv::Prompt::None,
                 cache,
                 false,
