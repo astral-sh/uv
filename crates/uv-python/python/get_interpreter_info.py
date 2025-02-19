@@ -605,7 +605,9 @@ def main() -> None:
         "sys_prefix": sys.prefix,
         "sys_base_executable": getattr(sys, "_base_executable", None),
         "sys_executable": sys.executable,
-        "sys_path": sys.path,
+        # We prepend the interpreter discovery in a temporary path to `sys.path`, which
+        # we have to strip
+        "sys_path": sys.path[1:],
         "stdlib": sysconfig.get_path("stdlib"),
         # Prior to the introduction of `sysconfig` patching, python-build-standalone installations would always use
         # "/install" as the prefix. With `sysconfig` patching, we rewrite the prefix to match the actual installation
