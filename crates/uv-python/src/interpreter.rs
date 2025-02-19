@@ -25,6 +25,7 @@ use uv_pep508::{MarkerEnvironment, StringVersion};
 use uv_platform_tags::Platform;
 use uv_platform_tags::{Tags, TagsError};
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
+use uv_static::EnvVars;
 
 use crate::implementation::LenientImplementationName;
 use crate::platform::{Arch, Libc, Os};
@@ -738,14 +739,14 @@ struct PythonEnvVars {
 impl PythonEnvVars {
     fn from_env() -> Self {
         Self {
-            pythonhome: env::var_os("PYTHONHOME"),
-            pythonpath: env::var_os("PYTHONPATH"),
-            pythonsafepath: env::var_os("PYTHONSAFEPATH"),
-            pythonplatlibdir: env::var_os("PYTHONPLATLIBDIR"),
-            pythonnousersite: env::var_os("PYTHONNOUSERSITE"),
-            pythonuserbase: env::var_os("PYTHONUSERBASE"),
-            appdata: env::var_os("APPDATA"),
-            home: env::var_os("HOME"),
+            pythonhome: env::var_os(EnvVars::PYTHONHOME),
+            pythonpath: env::var_os(EnvVars::PYTHONPATH),
+            pythonsafepath: env::var_os(EnvVars::PYTHONSAFEPATH),
+            pythonplatlibdir: env::var_os(EnvVars::PYTHONPLATLIBDIR),
+            pythonnousersite: env::var_os(EnvVars::PYTHONNOUSERSITE),
+            pythonuserbase: env::var_os(EnvVars::PYTHONUSERBASE),
+            appdata: env::var_os(EnvVars::APPDATA),
+            home: env::var_os(EnvVars::HOME),
         }
     }
 }
