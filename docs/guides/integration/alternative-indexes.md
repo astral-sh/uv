@@ -26,7 +26,7 @@ either by using a
 [Personal Access Token](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=Windows)
 (PAT), or using the [`keyring`](https://github.com/jaraco/keyring) package.
 
-The index can be declared like so:
+To use Azure Artifacts, add the index to your project:
 
 ```toml title="pyproject.toml"
 [[tool.uv.index]]
@@ -34,14 +34,14 @@ name = "private-registry"
 url = "https://pkgs.dev.azure.com/<ORGANIZATION>/<PROJECT>/_packaging/<FEED>/pypi/simple/"
 ```
 
-### Using access token
+### Authenticate with an Azure access token
 
-If there is a PAT available (e.g.,
+If there is a personal access token (PAT) available (e.g.,
 [`$(System.AccessToken)` in an Azure pipeline](https://learn.microsoft.com/en-us/azure/devops/pipelines/build/variables?view=azure-devops&tabs=yaml#systemaccesstoken)),
 credentials can be provided via "Basic" HTTP authentication scheme. Include the PAT in the password
 field of the URL. A username must be included as well, but can be any string.
 
-For instance, with the token stored in the `$AZURE_ARTIFACTS_TOKEN` environment variable, set
+For example, with the token stored in the `$AZURE_ARTIFACTS_TOKEN` environment variable, set
 credentials for the index with:
 
 ```bash
@@ -49,7 +49,11 @@ export UV_INDEX_PRIVATE_REGISTRY_USERNAME=dummy
 export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$AZURE_ARTIFACTS_TOKEN"
 ```
 
-### Using `keyring`
+!!! note
+
+    `PRIVATE_REGISTRY` should match the name of the index defined in your `pyproject.toml`.
+
+### Authenticate with `keyring` and `artifacts-keyring`
 
 You can also authenticate to Artifacts using [`keyring`](https://github.com/jaraco/keyring) package
 with the [`artifacts-keyring` plugin](https://github.com/Microsoft/artifacts-keyring). Because these
@@ -78,31 +82,19 @@ export UV_KEYRING_PROVIDER=subprocess
 export UV_INDEX_PRIVATE_REGISTRY_USERNAME=VssSessionToken
 ```
 
-### Publishing packages
+!!! note
 
-If you also want to publish your own packages to Azure Artifacts, you can either use `uv publish` or
-`uv publish --index <name>`, as described [here](../package.md).
+    The [`tool.uv.keyring-provider`](../../reference/settings.md#keyring-provider--keyring-provider-)
+    setting can be used to enable keyring in your `uv.toml` or `pyproject.toml`.
 
-#### Using `uv publish`
+    Similarly, the username for the index can be added directly to the index URL.
 
-Publish the package to the index by first setting up URL and credentials:
+### Publishing packages to Azure Artifacts
 
-```bash
-# Configure uv to use Azure Artifacts
-export UV_PUBLISH_URL=https://pkgs.dev.azure.com/<ORGANIZATION>/<PROJECT>/_packaging/<FEED>/pypi/upload/
-export UV_PUBLISH_USERNAME=dummy
-export UV_PUBLISH_PASSWORD="$AZURE_ARTIFACTS_TOKEN" # (1)
+If you also want to publish your own packages to Azure Artifacts, you can use `uv publish` as
+described in the [Building and publishing guide](../package.md).
 
-# Publish the package
-uv publish
-```
-
-1.  Only needed if you do not use `keyring`.
-
-#### Using `uv publish --index <name>`
-
-Add `publish-url` to the index you want to publish packages to. For instance, taking the index
-defined earlier:
+First, add a `publish-url` to the index you want to publish packages to. For example:
 
 ```toml title="pyproject.toml" hl_lines="4"
 [[tool.uv.index]]
@@ -111,18 +103,28 @@ url = "https://pkgs.dev.azure.com/<ORGANIZATION>/<PROJECT>/_packaging/<FEED>/pyp
 publish-url = "https://pkgs.dev.azure.com/<ORGANIZATION>/<PROJECT>/_packaging/<FEED>/pypi/upload/"
 ```
 
-Then, publish the package to the index by first setting up credentials:
+Then, configure a password (if not using keyring):
 
-```bash
-# Configure uv to use Azure Artifacts credentials
-export UV_PUBLISH_USERNAME=dummy
-export UV_PUBLISH_PASSWORD="$AZURE_ARTIFACTS_TOKEN" # (1)
-
-# Publish the package
-uv publish --index private-registry
+```console
+$ export UV_PUBLISH_USERNAME=dummy
+$ export UV_PUBLISH_PASSWORD="$AZURE_ARTIFACTS_TOKEN"
 ```
 
-1.  Only needed if you do not use `keyring`.
+And publish the package:
+
+```console
+$ uv publish --index private-registry
+```
+
+To use `uv publish` without adding the `publish-url` to the project, you can set `UV_PUBLISH_URL`:
+
+```console
+$ export UV_PUBLISH_URL=https://pkgs.dev.azure.com/<ORGANIZATION>/<PROJECT>/_packaging/<FEED>/pypi/upload/
+$ uv publish
+```
+
+Note this method is not preferable because uv cannot check if the package is already published
+before uploading artifacts.
 
 ## Google Artifact Registry
 
