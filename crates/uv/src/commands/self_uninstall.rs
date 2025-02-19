@@ -13,9 +13,9 @@ use uv_tool::InstalledTools;
 pub(crate) fn self_uninstall(
     cache: &Cache,
     printer: Printer,
-    clean_stored_data: bool,
+    remove_data: bool,
 ) -> Result<ExitStatus> {
-    if clean_stored_data {
+    if remove_data {
         // uv cache clean
         cache_clean(&[], &cache, printer)?;
 
@@ -35,9 +35,8 @@ pub(crate) fn self_uninstall(
     let home_dir = env::var("HOME").unwrap();
     let home_path = Path::new(&home_dir);
 
-    let target_is_windows = cfg!(target_os = "windows");
-    let uv_executable = if target_is_windows { "uv.exe" } else { "uv" };
-    let uvx_executable = if target_is_windows { "uvx.exe" } else { "uvx" };
+    let uv_executable = format!("uv{}", std::env::consts::EXE_SUFFIX);
+    let uvx_executable = format!("uvx{}", std::env::consts::EXE_SUFFIX);
 
     let uv_path = home_path.join(".local").join("bin").join(uv_executable);
     let uvx_path = home_path.join(".local").join("bin").join(uvx_executable);

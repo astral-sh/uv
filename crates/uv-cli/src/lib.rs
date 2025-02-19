@@ -530,7 +530,7 @@ pub struct SelfUninstallArgs {
     /// true iff should run `uv cache clean` and remove directories pointed to by `uv python dir`
     /// and `uv tool dir`
     #[arg(long)]
-    pub clean_stored_data: bool,
+    pub remove_data: bool,
 }
 
 #[derive(Args)]
