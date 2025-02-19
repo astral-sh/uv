@@ -18,13 +18,16 @@ use tokio::task::spawn_blocking;
 use tracing::{debug, instrument};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
+#[cfg(feature = "self-update")]
+use uv_cli::SelfUpdateArgs;
 use uv_cli::{
     compat::CompatArgs, BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands,
     PipCommand, PipNamespace, ProjectCommand,
 };
-use uv_cli::{PythonCommand, PythonNamespace, ToolCommand, ToolNamespace, TopLevelArgs};
-#[cfg(feature = "self-update")]
-use uv_cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
+use uv_cli::{
+    PythonCommand, PythonNamespace, SelfCommand, SelfNamespace, SelfUninstallArgs, ToolCommand,
+    ToolNamespace, TopLevelArgs,
+};
 use uv_fs::{Simplified, CWD};
 use uv_requirements::RequirementsSource;
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
@@ -908,6 +911,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     token,
                 }),
         }) => commands::self_update(target_version, token, printer).await,
+        Commands::Self_(SelfNamespace {
+            command: SelfCommand::Uninstall(SelfUninstallArgs { clean_stored_data }),
+        }) => commands::self_uninstall(&cache, printer, clean_stored_data),
         #[cfg(not(feature = "self-update"))]
         Commands::Self_(_) => {
             anyhow::bail!(

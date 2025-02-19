@@ -81,6 +81,7 @@ mod python_pin;
 #[cfg(all(feature = "python", feature = "pypi"))]
 mod run;
 
+mod self_uninstall;
 #[cfg(feature = "self-update")]
 mod self_update;
 

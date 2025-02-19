@@ -36,6 +36,7 @@ pub(crate) use python::install::install as python_install;
 pub(crate) use python::list::list as python_list;
 pub(crate) use python::pin::pin as python_pin;
 pub(crate) use python::uninstall::uninstall as python_uninstall;
+pub(crate) use self_uninstall::self_uninstall;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
 pub(crate) use tool::dir::dir as tool_dir;
@@ -72,6 +73,7 @@ mod publish;
 mod python;
 pub(crate) mod reporters;
 mod run;
+mod self_uninstall;
 #[cfg(feature = "self-update")]
 mod self_update;
 mod tool;
