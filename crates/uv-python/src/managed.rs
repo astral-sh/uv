@@ -250,7 +250,10 @@ impl ManagedPythonInstallations {
             .find_all()?
             .filter(move |installation| {
                 installation.key.os == os
-                    && installation.key.arch.family == arch.family
+                    && (arch.supports(installation.key.arch)
+                        // TODO(zanieb): Allow inequal variants, as `Arch::supports` does not
+                        // implement this yet. See https://github.com/astral-sh/uv/pull/9788
+                        || arch.family == installation.key.arch.family)
                     && installation.key.libc == libc
             });
 
@@ -665,6 +668,7 @@ impl ManagedPythonInstallation {
     }
 }
 
+// TODO(zanieb): Only used in tests now.
 /// Generate a platform portion of a key from the environment.
 pub fn platform_key_from_env() -> Result<String, Error> {
     let os = Os::from_env();

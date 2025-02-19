@@ -250,18 +250,20 @@ impl PythonDownloadRequest {
             .filter(move |download| self.satisfied_by_download(download))
     }
 
-    /// Whether this request is satisfied by the key of an existing installation.
+    /// Whether this request is satisfied by an installation key.
     pub fn satisfied_by_key(&self, key: &PythonInstallationKey) -> bool {
-        if let Some(arch) = &self.arch {
-            if key.arch != *arch {
-                return false;
-            }
-        }
         if let Some(os) = &self.os {
             if key.os != *os {
                 return false;
             }
         }
+
+        if let Some(arch) = &self.arch {
+            if !arch.supports(key.arch) {
+                return false;
+            }
+        }
+
         if let Some(libc) = &self.libc {
             if key.libc != *libc {
                 return false;
