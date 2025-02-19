@@ -17,7 +17,7 @@ pub(crate) fn self_uninstall(
 ) -> Result<ExitStatus> {
     if remove_data {
         // uv cache clean
-        cache_clean(&[], &cache, printer)?;
+        cache_clean(&[], cache, printer)?;
 
         // rm -r "$(uv python dir)"
         let installed_toolchains = ManagedPythonInstallations::from_settings(None)?;
