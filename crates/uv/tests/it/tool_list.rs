@@ -67,7 +67,9 @@ fn tool_list_paths() {
 #[cfg(windows)]
 #[test]
 fn tool_list_paths_windows() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = TestContext::new("3.12")
+        .clear_filters()
+        .with_filtered_windows_temp_dir();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -80,15 +82,15 @@ fn tool_list_paths_windows() {
         .assert()
         .success();
 
-    uv_snapshot!(context.filters(), context.tool_list().arg("--show-paths")
+    uv_snapshot!(context.filters_without_standard_filters(), context.tool_list().arg("--show-paths")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
     black v24.2.0 ([TEMP_DIR]\tools\black)
-    - black ([TEMP_DIR]\bin\black)
-    - blackd ([TEMP_DIR]\bin\blackd)
+    - black.exe ([TEMP_DIR]\bin\black.exe)
+    - blackd.exe ([TEMP_DIR]\bin\blackd.exe)
 
     ----- stderr -----
     "###);
