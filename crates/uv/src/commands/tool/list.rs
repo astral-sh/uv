@@ -98,12 +98,7 @@ pub(crate) async fn list(
         // Output tool entrypoints
         for entrypoint in tool.entrypoints() {
             if show_paths {
-                writeln!(
-                    printer.stdout(),
-                    "- {} ({})",
-                    entrypoint.name,
-                    entrypoint.install_path.simplified_display().cyan()
-                )?;
+                writeln!(printer.stdout(), "- {}", entrypoint.to_string().cyan())?;
             } else {
                 writeln!(printer.stdout(), "- {}", entrypoint.name)?;
             }
