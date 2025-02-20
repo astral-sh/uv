@@ -89,6 +89,11 @@ pub(crate) async fn run(
     printer: Printer,
     preview: PreviewMode,
 ) -> anyhow::Result<ExitStatus> {
+    fn is_python_script(path: &Path) -> bool {
+        path.extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
+    }
+
     let Some(command) = command else {
         // When a command isn't provided, we'll show a brief help including available tools
         show_help(invocation_source, &cache, printer).await?;
@@ -107,10 +112,7 @@ pub(crate) async fn run(
 
     if let Some(ref f) = from {
         let possible_script = Path::new(f);
-        if possible_script
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
-        {
+        if is_python_script(possible_script) {
             return Err(anyhow::anyhow!(
                 "It looks you have passed a script instead of a package into `--from`. \n\n{}{} Did you mean to run a tool with `{}`?",
                     "hint".bold().cyan(),
@@ -120,10 +122,7 @@ pub(crate) async fn run(
         }
     } else {
         let possible_script = Path::new(target);
-        if possible_script
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
-        {
+        if is_python_script(possible_script) {
             return if possible_script.try_exists()? {
                 Err(anyhow::anyhow!(
                     "It looks like you are trying to run a script. Did you mean `{}`?",
