@@ -1476,8 +1476,12 @@ impl PythonRequest {
                 version_request.matches_interpreter(interpreter)
             }
             PythonRequest::Directory(directory) => {
-                // `sys.prefix` points to the venv root.
+                // `sys.prefix` points to the environment root or `sys.executable` is the same
                 is_same_executable(directory, interpreter.sys_prefix())
+                    || is_same_executable(
+                        virtualenv_python_executable(directory).as_path(),
+                        interpreter.sys_executable(),
+                    )
             }
             PythonRequest::File(file) => {
                 // The interpreter satisfies the request both if it is the venv...

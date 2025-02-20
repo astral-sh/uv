@@ -181,18 +181,12 @@ impl PubGrubRequirement {
                 (url, parsed_url)
             }
             RequirementSource::Git {
-                repository,
-                reference,
-                precise,
+                git,
                 url,
                 subdirectory,
             } => {
-                let parsed_url = ParsedUrl::Git(ParsedGitUrl::from_source(
-                    repository.clone(),
-                    reference.clone(),
-                    *precise,
-                    subdirectory.clone(),
-                ));
+                let parsed_url =
+                    ParsedUrl::Git(ParsedGitUrl::from_source(git.clone(), subdirectory.clone()));
                 (url, parsed_url)
             }
             RequirementSource::Path {

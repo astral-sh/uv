@@ -93,7 +93,7 @@ pub struct Options {
         default = r#"[{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }]"#,
         value_type = "list[dict]",
         example = r#"
-            cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true }]
+            cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true } }]
         "#
     )]
     cache_keys: Option<Vec<CacheKey>>,
@@ -108,7 +108,13 @@ pub struct Options {
     pub constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub build_constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
     pub environments: Option<SupportedEnvironments>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub required_environments: Option<SupportedEnvironments>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
@@ -1789,7 +1795,9 @@ pub struct OptionsWire {
     // They're respected in both `pyproject.toml` and `uv.toml` files.
     override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    build_constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     environments: Option<SupportedEnvironments>,
+    required_environments: Option<SupportedEnvironments>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
@@ -1854,7 +1862,9 @@ impl From<OptionsWire> for Options {
             cache_keys,
             override_dependencies,
             constraint_dependencies,
+            build_constraint_dependencies,
             environments,
+            required_environments,
             conflicts,
             publish_url,
             trusted_publishing,
@@ -1917,7 +1927,9 @@ impl From<OptionsWire> for Options {
             cache_keys,
             override_dependencies,
             constraint_dependencies,
+            build_constraint_dependencies,
             environments,
+            required_environments,
             install_mirrors: PythonInstallMirrors::resolve(
                 python_install_mirror,
                 pypy_install_mirror,

@@ -220,7 +220,7 @@ impl Edge {
 impl From<&ResolvedDist> for RequirementSource {
     fn from(resolved_dist: &ResolvedDist) -> Self {
         match resolved_dist {
-            ResolvedDist::Installable { dist, .. } => match dist {
+            ResolvedDist::Installable { dist, .. } => match dist.as_ref() {
                 Dist::Built(BuiltDist::Registry(wheels)) => {
                     let wheel = wheels.best_wheel();
                     RequirementSource::Registry {
@@ -266,10 +266,8 @@ impl From<&ResolvedDist> for RequirementSource {
                     }
                 }
                 Dist::Source(SourceDist::Git(sdist)) => RequirementSource::Git {
+                    git: (*sdist.git).clone(),
                     url: sdist.url.clone(),
-                    repository: sdist.git.repository().clone(),
-                    reference: sdist.git.reference().clone(),
-                    precise: sdist.git.precise(),
                     subdirectory: sdist.subdirectory.clone(),
                 },
                 Dist::Source(SourceDist::Path(sdist)) => RequirementSource::Path {

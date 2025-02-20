@@ -319,7 +319,6 @@ fn run_pep723_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
     "###);
 
     // But neither invocation should create a lockfile.
@@ -818,6 +817,7 @@ fn run_pep723_script_lock() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.11"
 
         [options]
@@ -847,8 +847,7 @@ fn run_pep723_script_lock() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + iniconfig==2.0.0
+    Audited 1 package in [TIME]
     "###);
 
     // With a lockfile, running with `--locked` should not warn.
@@ -860,6 +859,7 @@ fn run_pep723_script_lock() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
     "###);
 
     // Modify the metadata.
@@ -895,6 +895,7 @@ fn run_pep723_script_lock() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Audited 1 package in [TIME]
     Traceback (most recent call last):
       File "[TEMP_DIR]/main.py", line 8, in <module>
         import anyio
@@ -925,6 +926,7 @@ fn run_pep723_script_lock() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.11"
 
         [options]
@@ -1730,6 +1732,7 @@ fn run_locked() -> Result<()> {
         assert_snapshot!(
             existing, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -3152,6 +3155,92 @@ fn run_script_without_build_system() -> Result<()> {
 }
 
 #[test]
+fn run_script_module_conflict() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo:app"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#
+    })?;
+
+    let init = context.temp_dir.child("src/foo/__init__.py");
+    init.write_str(indoc! { r#"
+        def app():
+            print("Hello from `__init__`")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from `__init__`
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    // Creating `__main__` should not change the behavior, the entrypoint should take precedence
+    let main = context.temp_dir.child("src/foo/__main__.py");
+    main.write_str(indoc! { r#"
+        print("Hello from `__main__`")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from `__init__`
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    // Even if the working directory is `src`
+    uv_snapshot!(context.filters(), context.run().arg("--directory").arg("src").arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from `__init__`
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    // Unless the user opts-in to module running with `-m`
+    uv_snapshot!(context.filters(), context.run().arg("-m").arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from `__main__`
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn run_script_explicit() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -3276,8 +3365,6 @@ fn run_gui_script_explicit_windows() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved in [TIME]
-    Audited in [TIME]
     Using executable: pythonw.exe
     "###);
 
@@ -3341,9 +3428,7 @@ fn run_gui_script_explicit_unix() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved in [TIME]
-    Audited in [TIME]
-    Using executable: python3
+    Using executable: python
     "###);
 
     Ok(())
@@ -3432,7 +3517,7 @@ fn run_linked_environment_path() -> Result<()> {
 }
 
 #[test]
-fn run_active_environment() -> Result<()> {
+fn run_active_project_environment() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.11", "3.12"])
         .with_filtered_virtualenv_bin()
         .with_filtered_python_names();
@@ -3531,6 +3616,115 @@ fn run_active_environment() -> Result<()> {
     Removed virtual environment at: foo
     Creating virtual environment at: foo
     Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_active_script_environment() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+
+        import iniconfig
+
+        print("Hello, world!")
+       "#
+    })?;
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(
+            r"environments-v1/main-\w+",
+            "environments-v1/main-[HASH]",
+        )])
+        .collect::<Vec<_>>();
+
+    // Running `uv run --script` with `VIRTUAL_ENV` should _not_ warn.
+    uv_snapshot!(&filters, context.run()
+        .arg("--script")
+        .arg("main.py")
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    // Using `--no-active` should also _not_ warn.
+    uv_snapshot!(&filters, context.run()
+        .arg("--no-active")
+        .arg("--script")
+        .arg("main.py")
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    "###);
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::missing());
+
+    // Using `--active` should create the environment
+    uv_snapshot!(&filters, context.run()
+        .arg("--active")
+        .arg("--script")
+        .arg("main.py")
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::is_dir());
+
+    // Requesting a different Python version should invalidate the environment
+    uv_snapshot!(&filters, context.run()
+        .arg("--active")
+        .arg("-p").arg("3.12")
+        .arg("--script")
+        .arg("main.py")
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -4119,4 +4313,60 @@ fn run_without_overlay() -> Result<()> {
     "###);
 
     Ok(())
+}
+
+/// See: <https://github.com/astral-sh/uv/issues/11220>
+#[cfg(unix)]
+#[test]
+fn detect_infinite_recursion() -> Result<()> {
+    use crate::common::get_bin;
+    use indoc::formatdoc;
+    use std::os::unix::fs::PermissionsExt;
+
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("main");
+    test_script.write_str(&formatdoc! { r#"
+        #!{uv} run
+
+        print("Hello, world!")
+    "#, uv = get_bin().display() })?;
+
+    fs_err::set_permissions(test_script.path(), PermissionsExt::from_mode(0o0744))?;
+
+    let mut cmd = std::process::Command::new(test_script.as_os_str());
+    context.add_shared_env(&mut cmd, false);
+
+    // Set the max recursion depth to a lower amount to speed up testing.
+    cmd.env("UV_RUN_MAX_RECURSION_DEPTH", "5");
+
+    uv_snapshot!(context.filters(), cmd, @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `uv run` was recursively invoked 6 times which exceeds the limit of 5.
+
+    hint: If you are running a script with `uv run` in the shebang, you may need to include the `--script` flag.
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_uv_variable() {
+    let context = TestContext::new("3.12");
+
+    // Display the `UV` variable
+    uv_snapshot!(
+        context.filters(),
+        context.run().arg("python").arg("-c").arg("import os; print(os.environ['UV'])"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [UV]
+
+    ----- stderr -----
+    "###);
 }

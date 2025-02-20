@@ -214,6 +214,10 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
     pyproject_toml.write_str(indoc! {r#"
         [tool.uv]
         unknown = "field"
+
+        [build-system]
+        requires = ["setuptools"]
+        build-backend = "setuptools.build_meta"
     "#})?;
 
     let mut filters = context.filters();
@@ -2277,6 +2281,83 @@ fn install_no_binary_overrides_only_binary_all() {
     );
 
     context.assert_command("import anyio").success();
+}
+
+/// Disable binaries with an environment variable
+/// TODO(zanieb): This is not yet implemented
+#[test]
+fn install_no_binary_env() {
+    let context = TestContext::new("3.12");
+
+    let mut command = context.pip_install();
+    command.arg("anyio").env("UV_NO_BINARY", "1");
+    uv_snapshot!(
+        command,
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    let mut command = context.pip_install();
+    command
+        .arg("anyio")
+        .arg("--reinstall")
+        .env("UV_NO_BINARY", "anyio");
+    uv_snapshot!(
+        command,
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     ~ anyio==4.3.0
+     ~ idna==3.6
+     ~ sniffio==1.3.1
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+
+    let mut command = context.pip_install();
+    command
+        .arg("anyio")
+        .arg("--reinstall")
+        .arg("idna")
+        .env("UV_NO_BINARY_PACKAGE", "idna");
+    uv_snapshot!(
+        command,
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     ~ anyio==4.3.0
+     ~ idna==3.6
+     ~ sniffio==1.3.1
+    "###
+    );
+
+    context.assert_command("import idna").success();
 }
 
 /// Overlapping usage of `--no-binary` and `--only-binary`
@@ -6934,6 +7015,146 @@ fn verify_hashes_editable() -> Result<()> {
     Ok(())
 }
 
+/// Allow arguments within a `requirements.txt` file to be quoted or unquoted, as in the CLI.
+#[test]
+fn double_quoted_arguments() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let constraints_in = context.temp_dir.child("constraints.in");
+    constraints_in.write_str(indoc::indoc! {r"
+        iniconfig==1.0.0
+    "})?;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(indoc::indoc! {r#"
+       --constraint "./constraints.in"
+
+        iniconfig
+    "#})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==1.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Allow arguments within a `requirements.txt` file to be quoted or unquoted, as in the CLI.
+#[test]
+fn single_quoted_arguments() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let constraints_in = context.temp_dir.child("constraints.in");
+    constraints_in.write_str(indoc::indoc! {r"
+        iniconfig==1.0.0
+    "})?;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(indoc::indoc! {r"
+       --constraint './constraints.in'
+
+        iniconfig
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==1.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Allow arguments within a `requirements.txt` file to be quoted or unquoted, as in the CLI.
+#[test]
+fn unquoted_arguments() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let constraints_in = context.temp_dir.child("constraints.in");
+    constraints_in.write_str(indoc::indoc! {r"
+        iniconfig==1.0.0
+    "})?;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(indoc::indoc! {r"
+       --constraint ./constraints.in
+
+        iniconfig
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==1.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Allow arguments within a `requirements.txt` file to be quoted or unquoted, as in the CLI.
+#[test]
+fn concatenated_quoted_arguments() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let constraints_in = context.temp_dir.child("constraints.in");
+    constraints_in.write_str(indoc::indoc! {r"
+        iniconfig==1.0.0
+    "})?;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(indoc::indoc! {r#"
+       --constraint "./constr""aints.in"
+
+        iniconfig
+    "#})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==1.0.0
+    "###
+    );
+
+    Ok(())
+}
+
 #[test]
 #[cfg(feature = "git")]
 fn tool_uv_sources() -> Result<()> {
@@ -7713,6 +7934,166 @@ fn compatible_build_constraint() -> Result<()> {
     "###
     );
 
+    Ok(())
+}
+
+/// Include `build-constraint-dependencies` in pyproject.toml with an incompatible constraint.
+#[test]
+fn incompatible_build_constraint_in_pyproject_toml() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[tool.uv]
+build-constraint-dependencies = [
+    "setuptools==1",
+]
+"#,
+    )?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("requests==1.2"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include a `build_constraints.txt` file with a compatible constraint.
+#[test]
+fn compatible_build_constraint_in_pyproject_toml() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[tool.uv]
+build-constraint-dependencies = [
+    "setuptools==40.8.0",
+]
+"#,
+    )?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("requests==1.2"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + requests==1.2.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Merge `build_constraints.txt` with `build-constraint-dependencies` in pyproject.toml with an incompatible constraint.
+#[test]
+fn incompatible_build_constraint_merged_with_pyproject_toml() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    // Incompatible setuptools version in pyproject.toml, compatible in build_constraints.txt.
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("setuptools>=40")?;
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[tool.uv]
+build-constraint-dependencies = [
+    "setuptools==1",
+]
+"#,
+    )?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("requests==1.2")
+        .arg("--build-constraint")
+        .arg("build_constraints.txt"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    "###
+    );
+
+    // Compatible setuptools version in pyproject.toml, incompatible in build_constraints.txt.
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("setuptools==1")?;
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[tool.uv]
+build-constraint-dependencies = [
+    "setuptools>=40",
+]
+"#,
+    )?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("requests==1.2")
+        .arg("--build-constraint")
+        .arg("build_constraints.txt"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools==1 and setuptools>=40, we can conclude that your requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Merge `build_constraints.txt` with `build-constraint-dependencies` in pyproject.toml with a compatible constraint.
+#[test]
+fn compatible_build_constraint_merged_with_pyproject_toml() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("setuptools>=40")?;
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[tool.uv]
+build-constraint-dependencies = [
+    "setuptools>=1",
+]
+"#,
+    )?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("requests==1.2")
+        .arg("--build-constraint")
+        .arg("build_constraints.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + requests==1.2.0
+    "###
+    );
     Ok(())
 }
 
@@ -8698,4 +9079,22 @@ fn no_sources_workspace_discovery() -> Result<()> {
     );
 
     Ok(())
+}
+
+#[test]
+fn unsupported_git_scheme() {
+    let context = TestContext::new("3.12");
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("git+fantasy://foo"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `git+fantasy://foo`
+      Caused by: Unsupported Git URL scheme `fantasy:` in `fantasy://foo` (expected one of `https:`, `ssh:`, or `file:`)
+    git+fantasy://foo
+    ^^^^^^^^^^^^^^^^^
+    "###
+    );
 }

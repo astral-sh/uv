@@ -1771,7 +1771,6 @@ jobs:
         with:
           python-version: "3.13"
           allow-prereleases: true
-          cache: pip
 
       - name: "Download binary"
         uses: actions/download-artifact@v4
@@ -1780,6 +1779,28 @@ jobs:
 
       - name: "Print Python path"
         run: echo $(which python)
+
+      - name: "Validate global Python install"
+        run: py -3.13 ./scripts/check_system_python.py --uv ./uv.exe
+
+  system-test-windows-aarch64-x86-python-313:
+    timeout-minutes: 10
+    needs: build-binary-windows-aarch64
+    name: "check system | x86-64 python3.13 on windows aarch64"
+    runs-on: github-windows-11-aarch64-4
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          architecture: "x64"
+          allow-prereleases: true
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-aarch64-${{ github.sha }}
 
       - name: "Validate global Python install"
         run: py -3.13 ./scripts/check_system_python.py --uv ./uv.exe

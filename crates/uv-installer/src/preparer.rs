@@ -64,15 +64,15 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
     /// Fetch, build, and unzip the distributions in parallel.
     pub fn prepare_stream<'stream>(
         &'stream self,
-        distributions: Vec<Dist>,
+        distributions: Vec<Arc<Dist>>,
         in_flight: &'stream InFlight,
         resolution: &'stream Resolution,
     ) -> impl Stream<Item = Result<CachedDist, Error>> + 'stream {
         distributions
             .into_iter()
-            .map(|dist| async {
+            .map(|dist| async move {
                 let wheel = self
-                    .get_wheel(dist, in_flight, resolution)
+                    .get_wheel((*dist).clone(), in_flight, resolution)
                     .boxed_local()
                     .await?;
                 if let Some(reporter) = self.reporter.as_ref() {
@@ -87,7 +87,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
     #[instrument(skip_all, fields(total = distributions.len()))]
     pub async fn prepare(
         &self,
-        mut distributions: Vec<Dist>,
+        mut distributions: Vec<Arc<Dist>>,
         in_flight: &InFlight,
         resolution: &Resolution,
     ) -> Result<Vec<CachedDist>, Error> {
@@ -192,7 +192,9 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                         return Err(Error::from_dist(dist, err, resolution));
                     }
                     if let Some(version) = dist.version() {
-                        if *version != cached.filename().version {
+                        if *version != cached.filename().version
+                            && *version != cached.filename().version.clone().without_local()
+                        {
                             let err = uv_distribution::Error::WheelMetadataVersionMismatch {
                                 given: version.clone(),
                                 metadata: cached.filename().version.clone(),

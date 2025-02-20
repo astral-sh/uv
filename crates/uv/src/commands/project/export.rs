@@ -23,8 +23,8 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, detect_conflicts, DependencyGroupsTarget, ProjectError,
-    ProjectInterpreter, ScriptInterpreter, UniversalState,
+    default_dependency_groups, detect_conflicts, ProjectError, ProjectInterpreter,
+    ScriptInterpreter, UniversalState,
 };
 use crate::commands::{diagnostics, ExitStatus, OutputWriter};
 use crate::printer::Printer;
@@ -107,24 +107,6 @@ pub(crate) async fn export(
         ExportTarget::Project(project)
     };
 
-    // Validate that any referenced dependency groups are defined in the workspace.
-    if !frozen {
-        let target = match &target {
-            ExportTarget::Project(VirtualProject::Project(project)) => {
-                if all_packages {
-                    DependencyGroupsTarget::Workspace(project.workspace())
-                } else {
-                    DependencyGroupsTarget::Project(project)
-                }
-            }
-            ExportTarget::Project(VirtualProject::NonProject(workspace)) => {
-                DependencyGroupsTarget::Workspace(workspace)
-            }
-            ExportTarget::Script(_) => DependencyGroupsTarget::Script,
-        };
-        target.validate(&dev)?;
-    }
-
     // Determine the default groups to include.
     let defaults = match &target {
         ExportTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
@@ -147,6 +129,7 @@ pub(crate) async fn export(
                 allow_insecure_host,
                 &install_mirrors,
                 no_config,
+                Some(false),
                 cache,
                 printer,
             )
@@ -266,6 +249,10 @@ pub(crate) async fn export(
             lock: &lock,
         },
     };
+
+    // Validate that the set of requested extras and development groups are defined in the lockfile.
+    target.validate_extras(&extras)?;
+    target.validate_groups(&dev)?;
 
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file.as_deref());

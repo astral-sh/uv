@@ -7,7 +7,7 @@ use url::Url;
 use uv_cache_info::CacheInfo;
 use uv_cache_key::{CanonicalUrl, RepositoryUrl};
 use uv_distribution_types::{InstalledDirectUrlDist, InstalledDist};
-use uv_git::GitOid;
+use uv_git_types::GitOid;
 use uv_pypi_types::{DirInfo, DirectUrl, RequirementSource, VcsInfo, VcsKind};
 
 #[derive(Debug, Copy, Clone)]
@@ -97,9 +97,7 @@ impl RequirementSatisfaction {
             }
             RequirementSource::Git {
                 url: _,
-                repository: requested_repository,
-                reference: _,
-                precise: requested_precise,
+                git: requested_git,
                 subdirectory: requested_subdirectory,
             } => {
                 let InstalledDist::Url(InstalledDirectUrlDist { direct_url, .. }) = &distribution
@@ -129,21 +127,25 @@ impl RequirementSatisfaction {
                 }
 
                 if !RepositoryUrl::parse(installed_url).is_ok_and(|installed_url| {
-                    installed_url == RepositoryUrl::new(requested_repository)
+                    installed_url == RepositoryUrl::new(requested_git.repository())
                 }) {
                     debug!(
                         "Repository mismatch: {:?} vs. {:?}",
-                        installed_url, requested_repository
+                        installed_url,
+                        requested_git.repository()
                     );
                     return Ok(Self::Mismatch);
                 }
 
                 // TODO(charlie): It would be more consistent for us to compare the requested
                 // revisions here.
-                if installed_precise.as_deref() != requested_precise.as_ref().map(GitOid::as_str) {
+                if installed_precise.as_deref()
+                    != requested_git.precise().as_ref().map(GitOid::as_str)
+                {
                     debug!(
                         "Precise mismatch: {:?} vs. {:?}",
-                        installed_precise, requested_precise
+                        installed_precise,
+                        requested_git.precise()
                     );
                     return Ok(Self::OutOfDate);
                 }

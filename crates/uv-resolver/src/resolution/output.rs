@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
+use std::sync::Arc;
 
 use indexmap::IndexSet;
 use petgraph::{
@@ -91,6 +92,13 @@ impl ResolutionGraphNode {
                 let group = dist.dev.as_ref()?;
                 Some((&dist.name, group))
             }
+        }
+    }
+
+    pub(crate) fn package_name(&self) -> Option<&PackageName> {
+        match *self {
+            ResolutionGraphNode::Root => None,
+            ResolutionGraphNode::Dist(ref dist) => Some(&dist.name),
         }
     }
 }
@@ -442,7 +450,7 @@ impl ResolverOutput {
 
             (
                 ResolvedDist::Installable {
-                    dist,
+                    dist: Arc::new(dist),
                     version: Some(version.clone()),
                 },
                 hashes,

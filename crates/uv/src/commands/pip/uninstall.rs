@@ -7,7 +7,7 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{KeyringProviderType, TrustedHost};
+use uv_configuration::{DryRun, KeyringProviderType, TrustedHost};
 use uv_distribution_types::{InstalledMetadata, Name, UnresolvedRequirement};
 use uv_fs::Simplified;
 use uv_pep508::UnnamedRequirement;
@@ -36,7 +36,7 @@ pub(crate) async fn pip_uninstall(
     native_tls: bool,
     keyring_provider: KeyringProviderType,
     allow_insecure_host: &[TrustedHost],
-    dry_run: bool,
+    dry_run: DryRun,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
@@ -144,7 +144,7 @@ pub(crate) async fn pip_uninstall(
         for package in &names {
             let installed = site_packages.get_packages(package);
             if installed.is_empty() {
-                if !dry_run {
+                if !dry_run.enabled() {
                     writeln!(
                         printer.stderr(),
                         "{}{} Skipping {} as it is not installed",
@@ -162,7 +162,7 @@ pub(crate) async fn pip_uninstall(
         for url in &urls {
             let installed = site_packages.get_urls(url);
             if installed.is_empty() {
-                if !dry_run {
+                if !dry_run.enabled() {
                     writeln!(
                         printer.stderr(),
                         "{}{} Skipping {} as it is not installed",
@@ -183,7 +183,7 @@ pub(crate) async fn pip_uninstall(
     };
 
     if distributions.is_empty() {
-        if dry_run {
+        if dry_run.enabled() {
             writeln!(printer.stderr(), "Would make no changes")?;
         } else {
             writeln!(
@@ -197,7 +197,7 @@ pub(crate) async fn pip_uninstall(
     }
 
     // Uninstall each package.
-    if !dry_run {
+    if !dry_run.enabled() {
         for distribution in &distributions {
             let summary = uv_installer::uninstall(distribution).await?;
             debug!(
@@ -213,7 +213,7 @@ pub(crate) async fn pip_uninstall(
 
     let uninstalls = distributions.len();
     let s = if uninstalls == 1 { "" } else { "s" };
-    if dry_run {
+    if dry_run.enabled() {
         writeln!(
             printer.stderr(),
             "{}",

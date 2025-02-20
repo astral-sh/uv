@@ -39,6 +39,7 @@ uv-distribution-types = { path = "crates/uv-distribution-types" }
 uv-extract = { path = "crates/uv-extract" }
 uv-fs = { path = "crates/uv-fs", features = ["serde", "tokio"] }
 uv-git = { path = "crates/uv-git" }
+uv-git-types = { path = "crates/uv-git-types" }
 uv-globfilter = { path = "crates/uv-globfilter" }
 uv-install-wheel = { path = "crates/uv-install-wheel", default-features = false }
 uv-installer = { path = "crates/uv-installer" }
@@ -73,7 +74,7 @@ uv-workspace = { path = "crates/uv-workspace" }
 anstream = { version = "0.6.15" }
 anyhow = { version = "1.0.89" }
 arcstr = { version = "1.2.0" }
-astral-tokio-tar = { version = "0.5.0" }
+astral-tokio-tar = { version = "0.5.1" }
 async-channel = { version = "2.3.1" }
 async-compression = { version = "0.4.12", features = ["bzip2", "gzip", "xz", "zstd"] }
 async-trait = { version = "0.1.82" }
@@ -116,9 +117,9 @@ indexmap = { version = "2.5.0" }
 indicatif = { version = "0.17.8" }
 indoc = { version = "2.0.5" }
 itertools = { version = "0.14.0" }
-jiff = { version = "0.1.14", features = ["serde"] }
+jiff = { version = "0.2.0", features = ["serde"] }
 junction = { version = "1.2.0" }
-mailparse = { version = "0.15.0" }
+mailparse = { version = "0.16.0" }
 md-5 = { version = "0.10.6" }
 memchr = { version = "2.7.4" }
 miette = { version = "7.2.0", features = ["fancy-no-backtrace"] }
@@ -134,6 +135,7 @@ proc-macro2 = { version = "1.0.86" }
 procfs = { version = "0.17.0", default-features = false, features = ["flate2"] }
 pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "b70cf707aa43f21b32f3a61b8a0889b15032d5c4" }
 quote = { version = "1.0.37" }
+r-shquote = { version = "0.1.1" }
 rayon = { version = "1.10.0" }
 reflink-copy = { version = "0.1.19" }
 regex = { version = "1.10.6" }

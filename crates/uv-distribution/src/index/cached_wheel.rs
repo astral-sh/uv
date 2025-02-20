@@ -26,7 +26,7 @@ pub struct CachedWheel {
 
 impl CachedWheel {
     /// Try to parse a distribution from a cached directory name (like `typing-extensions-4.8.0-py3-none-any`).
-    pub fn from_built_source(path: impl AsRef<Path>) -> Option<Self> {
+    pub fn from_built_source(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
         let path = path.as_ref();
 
         // Determine the wheel filename.
@@ -34,7 +34,7 @@ impl CachedWheel {
         let filename = WheelFilename::from_stem(filename).ok()?;
 
         // Convert to a cached wheel.
-        let archive = path.canonicalize().ok()?;
+        let archive = cache.resolve_link(path).ok()?;
         let entry = CacheEntry::from_path(archive);
         let hashes = Vec::new();
         let cache_info = CacheInfo::default();
@@ -127,7 +127,14 @@ impl CachedWheel {
         // Read the pointer.
         let pointer = HttpArchivePointer::read_from(path).ok()??;
         let cache_info = pointer.to_cache_info();
-        let Archive { id, hashes } = pointer.into_archive();
+        let archive = pointer.into_archive();
+
+        // Ignore stale pointers.
+        if !archive.exists(cache) {
+            return None;
+        }
+
+        let Archive { id, hashes, .. } = archive;
 
         let entry = cache.entry(CacheBucket::Archive, "", id);
 
@@ -151,7 +158,14 @@ impl CachedWheel {
         // Read the pointer.
         let pointer = LocalArchivePointer::read_from(path).ok()??;
         let cache_info = pointer.to_cache_info();
-        let Archive { id, hashes } = pointer.into_archive();
+        let archive = pointer.into_archive();
+
+        // Ignore stale pointers.
+        if !archive.exists(cache) {
+            return None;
+        }
+
+        let Archive { id, hashes, .. } = archive;
 
         // Convert to a cached wheel.
         let entry = cache.entry(CacheBucket::Archive, "", id);

@@ -288,6 +288,28 @@ uv will avoid using an old version of `apache-beam`.
 Constraints can also be defined for indirect dependencies using `constraints.txt` files or the
 [`constraint-dependencies`](../settings.md#constraint-dependencies) setting.
 
+### Old Version of a build dependency is used
+
+If a package fails to build because `uv` selects an incompatible or outdated version of a build-time
+dependency, you can enforce constraints specifically for build dependencies. The
+[`build-constraint-dependencies`](../settings.md#build-constraint-dependencies) setting (or an
+analogous `build-constraints.txt` file) can be used to ensure that `uv` selects an appropriate
+version of a given build requirements.
+
+For example, the issue described in
+[#5551](https://github.com/astral-sh/uv/issues/5551#issuecomment-2256055975) could be addressed by
+specifying a build constraint that excludes `setuptools` version `72.0.0`:
+
+```toml title="pyproject.toml"
+[tool.uv]
+# Prevent setuptools version 72.0.0 from being used as a build dependency.
+build-constraint-dependencies = ["setuptools!=72.0.0"]
+```
+
+The build constraint will thus ensure that any package requiring `setuptools` during the build
+process will avoid using the problematic version, preventing build failures caused by incompatible
+build dependencies.
+
 ### Package is only needed for an unused platform
 
 If locking fails due to building a package from a platform you do not need to support, consider

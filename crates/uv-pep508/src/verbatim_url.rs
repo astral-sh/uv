@@ -42,7 +42,7 @@ impl VerbatimUrl {
         Self { url, given: None }
     }
 
-    /// Parse a URL from a string, expanding any environment variables.
+    /// Parse a URL from a string.
     pub fn parse_url(given: impl AsRef<str>) -> Result<Self, ParseError> {
         let url = Url::parse(given.as_ref())?;
         Ok(Self { url, given: None })
@@ -242,7 +242,9 @@ impl<'de> serde::Deserialize<'de> for VerbatimUrl {
 impl Pep508Url for VerbatimUrl {
     type Err = VerbatimUrlError;
 
-    /// Create a `VerbatimUrl` to represent the requirement.
+    /// Create a [`VerbatimUrl`] to represent a PEP 508 requirement.
+    ///
+    /// Any environment variables in the URL will be expanded.
     #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused_variables))]
     fn parse_url(url: &str, working_dir: Option<&Path>) -> Result<Self, Self::Err> {
         // Expand environment variables in the URL.

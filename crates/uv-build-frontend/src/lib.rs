@@ -4,12 +4,6 @@
 
 mod error;
 
-use fs_err as fs;
-use indoc::formatdoc;
-use itertools::Itertools;
-use rustc_hash::FxHashMap;
-use serde::de::{value, IntoDeserializer, SeqAccess, Visitor};
-use serde::{de, Deserialize, Deserializer};
 use std::ffi::OsString;
 use std::fmt::Formatter;
 use std::fmt::Write;
@@ -20,6 +14,13 @@ use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::LazyLock;
 use std::{env, iter};
+
+use fs_err as fs;
+use indoc::formatdoc;
+use itertools::Itertools;
+use rustc_hash::FxHashMap;
+use serde::de::{value, IntoDeserializer, SeqAccess, Visitor};
+use serde::{de, Deserialize, Deserializer};
 use tempfile::TempDir;
 use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
@@ -36,6 +37,7 @@ use uv_pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, SourceBuildTrait};
+use uv_warnings::warn_user_once;
 
 pub use crate::error::{Error, MissingHeaderCause};
 
@@ -49,20 +51,22 @@ static DEFAULT_BACKEND: LazyLock<Pep517Backend> = LazyLock::new(|| Pep517Backend
 });
 
 /// A `pyproject.toml` as specified in PEP 517.
-#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 struct PyProjectToml {
     /// Build-related data
     build_system: Option<BuildSystem>,
     /// Project metadata
     project: Option<Project>,
+    /// Tool configuration
+    tool: Option<Tool>,
 }
 
 /// The `[project]` section of a pyproject.toml as specified in PEP 621.
 ///
 /// This representation only includes a subset of the fields defined in PEP 621 necessary for
 /// informing wheel builds.
-#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 struct Project {
     /// The name of the project
@@ -75,7 +79,7 @@ struct Project {
 }
 
 /// The `[build-system]` section of a pyproject.toml as specified in PEP 517.
-#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 struct BuildSystem {
     /// PEP 508 dependencies required to execute the build system.
@@ -84,6 +88,18 @@ struct BuildSystem {
     build_backend: Option<String>,
     /// Specify that their backend code is hosted in-tree, this key contains a list of directories.
     backend_path: Option<BackendPath>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+struct Tool {
+    uv: Option<ToolUv>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+struct ToolUv {
+    workspace: Option<de::IgnoredAny>,
 }
 
 impl BackendPath {
@@ -514,8 +530,40 @@ impl SourceBuild {
                         requirements,
                     }
                 } else {
-                    // If a `pyproject.toml` is present, but `[build-system]` is missing, proceed with
-                    // a PEP 517 build using the default backend, to match `pip` and `build`.
+                    // If a `pyproject.toml` is present, but `[build-system]` is missing, proceed
+                    // with a PEP 517 build using the default backend (`setuptools`), to match `pip`
+                    // and `build`.
+                    //
+                    // If there is no build system defined and there is no metadata source for
+                    // `setuptools`, warn. The build will succeed, but the metadata will be
+                    // incomplete (for example, the package name will be `UNKNOWN`).
+                    if pyproject_toml.project.is_none()
+                        && !source_tree.join("setup.py").is_file()
+                        && !source_tree.join("setup.cfg").is_file()
+                    {
+                        // Give a specific hint for `uv pip install .` in a workspace root.
+                        let looks_like_workspace_root = pyproject_toml
+                            .tool
+                            .as_ref()
+                            .and_then(|tool| tool.uv.as_ref())
+                            .and_then(|tool| tool.workspace.as_ref())
+                            .is_some();
+                        if looks_like_workspace_root {
+                            warn_user_once!(
+                                "`{}` appears to be a workspace root without a Python project; \
+                                consider using `uv sync` to install the workspace, or add a \
+                                `[build-system]` table to `pyproject.toml`",
+                                source_tree.simplified_display().cyan(),
+                            );
+                        } else {
+                            warn_user_once!(
+                                "`{}` does not appear to be a Python project, as the `pyproject.toml` \
+                                does not include a `[build-system]` table, and neither `setup.py` \
+                                nor `setup.cfg` are present in the directory",
+                                source_tree.simplified_display().cyan(),
+                            );
+                        };
+                    }
                     default_backend.clone()
                 };
                 Ok((backend, pyproject_toml.project))

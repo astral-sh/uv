@@ -238,12 +238,16 @@ class CPythonFinder(Finder):
         # Collect all available Python downloads
         for page in range(1, pages + 1):
             logging.info("Fetching CPython release page %d", page)
-            resp = await self.client.get(self.RELEASE_URL, params={"page": page})
+            resp = await self.client.get(
+                self.RELEASE_URL, params={"page": page, "per_page": 10}
+            )
             resp.raise_for_status()
             rows = resp.json()
             if not rows:
                 break
             for row in rows:
+                # Sort the assets to ensure deterministic results
+                row["assets"].sort(key=lambda asset: asset["browser_download_url"])
                 for asset in row["assets"]:
                     url = asset["browser_download_url"]
                     download = self._parse_download_url(url)
@@ -593,7 +597,10 @@ async def find() -> None:
             "`GITHUB_TOKEN` env var not found, you may hit rate limits for GitHub API requests."
         )
 
-    headers = {"X-GitHub-Api-Version": "2022-11-28"}
+    headers = {
+        "X-GitHub-Api-Version": "2022-11-28",
+        "Accept-Encoding": "gzip, deflate",
+    }
     if token:
         headers["Authorization"] = "Bearer " + token
     client = httpx.AsyncClient(follow_redirects=True, headers=headers, timeout=15)

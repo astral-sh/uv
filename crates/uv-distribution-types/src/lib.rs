@@ -43,7 +43,7 @@ use uv_distribution_filename::{
     DistExtension, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
 use uv_fs::normalize_absolute_path;
-use uv_git::GitUrl;
+use uv_git_types::GitUrl;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::{Pep508Url, VerbatimUrl};
@@ -66,6 +66,7 @@ pub use crate::index::*;
 pub use crate::index_name::*;
 pub use crate::index_url::*;
 pub use crate::installed::*;
+pub use crate::known_platform::*;
 pub use crate::origin::*;
 pub use crate::pip_index::*;
 pub use crate::prioritized_distribution::*;
@@ -90,6 +91,7 @@ mod index;
 mod index_name;
 mod index_url;
 mod installed;
+mod known_platform;
 mod origin;
 mod pip_index;
 mod prioritized_distribution;
@@ -712,9 +714,7 @@ impl GitSourceDist {
     /// Return the [`ParsedUrl`] for the distribution.
     pub fn parsed_url(&self) -> ParsedUrl {
         ParsedUrl::Git(ParsedGitUrl::from_source(
-            self.git.repository().clone(),
-            self.git.reference().clone(),
-            self.git.precise(),
+            (*self.git).clone(),
             self.subdirectory.clone(),
         ))
     }
