@@ -4928,6 +4928,7 @@ dependencies = [
  "uv-cache",
  "uv-cli",
  "uv-client",
+ "uv-configuration",
  "uv-distribution-filename",
  "uv-distribution-types",
  "uv-extract",

@@ -47,6 +47,7 @@ pub(crate) use tool::uninstall::uninstall as tool_uninstall;
 pub(crate) use tool::update_shell::update_shell as tool_update_shell;
 pub(crate) use tool::upgrade::upgrade as tool_upgrade;
 use uv_cache::Cache;
+use uv_configuration::Concurrency;
 use uv_distribution_types::InstalledMetadata;
 use uv_fs::{Simplified, CWD};
 use uv_installer::compile_tree;
@@ -147,6 +148,7 @@ pub(super) struct DryRunEvent<T: Display> {
 /// See the `--compile` option on `pip sync` and `pip install`.
 pub(super) async fn compile_bytecode(
     venv: &PythonEnvironment,
+    concurrency: &Concurrency,
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<()> {
@@ -154,14 +156,19 @@ pub(super) async fn compile_bytecode(
     let mut files = 0;
     for site_packages in venv.site_packages() {
         let site_packages = CWD.join(site_packages);
-        files += compile_tree(&site_packages, venv.python_executable(), cache.root())
-            .await
-            .with_context(|| {
-                format!(
-                    "Failed to bytecode-compile Python file in: {}",
-                    site_packages.user_display()
-                )
-            })?;
+        files += compile_tree(
+            &site_packages,
+            venv.python_executable(),
+            concurrency,
+            cache.root(),
+        )
+        .await
+        .with_context(|| {
+            format!(
+                "Failed to bytecode-compile Python file in: {}",
+                site_packages.user_display()
+            )
+        })?;
     }
     let s = if files == 1 { "" } else { "s" };
     writeln!(
