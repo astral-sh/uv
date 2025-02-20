@@ -84,13 +84,13 @@ static MAC_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
 });
 static ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 =
-        MarkerTree::from_str("platform_machine == 'aarch64' or platform_machine == 'arm64'")
+        MarkerTree::from_str("platform_machine == 'aarch64' or platform_machine == 'arm64' or platform_machine == 'ARM64'")
             .unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
 static X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 =
-        MarkerTree::from_str("platform_machine == 'x86_64' or platform_machine == 'amd64'")
+        MarkerTree::from_str("platform_machine == 'x86_64' or platform_machine == 'amd64' or platform_machine == 'AMD64'")
             .unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
@@ -326,7 +326,6 @@ impl Lock {
             }
 
             if platform_tags.iter().all(PlatformTag::is_windows) {
-                // TODO(charlie): This omits `win_ia64`, which is accepted by Warehouse.
                 if graph.graph[node_index]
                     .marker()
                     .is_disjoint(*WINDOWS_MARKERS)

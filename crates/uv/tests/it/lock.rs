@@ -25553,3 +25553,80 @@ fn lock_pytorch_local_preference() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn windows_arm() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pywin32-prj"
+        version = "0.1.0"
+        requires-python = "~=3.12.0"
+        dependencies = ["pywin32; sys_platform == 'win32'"]
+
+        [tool.uv]
+        environments = [
+            "sys_platform == 'linux' and platform_machine == 'x86_64'",
+            "sys_platform == 'win32' and platform_machine == 'AMD64'",
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        revision = 1
+        requires-python = ">=3.12.[X], <3.13"
+        resolution-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "platform_machine == 'AMD64' and sys_platform == 'win32'",
+        ]
+        supported-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "platform_machine == 'AMD64' and sys_platform == 'win32'",
+        ]
+
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
+
+        [[package]]
+        name = "pywin32"
+        version = "308"
+        source = { registry = "https://pypi.org/simple" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/21/27/0c8811fbc3ca188f93b5354e7c286eb91f80a53afa4e11007ef661afa746/pywin32-308-cp312-cp312-win_amd64.whl", hash = "sha256:00b3e11ef09ede56c6a43c71f2d31857cf7c54b0ab6e78ac659497abd2834f47", size = 6543015 },
+        ]
+
+        [[package]]
+        name = "pywin32-prj"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "pywin32", marker = "platform_machine == 'AMD64' and sys_platform == 'win32'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "pywin32", marker = "sys_platform == 'win32'" }]
+        "###
+        );
+    });
+
+    Ok(())
+}
