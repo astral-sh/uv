@@ -1881,7 +1881,7 @@ fn build_workspace_virtual_root() -> Result<()> {
             members = ["packages/*"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.build().arg("--no-build-logs"), @r###"
+    uv_snapshot!(context.filters(), context.build().arg("--no-build-logs"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1891,8 +1891,8 @@ fn build_workspace_virtual_root() -> Result<()> {
     warning: `[TEMP_DIR]/` appears to be a workspace root without a Python project; consider using `uv sync` to install the workspace, or add a `[build-system]` table to `pyproject.toml`
     Building wheel from source distribution...
     Successfully built dist/cache-0.0.0.tar.gz
-    Successfully built dist/unknown-0.0.0-py3-none-any.whl
-    "###);
+    Successfully built dist/UNKNOWN-0.0.0-py3-none-any.whl
+    ");
     Ok(())
 }
 
@@ -1910,7 +1910,7 @@ fn build_pyproject_toml_not_a_project() -> Result<()> {
             line-length = 88
     "})?;
 
-    uv_snapshot!(context.filters(), context.build().arg("--no-build-logs"), @r###"
+    uv_snapshot!(context.filters(), context.build().arg("--no-build-logs"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1920,7 +1920,65 @@ fn build_pyproject_toml_not_a_project() -> Result<()> {
     warning: `[TEMP_DIR]/` does not appear to be a Python project, as the `pyproject.toml` does not include a `[build-system]` table, and neither `setup.py` nor `setup.cfg` are present in the directory
     Building wheel from source distribution...
     Successfully built dist/cache-0.0.0.tar.gz
-    Successfully built dist/unknown-0.0.0-py3-none-any.whl
-    "###);
+    Successfully built dist/UNKNOWN-0.0.0-py3-none-any.whl
+    ");
+    Ok(())
+}
+
+#[test]
+fn build_with_nonnormalized_name() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .collect::<Vec<_>>();
+
+    let project = context.temp_dir.child("project");
+
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "my.PROJECT"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42,<69"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    project
+        .child("src")
+        .child("my.PROJECT")
+        .child("__init__.py")
+        .touch()?;
+    project.child("README").touch()?;
+
+    // Build the specified path.
+    uv_snapshot!(&filters, context.build().arg("--no-build-logs").current_dir(&project), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built dist/my.PROJECT-0.1.0.tar.gz
+    Successfully built dist/my.PROJECT-0.1.0-py3-none-any.whl
+    ");
+
+    project
+        .child("dist")
+        .child("my.PROJECT-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    project
+        .child("dist")
+        .child("my.PROJECT-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
     Ok(())
 }

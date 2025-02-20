@@ -668,7 +668,7 @@ async fn build_package(
             build_results.push(sdist_build.clone());
 
             // Extract the source distribution into a temporary directory.
-            let path = output_dir.join(sdist_build.filename().to_string());
+            let path = output_dir.join(sdist_build.raw_filename());
             let reader = fs_err::tokio::File::open(&path).await?;
             let ext = SourceDistExtension::from_path(path.as_path())
                 .map_err(|err| Error::InvalidSourceDistExt(path.user_display().to_string(), err))?;
@@ -695,7 +695,7 @@ async fn build_package(
                 subdirectory,
                 version_id,
                 build_output,
-                Some(sdist_build.filename().version()),
+                Some(sdist_build.normalized_filename().version()),
             )
             .await?;
             build_results.push(wheel_build);
@@ -767,7 +767,7 @@ async fn build_package(
                 subdirectory,
                 version_id,
                 build_output,
-                Some(sdist_build.filename().version()),
+                Some(sdist_build.normalized_filename().version()),
             )
             .await?;
             build_results.push(sdist_build);
@@ -866,9 +866,10 @@ async fn build_sdist(
                 uv_build_backend::list_source_dist(&source_tree_, uv_version::version())
             })
             .await??;
-
+            let raw_filename = filename.to_string();
             BuildMessage::List {
-                filename: DistFilename::SourceDistFilename(filename),
+                normalized_filename: DistFilename::SourceDistFilename(filename),
+                raw_filename,
                 source_tree: source_tree.to_path_buf(),
                 file_list,
             }
@@ -897,10 +898,11 @@ async fn build_sdist(
             .to_string();
 
             BuildMessage::Build {
-                filename: DistFilename::SourceDistFilename(
+                normalized_filename: DistFilename::SourceDistFilename(
                     SourceDistFilename::parsed_normalized_filename(&filename)
                         .map_err(Error::InvalidBuiltSourceDistFilename)?,
                 ),
+                raw_filename: filename,
                 output_dir: output_dir.to_path_buf(),
             }
         }
@@ -931,10 +933,11 @@ async fn build_sdist(
                 .map_err(|err| Error::BuildDispatch(err.into()))?;
             let filename = builder.build(output_dir).await?;
             BuildMessage::Build {
-                filename: DistFilename::SourceDistFilename(
+                normalized_filename: DistFilename::SourceDistFilename(
                     SourceDistFilename::parsed_normalized_filename(&filename)
                         .map_err(Error::InvalidBuiltSourceDistFilename)?,
                 ),
+                raw_filename: filename,
                 output_dir: output_dir.to_path_buf(),
             }
         }
@@ -968,8 +971,10 @@ async fn build_wheel(
                 uv_build_backend::list_wheel(&source_tree_, uv_version::version())
             })
             .await??;
+            let raw_filename = filename.to_string();
             BuildMessage::List {
-                filename: DistFilename::WheelFilename(filename),
+                normalized_filename: DistFilename::WheelFilename(filename),
+                raw_filename,
                 source_tree: source_tree.to_path_buf(),
                 file_list,
             }
@@ -997,8 +1002,10 @@ async fn build_wheel(
             })
             .await??;
 
+            let raw_filename = filename.to_string();
             BuildMessage::Build {
-                filename: DistFilename::WheelFilename(filename),
+                normalized_filename: DistFilename::WheelFilename(filename),
+                raw_filename,
                 output_dir: output_dir.to_path_buf(),
             }
         }
@@ -1029,15 +1036,16 @@ async fn build_wheel(
                 .map_err(|err| Error::BuildDispatch(err.into()))?;
             let filename = builder.build(output_dir).await?;
             BuildMessage::Build {
-                filename: DistFilename::WheelFilename(
+                normalized_filename: DistFilename::WheelFilename(
                     WheelFilename::from_str(&filename).map_err(Error::InvalidBuiltWheelFilename)?,
                 ),
+                raw_filename: filename,
                 output_dir: output_dir.to_path_buf(),
             }
         }
     };
     if let Some(expected) = version {
-        let actual = build_message.filename().version();
+        let actual = build_message.normalized_filename().version();
         if expected != actual {
             return Err(Error::VersionMismatch(expected.clone(), actual.clone()));
         }
@@ -1138,15 +1146,19 @@ impl Source<'_> {
 enum BuildMessage {
     /// A built wheel or source distribution.
     Build {
-        /// The name of the built distribution.
-        filename: DistFilename,
+        /// The normalized name of the built distribution.
+        normalized_filename: DistFilename,
+        /// The name of the built distribution before parsing and normalization.
+        raw_filename: String,
         /// The location of the built distribution.
         output_dir: PathBuf,
     },
     /// Show the list of files that would be included in a distribution.
     List {
-        /// The name of the build distribution.
-        filename: DistFilename,
+        /// The normalized name of the build distribution.
+        normalized_filename: DistFilename,
+        /// The name of the built distribution before parsing and normalization.
+        raw_filename: String,
         // All source files are relative to the source tree.
         source_tree: PathBuf,
         // Included file and source file, if not generated.
@@ -1155,39 +1167,55 @@ enum BuildMessage {
 }
 
 impl BuildMessage {
-    /// The filename of the wheel or source distribution.
-    fn filename(&self) -> &DistFilename {
+    /// The normalized filename of the wheel or source distribution.
+    fn normalized_filename(&self) -> &DistFilename {
         match self {
-            BuildMessage::Build { filename: name, .. } => name,
-            BuildMessage::List { filename: name, .. } => name,
+            BuildMessage::Build {
+                normalized_filename: name,
+                ..
+            } => name,
+            BuildMessage::List {
+                normalized_filename: name,
+                ..
+            } => name,
+        }
+    }
+
+    /// The filename of the wheel or source distribution before normalization.
+    fn raw_filename(&self) -> &str {
+        match self {
+            BuildMessage::Build {
+                raw_filename: name, ..
+            } => name,
+            BuildMessage::List {
+                raw_filename: name, ..
+            } => name,
         }
     }
 
     fn print(&self, printer: Printer) -> Result<()> {
         match self {
             BuildMessage::Build {
-                filename,
+                raw_filename,
                 output_dir,
+                ..
             } => {
                 writeln!(
                     printer.stderr(),
                     "Successfully built {}",
-                    output_dir
-                        .join(filename.to_string())
-                        .user_display()
-                        .bold()
-                        .cyan()
+                    output_dir.join(raw_filename).user_display().bold().cyan()
                 )?;
             }
             BuildMessage::List {
-                filename,
+                raw_filename,
                 file_list,
                 source_tree,
+                ..
             } => {
                 writeln!(
                     printer.stdout(),
                     "{}",
-                    format!("Building {filename} will include the following files:").bold()
+                    format!("Building {raw_filename} will include the following files:").bold()
                 )?;
                 for (file, source) in file_list {
                     if let Some(source) = source {
