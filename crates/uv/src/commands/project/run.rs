@@ -146,8 +146,18 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
     // Read from the `.env` file, if necessary.
     if !no_env_file {
-        for env_file_path in env_file.iter().rev().map(PathBuf::as_path) {
-            match dotenvy::from_path(env_file_path) {
+        let env_paths: Vec<PathBuf> = env_file
+            .iter()
+            .flat_map(|pb| {
+                pb.to_string_lossy()
+                    .split_whitespace()
+                    .map(PathBuf::from)
+                    .collect::<Vec<PathBuf>>()
+            })
+            .collect();
+
+        for env_file_path in env_paths.into_iter().rev() {
+            match dotenvy::from_path(&env_file_path) {
                 Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
                     bail!(
                         "No environment file found at: `{}`",
