@@ -2370,13 +2370,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 .boxed_local()
                                 .await?;
 
-                            Response::Dist { dist, metadata }
+                            Response::Dist {
+                                dist: (*dist).clone(),
+                                metadata,
+                            }
                         }
                         ResolvedDist::Installed { dist } => {
                             let metadata =
                                 provider.get_installed_metadata(&dist).boxed_local().await?;
 
-                            Response::Installed { dist, metadata }
+                            Response::Installed {
+                                dist: (*dist).clone(),
+                                metadata,
+                            }
                         }
                     };
 
@@ -2815,7 +2821,11 @@ impl ForkState {
 
     fn into_resolution(self) -> Resolution {
         let solution: FxHashMap<_, _> = self.pubgrub.partial_solution.extract_solution().collect();
-        let mut edges: FxHashSet<ResolutionDependencyEdge> = FxHashSet::default();
+        let edge_count: usize = solution
+            .keys()
+            .map(|package| self.pubgrub.incompatibilities[package].len())
+            .sum();
+        let mut edges: Vec<ResolutionDependencyEdge> = Vec::with_capacity(edge_count);
         for (package, self_version) in &solution {
             for id in &self.pubgrub.incompatibilities[package] {
                 let pubgrub::Kind::FromDependencyOf(
@@ -2901,7 +2911,7 @@ impl ForkState {
                             to_dev: dependency_dev.clone(),
                             marker: *dependency_marker,
                         };
-                        edges.insert(edge);
+                        edges.push(edge);
                     }
 
                     PubGrubPackageInner::Marker {
@@ -2933,7 +2943,7 @@ impl ForkState {
                             to_dev: None,
                             marker: *dependency_marker,
                         };
-                        edges.insert(edge);
+                        edges.push(edge);
                     }
 
                     PubGrubPackageInner::Extra {
@@ -2966,7 +2976,7 @@ impl ForkState {
                             to_dev: None,
                             marker: *dependency_marker,
                         };
-                        edges.insert(edge);
+                        edges.push(edge);
 
                         // Insert an edge from the dependent package to the base package.
                         let to_url = self.fork_urls.get(dependency_name);
@@ -2986,7 +2996,7 @@ impl ForkState {
                             to_dev: None,
                             marker: *dependency_marker,
                         };
-                        edges.insert(edge);
+                        edges.push(edge);
                     }
 
                     PubGrubPackageInner::Dev {
@@ -3018,7 +3028,7 @@ impl ForkState {
                             to_dev: Some(dependency_dev.clone()),
                             marker: *dependency_marker,
                         };
-                        edges.insert(edge);
+                        edges.push(edge);
                     }
 
                     _ => {}
@@ -3067,7 +3077,7 @@ pub(crate) struct Resolution {
     pub(crate) nodes: FxHashMap<ResolutionPackage, Version>,
     /// The directed connections between the nodes, where the marker is the node weight. We don't
     /// store the requirement itself, but it can be retrieved from the package metadata.
-    pub(crate) edges: FxHashSet<ResolutionDependencyEdge>,
+    pub(crate) edges: Vec<ResolutionDependencyEdge>,
     /// Map each package name, version tuple from `packages` to a distribution.
     pub(crate) pins: FilePins,
     /// The environment setting this resolution was found under.

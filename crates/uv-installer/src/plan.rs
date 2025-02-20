@@ -1,4 +1,5 @@
 use anyhow::{bail, Result};
+use std::sync::Arc;
 use tracing::{debug, warn};
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
@@ -114,7 +115,7 @@ impl<'a> Planner<'a> {
             }
 
             // Identify any cached distributions that satisfy the requirement.
-            match dist {
+            match dist.as_ref() {
                 Dist::Built(BuiltDist::Registry(wheel)) => {
                     if let Some(distribution) = registry_index.get(wheel.name()).find_map(|entry| {
                         if *entry.index.url() != wheel.best_wheel().index {
@@ -164,7 +165,7 @@ impl<'a> Planner<'a> {
                     if let Some(pointer) = HttpArchivePointer::read_from(&cache_entry)? {
                         let cache_info = pointer.to_cache_info();
                         let archive = pointer.into_archive();
-                        if archive.satisfies(hasher.get(dist)) {
+                        if archive.satisfies(hasher.get(dist.as_ref())) {
                             let cached_dist = CachedDirectUrlDist {
                                 filename: wheel.filename.clone(),
                                 url: VerbatimParsedUrl {
@@ -216,7 +217,7 @@ impl<'a> Planner<'a> {
                         if pointer.is_up_to_date(timestamp) {
                             let cache_info = pointer.to_cache_info();
                             let archive = pointer.into_archive();
-                            if archive.satisfies(hasher.get(dist)) {
+                            if archive.satisfies(hasher.get(dist.as_ref())) {
                                 let cached_dist = CachedDirectUrlDist {
                                     filename: wheel.filename.clone(),
                                     url: VerbatimParsedUrl {
@@ -393,7 +394,7 @@ pub struct Plan {
 
     /// The distributions that are not already installed in the current environment, and are
     /// not available in the local cache.
-    pub remote: Vec<Dist>,
+    pub remote: Vec<Arc<Dist>>,
 
     /// Any distributions that are already installed in the current environment, but will be
     /// re-installed (including upgraded) to satisfy the requirements.
