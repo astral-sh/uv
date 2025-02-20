@@ -106,12 +106,16 @@ pub(crate) async fn run(
     };
 
     if let Some(ref f) = from {
-        if Path::new(&f)
+        let possible_script = Path::new(f);
+        if possible_script
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
         {
             return Err(anyhow::anyhow!(
-                "It looks you have passed a script instead of a package into `--from`"
+                "It looks you have passed a script instead of a package into `--from`. \n\n{}{} Did you mean to run a tool with `{}`?",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    format!("{} --from {} {}", invocation_source, PackageName::new(possible_script.to_string_lossy().to_string())?.cyan(), target),
             ));
         }
     } else {
@@ -127,10 +131,10 @@ pub(crate) async fn run(
                 ))
             } else {
                 Err(anyhow::anyhow!(
-                    "It looks like you are trying to run a script that doesn't exist. \n\n{}{} Did you mean to run a tool with `uvx {}`?",
+                    "It looks like you are trying to run a script that doesn't exist. \n\n{}{} Did you mean to run a tool with `{}`?",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    PackageName::new(possible_script.to_string_lossy().to_string())?
+                    format!("{} {}", invocation_source, PackageName::new(possible_script.to_string_lossy().to_string())?.cyan()),
                 ))
             };
         }

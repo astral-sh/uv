@@ -1949,7 +1949,7 @@ fn tool_run_with_nonexistent_py_script() {
     ----- stderr -----
     error: It looks like you are trying to run a script that doesn't exist.
 
-    hint: Did you mean to run a tool with `uvx script-py`?
+    hint: Did you mean to run a tool with `uv tool run script-py`?
     ");
 }
 
@@ -1967,7 +1967,7 @@ fn tool_run_with_nonexistent_pyw_script() {
     ----- stderr -----
     error: It looks like you are trying to run a script that doesn't exist.
 
-    hint: Did you mean to run a tool with `uvx script-pyw`?
+    hint: Did you mean to run a tool with `uv tool run script-pyw`?
     ");
 }
 
@@ -1985,7 +1985,9 @@ fn tool_run_with_from_script() {
     ----- stdout -----
 
     ----- stderr -----
-    error: It looks you have passed a script instead of a package into `--from`
+    error: It looks you have passed a script instead of a package into `--from`.
+
+    hint: Did you mean to run a tool with `uv tool run --from script-py ruff`?
     ");
 }
 
@@ -2003,6 +2005,8 @@ fn tool_run_with_script_and_from_script() {
     ----- stdout -----
 
     ----- stderr -----
-    error: It looks you have passed a script instead of a package into `--from`
+    error: It looks you have passed a script instead of a package into `--from`.
+
+    hint: Did you mean to run a tool with `uv tool run --from script-py other-script.py`?
     ");
 }
