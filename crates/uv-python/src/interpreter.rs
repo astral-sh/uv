@@ -5,10 +5,11 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 use std::str::FromStr;
 use std::sync::OnceLock;
-use std::{env, io};
+use std::{env, io, iter};
 
 use configparser::ini::Ini;
 use fs_err as fs;
+use itertools::Either;
 use owo_colors::OwoColorize;
 use same_file::is_same_file;
 use serde::{Deserialize, Serialize};
@@ -624,7 +625,7 @@ impl Interpreter {
         let interpreter = if target.is_none() && prefix.is_none() {
             let purelib = self.purelib();
             let platlib = self.platlib();
-            Some(std::iter::once(purelib).chain(
+            Some(iter::once(purelib).chain(
                 if purelib == platlib || is_same_file(purelib, platlib).unwrap_or(false) {
                     None
                 } else {
@@ -643,6 +644,55 @@ impl Interpreter {
             .chain(interpreter.into_iter().flatten().map(Cow::Borrowed))
     }
 
+    /// The paths to consider for discovering installed packages
+    pub fn discovery_paths(&self) -> impl Iterator<Item = Cow<Path>> {
+        let target = self.target().map(Target::site_packages);
+
+        let prefix = self
+            .prefix()
+            .map(|prefix| prefix.site_packages(self.virtualenv()));
+
+        debug_assert!(
+            !(target.is_some() && prefix.is_some()),
+            "target and prefix can't both be defined"
+        );
+
+        // When installing into a specific directory, we ignore all other `sys.path` entries. The
+        // exception is the std path since PyPy vendors packages into std.
+        if target.is_some() || prefix.is_some() {
+            Either::Left(
+                target
+                    .into_iter()
+                    .flatten()
+                    .map(Cow::Borrowed)
+                    .chain(prefix.into_iter().flatten().map(Cow::Owned))
+                    .chain(iter::once(Cow::Borrowed(self.stdlib.as_path()))),
+            )
+        } else {
+            // Assumption: We're calling `discovery_paths` only once, so caching this IO operation
+            // is not applicable.
+            let include_system_site_packages = self.include_system_site_packages();
+
+            // Add the main site packages.
+            let prefix = self
+                .prefix()
+                .map(|prefix| prefix.site_packages(self.virtualenv()))
+                .into_iter()
+                .flatten()
+                .map(Cow::Owned);
+            // Add purelib and platlib (often the same path)
+            let interpreter = [Cow::Borrowed(self.purelib()), Cow::Borrowed(self.platlib())];
+            // Add system site packages, if configured for the venv.
+            let system_site_packages = [
+                Cow::Borrowed(self.sys_base_prefix.as_path()),
+                Cow::Borrowed(self.sys_base_exec_prefix.as_path()),
+            ]
+            .into_iter()
+            .filter(move |_| include_system_site_packages);
+
+            Either::Right(prefix.chain(interpreter).chain(system_site_packages))
+        }
+    }
     /// Whether or not this Python interpreter is from a default Python executable name, like
     /// `python`, `python3`, or `python.exe`.
     pub(crate) fn has_default_executable_name(&self) -> bool {
