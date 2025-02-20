@@ -728,7 +728,7 @@ fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
             return true;
         };
 
-        let Dist::Source(dist) = dist else {
+        let Dist::Source(dist) = dist.as_ref() else {
             return true;
         };
 
@@ -748,29 +748,28 @@ fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolu
 
         // Filter out any editable distributions.
         EditableMode::NonEditable => resolution.map(|dist| {
-            let ResolvedDist::Installable {
-                dist:
-                    Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                        name,
-                        install_path,
-                        editable: true,
-                        r#virtual: false,
-                        url,
-                    })),
-                version,
-            } = dist
+            let ResolvedDist::Installable { dist, version } = dist else {
+                return None;
+            };
+            let Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                name,
+                install_path,
+                editable: true,
+                r#virtual: false,
+                url,
+            })) = dist.as_ref()
             else {
                 return None;
             };
 
             Some(ResolvedDist::Installable {
-                dist: Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
                     name: name.clone(),
                     install_path: install_path.clone(),
                     editable: false,
                     r#virtual: false,
                     url: url.clone(),
-                })),
+                }))),
                 version: version.clone(),
             })
         }),

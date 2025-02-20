@@ -14,7 +14,7 @@ use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use pubgrub::{Id, IncompId, Incompatibility, Kind, Range, Ranges, State};
-use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
@@ -2370,13 +2370,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 .boxed_local()
                                 .await?;
 
-                            Response::Dist { dist, metadata }
+                            Response::Dist {
+                                dist: (*dist).clone(),
+                                metadata,
+                            }
                         }
                         ResolvedDist::Installed { dist } => {
                             let metadata =
                                 provider.get_installed_metadata(&dist).boxed_local().await?;
 
-                            Response::Installed { dist, metadata }
+                            Response::Installed {
+                                dist: (*dist).clone(),
+                                metadata,
+                            }
                         }
                     };
 

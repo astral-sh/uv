@@ -50,7 +50,7 @@ impl AnnotatedDist {
     pub(crate) fn index(&self) -> Option<&IndexUrl> {
         match &self.dist {
             ResolvedDist::Installed { .. } => None,
-            ResolvedDist::Installable { dist, .. } => match dist {
+            ResolvedDist::Installable { dist, .. } => match dist.as_ref() {
                 Dist::Built(dist) => match dist {
                     BuiltDist::Registry(dist) => Some(&dist.best_wheel().index),
                     BuiltDist::DirectUrl(_) => None,
