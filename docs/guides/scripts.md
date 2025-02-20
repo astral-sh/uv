@@ -231,10 +231,10 @@ For example, create a file called `do-thing` with the following contents
 # dependencies = ["rich"]
 # ///
 
-from rich import pprint
+from rich import print
 
 
-pprint("[bold]Hello, world![/bold]")
+print("[bold]Hello, world![/bold]")
 ```
 
 Now allow the script to be executed
@@ -250,8 +250,8 @@ Finally run the script
 ```
 do-thing
 
-# or 
-#   ./do-thing 
+# or
+#   ./do-thing
 # if the file is in your current folder
 ```
 
