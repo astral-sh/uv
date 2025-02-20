@@ -7714,3 +7714,97 @@ fn unsupported_git_scheme() -> Result<()> {
     "###);
     Ok(())
 }
+
+/// See: <https://github.com/astral-sh/uv/issues/11648>
+#[test]
+fn multiple_group_conflicts() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        foo = [
+            "iniconfig>=2",
+        ]
+        bar = [
+            "iniconfig<2",
+        ]
+        baz = [
+            "iniconfig",
+        ]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { group = "foo" },
+            { group = "bar" },
+          ],
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("baz"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo").arg("--group").arg("baz"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("bar").arg("--group").arg("baz"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - iniconfig==2.0.0
+     + iniconfig==1.1.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo").arg("--group").arg("bar"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    error: Groups `foo` and `bar` are incompatible with the declared conflicts: {`project:foo`, `project:bar`}
+    "###);
+
+    Ok(())
+}
