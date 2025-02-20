@@ -85,7 +85,12 @@ Sometimes you want to run a tool on Windows that's written in Python, like `blac
 `.exe` files. So we need to somehow convert our Python file a `.exe` file.
 
 That's what this does: it's a generic "trampoline" that lets us generate custom `.exe`s for
-arbitrary Python scripts, and when invoked it bounces to invoking `python <the script>` instead.
+arbitrary Python usage on Windows. You can use it in two ways:
+
+1. **Script runner variant (UVSC)**: bundle a Python script (as a ZIP) alongside the trampoline and
+   invoke `python <the bundled script>` at runtime.
+2. **Python mirror variant (UVPY)**: create a simple executable that just forwards to a specified
+   `python.exe` binary, acting like a stand-in or alias for Python itself.
 
 ### How do you use it as Python mirror?
 
@@ -105,8 +110,9 @@ The intended use is:
 | `<len(path to python.exe)>` |
 | `<b'U', b'V', b'P', b'Y'>`  |
 
-Then when you run `python` on the `.exe`, it’ll see the `UVPY` marker and recognize that this is the “Python mirror” variant.
-So it simply hands everything off to your specified `python.exe`. Easy-peasy.
+When you run `python` on this `.exe`, it will see the `UVPY` marker at the end of the file and
+recognize that it's the “Python mirror” variant. Then it simply hands everything off to your
+specified `python.exe`. Easy-peasy.
 
 ### How do you use it as Script runner?
 
