@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use fs_err as fs;
 use thiserror::Error;
-use tracing::warn;
+use tracing::{debug, warn};
 use url::Url;
 
 use uv_cache_info::CacheInfo;
@@ -104,6 +104,74 @@ pub struct InstalledEggInfoDirectory {
     pub name: PackageName,
     pub version: Version,
     pub path: PathBuf,
+    /// The inferred root directory of the package the egg-info is for.
+    pub base_path: Option<PathBuf>,
+}
+
+impl InstalledEggInfoDirectory {
+    pub fn new(name: PackageName, version: Version, path: PathBuf) -> Self {
+        let base_path = Self::find_base_path(&path);
+        if base_path.is_none() {
+            debug!(
+                "Could not find base path for egg-info directory at: `{}`",
+                path.user_display()
+            );
+        }
+        Self {
+            name,
+            version,
+            path,
+            base_path,
+        }
+    }
+
+    /// Infer the root directory of the package the egg-info is for.
+    ///
+    /// In a package `foo` with `foo/pyproject.toml` and `foo/src/foo/__init__.py`, setuptools
+    /// will place the egg-info in `foo/src/foo.egg-info`. An editable installation will add
+    /// `foo/src` to `sys.path`.
+    ///
+    /// Setuptools will also generate a `SOURCES.txt` at  `foo/src/foo.egg-info/SOURCES.txt` with
+    /// entries such as:
+    /// ```
+    /// pyproject.toml
+    /// src/foo/__init__.py
+    /// src/foo.egg-info/SOURCES.txt
+    /// [...]
+    /// ```
+    ///
+    /// These entries don't tell us that `pyproject.toml` is actually a directory up, so we subtract
+    /// `src/foo.egg-info/SOURCES.txt` from the `path` to infer the base path, the directory with
+    /// the `pyproject.toml`.
+    fn find_base_path(path: &Path) -> Option<PathBuf> {
+        let sources_txt = path.join("SOURCES.txt");
+        let Ok(sources) = fs_err::read_to_string(&sources_txt) else {
+            return None;
+        };
+        for line in sources.lines() {
+            if !sources_txt.ends_with(line) {
+                continue;
+            }
+            // `strip_suffix` for two normalized paths.
+            // Example:
+            // `/home/ferris/project/foo/src/foo.egg-info/SOURCES.txt`
+            //                          `src/foo.egg-info/SOURCES.txt`
+            // We obtain `/home/ferris/project/foo` by removing the last three segments.
+            let base_path: PathBuf = sources_txt
+                .components()
+                .take(sources_txt.components().count() - Path::new(line).components().count())
+                .collect();
+            debug_assert!(
+                base_path.join(line) == sources_txt,
+                "Subtracting egg-info base failed: `{}` `{}` `{}`",
+                base_path.display(),
+                line,
+                sources_txt.display()
+            );
+            return Some(base_path);
+        }
+        None
+    }
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -188,11 +256,9 @@ impl InstalledDist {
 
             if let Some(version) = file_name.version {
                 if metadata.is_dir() {
-                    return Ok(Some(Self::EggInfoDirectory(InstalledEggInfoDirectory {
-                        name: file_name.name,
-                        version,
-                        path: path.to_path_buf(),
-                    })));
+                    return Ok(Some(Self::EggInfoDirectory(
+                        InstalledEggInfoDirectory::new(file_name.name, version, path.to_path_buf()),
+                    )));
                 }
 
                 if metadata.is_file() {
@@ -208,22 +274,26 @@ impl InstalledDist {
                 let Some(egg_metadata) = read_metadata(&path.join("PKG-INFO")) else {
                     return Ok(None);
                 };
-                return Ok(Some(Self::EggInfoDirectory(InstalledEggInfoDirectory {
-                    name: file_name.name,
-                    version: Version::from_str(&egg_metadata.version)?,
-                    path: path.to_path_buf(),
-                })));
+                return Ok(Some(Self::EggInfoDirectory(
+                    InstalledEggInfoDirectory::new(
+                        file_name.name,
+                        Version::from_str(&egg_metadata.version)?,
+                        path.to_path_buf(),
+                    ),
+                )));
             }
 
             if metadata.is_file() {
                 let Some(egg_metadata) = read_metadata(path) else {
                     return Ok(None);
                 };
-                return Ok(Some(Self::EggInfoDirectory(InstalledEggInfoDirectory {
-                    name: file_name.name,
-                    version: Version::from_str(&egg_metadata.version)?,
-                    path: path.to_path_buf(),
-                })));
+                return Ok(Some(Self::EggInfoDirectory(
+                    InstalledEggInfoDirectory::new(
+                        file_name.name,
+                        Version::from_str(&egg_metadata.version)?,
+                        path.to_path_buf(),
+                    ),
+                )));
             }
         }
 
