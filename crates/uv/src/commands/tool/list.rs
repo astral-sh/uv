@@ -98,12 +98,29 @@ pub(crate) async fn list(
         // Output tool entrypoints
         for entrypoint in tool.entrypoints() {
             if show_paths {
-                writeln!(
-                    printer.stdout(),
-                    "- {} ({})",
-                    entrypoint.name,
-                    entrypoint.install_path.simplified_display().cyan()
-                )?;
+                #[cfg(windows)]
+                {
+                    writeln!(
+                        printer.stdout(),
+                        "- {} ({})",
+                        entrypoint.name,
+                        entrypoint
+                            .install_path
+                            .simplified_display()
+                            .to_string()
+                            .replace('/', "\\")
+                            .cyan()
+                    )?;
+                }
+                #[cfg(unix)]
+                {
+                    writeln!(
+                        printer.stdout(),
+                        "- {} ({})",
+                        entrypoint.name,
+                        entrypoint.install_path.display().cyan()
+                    )?;
+                }
             } else {
                 writeln!(printer.stdout(), "- {}", entrypoint.name)?;
             }
