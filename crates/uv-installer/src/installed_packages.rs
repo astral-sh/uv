@@ -9,8 +9,8 @@ use tracing::{debug, trace};
 use url::Url;
 
 use uv_distribution_types::{
-    Diagnostic, InstalledDist, Name, NameRequirementSpecification, UnresolvedRequirement,
-    UnresolvedRequirementSpecification,
+    Diagnostic, InstalledDirectUrlDist, InstalledDist, Name, NameRequirementSpecification,
+    UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -52,9 +52,9 @@ impl InstalledPackages {
         let mut by_name: FxHashMap<PackageName, Vec<usize>> = FxHashMap::default();
         let mut by_url: FxHashMap<Url, Vec<usize>> = FxHashMap::default();
 
-        for import_path in interpreter.sys_path() {
+        for import_path in interpreter.discovery_paths() {
             // Read the site-packages directory.
-            let ordered_directory_paths = match fs::read_dir(import_path) {
+            let ordered_directory_paths = match fs::read_dir(import_path.as_ref()) {
                 Ok(import_path_entry) => {
                     trace!("Discovering packages in: `{}`", import_path.user_display());
                     // Collect sorted directory paths; `read_dir` is not stable across platforms
@@ -110,6 +110,61 @@ impl InstalledPackages {
                 };
 
                 let idx = distributions.len();
+
+                // Ignore exact duplicate and log problematic duplications.
+                if let Some(existing) = by_name
+                    .get(dist_info.name())
+                    .into_iter()
+                    .flatten()
+                    .find_map(|dist_id| distributions[*dist_id].as_ref())
+                {
+                    // Ignore duplicate paths in `sys.path`
+                    if *existing == dist_info {
+                        continue;
+                    }
+
+                    // egg-info directories are special: We may see them twice, once as dist-info
+                    // directory, and then again as egg-info directory in a subdirectory of the
+                    // package of the same name, linked from the `sys.path` entry added by the
+                    // editable. If they both point to the same path, we want to only consider the
+                    // dist-info that already covers the package.
+                    if let InstalledDist::EggInfoDirectory(egg_info) = &dist_info {
+                        if let InstalledDist::Url(InstalledDirectUrlDist { url, .. }) = existing {
+                            if (Some(url.path().to_string()))
+                                == (egg_info
+                                    .base_path
+                                    .as_ref()
+                                    .map(|path| path.display().to_string()))
+                            {
+                                debug!(
+                                    "Ignoring already processed egg-info at: `{}`",
+                                    path.user_display()
+                                );
+                                continue;
+                            }
+                        }
+                    }
+
+                    if existing.path().parent() == dist_info.path().parent() {
+                        // It can be valid to shadow packages, but two different distributions for the
+                        // same package name in the same directory should never happen, see e.g.
+                        // https://github.com/astral-sh/uv/issues/11648. In this case, it is not clear
+                        // of which version the module that Python will pick up is. We must keep both
+                        // to remove both.
+                        debug!(
+                            "The package `{}` has multiple installed distributions:\n\
+                              - version {} at `{}`\n\
+                              - version {} at `{}`",
+                            dist_info.name(),
+                            existing.version(),
+                            existing.path().user_display(),
+                            dist_info.version(),
+                            dist_info.path().user_display(),
+                        );
+                    }
+
+                    // We can't skip duplicate distributions as we must uninstall them
+                }
 
                 // Index the distribution by name.
                 by_name
