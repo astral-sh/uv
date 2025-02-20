@@ -1,7 +1,8 @@
 use std::cmp::max;
+use std::collections::HashSet;
 use std::fmt::Write;
 
-use anstream::println;
+use anstream::{eprintln, println};
 use anyhow::Result;
 use futures::StreamExt;
 use itertools::Itertools;
@@ -9,6 +10,7 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use serde::Serialize;
 use tokio::sync::Semaphore;
+use tracing::debug;
 use unicode_width::UnicodeWidthStr;
 
 use uv_cache::{Cache, Refresh};
@@ -71,12 +73,36 @@ pub(crate) async fn pip_list(
     let installed_packages = InstalledPackages::from_environment(&environment)?;
 
     // Filter if `--editable` is specified; always sort by name.
-    let results = installed_packages
-        .iter()
-        .filter(|dist| editable.is_none() || editable == Some(dist.is_editable()))
-        .filter(|dist| !exclude.contains(dist.name()))
-        .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
-        .collect_vec();
+    let mut results = Vec::new();
+    let mut shadowed = Vec::new();
+    let mut seen = HashSet::new();
+    let mut seen_dist = HashSet::new();
+
+    for installed_dist in installed_packages.iter() {
+        if editable.is_some() && editable != Some(installed_dist.is_editable()) {
+            continue;
+        }
+        if exclude.contains(installed_dist.name()) {
+            continue;
+        }
+        // Don't show duplicate entries in neither the results nor the shadowed list.
+        if !seen_dist.insert(installed_dist.clone()) {
+            continue;
+        }
+        // Show only the first occurrence of any given packages, ignoring shadowed packages.
+        if !seen.insert(installed_dist.name().clone()) {
+            debug!(
+                "Shadowed package {} at: `{}`",
+                installed_dist.name(),
+                installed_dist.path().user_display()
+            );
+            shadowed.push(installed_dist);
+            continue;
+        }
+        results.push(installed_dist);
+    }
+
+    results.sort_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())));
 
     // Determine the latest version for each package.
     let latest = if outdated && !results.is_empty() {
@@ -155,26 +181,20 @@ pub(crate) async fn pip_list(
 
     match format {
         ListFormat::Json => {
-            let rows = results
+            let mut rows = results
                 .iter()
                 .copied()
-                .map(|dist| Entry {
-                    name: dist.name().clone(),
-                    version: dist.version().clone(),
-                    latest_version: latest
-                        .get(dist.name())
-                        .and_then(|filename| filename.as_ref())
-                        .map(DistFilename::version)
-                        .cloned(),
-                    latest_filetype: latest
-                        .get(dist.name())
-                        .and_then(|filename| filename.as_ref())
-                        .map(FileType::from),
-                    editable_project_location: dist
-                        .as_editable()
-                        .map(|url| url.to_file_path().unwrap().simplified_display().to_string()),
-                })
+                .map(|dist| Entry::from_installed_dist(dist, &latest, false))
                 .collect_vec();
+            // Shadowed entries aren't checked for outdated-ness, only the shown main entry.
+            if !outdated {
+                rows.extend(
+                    shadowed
+                        .iter()
+                        .copied()
+                        .map(|dist| Entry::from_installed_dist(dist, &latest, true)),
+                );
+            }
             let output = serde_json::to_string(&rows)?;
             println!("{output}");
         }
@@ -252,11 +272,27 @@ pub(crate) async fn pip_list(
             for elems in MultiZip(columns.iter().map(Column::fmt).collect_vec()) {
                 println!("{}", elems.join(" ").trim_end());
             }
+            if !shadowed.is_empty() {
+                eprintln!(
+                    "{}{} The are shadowed package installations for {}",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    shadowed.into_iter().join(", ")
+                );
+            }
         }
         ListFormat::Freeze if results.is_empty() => {}
         ListFormat::Freeze => {
             for dist in &results {
                 println!("{}=={}", dist.name().bold(), dist.version());
+            }
+            if !shadowed.is_empty() {
+                eprintln!(
+                    "{}{} The are shadowed package installations for {}",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    shadowed.into_iter().join(", ")
+                );
             }
         }
     }
@@ -329,6 +365,33 @@ struct Entry {
     latest_filetype: Option<FileType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     editable_project_location: Option<String>,
+    shadowed: bool,
+}
+
+impl Entry {
+    fn from_installed_dist(
+        dist: &InstalledDist,
+        latest: &FxHashMap<&PackageName, Option<DistFilename>>,
+        shadowed: bool,
+    ) -> Self {
+        Self {
+            name: dist.name().clone(),
+            version: dist.version().clone(),
+            latest_version: latest
+                .get(dist.name())
+                .and_then(|filename| filename.as_ref())
+                .map(DistFilename::version)
+                .cloned(),
+            latest_filetype: latest
+                .get(dist.name())
+                .and_then(|filename| filename.as_ref())
+                .map(FileType::from),
+            editable_project_location: dist
+                .as_editable()
+                .map(|url| url.to_file_path().unwrap().simplified_display().to_string()),
+            shadowed,
+        }
+    }
 }
 
 /// A column in a table.

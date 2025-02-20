@@ -164,7 +164,7 @@ fn list_outdated_json() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"anyio","version":"3.0.0","latest_version":"4.3.0","latest_filetype":"wheel"}]
+    [{"name":"anyio","version":"3.0.0","latest_version":"4.3.0","latest_filetype":"wheel","shadowed":false}]
 
     ----- stderr -----
     "###
@@ -509,7 +509,7 @@ fn list_format_json() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"anyio","version":"4.3.0"},{"name":"idna","version":"3.6"},{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/scripts/packages/poetry_editable"},{"name":"sniffio","version":"1.3.1"}]
+    [{"name":"anyio","version":"4.3.0","shadowed":false},{"name":"idna","version":"3.6","shadowed":false},{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/scripts/packages/poetry_editable","shadowed":false},{"name":"sniffio","version":"1.3.1","shadowed":false}]
 
     ----- stderr -----
     "###
@@ -521,7 +521,7 @@ fn list_format_json() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/scripts/packages/poetry_editable"}]
+    [{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/scripts/packages/poetry_editable","shadowed":false}]
 
     ----- stderr -----
     "###
@@ -533,7 +533,7 @@ fn list_format_json() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"anyio","version":"4.3.0"},{"name":"idna","version":"3.6"},{"name":"sniffio","version":"1.3.1"}]
+    [{"name":"anyio","version":"4.3.0","shadowed":false},{"name":"idna","version":"3.6","shadowed":false},{"name":"sniffio","version":"1.3.1","shadowed":false}]
 
     ----- stderr -----
     "###

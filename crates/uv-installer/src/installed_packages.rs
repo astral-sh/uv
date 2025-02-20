@@ -1,15 +1,17 @@
 use std::collections::BTreeSet;
 use std::iter::Flatten;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use same_file::is_same_file;
+use tracing::{debug, trace};
 use url::Url;
 
 use uv_distribution_types::{
-    Diagnostic, InstalledDist, Name, NameRequirementSpecification, UnresolvedRequirement,
-    UnresolvedRequirementSpecification,
+    Diagnostic, InstalledDirectUrlDist, InstalledDist, InstalledEggInfoDirectory, Name,
+    NameRequirementSpecification, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -51,12 +53,13 @@ impl InstalledPackages {
         let mut by_name = FxHashMap::default();
         let mut by_url = FxHashMap::default();
 
-        for site_packages in interpreter.site_packages() {
+        for import_path in interpreter.discovery_paths() {
             // Read the site-packages directory.
-            let site_packages = match fs::read_dir(site_packages) {
-                Ok(site_packages) => {
+            let ordered_directory_paths = match fs::read_dir(import_path.as_ref()) {
+                Ok(import_path_entry) => {
+                    trace!("Discovering packages in: `{}`", import_path.user_display());
                     // Collect sorted directory paths; `read_dir` is not stable across platforms
-                    let dist_likes: BTreeSet<_> = site_packages
+                    let dist_likes: BTreeSet<_> = import_path_entry
                         .filter_map(|read_dir| match read_dir {
                             Ok(entry) => match entry.file_type() {
                                 Ok(file_type) => (file_type.is_dir()
@@ -84,7 +87,7 @@ impl InstalledPackages {
             };
 
             // Index all installed packages by name.
-            for path in site_packages {
+            for path in ordered_directory_paths {
                 let dist_info = match InstalledDist::try_from_path(&path) {
                     Ok(Some(dist_info)) => dist_info,
                     Ok(None) => continue,
@@ -109,6 +112,12 @@ impl InstalledPackages {
 
                 let idx = distributions.len();
 
+                // Ignore exact duplicate and log problematic duplications.
+                if Self::is_duplicate_distribution(&distributions, &mut by_name, &path, &dist_info)
+                {
+                    continue;
+                }
+
                 // Index the distribution by name.
                 by_name
                     .entry(dist_info.name().clone())
@@ -131,6 +140,89 @@ impl InstalledPackages {
             by_name,
             by_url,
         })
+    }
+
+    /// Whether the distribution is a duplicate instance of one already tracked.
+    ///
+    /// Returns `true` only if the distribution refers to exact same installed distribution, while
+    /// returning false for shadowed distributions of the same name (since we have to remove both).
+    fn is_duplicate_distribution(
+        distributions: &[Option<InstalledDist>],
+        by_name: &mut FxHashMap<PackageName, Vec<usize>>,
+        path: &Path,
+        dist_info: &InstalledDist,
+    ) -> bool {
+        let Some(existing_ids) = by_name.get(dist_info.name()) else {
+            return false;
+        };
+        // In most cases, there is no other distribution of the same name in path.
+        for existing_id in existing_ids {
+            let Some(existing) = distributions[*existing_id].as_ref() else {
+                continue;
+            };
+
+            // Ignore duplicate paths in `sys.path`
+            if existing == dist_info {
+                return true;
+            }
+
+            // On fedora, purelib and platlib in a venv are `.venv/lib` and `.venv/lib64`,
+            // with `.venv/lib64` being a symlink to `.venv/lib`. We have to deduplicate
+            // access across this symlink, such as:
+            // * `.venv/lib/python3.13/site-packages/foo-1.0.0.dist-info`
+            // * `.venv/lib64/python3.13/site-packages/foo-1.0.0.dist-info`
+            if is_same_file(existing.path(), dist_info.path()).unwrap_or(false) {
+                return true;
+            }
+
+            // egg-info directories are special: We may see them twice, once as dist-info
+            // directory, and then again as egg-info directory in a subdirectory of the
+            // package of the same name, linked from the `sys.path` entry added by the
+            // editable. If they both point to the same path, we want to only consider the
+            // dist-info that already covers the package.
+            if let InstalledDist::EggInfoDirectory(InstalledEggInfoDirectory {
+                base_path: Some(base_path),
+                ..
+            }) = &dist_info
+            {
+                if let InstalledDist::Url(InstalledDirectUrlDist { url, .. }) = existing {
+                    if !is_same_file(url.path(), base_path).unwrap_or(false) {
+                        debug!(
+                            "Ignoring already processed egg-info at: `{}`",
+                            path.user_display()
+                        );
+                        return true;
+                    }
+                }
+            }
+
+            // It can be valid to shadow packages, but two different distributions for the
+            // same package name in the same directory should never happen, see e.g.
+            // https://github.com/astral-sh/uv/issues/11648. In this case, it is not clear
+            // of which version the module that Python will pick up is. We must keep both
+            // to remove both.
+            if !is_same_file(
+                existing.path().parent().unwrap_or(Path::new("")),
+                dist_info.path().parent().unwrap_or(Path::new("")),
+            )
+            .unwrap_or(false)
+            {
+                debug!(
+                    "The package `{}` has multiple installed distributions:\n\
+                      - version {} at `{}`\n\
+                      - version {} at `{}`",
+                    dist_info.name(),
+                    existing.version(),
+                    existing.path().user_display(),
+                    dist_info.version(),
+                    dist_info.path().user_display(),
+                );
+                // We can't skip distributions even if they are inexact duplicates as we must
+                // uninstall them, so we continue to the `false` return.
+            }
+        }
+
+        false
     }
 
     /// Returns the [`Interpreter`] used to install the packages.
