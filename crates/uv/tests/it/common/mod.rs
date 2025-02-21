@@ -250,6 +250,19 @@ impl TestContext {
         self
     }
 
+    /// Add a filter that ignores temporary directory in path.
+    pub fn with_filtered_windows_temp_dir(mut self) -> Self {
+        let pattern = regex::escape(
+            &self
+                .temp_dir
+                .simplified_display()
+                .to_string()
+                .replace('/', "\\"),
+        );
+        self.filters.push((pattern, "[TEMP_DIR]".to_string()));
+        self
+    }
+
     /// Add extra directories and configuration for managed Python installations.
     #[must_use]
     pub fn with_managed_python_dirs(mut self) -> Self {
@@ -264,6 +277,12 @@ impl TestContext {
         self.extra_env
             .push((EnvVars::UV_PYTHON_DOWNLOADS.into(), "automatic".into()));
 
+        self
+    }
+
+    /// Clear filters on `TestContext`.
+    pub fn clear_filters(mut self) -> Self {
+        self.filters.clear();
         self
     }
 
@@ -985,6 +1004,14 @@ impl TestContext {
             .iter()
             .map(|(p, r)| (p.as_str(), r.as_str()))
             .chain(INSTA_FILTERS.iter().copied())
+            .collect()
+    }
+
+    /// Only the filters added to this test context.
+    pub fn filters_without_standard_filters(&self) -> Vec<(&str, &str)> {
+        self.filters
+            .iter()
+            .map(|(p, r)| (p.as_str(), r.as_str()))
             .collect()
     }
 

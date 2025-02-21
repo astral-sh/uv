@@ -131,9 +131,23 @@ pub async fn compile_tree(
         // Otherwise we stumble over temporary files from `compileall`.
         .filter_entry(|dir| dir.file_name() != "__pycache__");
     for entry in walker {
-        let entry = entry?;
+        // Retrieve the entry and its metadata, with shared handling for IO errors
+        let (entry, metadata) =
+            match entry.and_then(|entry| entry.metadata().map(|metadata| (entry, metadata))) {
+                Ok((entry, metadata)) => (entry, metadata),
+                Err(err) => {
+                    if err
+                        .io_error()
+                        .is_some_and(|err| err.kind() == io::ErrorKind::NotFound)
+                    {
+                        // The directory was removed, just ignore it
+                        continue;
+                    }
+                    return Err(err.into());
+                }
+            };
         // https://github.com/pypa/pip/blob/3820b0e52c7fed2b2c43ba731b718f316e6816d1/src/pip/_internal/operations/install/wheel.py#L593-L604
-        if entry.metadata()?.is_file() && entry.path().extension().is_some_and(|ext| ext == "py") {
+        if metadata.is_file() && entry.path().extension().is_some_and(|ext| ext == "py") {
             source_files += 1;
             if let Err(err) = sender.send(entry.path().to_owned()).await {
                 // The workers exited.

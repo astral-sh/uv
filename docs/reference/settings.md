@@ -518,12 +518,12 @@ globs are interpreted as relative to the project directory.
 
     ```toml
     [tool.uv]
-    cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true }]
+    cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true } }]
     ```
 === "uv.toml"
 
     ```toml
-    cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true }]
+    cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true } }]
     ```
 
 ---

@@ -454,8 +454,8 @@ pub(crate) async fn install(
         .await;
 
         // If the resolution failed, retry with the inferred `requires-python` constraint.
-        let resolution = match resolution {
-            Ok(resolution) => resolution,
+        let (resolution, interpreter) = match resolution {
+            Ok(resolution) => (resolution, interpreter),
             Err(err) => match err {
                 ProjectError::Operation(err) => {
                     // If the resolution failed due to the discovered interpreter not satisfying the
@@ -505,7 +505,7 @@ pub(crate) async fn install(
                     )
                     .await
                     {
-                        Ok(resolution) => resolution,
+                        Ok(resolution) => (resolution, interpreter),
                         Err(ProjectError::Operation(err)) => {
                             return diagnostics::OperationDiagnostic::native_tls(native_tls)
                                 .report(err)

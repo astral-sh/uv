@@ -7015,6 +7015,146 @@ fn verify_hashes_editable() -> Result<()> {
     Ok(())
 }
 
+/// Allow arguments within a `requirements.txt` file to be quoted or unquoted, as in the CLI.
+#[test]
+fn double_quoted_arguments() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let constraints_in = context.temp_dir.child("constraints.in");
+    constraints_in.write_str(indoc::indoc! {r"
+        iniconfig==1.0.0
+    "})?;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(indoc::indoc! {r#"
+       --constraint "./constraints.in"
+
+        iniconfig
+    "#})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==1.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Allow arguments within a `requirements.txt` file to be quoted or unquoted, as in the CLI.
+#[test]
+fn single_quoted_arguments() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let constraints_in = context.temp_dir.child("constraints.in");
+    constraints_in.write_str(indoc::indoc! {r"
+        iniconfig==1.0.0
+    "})?;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(indoc::indoc! {r"
+       --constraint './constraints.in'
+
+        iniconfig
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==1.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Allow arguments within a `requirements.txt` file to be quoted or unquoted, as in the CLI.
+#[test]
+fn unquoted_arguments() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let constraints_in = context.temp_dir.child("constraints.in");
+    constraints_in.write_str(indoc::indoc! {r"
+        iniconfig==1.0.0
+    "})?;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(indoc::indoc! {r"
+       --constraint ./constraints.in
+
+        iniconfig
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==1.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Allow arguments within a `requirements.txt` file to be quoted or unquoted, as in the CLI.
+#[test]
+fn concatenated_quoted_arguments() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let constraints_in = context.temp_dir.child("constraints.in");
+    constraints_in.write_str(indoc::indoc! {r"
+        iniconfig==1.0.0
+    "})?;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(indoc::indoc! {r#"
+       --constraint "./constr""aints.in"
+
+        iniconfig
+    "#})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==1.0.0
+    "###
+    );
+
+    Ok(())
+}
+
 #[test]
 #[cfg(feature = "git")]
 fn tool_uv_sources() -> Result<()> {

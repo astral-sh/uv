@@ -1,3 +1,4 @@
+use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
 
 use serde::Deserialize;
@@ -6,7 +7,7 @@ use toml_edit::Table;
 use toml_edit::Value;
 use toml_edit::{Array, Item};
 
-use uv_fs::PortablePath;
+use uv_fs::{PortablePath, Simplified};
 use uv_pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_settings::ToolOptions;
 
@@ -96,6 +97,32 @@ impl TryFrom<ToolWire> for Tool {
 pub struct ToolEntrypoint {
     pub name: String,
     pub install_path: PathBuf,
+}
+
+impl Display for ToolEntrypoint {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        #[cfg(windows)]
+        {
+            write!(
+                f,
+                "{} ({})",
+                self.name,
+                self.install_path
+                    .simplified_display()
+                    .to_string()
+                    .replace('/', "\\")
+            )
+        }
+        #[cfg(unix)]
+        {
+            write!(
+                f,
+                "{} ({})",
+                self.name,
+                self.install_path.simplified_display()
+            )
+        }
+    }
 }
 
 /// Format an array so that each element is on its own line and has a trailing comma.
