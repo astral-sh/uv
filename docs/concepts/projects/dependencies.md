@@ -613,19 +613,47 @@ instead. Additionally, the `dev` group is [synced by default](#default-groups).
 
 ### Dependency groups
 
-Development dependencies can be divided into multiple groups, using the `--group` flag.
-
-For example, to add a development dependency in the `lint` group:
-
-```console
-$ uv add --group lint ruff
-```
-
-Which results in the following `[dependency-groups]` definition:
+uv supports
+[PyPA spec Dependency Groups](https://packaging.python.org/en/latest/specifications/dependency-groups/):
 
 ```toml title="pyproject.toml"
 [dependency-groups]
 dev = [
+  {include-group = "lint"}
+  "pytest"
+]
+lint = [
+  "ruff"
+]
+```
+
+uv requires that all dependency groups are compatible with each other and resolves all groups
+together when creating the lockfile.
+
+If dependencies declared in one group are not compatible with those in another group, uv will fail
+to resolve the requirements of the project with an error unless you explicitly
+[declare them as conflicting](./config.md#conflicting-dependencies).
+
+#### CLI Options
+
+Development dependencies can be divided into multiple groups, using the `--group` flag.
+
+For example, to add a dependency in the `ci` group:
+
+```console
+$ uv add --group ci tox pip-audit
+```
+
+Which results in the updated definition:
+
+```toml title="pyproject.toml"
+[dependency-groups]
+ci = [
+  "pip-audit",
+  "tox",
+]
+dev = [
+  {include-group = "lint"}
   "pytest"
 ]
 lint = [
@@ -636,21 +664,13 @@ lint = [
 Once groups are defined, the `--all-groups`, `--no-default-groups`, `--group`, `--only-group`, and
 `--no-group` options can be used to include or exclude their dependencies.
 
-!!! tip
-
-    The `--dev`, `--only-dev`, and `--no-dev` flags are equivalent to `--group dev`,
-    `--only-group dev`, and `--no-group dev` respectively.
-
-uv requires that all dependency groups are compatible with each other and resolves all groups
-together when creating the lockfile.
-
-If dependencies declared in one group are not compatible with those in another group, uv will fail
-to resolve the requirements of the project with an error.
+The `--dev`, `--only-dev`, and `--no-dev` flags are equivalent to `--group dev`, `--only-group dev`,
+and `--no-group dev` respectively.
 
 !!! note
 
-    If you have dependency groups that conflict with one another, resolution will fail
-    unless you explicitly [declare them as conflicting](./config.md#conflicting-dependencies).
+    `include-group` is not supported from the CLI ([#9054](https://github.com/astral-sh/uv/issues/9054)).
+    Those edits must be made manually.
 
 ### Default groups
 
