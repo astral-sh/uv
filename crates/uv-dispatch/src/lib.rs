@@ -27,7 +27,7 @@ use uv_distribution_types::{
     IsBuildBackendError, Name, Resolution, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
-use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
+use uv_installer::{InstalledPackages, Installer, Plan, Planner, Preparer};
 use uv_pypi_types::{Conflicts, Requirement};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{
@@ -268,7 +268,7 @@ impl BuildContext for BuildDispatch<'_> {
         let tags = self.interpreter.tags()?;
 
         // Determine the set of installed packages.
-        let site_packages = SitePackages::from_environment(venv)?;
+        let installed_packages = InstalledPackages::from_environment(venv)?;
 
         let Plan {
             cached,
@@ -276,7 +276,7 @@ impl BuildContext for BuildDispatch<'_> {
             reinstalls,
             extraneous: _,
         } = Planner::new(resolution).build(
-            site_packages,
+            installed_packages,
             &Reinstall::default(),
             self.build_options,
             self.hasher,
@@ -424,6 +424,7 @@ impl BuildContext for BuildDispatch<'_> {
             self.build_extra_env_vars.clone(),
             build_output,
             self.concurrency.builds,
+            self.cache,
         )
         .boxed_local()
         .await?;
