@@ -41,7 +41,7 @@ use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
 use uv_pep440::{release_specifiers_to_ranges, Version};
 use uv_platform_tags::Tags;
-use uv_pypi_types::{HashAlgorithm, HashDigest, PyProjectToml, ResolutionMetadata};
+use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
 use uv_types::{BuildContext, BuildStack, SourceBuildTrait};
 use uv_workspace::pyproject::ToolUvSources;
 
@@ -708,7 +708,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .download_archive(response, source, ext, entry.path(), &algorithms)
                     .await?;
 
-                Ok(revision.with_hashes(hashes))
+                Ok(revision.with_hashes(HashDigests::from(hashes)))
             }
             .boxed_local()
             .instrument(info_span!("download", source_dist = %source))
@@ -1037,7 +1037,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await?;
 
         // Include the hashes and cache info in the revision.
-        let revision = revision.with_hashes(hashes);
+        let revision = revision.with_hashes(HashDigests::from(hashes));
 
         // Persist the revision.
         let pointer = LocalRevisionPointer {
@@ -1509,7 +1509,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             path: cache_shard.join(&disk_filename),
             target: cache_shard.join(filename.stem()),
             filename,
-            hashes: vec![],
+            hashes: HashDigests::empty(),
             cache_info: CacheInfo::default(),
         })
     }
@@ -1561,7 +1561,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                 debug!("Found static metadata via GitHub fast path for: {source}");
                                 return Ok(ArchiveMetadata {
                                     metadata: Metadata::from_metadata23(metadata),
-                                    hashes: vec![],
+                                    hashes: HashDigests::empty(),
                                 });
                             }
                             Err(err) => {
@@ -1974,7 +1974,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 return Err(Error::CacheHeal(source.to_string(), existing.algorithm()));
             }
         }
-        Ok(revision.with_hashes(hashes))
+        Ok(revision.with_hashes(HashDigests::from(hashes)))
     }
 
     /// Heal a [`Revision`] for a remote archive.
@@ -2011,7 +2011,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         return Err(Error::CacheHeal(source.to_string(), existing.algorithm()));
                     }
                 }
-                Ok(revision.clone().with_hashes(hashes))
+                Ok(revision.clone().with_hashes(HashDigests::from(hashes)))
             }
             .boxed_local()
             .instrument(info_span!("download", source_dist = %source))
