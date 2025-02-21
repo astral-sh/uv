@@ -6,7 +6,7 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::atomic::Ordering;
-
+use std::env;
 use anstream::eprintln;
 use anyhow::{bail, Context, Result};
 use clap::error::{ContextKind, ContextValue};
@@ -277,6 +277,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         },
         duration_layer,
         globals.color,
+        &globals.log,
+        match globals.log_verbose {
+            0 => logging::FileLogLevel::Verbose,
+            1 => logging::FileLogLevel::ExtraVerbose,
+            2 => logging::FileLogLevel::TraceVerbose,
+            3.. => logging::FileLogLevel::TraceExtraVerbose,
+        }
     )?;
 
     // Configure the `Printer`, which controls user-facing output in the CLI.
@@ -1886,6 +1893,7 @@ where
         }
     };
 
+    let log_path = cli.top_level.global_args.log.clone();
     // Running out of stack has been an issue for us. We box types and futures in various places
     // to mitigate this, with this being an especially important case.
     //
@@ -1932,19 +1940,47 @@ where
         .join()
         .expect("Tokio executor failed, was there a panic?");
 
-    match result {
-        Ok(code) => code.into(),
-        Err(err) => {
-            let mut causes = err.chain();
-            eprintln!(
-                "{}: {}",
-                "error".red().bold(),
-                causes.next().unwrap().to_string().trim()
-            );
-            for err in causes {
-                eprintln!("  {}: {}", "Caused by".red().bold(), err.to_string().trim());
+        match result {
+            Ok(code) => {
+                if let ExitStatus::Error | ExitStatus::Failure = code {
+                    if let Some(log_path) = log_path {
+                        print_log_info(&log_path);
+                    }
+                }
+                code.into()
             }
-            ExitStatus::Error.into()
+            Err(err) => {
+                let mut causes = err.chain();
+                eprintln!(
+                    "{}: {}",
+                    "error".red().bold(),
+                    causes.next().unwrap().to_string().trim()
+                );
+                for cause in causes {
+                    eprintln!("  {}: {}", "Caused by".red().bold(), cause.to_string().trim());
+                }
+                if let Some(log_path) = log_path {
+                    print_log_info(&log_path);
+                }
+                ExitStatus::Error.into()
+            }
         }
-    }
+}
+
+fn print_log_info(log_path: &Path) {
+    let mut log_file_path = log_path.to_owned();
+    log_file_path.set_extension("log");
+    let log_file_path = env::var(uv_static::EnvVars::UV_LOG_DIR)
+        .map(|dir| Path::new(&dir).join(
+            log_file_path.file_name().expect("Missing filename")
+        ))
+        .unwrap_or_else(|_| {
+            env::current_dir()
+                .expect("Failed to get current directory when directing to logs")
+                .join(&log_file_path)
+        });
+    eprintln!(
+        "See {} for detailed logs",
+        log_file_path.display().to_string().cyan().bold()
+    );
 }

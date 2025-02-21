@@ -1,4 +1,5 @@
 use std::fmt;
+use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::Context;
@@ -34,6 +35,19 @@ pub(crate) enum Level {
     ExtraVerbose,
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FileLogLevel {
+
+    /// Write debug messages to the log file.
+    #[default]
+    Verbose,
+    /// Write messages in a hierarchical span tree to the log file, debug messages are written.
+    ExtraVerbose,
+    /// Write trace level logs to the log file.
+    TraceVerbose,
+    /// Write messages in a hierarchical span tree to the log file, trace messages are written.
+    TraceExtraVerbose,
+}
 struct UvFormat {
     display_timestamp: bool,
     display_level: bool,
@@ -119,6 +133,8 @@ pub(crate) fn setup_logging(
     level: Level,
     durations: impl Layer<Registry> + Send + Sync,
     color: ColorChoice,
+    log_path: &Option<PathBuf>,
+    file_log_level: FileLogLevel,
 ) -> anyhow::Result<()> {
     let default_directive = match level {
         Level::Default => {
@@ -136,6 +152,12 @@ pub(crate) fn setup_logging(
         tracing_subscriber::filter::Targets::new()
             .with_target("", tracing::level_filters::LevelFilter::INFO),
     );
+
+    let subscriber = tracing_subscriber::registry()
+        .with(durations_layer);
+
+    // Building the layers for logging sort of like a builder pattern
+    let mut layers = Vec::new();
 
     let filter = EnvFilter::builder()
         .with_default_directive(default_directive)
@@ -169,32 +191,75 @@ pub(crate) fn setup_logging(
                 show_spans: false,
             };
 
-            tracing_subscriber::registry()
-                .with(durations_layer)
-                .with(
-                    tracing_subscriber::fmt::layer()
-                        .event_format(format)
-                        .with_writer(writer)
-                        .with_ansi(ansi)
-                        .with_filter(filter),
-                )
-                .init();
+            layers.push(tracing_subscriber::fmt::layer()
+                .event_format(format)
+                .with_writer(writer)
+                .with_ansi(ansi)
+                .with_filter(filter)
+                .boxed());
+
         }
         Level::ExtraVerbose => {
             // Regardless of the tracing level, include the uptime and target for each message.
-            tracing_subscriber::registry()
-                .with(durations_layer)
-                .with(
-                    HierarchicalLayer::default()
-                        .with_targets(true)
-                        .with_timer(Uptime::default())
-                        .with_writer(writer)
-                        .with_ansi(ansi)
-                        .with_filter(filter),
-                )
-                .init();
+            layers.push(HierarchicalLayer::default()
+                .with_targets(true)
+                .with_timer(Uptime::default())
+                .with_writer(writer)
+                .with_ansi(ansi)
+                .with_filter(filter)
+                .boxed());
         }
     }
+
+    // If log path is provided the setup for persistent file logging is done
+    if let Some(path) = log_path {
+        // file_filter sets the level of logs by default debug logs are written to the file
+        let file_filter_str = match file_log_level {
+            FileLogLevel::Verbose|FileLogLevel::ExtraVerbose => "uv=debug",
+            FileLogLevel::TraceVerbose| FileLogLevel::TraceExtraVerbose => "trace",
+        };
+
+        let file_filter = EnvFilter::try_new(file_filter_str)
+        .unwrap_or_else(|_| EnvFilter::new("uv=debug"));
+        let file_fomat = UvFormat {
+            display_timestamp: true,
+            display_level: true,
+            show_spans: false,
+        };
+
+        let mut new_path = path.clone();
+        new_path.set_extension("log");
+        // Discuss if previous content should be overwritten or appended.
+        // If it doesn't exist, create it. 
+        let log_file = std::fs::OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(&new_path)
+        .with_context(|| format!("Failed to open or create log file: {:?}", new_path))?;
+
+        let file_writer = std::sync::Mutex::new(anstream::AutoStream::new(log_file, anstream::ColorChoice::Never));
+
+        // Depending on the log level, different layers are added to the subscriber. However me might need to seperate trace or debug and the heirarchical layer or not into different args (based on what the use cases are)
+        match file_log_level {
+            FileLogLevel::Verbose | FileLogLevel::TraceVerbose => {
+                layers.push(tracing_subscriber::fmt::layer()
+                    .with_ansi(false)
+                    .event_format(file_fomat)
+                    .with_writer(file_writer)
+                    .with_filter(file_filter).boxed());
+            }
+            FileLogLevel::ExtraVerbose | FileLogLevel::TraceExtraVerbose=> {
+                layers.push(
+                HierarchicalLayer::default()
+                    .with_ansi(false)
+                    .with_writer(file_writer)
+                    .with_timer(Uptime::default())
+                    .with_filter(file_filter).boxed());
+            }
+        }
+    };
+
+    subscriber.with(layers).init();
 
     Ok(())
 }
