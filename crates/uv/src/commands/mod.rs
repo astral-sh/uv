@@ -3,7 +3,7 @@ use anyhow::Context;
 use owo_colors::OwoColorize;
 use std::borrow::Cow;
 use std::io::stdout;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use std::{fmt::Display, fmt::Write, process::ExitCode};
 
@@ -53,6 +53,7 @@ use uv_fs::{Simplified, CWD};
 use uv_installer::compile_tree;
 use uv_normalize::PackageName;
 use uv_python::PythonEnvironment;
+use uv_scripts::Pep723Script;
 pub(crate) use venv::venv;
 pub(crate) use version::version;
 
@@ -289,4 +290,13 @@ pub(super) fn capitalize(s: &str) -> String {
         None => String::new(),
         Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
     }
+}
+
+/// A Python file that may or may not include an existing PEP 723 script tag.
+#[derive(Debug)]
+pub(crate) enum ScriptPath {
+    /// The Python file already includes a PEP 723 script tag.
+    Script(Pep723Script),
+    /// The Python file does not include a PEP 723 script tag.
+    Path(PathBuf),
 }
