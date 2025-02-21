@@ -181,7 +181,7 @@ impl<'a> TryFrom<BaseClientBuilder<'a>> for RegistryClientBuilder<'a> {
         Ok(Self {
             index_urls: IndexUrls::default(),
             index_strategy: IndexStrategy::default(),
-            cache: Cache::temp()?,
+            cache: Cache::temp(None)?,
             base_client_builder: value,
         })
     }
