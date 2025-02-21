@@ -30,7 +30,7 @@ use uv_configuration::{
 };
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl};
 use uv_install_wheel::LinkMode;
-use uv_normalize::PackageName;
+use uv_normalize::{PackageName, PipGroupName};
 use uv_pep508::{ExtraName, RequirementOrigin};
 use uv_pypi_types::{Requirement, SupportedEnvironments};
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
@@ -1822,6 +1822,7 @@ impl PipInstallSettings {
             refresh,
             no_deps,
             deps,
+            group,
             require_hashes,
             no_require_hashes,
             verify_hashes,
@@ -1928,6 +1929,7 @@ impl PipInstallSettings {
                     strict: flag(strict, no_strict),
                     extra,
                     all_extras: flag(all_extras, no_all_extras),
+                    group: Some(group),
                     no_deps: flag(no_deps, deps),
                     python_version,
                     python_platform,
@@ -2636,7 +2638,7 @@ pub(crate) struct PipSettings {
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) system: bool,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) groups: DevGroupsSpecification,
+    pub(crate) groups: Vec<PipGroupName>,
     pub(crate) break_system_packages: bool,
     pub(crate) target: Option<Target>,
     pub(crate) prefix: Option<Prefix>,
@@ -2713,6 +2715,7 @@ impl PipSettings {
             extra,
             all_extras,
             no_extra,
+            group,
             no_deps,
             allow_empty_requirements,
             resolution,
@@ -2830,16 +2833,7 @@ impl PipSettings {
                 args.no_extra.combine(no_extra).unwrap_or_default(),
                 args.extra.combine(extra).unwrap_or_default(),
             ),
-            groups: DevGroupsSpecification::from_args(
-                false,
-                false,
-                false,
-                Vec::new(),
-                Vec::new(),
-                false,
-                Vec::new(),
-                false,
-            ),
+            groups: args.group.combine(group).unwrap_or_default(),
             dependency_mode: if args.no_deps.combine(no_deps).unwrap_or_default() {
                 DependencyMode::Direct
             } else {

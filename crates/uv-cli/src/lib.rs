@@ -15,7 +15,7 @@ use uv_configuration::{
     ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{Index, IndexUrl, Origin, PipExtraIndex, PipFindLinks, PipIndex};
-use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
 use uv_pep508::Requirement;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
@@ -1585,6 +1585,12 @@ pub struct PipInstallArgs {
 
     #[arg(long, overrides_with("no_deps"), hide = true)]
     pub deps: bool,
+
+    /// Ignore the package and it's dependencies, only install from the specified dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, group = "sources", conflicts_with_all = ["requirements", "package", "editable"])]
+    pub group: Vec<PipGroupName>,
 
     /// Require a matching hash for each requirement.
     ///

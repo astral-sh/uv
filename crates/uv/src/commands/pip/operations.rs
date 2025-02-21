@@ -13,8 +13,8 @@ use uv_tool::InstalledTools;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification, DryRun,
-    ExtrasSpecification, Overrides, Reinstall, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DryRun, ExtrasSpecification, Overrides,
+    Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -28,7 +28,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
-use uv_normalize::PackageName;
+use uv_normalize::{PackageName, PipGroupName};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
 use uv_python::{PythonEnvironment, PythonInstallation};
@@ -50,13 +50,33 @@ use crate::printer::Printer;
 
 /// Consolidate the requirements for an installation.
 pub(crate) async fn read_requirements(
-    requirements: &[RequirementsSource],
+    mut requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     extras: &ExtrasSpecification,
-    groups: &DevGroupsSpecification,
+    groups: &[PipGroupName],
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<RequirementsSpecification, Error> {
+    // pip `--group` flags specify their own sources, and basically disable everything else.
+    // So if we encounter them, we desugar them to `-r` inputs and proceed as normal.
+    let group_requirements;
+    if !groups.is_empty() {
+        debug_assert!(
+            requirements.is_empty(),
+            "-r should be exclusive with --group in `uv pip`"
+        );
+        // Deduplicate in a stable way to get deterministic behaviour
+        let deduped_paths = groups
+            .iter()
+            .map(|group| &group.path)
+            .collect::<BTreeSet<_>>();
+        group_requirements = deduped_paths
+            .into_iter()
+            .map(|path| RequirementsSource::PyprojectToml(path.to_owned()))
+            .collect::<Vec<_>>();
+        requirements = &group_requirements[..];
+    }
+
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
     // return an error.
     if !extras.is_empty() && !requirements.iter().any(RequirementsSource::allows_extras) {
@@ -72,13 +92,6 @@ pub(crate) async fn read_requirements(
         };
         return Err(anyhow!(
             "Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file. {hint}"
-        )
-        .into());
-    }
-    if !groups.is_empty() && !requirements.iter().any(RequirementsSource::allows_groups) {
-        let flags = groups.history().as_flags_pretty().join(" ");
-        return Err(anyhow!(
-            "Requesting groups requires a `pyproject.toml`. Requested via: {flags}"
         )
         .into());
     }
@@ -114,7 +127,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     mut project: Option<PackageName>,
     workspace_members: BTreeSet<PackageName>,
     extras: &ExtrasSpecification,
-    groups: &DevGroupsSpecification,
+    groups: &[PipGroupName],
     preferences: Vec<Preference>,
     installed_packages: InstalledPackages,
     hasher: &HashStrategy,
