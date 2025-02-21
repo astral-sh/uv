@@ -476,7 +476,7 @@ impl ResolverOutput {
                 Some(Yanked::Reason(reason)) => {
                     diagnostics.push(ResolutionDiagnostic::YankedVersion {
                         dist: dist.clone(),
-                        reason: Some(reason.clone()),
+                        reason: Some(reason.to_string()),
                     });
                 }
             }

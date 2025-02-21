@@ -2,7 +2,9 @@ use std::str::FromStr;
 
 use jiff::Timestamp;
 use serde::{Deserialize, Deserializer, Serialize};
+
 use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
+use uv_small_str::SmallString;
 
 use crate::lenient_requirement::LenientVersionSpecifiers;
 
@@ -101,7 +103,7 @@ impl CoreMetadata {
 #[rkyv(derive(Debug))]
 pub enum Yanked {
     Bool(bool),
-    Reason(String),
+    Reason(SmallString),
 }
 
 impl<'de> Deserialize<'de> for Yanked {
@@ -111,7 +113,7 @@ impl<'de> Deserialize<'de> for Yanked {
     {
         serde_untagged::UntaggedEnumVisitor::new()
             .bool(|bool| Ok(Yanked::Bool(bool)))
-            .string(|string| Ok(Yanked::Reason(string.to_owned())))
+            .string(|string| Ok(Yanked::Reason(SmallString::from(string))))
             .deserialize(deserializer)
     }
 }

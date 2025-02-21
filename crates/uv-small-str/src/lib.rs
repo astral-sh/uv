@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cmp::PartialEq;
 use std::ops::Deref;
 
@@ -23,6 +24,15 @@ impl From<String> for SmallString {
     #[inline]
     fn from(s: String) -> Self {
         Self(s.into())
+    }
+}
+
+impl From<Cow<'_, str>> for SmallString {
+    fn from(s: Cow<'_, str>) -> Self {
+        match s {
+            Cow::Borrowed(s) => Self::from(s),
+            Cow::Owned(s) => Self::from(s),
+        }
     }
 }
 
