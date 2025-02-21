@@ -915,7 +915,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         #[cfg(not(feature = "self-update"))]
         Commands::Self_(_) => {
             anyhow::bail!(
-                "uv was installed through an external package manager, and self {update,uninstall} \
+                "uv was installed through an external package manager, and self {{update,uninstall}} \
                 is not available. Please use your package manager to update uv."
             );
         }
