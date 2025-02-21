@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
@@ -79,6 +81,76 @@ impl std::fmt::Display for GroupName {
 impl AsRef<str> for GroupName {
     fn as_ref(&self) -> &str {
         &self.0
+    }
+}
+
+/// The pip variant of a `GroupName`
+///
+/// Either <groupname> or <path>:<groupname>.
+/// If <path> is omitted it defaults to "pyproject.toml".
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct PipGroupName {
+    pub path: PathBuf,
+    pub name: GroupName,
+}
+
+impl FromStr for PipGroupName {
+    type Err = InvalidNameError;
+
+    fn from_str(path_and_name: &str) -> Result<Self, Self::Err> {
+        // The syntax is `<path>:<name>`.
+        //
+        // `:` isn't valid as part of a dependency-group name, but it can appear in a path.
+        // Therefore we look for the first `:` starting from the end to find the delimiter.
+        // If there is no `:` then there's no path and we use the default one.
+        if let Some((path, name)) = path_and_name.rsplit_once(':') {
+            // pip hard errors if the path does not end with pyproject.toml
+            if !path.ends_with("pyproject.toml") {
+                return Err(InvalidNameError(format!(
+                    "--group path did not end with 'pyproject.toml': {path}'"
+                )));
+            }
+
+            let name = GroupName::from_str(name)?;
+            let path = PathBuf::from(path);
+            Ok(Self { path, name })
+        } else {
+            let name = GroupName::from_str(path_and_name)?;
+            let path = PathBuf::from("pyproject.toml");
+            Ok(Self { path, name })
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for PipGroupName {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Self::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+impl Serialize for PipGroupName {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let string = self.to_string();
+        string.serialize(serializer)
+    }
+}
+
+impl Display for PipGroupName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let path = self.path.to_string_lossy();
+        if path == "pyproject.toml" {
+            self.name.fmt(f)
+        } else {
+            write!(f, "{}:{}", path, self.name)
+        }
     }
 }
 

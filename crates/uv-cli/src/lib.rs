@@ -15,7 +15,7 @@ use uv_configuration::{
     ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{Index, IndexUrl, Origin, PipExtraIndex, PipFindLinks, PipIndex};
-use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
 use uv_pep508::{MarkerTree, Requirement};
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
@@ -949,6 +949,7 @@ fn parse_maybe_string(input: &str) -> Result<Maybe<String>, String> {
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
+#[command(group = clap::ArgGroup::new("sources").required(true).multiple(true))]
 pub struct PipCompileArgs {
     /// Include all packages listed in the given `requirements.in` files.
     ///
@@ -959,7 +960,7 @@ pub struct PipCompileArgs {
     ///
     /// The order of the requirements files and the requirements in them is used to determine
     /// priority during resolution.
-    #[arg(required(true), value_parser = parse_file_path)]
+    #[arg(group = "sources", value_parser = parse_file_path)]
     pub src_file: Vec<PathBuf>,
 
     /// Constrain versions using the given requirements files.
@@ -1021,6 +1022,14 @@ pub struct PipCompileArgs {
 
     #[arg(long, overrides_with("no_deps"), hide = true)]
     pub deps: bool,
+
+    /// Install the specified dependency group in the specified pyproject.toml
+    ///
+    /// If no path is provided, ./pyproject.toml is used.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, group = "sources")]
+    pub group: Vec<PipGroupName>,
 
     /// Write the compiled requirements to the given `requirements.txt` file.
     ///
@@ -1585,6 +1594,14 @@ pub struct PipInstallArgs {
 
     #[arg(long, overrides_with("no_deps"), hide = true)]
     pub deps: bool,
+
+    /// Install the specified dependency group in the specified pyproject.toml
+    ///
+    /// If no path is provided, ./pyproject.toml is used.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, group = "sources")]
+    pub group: Vec<PipGroupName>,
 
     /// Require a matching hash for each requirement.
     ///

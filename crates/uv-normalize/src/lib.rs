@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 
 pub use dist_info_name::DistInfoName;
 pub use extra_name::ExtraName;
-pub use group_name::{GroupName, DEV_DEPENDENCIES};
+pub use group_name::{GroupName, PipGroupName, DEV_DEPENDENCIES};
 pub use package_name::PackageName;
 
 use uv_small_str::SmallString;

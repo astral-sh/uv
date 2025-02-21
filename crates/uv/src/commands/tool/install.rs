@@ -235,7 +235,7 @@ pub(crate) async fn install(
 
     // Read the `--with` requirements.
     let spec =
-        RequirementsSpecification::from_sources(with, constraints, overrides, &client_builder)
+        RequirementsSpecification::from_sources(with, constraints, overrides, &[], &client_builder)
             .await?;
 
     // Resolve the `--from` and `--with` requirements.
