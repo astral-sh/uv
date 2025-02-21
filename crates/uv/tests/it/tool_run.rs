@@ -1696,7 +1696,7 @@ fn tool_run_python_at_version() {
     success: false
     exit_code: 2
     ----- stdout -----
-    
+
     ----- stderr -----
     error: Invalid version request: 3.300
     "###);
@@ -1896,5 +1896,117 @@ fn tool_run_verbatim_name() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    ");
+}
+
+#[test]
+fn tool_run_with_existing_py_script() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    context.temp_dir.child("script.py").touch()?;
+
+    // We treat arguments before the command as uv arguments
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("script.py"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: It looks like you are trying to run a script. Did you mean `uv run script.py`?
+    ");
+    Ok(())
+}
+
+#[test]
+fn tool_run_with_existing_pyw_script() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    context.temp_dir.child("script.pyw").touch()?;
+
+    // We treat arguments before the command as uv arguments
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("script.pyw"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: It looks like you are trying to run a script. Did you mean `uv run script.pyw`?
+    ");
+    Ok(())
+}
+
+#[test]
+fn tool_run_with_nonexistent_py_script() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // We treat arguments before the command as uv arguments
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("script.py"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: It looks like you are trying to run a script that doesn't exist.
+
+    hint: Did you mean to run a tool with `uv tool run script-py`?
+    ");
+}
+
+#[test]
+fn tool_run_with_nonexistent_pyw_script() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // We treat arguments before the command as uv arguments
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("script.pyw"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: It looks like you are trying to run a script that doesn't exist.
+
+    hint: Did you mean to run a tool with `uv tool run script-pyw`?
+    ");
+}
+
+#[test]
+fn tool_run_with_from_script() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // We treat arguments before the command as uv arguments
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("script.py")
+        .arg("ruff"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: It looks you have passed a script instead of a package into `--from`.
+
+    hint: Did you mean to run a tool with `uv tool run --from script-py ruff`?
+    ");
+}
+
+#[test]
+fn tool_run_with_script_and_from_script() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // We treat arguments before the command as uv arguments
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("script.py")
+        .arg("other-script.py"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: It looks you have passed a script instead of a package into `--from`.
+
+    hint: Did you mean to run a tool with `uv tool run --from script-py other-script.py`?
     ");
 }
