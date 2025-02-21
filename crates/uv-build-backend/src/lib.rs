@@ -403,8 +403,8 @@ mod tests {
             license = { file = "license.txt" }
 
             [build-system]
-            requires = ["uv>=0.5.15,<0.6"]
-            build-backend = "uv"
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
         "#
             },
         )
@@ -471,8 +471,8 @@ mod tests {
             version = "1.0.0"
 
             [build-system]
-            requires = ["uv>=0.5.15,<0.6"]
-            build-backend = "uv"
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
         "#
             },
         )
