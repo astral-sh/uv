@@ -85,28 +85,56 @@ Sometimes you want to run a tool on Windows that's written in Python, like `blac
 `.exe` files. So we need to somehow convert our Python file a `.exe` file.
 
 That's what this does: it's a generic "trampoline" that lets us generate custom `.exe`s for
-arbitrary Python scripts, and when invoked it bounces to invoking `python <the script>` instead.
+arbitrary Python usage on Windows. You can use it in two ways:
 
-### How do you use it?
+1. **Script runner variant (UVSC)**: bundle a Python script (as a ZIP) alongside the trampoline and
+   invoke `python <the bundled script>` at runtime.
+2. **Python mirror variant (UVPY)**: create a simple executable that just forwards to a specified
+   `python.exe` binary, acting like a stand-in or alias for Python itself.
+
+### How do you use it as Python mirror?
+
+Basically, this invokes the provided `python.exe` executable.
+
+The intended use is:
+
+- First, place our prebuilt `.exe` content at the top of the file.
+- After the exe file content, write the path to the Python executable that the script uses to run
+  the Python script as UTF-8 encoded string, followed by the path's length as a 32-bit little-endian
+  integer.
+- Write the magic number 'UVPY' in bytes.
+
+|       `launcher.exe`        |
+| :-------------------------: |
+|   `<path to python.exe>`    |
+| `<len(path to python.exe)>` |
+| `<b'U', b'V', b'P', b'Y'>`  |
+
+When you run `python` on this `.exe`, it will see the `UVPY` marker at the end of the file and
+recognize that it's the “Python mirror” variant. Then it simply hands everything off to your
+specified `python.exe`. Easy-peasy.
+
+### How do you use it as Script runner?
 
 Basically, this looks up `python.exe` (for console programs) and invokes
 `python.exe path\to\the\<the .exe>`.
 
 The intended use is:
 
-- take your Python script, name it `__main__.py`, and pack it into a `.zip` file. Then concatenate
-  that `.zip` file onto the end of one of our prebuilt `.exe`s.
-- After the zip file content, write the path to the Python executable that the script uses to run
+- First, place our prebuilt `.exe` content at the top of the file.
+- After the exe file content, write the path to the Python executable that the script uses to run
   the Python script as UTF-8 encoded string, followed by the path's length as a 32-bit little-endian
   integer.
-- At the very end, write the magic number `UVUV` in bytes.
+- Write the magic number 'UVSC' in bytes.
+- Finally, rename your Python script as `__main__.py`, compress it into a `.zip` file, and append
+  this `.zip` file to the end of one of our prebuilt `.exe` files.
 
 |       `launcher.exe`        |
 | :-------------------------: |
-|  `<zipped python script>`   |
 |   `<path to python.exe>`    |
 | `<len(path to python.exe)>` |
-| `<b'U', b'V', b'U', b'V'>`  |
+| `<b'U', b'V', b'S', b'C'>`  |
+|  `<zipped python script>`   |
 
 Then when you run `python` on the `.exe`, it will see the `.zip` trailer at the end of the `.exe`,
 and automagically look inside to find and execute `__main__.py`. Easy-peasy.

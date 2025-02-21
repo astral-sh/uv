@@ -756,7 +756,7 @@ fn find_matching_bin_link<'a>(
         }
         path.read_link().ok()?
     } else if cfg!(windows) {
-        let launcher = Launcher::try_from_path(path).ok()??;
+        let launcher = Launcher::try_from_path(path).ok()?;
         if !matches!(launcher.kind, LauncherKind::Python) {
             return None;
         }
