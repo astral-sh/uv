@@ -5,7 +5,7 @@ fn help() {
     let context = TestContext::new_with_versions(&[]);
 
     // The `uv help` command should show the long help message
-    uv_snapshot!(context.filters(), context.help(), @r###"
+    uv_snapshot!(context.filters(), context.help(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -66,6 +66,10 @@ fn help() {
               Change to the given directory prior to running the command
           --project <PROJECT>
               Run the command within the given project directory
+          --log <PATH>
+              Path to a verbose appending log. [env: UV_LOG=]
+      -l, --log-verbose...
+              Determines the verbosity of the file logs
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -79,14 +83,14 @@ fn help() {
 
 
     ----- stderr -----
-    "###);
+    "#);
 }
 
 #[test]
 fn help_flag() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.command().arg("--help"), @r###"
+    uv_snapshot!(context.filters(), context.command().arg("--help"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -146,6 +150,10 @@ fn help_flag() {
               Change to the given directory prior to running the command
           --project <PROJECT>
               Run the command within the given project directory
+          --log <PATH>
+              Path to a verbose appending log. [env: UV_LOG=help.rs:87:19]
+      -l, --log-verbose...
+              Determines the verbosity of the file logs
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -158,14 +166,14 @@ fn help_flag() {
     Use `uv help` for more details.
 
     ----- stderr -----
-    "###);
+    "#);
 }
 
 #[test]
 fn help_short_flag() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.command().arg("-h"), @r###"
+    uv_snapshot!(context.filters(), context.command().arg("-h"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -225,6 +233,10 @@ fn help_short_flag() {
               Change to the given directory prior to running the command
           --project <PROJECT>
               Run the command within the given project directory
+          --log <PATH>
+              Path to a verbose appending log. [env: UV_LOG=help.rs:166:19]
+      -l, --log-verbose...
+              Determines the verbosity of the file logs
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -237,14 +249,14 @@ fn help_short_flag() {
     Use `uv help` for more details.
 
     ----- stderr -----
-    "###);
+    "#);
 }
 
 #[test]
 fn help_subcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("python"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("python"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -419,6 +431,14 @@ fn help_subcommand() {
               
               This setting has no effect when used in the `uv pip` interface.
 
+          --log <PATH>
+              Path to a verbose appending log.
+              
+              [env: UV_LOG=]
+
+      -l, --log-verbose...
+              Determines the verbosity of the file logs
+
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration.
               
@@ -445,14 +465,14 @@ fn help_subcommand() {
 
 
     ----- stderr -----
-    "###);
+    "#);
 }
 
 #[test]
 fn help_subsubcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("python").arg("install"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("python").arg("install"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -668,6 +688,14 @@ fn help_subsubcommand() {
               
               This setting has no effect when used in the `uv pip` interface.
 
+          --log <PATH>
+              Path to a verbose appending log.
+              
+              [env: UV_LOG=]
+
+      -l, --log-verbose...
+              Determines the verbosity of the file logs
+
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration.
               
@@ -692,14 +720,14 @@ fn help_subsubcommand() {
 
 
     ----- stderr -----
-    "###);
+    "#);
 }
 
 #[test]
 fn help_flag_subcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.command().arg("python").arg("--help"), @r###"
+    uv_snapshot!(context.filters(), context.command().arg("python").arg("--help"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -747,6 +775,10 @@ fn help_flag_subcommand() {
               Change to the given directory prior to running the command
           --project <PROJECT>
               Run the command within the given project directory
+          --log <PATH>
+              Path to a verbose appending log. [env: UV_LOG=help.rs:700:19]
+      -l, --log-verbose...
+              Determines the verbosity of the file logs
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -759,14 +791,14 @@ fn help_flag_subcommand() {
     Use `uv help python` for more details.
 
     ----- stderr -----
-    "###);
+    "#);
 }
 
 #[test]
 fn help_flag_subsubcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.command().arg("python").arg("install").arg("--help"), @r###"
+    uv_snapshot!(context.filters(), context.command().arg("python").arg("install").arg("--help"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -820,6 +852,10 @@ fn help_flag_subsubcommand() {
               Change to the given directory prior to running the command
           --project <PROJECT>
               Run the command within the given project directory
+          --log <PATH>
+              Path to a verbose appending log. [env: UV_LOG=help.rs:767:19]
+      -l, --log-verbose...
+              Determines the verbosity of the file logs
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -830,7 +866,7 @@ fn help_flag_subsubcommand() {
               Display the uv version
 
     ----- stderr -----
-    "###);
+    "#);
 }
 
 #[test]
@@ -916,7 +952,7 @@ fn help_unknown_subsubcommand() {
 fn help_with_global_option() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("--no-cache"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -977,6 +1013,10 @@ fn help_with_global_option() {
               Change to the given directory prior to running the command
           --project <PROJECT>
               Run the command within the given project directory
+          --log <PATH>
+              Path to a verbose appending log. [env: UV_LOG=]
+      -l, --log-verbose...
+              Determines the verbosity of the file logs
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -990,7 +1030,7 @@ fn help_with_global_option() {
 
 
     ----- stderr -----
-    "###);
+    "#);
 }
 
 #[test]
@@ -1032,7 +1072,7 @@ fn help_with_no_pager() {
 
     // We can't really test whether the --no-pager option works with a snapshot test.
     // It's still nice to have a test for the option to confirm the option exists.
-    uv_snapshot!(context.filters(), context.help().arg("--no-pager"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("--no-pager"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1093,6 +1133,10 @@ fn help_with_no_pager() {
               Change to the given directory prior to running the command
           --project <PROJECT>
               Run the command within the given project directory
+          --log <PATH>
+              Path to a verbose appending log. [env: UV_LOG=]
+      -l, --log-verbose...
+              Determines the verbosity of the file logs
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -1106,5 +1150,5 @@ fn help_with_no_pager() {
 
 
     ----- stderr -----
-    "###);
+    "#);
 }

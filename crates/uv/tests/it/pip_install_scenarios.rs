@@ -3883,7 +3883,7 @@ fn python_greater_than_current() {
 
     uv_snapshot!(filters, command(&context)
         .arg("python-greater-than-current-a==1.0.0")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3892,7 +3892,8 @@ fn python_greater_than_current() {
       × No solution found when resolving dependencies:
       ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
           And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,

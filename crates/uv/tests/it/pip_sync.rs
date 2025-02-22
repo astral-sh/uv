@@ -92,14 +92,15 @@ fn missing_system() -> Result<()> {
     let requirements = context.temp_dir.child("requirements.txt");
     requirements.write_str("anyio")?;
 
-    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt").arg("--system"), @r###"
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt").arg("--system"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No system Python installation found
-    "###);
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    ");
 
     Ok(())
 }

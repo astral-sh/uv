@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{env, fmt};
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -212,8 +212,15 @@ pub(crate) fn setup_logging(
                 .boxed());
         }
     }
+    // TODO might be better to deal with this in settings or something
+    let original_dir = env::current_dir().expect("Failed to get current directory");
+
+    if let Ok(log_dir) = env::var(uv_static::EnvVars::UV_LOG_DIR) {
+        env::set_current_dir(&log_dir).expect("Failed to set current directory to TEST_DIR");
+    }
 
     // If log path is provided the setup for persistent file logging is done
+    // Should there be a case where logging is done if UV_LOG_DIR is set but no --log flag is provided?
     if let Some(path) = log_path {
         // file_filter sets the level of logs by default debug logs are written to the file
         let file_filter_str = match file_log_level {
@@ -264,7 +271,7 @@ pub(crate) fn setup_logging(
             }
         }
     };
-
+    env::set_current_dir(&original_dir).expect("Failed to set current directory back to original");
     subscriber.with(layers).init();
 
     Ok(())

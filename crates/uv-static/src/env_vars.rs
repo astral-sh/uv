@@ -654,5 +654,6 @@ impl EnvVars {
     pub const UV_LOG: &'static str = "UV_LOG";
 
     /// Path to the directory where uv will write logs
+    // Should this only for testing during development or made available to users, by also adding a cli flag?
     pub const UV_LOG_DIR: &'static str = "UV_LOG_DIR";
 }

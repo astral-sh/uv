@@ -65,7 +65,7 @@ fn python_install() {
     "###);
 
     // Uninstallation requires an argument
-    uv_snapshot!(context.filters(), context.python_uninstall(), @r###"
+    uv_snapshot!(context.filters(), context.python_uninstall(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -74,10 +74,10 @@ fn python_install() {
     error: the following required arguments were not provided:
       <TARGETS>...
 
-    Usage: uv python uninstall --install-dir <INSTALL_DIR> <TARGETS>...
+    Usage: uv python uninstall --install-dir <INSTALL_DIR> --log <PATH> <TARGETS>...
 
     For more information, try '--help'.
-    "###);
+    ");
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.13"), @r###"
     success: true
@@ -179,14 +179,15 @@ fn python_install_automatic() {
     uv_snapshot!(context.filters(), context.run()
         .env_remove("VIRTUAL_ENV")
         .arg("--no-python-downloads")
-        .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r###"
+        .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No interpreter found in [PYTHON SOURCES]
-    "###);
+    See [UV_LOG_DIR]/python_install.log for detailed logs
+    ");
 
     // Otherwise, we should fetch the latest Python version
     uv_snapshot!(context.filters(), context.run()
@@ -356,7 +357,7 @@ fn python_install_preview() {
     fs_err::remove_file(bin_python.path()).unwrap();
     bin_python.touch().unwrap();
 
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.13"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.13"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -364,7 +365,8 @@ fn python_install_preview() {
     ----- stderr -----
     error: Failed to install cpython-3.13.2-[PLATFORM]
       Caused by: Executable already exists at `[BIN]/python3.13` but is not managed by uv; use `--force` to replace it
-    "###);
+    See [UV_LOG_DIR]/python_install.log for detailed logs
+    ");
 
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--force").arg("3.13"), @r###"
     success: true
@@ -638,14 +640,15 @@ fn python_install_freethreaded() {
     "###);
 
     // Should not work with older Python versions
-    uv_snapshot!(context.filters(), context.python_install().arg("3.12t"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12t"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No download found for request: cpython-3.12t-[PLATFORM]
-    "###);
+    See [UV_LOG_DIR]/python_install.log for detailed logs
+    ");
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("--all"), @r###"
     success: true
@@ -668,14 +671,15 @@ fn python_install_invalid_request() {
         .with_managed_python_dirs();
 
     // Request something that is not a Python version
-    uv_snapshot!(context.filters(), context.python_install().arg("foobar"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("foobar"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: `foobar` is not a valid Python download request; see `uv help python` for supported formats and `uv python list --only-downloads` for available versions
-    "###);
+    See [UV_LOG_DIR]/python_install.log for detailed logs
+    ");
 
     // Request a version we don't have a download for
     uv_snapshot!(context.filters(), context.python_install().arg("3.8.0"), @r###"
@@ -718,14 +722,15 @@ fn python_install_default() {
         .child(format!("python{}", std::env::consts::EXE_SUFFIX));
 
     // `--preview` is required for `--default`
-    uv_snapshot!(context.filters(), context.python_install().arg("--default"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("--default"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     The `--default` flag is only available in preview mode; add the `--preview` flag to use `--default`
-    "###);
+    See [UV_LOG_DIR]/python_install.log for detailed logs
+    ");
 
     // Install a specific version
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.13"), @r###"
@@ -998,14 +1003,15 @@ fn python_install_unknown() {
     let context: TestContext = TestContext::new_with_versions(&[]).with_managed_python_dirs();
 
     // An unknown request
-    uv_snapshot!(context.filters(), context.python_install().arg("foobar"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("foobar"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: `foobar` is not a valid Python download request; see `uv help python` for supported formats and `uv python list --only-downloads` for available versions
-    "###);
+    See [UV_LOG_DIR]/python_install.log for detailed logs
+    ");
 
     context.temp_dir.child("foo").create_dir_all().unwrap();
 
@@ -1088,7 +1094,7 @@ fn python_install_default_from_env() {
     "###);
 
     // We should ignore `UV_PYTHON` here and complain there is not a target
-    uv_snapshot!(context.filters(), context.python_uninstall().env(EnvVars::UV_PYTHON, "3.12"), @r###"
+    uv_snapshot!(context.filters(), context.python_uninstall().env(EnvVars::UV_PYTHON, "3.12"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1097,10 +1103,10 @@ fn python_install_default_from_env() {
     error: the following required arguments were not provided:
       <TARGETS>...
 
-    Usage: uv python uninstall --install-dir <INSTALL_DIR> <TARGETS>...
+    Usage: uv python uninstall --install-dir <INSTALL_DIR> --log <PATH> <TARGETS>...
 
     For more information, try '--help'.
-    "###);
+    ");
 
     // We should ignore `UV_PYTHON` here and respect `--all`
     uv_snapshot!(context.filters(), context.python_uninstall().arg("--all").env(EnvVars::UV_PYTHON, "3.11"), @r###"

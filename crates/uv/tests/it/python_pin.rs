@@ -443,14 +443,15 @@ fn python_pin_resolve_no_python() {
         error: No interpreter found for Python 3.12 in managed installations, search path, or registry
         "###);
     } else {
-        uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("3.12"), @r###"
+        uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("3.12"), @r"
         success: false
         exit_code: 2
         ----- stdout -----
 
         ----- stderr -----
         error: No interpreter found for Python 3.12 in managed installations or search path
-        "###);
+        See [UV_LOG_DIR]/python_pin.log for detailed logs
+        ");
     }
 }
 
