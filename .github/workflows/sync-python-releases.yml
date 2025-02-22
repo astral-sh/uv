@@ -24,7 +24,7 @@ jobs:
       - name: Sync Python Releases
         run: |
           uv run -- fetch-download-metadata.py
-          uv run -- template-download-metadata.py
+          uv run -- minify-download-metadata.py
         working-directory: ./crates/uv-python
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -35,7 +35,7 @@ jobs:
           commit-message: "Sync latest Python releases"
           add-paths: |
             crates/uv-python/download-metadata.json
-            crates/uv-python/src/downloads.inc
+            crates/uv-python/src/download-metadata-minified.json
           branch: "sync-python-releases"
           title: "Sync latest Python releases"
           body: "Automated update for Python releases."
