@@ -9,7 +9,7 @@ pub use wheel::{build_editable, build_wheel, list_wheel, metadata};
 use crate::metadata::ValidationError;
 use std::fs::FileType;
 use std::io;
-use std::path::{Path, PathBuf, StripPrefixError};
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tracing::debug;
 use uv_fs::Simplified;
@@ -36,13 +36,6 @@ pub enum Error {
         #[source]
         source: globset::Error,
     },
-    /// [`globset::Error`] shows the glob that failed to parse.
-    #[error("Unsupported glob expression in: `{field}`")]
-    GlobSet {
-        field: String,
-        #[source]
-        err: globset::Error,
-    },
     #[error("`pyproject.toml` must not be excluded from source distribution build")]
     PyprojectTomlExcluded,
     #[error("Failed to walk source tree: `{}`", root.user_display())]
@@ -51,8 +44,6 @@ pub enum Error {
         #[source]
         err: walkdir::Error,
     },
-    #[error("Failed to walk source tree")]
-    StripPrefix(#[from] StripPrefixError),
     #[error("Unsupported file type {:?}: `{}`", _1, _0.user_display())]
     UnsupportedFileType(PathBuf, FileType),
     #[error("Failed to write wheel zip archive")]
