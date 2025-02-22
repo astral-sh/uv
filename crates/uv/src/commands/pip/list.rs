@@ -1,4 +1,5 @@
 use std::cmp::max;
+use std::collections::HashSet;
 use std::fmt::Write;
 
 use anstream::println;
@@ -9,6 +10,7 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use serde::Serialize;
 use tokio::sync::Semaphore;
+use tracing::debug;
 use unicode_width::UnicodeWidthStr;
 
 use uv_cache::{Cache, Refresh};
@@ -19,7 +21,7 @@ use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType, TrustedH
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{Diagnostic, IndexCapabilities, IndexLocations, InstalledDist, Name};
 use uv_fs::Simplified;
-use uv_installer::SitePackages;
+use uv_installer::InstalledPackages;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_python::PythonRequest;
@@ -69,15 +71,32 @@ pub(crate) async fn pip_list(
     report_target_environment(&environment, cache, printer)?;
 
     // Build the installed index.
-    let site_packages = SitePackages::from_environment(&environment)?;
+    let installed_packages = InstalledPackages::from_environment(&environment)?;
 
     // Filter if `--editable` is specified; always sort by name.
-    let results = site_packages
-        .iter()
-        .filter(|dist| editable.is_none() || editable == Some(dist.is_editable()))
-        .filter(|dist| !exclude.contains(dist.name()))
-        .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
-        .collect_vec();
+    let mut results = Vec::new();
+    let mut seen = HashSet::new();
+
+    for installed_dist in installed_packages.iter() {
+        if editable.is_some() && editable != Some(installed_dist.is_editable()) {
+            continue;
+        }
+        if exclude.contains(installed_dist.name()) {
+            continue;
+        }
+        // Show only the first occurrence of any given packages, ignoring shadowed packages.
+        if !seen.insert(installed_dist.name().clone()) {
+            debug!(
+                "Ignoring shadowed package {} at: `{}`",
+                installed_dist.name(),
+                installed_dist.path().user_display()
+            );
+            continue;
+        }
+        results.push(installed_dist);
+    }
+
+    results.sort_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())));
 
     // Determine the latest version for each package.
     let latest = if outdated && !results.is_empty() {
@@ -267,7 +286,7 @@ pub(crate) async fn pip_list(
         // Determine the markers to use for resolution.
         let markers = environment.interpreter().resolver_marker_environment();
 
-        for diagnostic in site_packages.diagnostics(&markers)? {
+        for diagnostic in installed_packages.diagnostics(&markers)? {
             writeln!(
                 printer.stderr(),
                 "{}{} {}",

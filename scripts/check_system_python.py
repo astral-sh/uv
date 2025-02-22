@@ -8,6 +8,7 @@ To run locally, create a venv with seed packages.
 import argparse
 import logging
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -173,6 +174,19 @@ if __name__ == "__main__":
             raise Exception(
                 "The package `pylint` isn't installed in the virtual environment."
             )
+
+        # Test `uv pip list`
+        installed_packages = subprocess.check_output([uv, "pip", "list"], text=True)
+        if "cffi" in installed_packages:
+            raise Exception("A `cffi` package was discovered for a non-PyPy.")
+        if platform.python_implementation() == "PyPy":
+            if "cffi" not in installed_packages:
+                raise Exception("The vendored `cffi` wasn't discovered for PyPy.")
+        else:
+            if "pylint" in installed_packages:
+                raise Exception(
+                    "The package `pylint` is not discovered in the virtual environment."
+                )
 
         # Uninstall the package (`pylint`).
         logging.info("Uninstalling the package `pylint`.")
