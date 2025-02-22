@@ -35,13 +35,15 @@ pub(crate) enum Level {
     ExtraVerbose,
 }
 
+/// Enum to set the log level for the file logs
+// Discuss if we need to seperate trace or debug and the heirarchical layer or not into different args (based on what the use cases are)
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum FileLogLevel {
 
     /// Write debug messages to the log file.
     #[default]
     Verbose,
-    /// Write messages in a hierarchical span tree to the log file, debug messages are written.
+    /// Write messages in a hierarchical span tree to the log file, debug or lower messages are written.
     ExtraVerbose,
     /// Write trace level logs to the log file.
     TraceVerbose,
@@ -222,36 +224,40 @@ pub(crate) fn setup_logging(
         let file_filter = EnvFilter::try_new(file_filter_str)
         .unwrap_or_else(|_| EnvFilter::new("uv=debug"));
         let file_fomat = UvFormat {
-            display_timestamp: true,
+            // Setting timestamp display as false as to mimic the behavior of the console logs 
+            // however wanted to discuss:                                                                                                           the case where user might want to know when they wrote the logs 
+            display_timestamp: false,
             display_level: true,
             show_spans: false,
         };
 
         let mut new_path = path.clone();
         new_path.set_extension("log");
+
         // Discuss if previous content should be overwritten or appended.
-        // If it doesn't exist, create it. 
+        // Should it panic or gracefully exit just without logging in case of failure to open or create the file.
         let log_file = std::fs::OpenOptions::new()
         .append(true)
         .create(true)
         .open(&new_path)
         .with_context(|| format!("Failed to open or create log file: {:?}", new_path))?;
 
+        // Forcing no anstream in file logs, I don't like the idea of using the same env variable NO_COLOR or cli flag to control both console and file logs
+        // If there is a case to introduce color for file logs we can introduce a new env variable or cli flag for it.
         let file_writer = std::sync::Mutex::new(anstream::AutoStream::new(log_file, anstream::ColorChoice::Never));
 
         // Depending on the log level, different layers are added to the subscriber. However me might need to seperate trace or debug and the heirarchical layer or not into different args (based on what the use cases are)
         match file_log_level {
             FileLogLevel::Verbose | FileLogLevel::TraceVerbose => {
                 layers.push(tracing_subscriber::fmt::layer()
-                    .with_ansi(false)
                     .event_format(file_fomat)
                     .with_writer(file_writer)
                     .with_filter(file_filter).boxed());
+                    
             }
             FileLogLevel::ExtraVerbose | FileLogLevel::TraceExtraVerbose=> {
                 layers.push(
                 HierarchicalLayer::default()
-                    .with_ansi(false)
                     .with_writer(file_writer)
                     .with_timer(Uptime::default())
                     .with_filter(file_filter).boxed());
