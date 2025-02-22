@@ -103,7 +103,7 @@ url = "https://pkgs.dev.azure.com/<ORGANIZATION>/<PROJECT>/_packaging/<FEED>/pyp
 publish-url = "https://pkgs.dev.azure.com/<ORGANIZATION>/<PROJECT>/_packaging/<FEED>/pypi/upload/"
 ```
 
-Then, configure a password (if not using keyring):
+Then, configure credentials (if not using keyring):
 
 ```console
 $ export UV_PUBLISH_USERNAME=dummy
@@ -223,7 +223,7 @@ url = "https://<REGION>-python.pkg.dev/<PROJECT>/<REPOSITORY>"
 publish-url = "https://<REGION>-python.pkg.dev/<PROJECT>/<REPOSITORY>"
 ```
 
-Then, configure a password (if not using keyring):
+Then, configure credentials (if not using keyring):
 
 ```console
 $ export UV_PUBLISH_USERNAME=oauth2accesstoken
@@ -345,7 +345,7 @@ url = "https://<DOMAIN>-<ACCOUNT_ID>.d.codeartifact.<REGION>.amazonaws.com/pypi/
 publish-url = "https://<DOMAIN>-<ACCOUNT_ID>.d.codeartifact.<REGION>.amazonaws.com/pypi/<REPOSITORY>/"
 ```
 
-Then, configure a password (if not using keyring):
+Then, configure credentials (if not using keyring):
 
 ```console
 $ export UV_PUBLISH_USERNAME=aws
