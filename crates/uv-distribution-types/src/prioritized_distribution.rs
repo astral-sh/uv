@@ -294,8 +294,6 @@ pub enum IncompatibleWheel {
     /// The wheel tags do not match those of the target Python platform.
     Tag(IncompatibleTag),
     /// The required Python version is not a superset of the target Python version range.
-    ///
-    /// TODO(charlie): Consider making this two variants to reduce enum size.
     RequiresPython(VersionSpecifiers, PythonRequirementKind),
     /// The wheel was yanked.
     Yanked(Yanked),
