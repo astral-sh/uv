@@ -26,15 +26,24 @@ either by using a
 [Personal Access Token](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=Windows)
 (PAT), or using the [`keyring`](https://github.com/jaraco/keyring) package.
 
-To use Azure Artifacts, add the index to your project:
+If there is a PAT available (eg
+[`$(System.AccessToken)` in an Azure pipeline](https://learn.microsoft.com/en-us/azure/devops/pipelines/build/variables?view=azure-devops&tabs=yaml#systemaccesstoken)),
+credentials can be provided via the `UV_INDEX_[index name]_[username/password]` environment
+variables as described in
+[Providing credentials](../../configuration/indexes.md#providing-credentials), using your PAT as the
+password and an arbitrary string like "dummy" as the username.
 
-```toml title="pyproject.toml"
-[[tool.uv.index]]
-name = "private-registry"
-url = "https://pkgs.dev.azure.com/<ORGANIZATION>/<PROJECT>/_packaging/<FEED>/pypi/simple/"
+Alternatively, encode credentials in the `UV_INDEX` environment variable. For example, with the
+token stored in the `$ADO_PAT` environment variable, set the index URL with:
+
+```console
+$ export UV_INDEX=https://dummy:$ADO_PAT@pkgs.dev.azure.com/{organisation}/{project}/_packaging/{feedName}/pypi/simple/
 ```
 
-### Authenticate with an Azure access token
+This method is not normally recommended since `uv sync` then copies the url to the `pyproject.toml`,
+exposing the PAT in plaintext.
+
+### Using `keyring`
 
 If there is a personal access token (PAT) available (e.g.,
 [`$(System.AccessToken)` in an Azure pipeline](https://learn.microsoft.com/en-us/azure/devops/pipelines/build/variables?view=azure-devops&tabs=yaml#systemaccesstoken)),
