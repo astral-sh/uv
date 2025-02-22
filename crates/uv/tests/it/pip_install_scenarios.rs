@@ -3727,7 +3727,7 @@ fn python_greater_than_current_excluded() {
 
     uv_snapshot!(filters, command(&context)
         .arg("python-greater-than-current-excluded-a>=2.0.0")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3747,7 +3747,8 @@ fn python_greater_than_current_excluded() {
           Because the current Python version (3.9.[X]) does not satisfy Python>=3.12 and package-a==4.0.0 depends on Python>=3.12, we can conclude that package-a==4.0.0 cannot be used.
           And because we know from (2) that package-a>=2.0.0,<4.0.0 cannot be used, we can conclude that package-a>=2.0.0 cannot be used.
           And because you require package-a>=2.0.0, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -3801,7 +3802,7 @@ fn python_greater_than_current_many() {
 
     uv_snapshot!(filters, command(&context)
         .arg("python-greater-than-current-many-a==1.0.0")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3809,7 +3810,8 @@ fn python_greater_than_current_many() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there is no version of package-a==1.0.0 and you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,

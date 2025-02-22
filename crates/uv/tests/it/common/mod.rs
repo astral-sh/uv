@@ -123,7 +123,7 @@ impl TestContext {
         // To Disucess: As things stand currently all tests would create file logs but the logs wouldn't persist (would be cleaned up when the Temp_dir is cleaned) unless the `UV_LOG_DIR` env var is set. However this might be costly and slow testing for those who don't want to log for tests and cli testing, so do we add an option to turn off testing. 
         // Seperating how logging is done for snapshot compareted to a how a user would log might be something to dicuss too. Like use a seperate env variable for setting the log file for snapshot testing.
         let mut new = Self::new_with_versions(&[python_version]);
-        new.extra_env.push((EnvVars::UV_LOG.into(), Location::caller().to_string().rsplit('/').next().unwrap().into()));
+        new.extra_env.push((EnvVars::UV_LOG.into(), Location::caller().file().to_string().rsplit('/').next().unwrap().into()));
         new.create_venv();
         new
     }
@@ -539,7 +539,7 @@ impl TestContext {
             python_version,
             python_versions,
             filters,
-            extra_env: vec![(EnvVars::UV_LOG.into(), Location::caller().to_string().rsplit('/').next().unwrap().into())],
+            extra_env: vec![(EnvVars::UV_LOG.into(), Location::caller().file().to_string().rsplit('/').next().unwrap().into())],
             _root: root,
         }
     }
