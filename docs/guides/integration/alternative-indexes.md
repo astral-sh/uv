@@ -137,7 +137,7 @@ access token, or using the [`keyring`](https://github.com/jaraco/keyring) packag
     This guide assumes that [`gcloud`](https://cloud.google.com/sdk/gcloud) CLI is installed and
     authenticated.
 
-The index can be declared like so:
+To use Google Artifact Registry, add the index to your project:
 
 ```toml title="pyproject.toml"
 [[tool.uv.index]]
@@ -145,7 +145,7 @@ name = "private-registry"
 url = "https://<REGION>-python.pkg.dev/<PROJECT>/<REPOSITORY>"
 ```
 
-### Using access token
+### Authenticate with a Google access token
 
 Credentials can be provided via "Basic" HTTP authentication scheme. Include access token in the
 password field of the URL. Username must be `oauth2accesstoken`, otherwise authentication will fail.
@@ -170,7 +170,11 @@ export UV_INDEX_PRIVATE_REGISTRY_USERNAME=oauth2accesstoken
 export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$ARTIFACT_REGISTRY_TOKEN"
 ```
 
-### Using `keyring`
+!!! note
+
+    `PRIVATE_REGISTRY` should match the name of the index defined in your `pyproject.toml`.
+
+### Authenticate with `keyring` and `keyrings.google-artifactregistry-auth`
 
 You can also authenticate to Artifact Registry using [`keyring`](https://github.com/jaraco/keyring)
 package with the
@@ -198,31 +202,19 @@ export UV_KEYRING_PROVIDER=subprocess
 export UV_INDEX_PRIVATE_REGISTRY_USERNAME=oauth2accesstoken
 ```
 
-### Publishing packages
+!!! note
 
-If you also want to publish your own packages to Artifact Registry, you can either use `uv publish`
-or `uv publish --index <name>`, as described [here](../package.md).
+    The [`tool.uv.keyring-provider`](../../reference/settings.md#keyring-provider--keyring-provider-)
+    setting can be used to enable keyring in your `uv.toml` or `pyproject.toml`.
 
-#### Using `uv publish`
+    Similarly, the username for the index can be added directly to the index URL.
 
-Publish the package to the index by first setting up URL and credentials:
+### Publishing packages to Google Artifact Registry
 
-```bash
-# Configure uv to use Artifact Registry
-export UV_PUBLISH_URL="https://<REGION>-python.pkg.dev/<PROJECT>/<REPOSITORY>"
-export UV_PUBLISH_USERNAME=oauth2accesstoken
-export UV_PUBLISH_PASSWORD="$ARTIFACT_REGISTRY_TOKEN" # (1)
+If you also want to publish your own packages to Google Artifact Registry, you can use `uv publish`
+as described in the [Building and publishing guide](../package.md).
 
-# Publish the package
-uv publish
-```
-
-1.  Only needed if you do not use `keyring`.
-
-#### Using `uv publish --index <name>`
-
-Add `publish-url` to the index you want to publish packages to. For instance, taking the index
-defined earlier:
+First, add a `publish-url` to the index you want to publish packages to. For example:
 
 ```toml title="pyproject.toml" hl_lines="4"
 [[tool.uv.index]]
@@ -231,18 +223,28 @@ url = "https://<REGION>-python.pkg.dev/<PROJECT>/<REPOSITORY>"
 publish-url = "https://<REGION>-python.pkg.dev/<PROJECT>/<REPOSITORY>"
 ```
 
-Then, publish the package to the index by first setting up credentials:
+Then, configure a password (if not using keyring):
 
-```bash
-# Configure uv to use Artifact Registry credentials
-export UV_PUBLISH_USERNAME=oauth2accesstoken
-export UV_PUBLISH_PASSWORD="$ARTIFACT_REGISTRY_TOKEN" # (1)
-
-# Publish the package
-uv publish --index private-registry
+```console
+$ export UV_PUBLISH_USERNAME=oauth2accesstoken
+$ export UV_PUBLISH_PASSWORD="$ARTIFACT_REGISTRY_TOKEN"
 ```
 
-1.  Only needed if you do not use `keyring`.
+And publish the package:
+
+```console
+$ uv publish --index private-registry
+```
+
+To use `uv publish` without adding the `publish-url` to the project, you can set `UV_PUBLISH_URL`:
+
+```console
+$ export UV_PUBLISH_URL=https://<REGION>-python.pkg.dev/<PROJECT>/<REPOSITORY>
+$ uv publish
+```
+
+Note this method is not preferable because uv cannot check if the package is already published
+before uploading artifacts.
 
 ## AWS CodeArtifact
 
@@ -262,7 +264,7 @@ name = "private-registry"
 url = "https://<DOMAIN>-<ACCOUNT_ID>.d.codeartifact.<REGION>.amazonaws.com/pypi/<REPOSITORY>/simple/"
 ```
 
-### Using access token
+### Authenticate with an AWS access token
 
 Credentials can be provided via "Basic" HTTP authentication scheme. Include access token in the
 password field of the URL. Username must be `aws`, otherwise authentication will fail.
@@ -291,7 +293,11 @@ export UV_INDEX_PRIVATE_REGISTRY_USERNAME=aws
 export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$AWS_CODEARTIFACT_TOKEN"
 ```
 
-### Using `keyring`
+!!! note
+
+    `PRIVATE_REGISTRY` should match the name of the index defined in your `pyproject.toml`.
+
+### Authenticate with `keyring` and `keyrings.codeartifact`
 
 You can also authenticate to Artifact Registry using [`keyring`](https://github.com/jaraco/keyring)
 package with the [`keyrings.codeartifact` plugin](https://github.com/jmkeyes/keyrings.codeartifact).
@@ -318,31 +324,19 @@ export UV_KEYRING_PROVIDER=subprocess
 export UV_INDEX_PRIVATE_REGISTRY_USERNAME=aws
 ```
 
-### Publishing packages
+!!! note
 
-If you also want to publish your own packages to AWS CodeArtifact, you can either use `uv publish`
-or `uv publish --index <name>`, as described [here](../package.md).
+    The [`tool.uv.keyring-provider`](../../reference/settings.md#keyring-provider--keyring-provider-)
+    setting can be used to enable keyring in your `uv.toml` or `pyproject.toml`.
 
-#### Using `uv publish`
+    Similarly, the username for the index can be added directly to the index URL.
 
-Publish the package to the index by first setting up URL and credentials:
+### Publishing packages to AWS CodeArtifact
 
-```bash
-# Configure uv to use AWS CodeArtifact
-export UV_PUBLISH_URL=https://<DOMAIN>-<ACCOUNT_ID>.d.codeartifact.<REGION>.amazonaws.com/pypi/<REPOSITORY>/
-export UV_PUBLISH_USERNAME=aws
-export UV_PUBLISH_PASSWORD="$AWS_CODEARTIFACT_TOKEN" # (1)
+If you also want to publish your own packages to AWS CodeArtifact, you can use `uv publish` as
+described in the [Building and publishing guide](../package.md).
 
-# Publish the package
-uv publish
-```
-
-1.  Only needed if you do not use `keyring`.
-
-#### Using `uv publish --index <name>`
-
-Add `publish-url` to the index you want to publish packages to. For instance, taking the index
-defined earlier:
+First, add a `publish-url` to the index you want to publish packages to. For example:
 
 ```toml title="pyproject.toml" hl_lines="4"
 [[tool.uv.index]]
@@ -351,18 +345,28 @@ url = "https://<DOMAIN>-<ACCOUNT_ID>.d.codeartifact.<REGION>.amazonaws.com/pypi/
 publish-url = "https://<DOMAIN>-<ACCOUNT_ID>.d.codeartifact.<REGION>.amazonaws.com/pypi/<REPOSITORY>/"
 ```
 
-Then, publish the package to the index by first setting up credentials:
+Then, configure a password (if not using keyring):
 
-```bash
-# Configure uv to use AWS CodeArtifact credentials
-export UV_PUBLISH_USERNAME=aws
-export UV_PUBLISH_PASSWORD="$AWS_CODEARTIFACT_TOKEN" # (1)
-
-# Publish the package
-uv publish --index private-registry
+```console
+$ export UV_PUBLISH_USERNAME=aws
+$ export UV_PUBLISH_PASSWORD="$AWS_CODEARTIFACT_TOKEN"
 ```
 
-1.  Only needed if you do not use `keyring`.
+And publish the package:
+
+```console
+$ uv publish --index private-registry
+```
+
+To use `uv publish` without adding the `publish-url` to the project, you can set `UV_PUBLISH_URL`:
+
+```console
+$ export UV_PUBLISH_URL=https://<DOMAIN>-<ACCOUNT_ID>.d.codeartifact.<REGION>.amazonaws.com/pypi/<REPOSITORY>/
+$ uv publish
+```
+
+Note this method is not preferable because uv cannot check if the package is already published
+before uploading artifacts.
 
 ## Other package indexes
 
