@@ -56,9 +56,7 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
         } = self;
         requirements
             .map(|requirement| async {
-                Self::resolve_requirement(requirement, hasher, index, &database)
-                    .await
-                    .map(Requirement::from)
+                Self::resolve_requirement(requirement, hasher, index, &database).await
             })
             .collect::<FuturesOrdered<_>>()
             .try_collect()

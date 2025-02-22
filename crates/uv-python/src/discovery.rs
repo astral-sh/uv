@@ -1037,7 +1037,7 @@ pub(crate) fn find_python_installation(
     let mut first_error = None;
     for result in installations {
         // Iterate until the first critical error or happy result
-        if !result.as_ref().err().map_or(true, Error::is_critical) {
+        if !result.as_ref().err().is_none_or(Error::is_critical) {
             // Track the first non-critical error
             if first_error.is_none() {
                 if let Err(err) = result {
@@ -2214,7 +2214,7 @@ impl VersionRequest {
             Self::MajorMinorPrerelease(self_major, self_minor, self_prerelease, _) => {
                 // Pre-releases of Python versions are always for the zero patch version
                 (*self_major, *self_minor, 0) == (major, minor, patch)
-                    && prerelease.map_or(true, |pre| *self_prerelease == pre)
+                    && prerelease.is_none_or(|pre| *self_prerelease == pre)
             }
         }
     }
