@@ -1,5 +1,6 @@
 use std::fmt::Display;
 use std::fmt::Write;
+use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -88,6 +89,11 @@ pub(crate) async fn run(
     printer: Printer,
     preview: PreviewMode,
 ) -> anyhow::Result<ExitStatus> {
+    fn is_python_script(path: &Path) -> bool {
+        path.extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
+    }
+
     let Some(command) = command else {
         // When a command isn't provided, we'll show a brief help including available tools
         show_help(invocation_source, &cache, printer).await?;
@@ -103,6 +109,35 @@ pub(crate) async fn run(
     let Some(target) = target.to_str() else {
         return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
     };
+
+    if let Some(ref f) = from {
+        let possible_script = Path::new(f);
+        if is_python_script(possible_script) {
+            return Err(anyhow::anyhow!(
+                "It looks you have passed a script instead of a package into `--from`. \n\n{}{} Did you mean to run a tool with `{}`?",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    format!("{} --from {} {}", invocation_source, PackageName::new(possible_script.to_string_lossy().to_string())?.cyan(), target),
+            ));
+        }
+    } else {
+        let possible_script = Path::new(target);
+        if is_python_script(possible_script) {
+            return if possible_script.try_exists()? {
+                Err(anyhow::anyhow!(
+                    "It looks like you are trying to run a script. Did you mean `{}`?",
+                    format!("uv run {}", possible_script.display()).cyan()
+                ))
+            } else {
+                Err(anyhow::anyhow!(
+                    "It looks like you are trying to run a script that doesn't exist. \n\n{}{} Did you mean to run a tool with `{}`?",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    format!("{} {}", invocation_source, PackageName::new(possible_script.to_string_lossy().to_string())?.cyan()),
+                ))
+            };
+        }
+    }
 
     let request = ToolRequest::parse(target, from.as_deref());
 
