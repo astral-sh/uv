@@ -112,7 +112,7 @@ impl fmt::Display for EnvironmentNotFound {
                 "--system".green()
             )?,
             SearchType::VirtualOrSystem => {
-                write!(f, "; run `{}` to create an environment", "uv venv".green())?
+                write!(f, "; run `{}` to create an environment", "uv venv".green())?;
             }
             SearchType::System => {}
         }
