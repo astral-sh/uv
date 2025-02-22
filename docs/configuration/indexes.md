@@ -138,10 +138,7 @@ While `unsafe-best-match` is the closest to pip's behavior, it exposes users to 
 ## Providing credentials
 
 Most private registries require authentication to access packages, typically via a username and
-password (or access token).
-
-To authenticate with a provide index, either provide credentials via environment variables or embed
-them in the URL.
+password (or access token), either loaded from environment variables or embedded in the URL.
 
 For example, given an index named `internal-proxy` that requires a username (`public`) and password
 (`koala`), define the index (without credentials) in your `pyproject.toml`:
@@ -152,9 +149,9 @@ name = "internal-proxy"
 url = "https://example.com/simple"
 ```
 
-From there, you can set the `UV_INDEX_INTERNAL_PROXY_USERNAME` and
-`UV_INDEX_INTERNAL_PROXY_PASSWORD` environment variables, where `INTERNAL_PROXY` is the uppercase
-version of the index name, with non-alphanumeric characters replaced by underscores:
+Then set the `UV_INDEX_INTERNAL_PROXY_USERNAME` and `UV_INDEX_INTERNAL_PROXY_PASSWORD` environment
+variables, where `INTERNAL_PROXY` is the uppercase version of the index name, with non-alphanumeric
+characters replaced by underscores:
 
 ```sh
 export UV_INDEX_INTERNAL_PROXY_USERNAME=public
