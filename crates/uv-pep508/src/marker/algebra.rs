@@ -55,12 +55,12 @@ use itertools::{Either, Itertools};
 use rustc_hash::FxHashMap;
 use version_ranges::Ranges;
 
-use uv_pep440::{release_specifier_to_range, Operator, Version, VersionSpecifier};
+use uv_pep440::{Operator, Version, VersionSpecifier, release_specifier_to_range};
 
+use crate::marker::MarkerValueExtra;
 use crate::marker::lowering::{
     CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
 };
-use crate::marker::MarkerValueExtra;
 use crate::{
     ExtraOperator, MarkerExpression, MarkerOperator, MarkerValueString, MarkerValueVersion,
 };
@@ -153,11 +153,7 @@ impl InternerGuard<'_> {
             .entry(node.clone())
             .or_insert_with(|| NodeId::new(self.shared.nodes.push(node), false));
 
-        if flipped {
-            id.not()
-        } else {
-            *id
-        }
+        if flipped { id.not() } else { *id }
     }
 
     /// Returns a decision node for a single marker expression.
@@ -631,7 +627,7 @@ impl InternerGuard<'_> {
         // we recursively simplify.
         let Node {
             var: Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
-            children: Edges::Version { ref edges },
+            children: Edges::Version { edges },
         } = node
         else {
             // Simplify all nodes recursively.
@@ -713,7 +709,7 @@ impl InternerGuard<'_> {
         let node = self.shared.node(i);
         let Node {
             var: Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
-            children: Edges::Version { ref edges },
+            children: Edges::Version { edges },
         } = node
         else {
             // Complexify all nodes recursively.
@@ -1630,7 +1626,7 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
         Ok(match specifier.operator() {
             // `python_version` cannot have more than two release segments, so equality is impossible.
             Operator::Equal | Operator::ExactEqual | Operator::EqualStar | Operator::TildeEqual => {
-                return Err(NodeId::FALSE)
+                return Err(NodeId::FALSE);
             }
 
             // Similarly, inequalities are always `true`.
@@ -1708,7 +1704,7 @@ impl fmt::Debug for NodeId {
 
 #[cfg(test)]
 mod tests {
-    use super::{NodeId, INTERNER};
+    use super::{INTERNER, NodeId};
     use crate::MarkerExpression;
 
     fn expr(s: &str) -> NodeId {

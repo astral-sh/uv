@@ -40,9 +40,9 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
         use std::ops::Deref;
 
         use nix::sys::signal;
-        use nix::unistd::{getpgid, Pid};
+        use nix::unistd::{Pid, getpgid};
         use tokio::select;
-        use tokio::signal::unix::{signal as handle_signal, SignalKind};
+        use tokio::signal::unix::{SignalKind, signal as handle_signal};
 
         /// Simple new type for `Pid` allowing construction from [`Child`].
         ///

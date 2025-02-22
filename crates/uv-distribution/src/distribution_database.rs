@@ -10,7 +10,7 @@ use tempfile::TempDir;
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{info_span, instrument, warn, Instrument};
+use tracing::{Instrument, info_span, instrument, warn};
 use url::Url;
 
 use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
@@ -449,7 +449,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 Ok(ArchiveMetadata::from_metadata23(metadata))
             }
             Err(err) if err.is_http_streaming_unsupported() => {
-                warn!("Streaming unsupported when fetching metadata for {dist}; downloading wheel directly ({err})");
+                warn!(
+                    "Streaming unsupported when fetching metadata for {dist}; downloading wheel directly ({err})"
+                );
 
                 // If the request failed due to an error that could be resolved by
                 // downloading the wheel directly, try that.

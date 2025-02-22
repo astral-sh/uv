@@ -11,9 +11,9 @@ use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::Requirement;
 
 use crate::lenient_requirement::LenientRequirement;
-use crate::metadata::pyproject_toml::PyProjectToml;
 use crate::metadata::Headers;
-use crate::{metadata, LenientVersionSpecifiers, MetadataError, VerbatimParsedUrl};
+use crate::metadata::pyproject_toml::PyProjectToml;
+use crate::{LenientVersionSpecifiers, MetadataError, VerbatimParsedUrl, metadata};
 
 /// A subset of the full core metadata specification, including only the
 /// fields that are relevant to dependency resolution.
@@ -178,7 +178,7 @@ impl ResolutionMetadata {
             match field.as_str() {
                 "dependencies" => return Err(MetadataError::DynamicField("dependencies")),
                 "optional-dependencies" => {
-                    return Err(MetadataError::DynamicField("optional-dependencies"))
+                    return Err(MetadataError::DynamicField("optional-dependencies"));
                 }
                 "requires-python" => return Err(MetadataError::DynamicField("requires-python")),
                 // When building from a source distribution, the version is known from the filename and

@@ -7,8 +7,8 @@ use std::io::BufReader;
 use url::Url;
 
 use crate::common::{
-    self, build_vendor_links_url, decode_token, download_to_disk, packse_index_url, uv_snapshot,
-    venv_bin_path, TestContext,
+    self, TestContext, build_vendor_links_url, decode_token, download_to_disk, packse_index_url,
+    uv_snapshot, venv_bin_path,
 };
 use uv_fs::Simplified;
 use uv_static::EnvVars;

@@ -4,7 +4,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use configparser::ini::Ini;
-use futures::{stream::FuturesOrdered, TryStreamExt};
+use futures::{TryStreamExt, stream::FuturesOrdered};
 use serde::Deserialize;
 use tracing::debug;
 use url::Host;

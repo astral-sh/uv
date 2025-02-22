@@ -1,5 +1,5 @@
-use std::collections::btree_map::{BTreeMap, Entry};
 use std::collections::Bound;
+use std::collections::btree_map::{BTreeMap, Entry};
 use std::ops::RangeBounds;
 use std::sync::OnceLock;
 
@@ -21,7 +21,7 @@ use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
-use crate::{yanks::AllowedYanks, ExcludeNewer, RequiresPython};
+use crate::{ExcludeNewer, RequiresPython, yanks::AllowedYanks};
 
 /// A map from versions to distributions.
 #[derive(Debug)]

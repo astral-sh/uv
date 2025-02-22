@@ -10,7 +10,7 @@ use fs_err::File;
 use itertools::Itertools;
 use tracing::debug;
 
-use uv_fs::{cachedir, Simplified, CWD};
+use uv_fs::{CWD, Simplified, cachedir};
 use uv_pypi_types::Scheme;
 use uv_python::{Interpreter, VirtualEnvironment};
 use uv_shell::escape_posix_for_single_quotes;

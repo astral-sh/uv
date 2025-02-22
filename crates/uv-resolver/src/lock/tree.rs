@@ -2,9 +2,9 @@ use std::collections::{BTreeSet, VecDeque};
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use petgraph::Direction;
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::prelude::EdgeRef;
-use petgraph::Direction;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_configuration::DevGroupsManifest;

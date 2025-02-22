@@ -270,9 +270,13 @@ mod tests {
 
         // Two URLs should _not_ be considered equal if they request different subdirectories.
         assert_ne!(
-             CanonicalUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_a")?,
-             CanonicalUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_b")?,
-         );
+            CanonicalUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_a"
+            )?,
+            CanonicalUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_b"
+            )?,
+        );
 
         // Two URLs should _not_ be considered equal if they request different commit tags.
         assert_ne!(
@@ -350,9 +354,13 @@ mod tests {
         // Two URLs should be considered equal if they map to the same repository, even if they
         // request different subdirectories.
         assert_eq!(
-             RepositoryUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_a")?,
-             RepositoryUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_b")?,
-         );
+            RepositoryUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_a"
+            )?,
+            RepositoryUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_b"
+            )?,
+        );
 
         // Two URLs should be considered equal if they map to the same repository, even if they
         // request different commit tags.

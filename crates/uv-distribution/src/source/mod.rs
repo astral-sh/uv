@@ -18,7 +18,7 @@ use fs_err::tokio as fs;
 use futures::{FutureExt, TryStreamExt};
 use reqwest::{Response, StatusCode};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, info_span, instrument, warn, Instrument};
+use tracing::{Instrument, debug, info_span, instrument, warn};
 use url::Url;
 use zip::ZipArchive;
 
@@ -39,7 +39,7 @@ use uv_fs::{rename_with_retry, write_atomic};
 use uv_git_types::{GitHubRepository, GitOid};
 use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
-use uv_pep440::{release_specifiers_to_ranges, Version};
+use uv_pep440::{Version, release_specifiers_to_ranges};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashAlgorithm, HashDigest, PyProjectToml, ResolutionMetadata};
 use uv_types::{BuildContext, BuildStack, SourceBuildTrait};
@@ -1573,7 +1573,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         // Nothing to do.
                     }
                     Err(err) => {
-                        debug!("Failed to fetch `pyproject.toml` via GitHub fast path for: {source} ({err})");
+                        debug!(
+                            "Failed to fetch `pyproject.toml` via GitHub fast path for: {source} ({err})"
+                        );
                     }
                 }
             }

@@ -16,10 +16,10 @@ use tokio_util::either::Either;
 use tracing::{debug, instrument};
 use url::Url;
 
-use uv_client::{is_extended_transient_error, WrappedReqwestError};
+use uv_client::{WrappedReqwestError, is_extended_transient_error};
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
-use uv_fs::{rename_with_retry, Simplified};
+use uv_fs::{Simplified, rename_with_retry};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_static::EnvVars;
 
@@ -80,9 +80,7 @@ pub enum Error {
     InvalidRequestPlatform(#[from] platform::Error),
     #[error("No download found for request: {}", _0.green())]
     NoDownloadFound(PythonDownloadRequest),
-    #[error(
-        "A mirror was provided via `{0}`, but the URL does not match the expected format: {0}"
-    )]
+    #[error("A mirror was provided via `{0}`, but the URL does not match the expected format: {0}")]
     Mirror(&'static str, &'static str),
     #[error(transparent)]
     LibcDetection(#[from] LibcDetectionError),
@@ -354,7 +352,9 @@ impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
             Some(VersionRequest::from(&key.version())),
             match &key.implementation {
                 LenientImplementationName::Known(implementation) => Some(*implementation),
-                LenientImplementationName::Unknown(name) => unreachable!("Managed Python installations are expected to always have known implementation names, found {name}"),
+                LenientImplementationName::Unknown(name) => unreachable!(
+                    "Managed Python installations are expected to always have known implementation names, found {name}"
+                ),
             },
             Some(key.arch),
             Some(key.os),

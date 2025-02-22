@@ -11,10 +11,10 @@ use same_file::is_same_file;
 use thiserror::Error;
 use tracing::{debug, warn};
 
-use uv_fs::{symlink_or_copy_file, LockedFile, Simplified};
+use uv_fs::{LockedFile, Simplified, symlink_or_copy_file};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
-use uv_trampoline_builder::{windows_python_launcher, Launcher};
+use uv_trampoline_builder::{Launcher, windows_python_launcher};
 
 use crate::downloads::{Error as DownloadError, ManagedPythonDownload};
 use crate::implementation::{
@@ -25,7 +25,7 @@ use crate::libc::LibcDetectionError;
 use crate::platform::Error as PlatformError;
 use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
-use crate::{macos_dylib, sysconfig, PythonRequest, PythonVariant};
+use crate::{PythonRequest, PythonVariant, macos_dylib, sysconfig};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -189,7 +189,7 @@ impl ManagedPythonInstallations {
     /// This ensures a consistent ordering across all platforms.
     pub fn find_all(
         &self,
-    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation>, Error> {
+    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + use<>, Error> {
         let dirs = match fs_err::read_dir(&self.root) {
             Ok(installation_dirs) => {
                 // Collect sorted directory paths; `read_dir` is not stable across platforms
@@ -213,7 +213,7 @@ impl ManagedPythonInstallations {
                 return Err(Error::ReadError {
                     dir: self.root.clone(),
                     err,
-                })
+                });
             }
         };
         let scratch = self.scratch();
@@ -241,7 +241,7 @@ impl ManagedPythonInstallations {
     /// Iterate over Python installations that support the current platform.
     pub fn find_matching_current_platform(
         &self,
-    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation>, Error> {
+    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + use<>, Error> {
         let os = Os::from_env();
         let arch = Arch::from_env();
         let libc = Libc::from_env()?;
@@ -267,7 +267,7 @@ impl ManagedPythonInstallations {
     /// - The platform metadata cannot be read
     /// - A directory for the installation cannot be read
     pub fn find_version<'a>(
-        &self,
+        &'a self,
         version: &'a PythonVersion,
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + 'a, Error> {
         Ok(self
@@ -486,7 +486,7 @@ impl ManagedPythonInstallation {
                     );
                 }
                 Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                    return Err(Error::MissingExecutable(python.clone()))
+                    return Err(Error::MissingExecutable(python.clone()));
                 }
                 Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
                 Err(err) => {
@@ -494,7 +494,7 @@ impl ManagedPythonInstallation {
                         from: executable,
                         to: python,
                         err,
-                    })
+                    });
                 }
             };
         }

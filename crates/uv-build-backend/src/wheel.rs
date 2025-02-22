@@ -12,7 +12,7 @@ use zip::{CompressionMethod, ZipWriter};
 
 use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
-use uv_globfilter::{parse_portable_glob, GlobDirFilter};
+use uv_globfilter::{GlobDirFilter, parse_portable_glob};
 use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
 use uv_warnings::warn_user_once;
 

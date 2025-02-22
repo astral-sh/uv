@@ -5,8 +5,8 @@ use std::str::Utf8Error;
 use fs_err::File;
 use thiserror::Error;
 use uv_fs::Simplified;
-use zip::write::FileOptions;
 use zip::ZipWriter;
+use zip::write::FileOptions;
 
 #[cfg(all(windows, target_arch = "x86"))]
 const LAUNCHER_I686_GUI: &[u8] =
@@ -323,7 +323,7 @@ mod test {
 
     use which::which;
 
-    use super::{windows_python_launcher, windows_script_launcher, Launcher, LauncherKind};
+    use super::{Launcher, LauncherKind, windows_python_launcher, windows_script_launcher};
 
     #[test]
     #[cfg(all(windows, target_arch = "x86", feature = "production"))]

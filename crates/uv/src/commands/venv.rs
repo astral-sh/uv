@@ -26,16 +26,16 @@ use uv_python::{
 };
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
-use uv_shell::{shlex_posix, shlex_windows, Shell};
+use uv_shell::{Shell, shlex_posix, shlex_windows};
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
 
-use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
-use crate::commands::pip::operations::{report_interpreter, Changelog};
-use crate::commands::project::{validate_project_requires_python, WorkspacePython};
-use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
+use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
+use crate::commands::pip::operations::{Changelog, report_interpreter};
+use crate::commands::project::{WorkspacePython, validate_project_requires_python};
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
 
 /// Create a virtual environment.

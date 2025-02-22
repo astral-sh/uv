@@ -39,7 +39,7 @@ use uv_distribution_types::{
     IndexUrl, NameRequirementSpecification, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
 };
-use uv_fs::{Simplified, CWD};
+use uv_fs::{CWD, Simplified};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::{MarkerTree, UnnamedRequirement, UnnamedRequirementUrl};
 use uv_pypi_types::Requirement;

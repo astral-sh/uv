@@ -3,12 +3,12 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use glob::{glob, GlobError, PatternError};
+use glob::{GlobError, PatternError, glob};
 use rustc_hash::FxHashSet;
 use tracing::{debug, trace, warn};
 use uv_distribution_types::Index;
-use uv_fs::{Simplified, CWD};
-use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_fs::{CWD, Simplified};
+use uv_normalize::{DEV_DEPENDENCIES, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl};
 use uv_pypi_types::{
@@ -1497,9 +1497,9 @@ mod tests {
 
     use uv_normalize::GroupName;
 
+    use crate::WorkspaceError;
     use crate::pyproject::{DependencyGroupSpecifier, PyProjectToml};
     use crate::workspace::{DiscoveryOptions, ProjectWorkspace};
-    use crate::WorkspaceError;
 
     async fn workspace_test(folder: &str) -> (ProjectWorkspace, String) {
         let root_dir = env::current_dir()

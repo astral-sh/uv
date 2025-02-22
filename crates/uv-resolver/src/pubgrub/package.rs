@@ -181,10 +181,9 @@ impl PubGrubPackage {
             | PubGrubPackageInner::Dev { .. }
             | PubGrubPackageInner::Marker { .. } => None,
             PubGrubPackageInner::Package {
-                extra: Some(ref extra),
-                ..
+                extra: Some(extra), ..
             }
-            | PubGrubPackageInner::Extra { ref extra, .. } => Some(extra),
+            | PubGrubPackageInner::Extra { extra, .. } => Some(extra),
         }
     }
 
@@ -201,10 +200,8 @@ impl PubGrubPackage {
             | PubGrubPackageInner::Package { dev: None, .. }
             | PubGrubPackageInner::Extra { .. }
             | PubGrubPackageInner::Marker { .. } => None,
-            PubGrubPackageInner::Package {
-                dev: Some(ref dev), ..
-            }
-            | PubGrubPackageInner::Dev { ref dev, .. } => Some(dev),
+            PubGrubPackageInner::Package { dev: Some(dev), .. }
+            | PubGrubPackageInner::Dev { dev, .. } => Some(dev),
         }
     }
 

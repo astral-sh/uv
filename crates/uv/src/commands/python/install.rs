@@ -4,8 +4,8 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Error, Result};
-use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use futures::stream::FuturesUnordered;
 use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -17,7 +17,7 @@ use uv_configuration::TrustedHost;
 use uv_fs::Simplified;
 use uv_python::downloads::{self, DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
 use uv_python::managed::{
-    python_executable_dir, ManagedPythonInstallation, ManagedPythonInstallations,
+    ManagedPythonInstallation, ManagedPythonInstallations, python_executable_dir,
 };
 use uv_python::platform::Libc;
 use uv_python::{
@@ -30,7 +30,7 @@ use uv_warnings::warn_user;
 
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{elapsed, ExitStatus};
+use crate::commands::{ExitStatus, elapsed};
 use crate::printer::Printer;
 
 #[derive(Debug, Clone)]
@@ -143,7 +143,10 @@ pub(crate) async fn install(
     let start = std::time::Instant::now();
 
     if default && !preview.is_enabled() {
-        writeln!(printer.stderr(), "The `--default` flag is only available in preview mode; add the `--preview` flag to use `--default`")?;
+        writeln!(
+            printer.stderr(),
+            "The `--default` flag is only available in preview mode; add the `--preview` flag to use `--default`"
+        )?;
         return Ok(ExitStatus::Failure);
     }
 

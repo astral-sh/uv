@@ -76,13 +76,13 @@ impl RequirementsTxtRequirement {
                 let parsed_url = match url.parsed_url {
                     ParsedUrl::Directory(parsed_url) => parsed_url,
                     ParsedUrl::Path(_) => {
-                        return Err(EditableError::File(requirement.name, url.to_string()))
+                        return Err(EditableError::File(requirement.name, url.to_string()));
                     }
                     ParsedUrl::Archive(_) => {
-                        return Err(EditableError::Https(requirement.name, url.to_string()))
+                        return Err(EditableError::Https(requirement.name, url.to_string()));
                     }
                     ParsedUrl::Git(_) => {
-                        return Err(EditableError::Git(requirement.name, url.to_string()))
+                        return Err(EditableError::Git(requirement.name, url.to_string()));
                     }
                 };
 
@@ -101,13 +101,13 @@ impl RequirementsTxtRequirement {
                 let parsed_url = match requirement.url.parsed_url {
                     ParsedUrl::Directory(parsed_url) => parsed_url,
                     ParsedUrl::Path(_) => {
-                        return Err(EditableError::UnnamedFile(requirement.to_string()))
+                        return Err(EditableError::UnnamedFile(requirement.to_string()));
                     }
                     ParsedUrl::Archive(_) => {
-                        return Err(EditableError::UnnamedHttps(requirement.to_string()))
+                        return Err(EditableError::UnnamedHttps(requirement.to_string()));
                     }
                     ParsedUrl::Git(_) => {
-                        return Err(EditableError::UnnamedGit(requirement.to_string()))
+                        return Err(EditableError::UnnamedGit(requirement.to_string()));
                     }
                 };
 

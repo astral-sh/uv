@@ -36,7 +36,7 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::operations::{report_interpreter, report_target_environment};
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
-use crate::commands::{diagnostics, ExitStatus};
+use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 
 /// Install a set of locked requirements into the current Python environment.
@@ -126,7 +126,10 @@ pub(crate) async fn pip_sync(
     if !allow_empty_requirements {
         let num_requirements = requirements.len() + source_trees.len();
         if num_requirements == 0 {
-            writeln!(printer.stderr(), "No requirements found (hint: use `--allow-empty-requirements` to clear the environment)")?;
+            writeln!(
+                printer.stderr(),
+                "No requirements found (hint: use `--allow-empty-requirements` to clear the environment)"
+            )?;
             return Ok(ExitStatus::Success);
         }
     }
@@ -383,7 +386,7 @@ pub(crate) async fn pip_sync(
         Err(err) => {
             return diagnostics::OperationDiagnostic::native_tls(native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
     };
 
@@ -417,7 +420,7 @@ pub(crate) async fn pip_sync(
         Err(err) => {
             return diagnostics::OperationDiagnostic::native_tls(native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
     }
 

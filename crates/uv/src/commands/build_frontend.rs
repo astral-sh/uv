@@ -11,10 +11,10 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::instrument;
 
-use crate::commands::pip::operations;
-use crate::commands::project::{find_requires_python, ProjectError};
-use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
+use crate::commands::pip::operations;
+use crate::commands::project::{ProjectError, find_requires_python};
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
 use uv_build_backend::check_direct_build;
@@ -29,7 +29,7 @@ use uv_distribution_filename::{
     DistFilename, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, SourceDist};
-use uv_fs::{relative_to, Simplified};
+use uv_fs::{Simplified, relative_to};
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -272,7 +272,13 @@ async fn build_impl(
         if !package.pyproject_toml().is_package() {
             let name = &package.project().name;
             let pyproject_toml = package.root().join("pyproject.toml");
-            return Err(anyhow::anyhow!("Package `{}` is missing a `{}`. For example, to build with `{}`, add the following to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```", name.cyan(), "build-system".green(), "setuptools".cyan(), pyproject_toml.user_display().cyan()));
+            return Err(anyhow::anyhow!(
+                "Package `{}` is missing a `{}`. For example, to build with `{}`, add the following to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```",
+                name.cyan(),
+                "build-system".green(),
+                "setuptools".cyan(),
+                pyproject_toml.user_display().cyan()
+            ));
         }
 
         vec![AnnotatedSource::from(Source::Directory(Cow::Borrowed(
@@ -311,7 +317,13 @@ async fn build_impl(
             let member = workspace.packages().values().next().unwrap();
             let name = &member.project().name;
             let pyproject_toml = member.root().join("pyproject.toml");
-            return Err(anyhow::anyhow!("Workspace does contain any buildable packages. For example, to build `{}` with `{}`, add a `{}` to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```", name.cyan(), "setuptools".cyan(), "build-system".green(), pyproject_toml.user_display().cyan()));
+            return Err(anyhow::anyhow!(
+                "Workspace does contain any buildable packages. For example, to build `{}` with `{}`, add a `{}` to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```",
+                name.cyan(),
+                "setuptools".cyan(),
+                "build-system".green(),
+                pyproject_toml.user_display().cyan()
+            ));
         }
 
         packages

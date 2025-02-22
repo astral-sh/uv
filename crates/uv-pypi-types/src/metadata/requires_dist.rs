@@ -41,7 +41,7 @@ impl RequiresDist {
             match field.as_str() {
                 "dependencies" => return Err(MetadataError::DynamicField("dependencies")),
                 "optional-dependencies" => {
-                    return Err(MetadataError::DynamicField("optional-dependencies"))
+                    return Err(MetadataError::DynamicField("optional-dependencies"));
                 }
                 "version" => {
                     dynamic = true;

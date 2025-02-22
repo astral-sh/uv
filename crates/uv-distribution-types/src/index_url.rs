@@ -10,7 +10,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
 use url::{ParseError, Url};
 
-use uv_pep508::{split_scheme, Scheme, VerbatimUrl, VerbatimUrlError};
+use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
 
 use crate::{Index, Verbatim};
 
@@ -72,7 +72,7 @@ impl schemars::JsonSchema for IndexUrl {
         "IndexUrl".to_string()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
         schemars::schema::SchemaObject {
             instance_type: Some(schemars::schema::InstanceType::String.into()),
             metadata: Some(Box::new(schemars::schema::Metadata {

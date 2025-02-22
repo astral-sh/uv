@@ -10,8 +10,8 @@ use tracing::{debug, instrument, trace};
 use which::{which, which_all};
 
 use uv_cache::Cache;
-use uv_fs::which::is_executable;
 use uv_fs::Simplified;
+use uv_fs::which::is_executable;
 use uv_pep440::{Prerelease, Version, VersionSpecifier, VersionSpecifiers};
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
@@ -26,11 +26,11 @@ use crate::managed::ManagedPythonInstallations;
 use crate::microsoft_store::find_microsoft_store_pythons;
 use crate::virtualenv::Error as VirtualEnvError;
 use crate::virtualenv::{
-    conda_environment_from_env, virtualenv_from_env, virtualenv_from_working_dir,
-    virtualenv_python_executable, CondaEnvironmentKind,
+    CondaEnvironmentKind, conda_environment_from_env, virtualenv_from_env,
+    virtualenv_from_working_dir, virtualenv_python_executable,
 };
 #[cfg(windows)]
-use crate::windows_registry::{registry_pythons, WindowsPython};
+use crate::windows_registry::{WindowsPython, registry_pythons};
 use crate::{Interpreter, PythonVersion};
 
 /// A request to find a Python installation.
@@ -247,8 +247,8 @@ pub enum Error {
 /// - Discovered virtual environment (e.g. `.venv` in a parent directory)
 ///
 /// Notably, "system" environments are excluded. See [`python_executables_from_installed`].
-fn python_executables_from_virtual_environments<'a>(
-) -> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a {
+fn python_executables_from_virtual_environments<'a>()
+-> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a {
     let from_active_environment = iter::once_with(|| {
         virtualenv_from_env()
             .into_iter()
@@ -313,10 +313,9 @@ fn python_executables_from_installed<'a>(
                     "Searching for managed installations at `{}`",
                     installed_installations.root().user_display()
                 );
-                let installations = installed_installations.find_matching_current_platform()?;
                 // Check that the Python version satisfies the request to avoid unnecessary interpreter queries later
-                Ok(installations
-                    .into_iter()
+                Ok(installed_installations
+                    .find_matching_current_platform()?
                     .filter(move |installation| {
                         if version.matches_version(&installation.version()) {
                             true
@@ -541,7 +540,7 @@ fn find_all_minor(
     implementation: Option<&ImplementationName>,
     version_request: &VersionRequest,
     dir: &Path,
-) -> impl Iterator<Item = PathBuf> {
+) -> impl Iterator<Item = PathBuf> + use<> {
     match version_request {
         &VersionRequest::Any
         | VersionRequest::Default
@@ -1225,8 +1224,8 @@ pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
         CreateFileW, FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS,
         FILE_FLAG_OPEN_REPARSE_POINT, MAXIMUM_REPARSE_DATA_BUFFER_SIZE, OPEN_EXISTING,
     };
-    use windows_sys::Win32::System::Ioctl::FSCTL_GET_REPARSE_POINT;
     use windows_sys::Win32::System::IO::DeviceIoControl;
+    use windows_sys::Win32::System::Ioctl::FSCTL_GET_REPARSE_POINT;
 
     // The path must be absolute.
     if !path.is_absolute() {
@@ -2666,7 +2665,7 @@ fn split_wheel_tag_release_version(version: Version) -> Version {
 mod tests {
     use std::{path::PathBuf, str::FromStr};
 
-    use assert_fs::{prelude::*, TempDir};
+    use assert_fs::{TempDir, prelude::*};
     use test_log::test;
     use uv_pep440::{Prerelease, PrereleaseKind, VersionSpecifiers};
 

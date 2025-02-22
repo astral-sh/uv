@@ -2,9 +2,9 @@ use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
 
 use serde::Deserialize;
-use toml_edit::value;
 use toml_edit::Table;
 use toml_edit::Value;
+use toml_edit::value;
 use toml_edit::{Array, Item};
 
 use uv_fs::{PortablePath, Simplified};

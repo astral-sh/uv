@@ -3,9 +3,9 @@ use std::ops::Bound;
 use std::str::FromStr;
 
 use crate::{
-    version, Operator, OperatorParseError, Version, VersionPattern, VersionPatternParseError,
+    Operator, OperatorParseError, Version, VersionPattern, VersionPatternParseError, version,
 };
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 #[cfg(feature = "tracing")]
 use tracing::warn;
 
@@ -92,7 +92,9 @@ impl VersionSpecifiers {
                 }
                 _ => {
                     #[cfg(feature = "tracing")]
-                    warn!("Ignoring unsupported gap in `requires-python` version: {next:?} -> {lower:?}");
+                    warn!(
+                        "Ignoring unsupported gap in `requires-python` version: {next:?} -> {lower:?}"
+                    );
                 }
             }
             next = upper;
@@ -808,15 +810,21 @@ mod tests {
     fn test_equal() {
         let version = Version::from_str("1.1.post1").unwrap();
 
-        assert!(!VersionSpecifier::from_str("== 1.1")
-            .unwrap()
-            .contains(&version));
-        assert!(VersionSpecifier::from_str("== 1.1.post1")
-            .unwrap()
-            .contains(&version));
-        assert!(VersionSpecifier::from_str("== 1.1.*")
-            .unwrap()
-            .contains(&version));
+        assert!(
+            !VersionSpecifier::from_str("== 1.1")
+                .unwrap()
+                .contains(&version)
+        );
+        assert!(
+            VersionSpecifier::from_str("== 1.1.post1")
+                .unwrap()
+                .contains(&version)
+        );
+        assert!(
+            VersionSpecifier::from_str("== 1.1.*")
+                .unwrap()
+                .contains(&version)
+        );
     }
 
     const VERSIONS_ALL: &[&str] = &[
@@ -1067,12 +1075,16 @@ mod tests {
 
     #[test]
     fn test_arbitrary_equality() {
-        assert!(VersionSpecifier::from_str("=== 1.2a1")
-            .unwrap()
-            .contains(&Version::from_str("1.2a1").unwrap()));
-        assert!(!VersionSpecifier::from_str("=== 1.2a1")
-            .unwrap()
-            .contains(&Version::from_str("1.2a1+local").unwrap()));
+        assert!(
+            VersionSpecifier::from_str("=== 1.2a1")
+                .unwrap()
+                .contains(&Version::from_str("1.2a1").unwrap())
+        );
+        assert!(
+            !VersionSpecifier::from_str("=== 1.2a1")
+                .unwrap()
+                .contains(&Version::from_str("1.2a1+local").unwrap())
+        );
     }
 
     #[test]

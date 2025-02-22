@@ -27,9 +27,9 @@
 pub use version_ranges::{release_specifier_to_range, release_specifiers_to_ranges};
 pub use {
     version::{
-        LocalSegment, LocalVersion, LocalVersionSlice, Operator, OperatorParseError, Prerelease,
-        PrereleaseKind, Version, VersionParseError, VersionPattern, VersionPatternParseError,
-        MIN_VERSION,
+        LocalSegment, LocalVersion, LocalVersionSlice, MIN_VERSION, Operator, OperatorParseError,
+        Prerelease, PrereleaseKind, Version, VersionParseError, VersionPattern,
+        VersionPatternParseError,
     },
     version_specifier::{
         VersionSpecifier, VersionSpecifierBuildError, VersionSpecifiers,

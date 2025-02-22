@@ -1,4 +1,4 @@
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;

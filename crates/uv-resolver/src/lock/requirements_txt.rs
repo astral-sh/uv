@@ -1,6 +1,6 @@
 use std::borrow::Cow;
-use std::collections::hash_map::Entry;
 use std::collections::VecDeque;
+use std::collections::hash_map::Entry;
 use std::fmt::Formatter;
 use std::path::{Component, Path, PathBuf};
 
@@ -20,7 +20,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{ConflictItem, ParsedArchiveUrl, ParsedGitUrl};
 
-use crate::graph_ops::{marker_reachability, Reachable};
+use crate::graph_ops::{Reachable, marker_reachability};
 use crate::lock::{Package, PackageId, Source};
 use crate::universal_marker::resolve_conflicts;
 use crate::{Installable, LockError};

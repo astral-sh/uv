@@ -12,9 +12,9 @@ use predicates::Predicate;
 use url::Url;
 
 use crate::common::{
-    download_to_disk, site_packages_path, uv_snapshot, venv_to_interpreter, TestContext,
+    TestContext, download_to_disk, site_packages_path, uv_snapshot, venv_to_interpreter,
 };
-use uv_fs::{copy_dir_all, Simplified};
+use uv_fs::{Simplified, copy_dir_all};
 use uv_static::EnvVars;
 
 fn check_command(venv: &Path, command: &str, temp_dir: &Path) {
@@ -129,12 +129,14 @@ fn install() -> Result<()> {
     );
 
     // Counterpart for the `compile()` test.
-    assert!(!context
-        .site_packages()
-        .join("markupsafe")
-        .join("__pycache__")
-        .join("__init__.cpython-312.pyc")
-        .exists());
+    assert!(
+        !context
+            .site_packages()
+            .join("markupsafe")
+            .join("__pycache__")
+            .join("__init__.cpython-312.pyc")
+            .exists()
+    );
 
     context
         .assert_command("from markupsafe import Markup")
@@ -1086,7 +1088,10 @@ fn install_local_wheel() -> Result<()> {
 
     // Download a wheel.
     let archive = context.temp_dir.child("tomli-2.0.1-py3-none-any.whl");
-    download_to_disk("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl", &archive);
+    download_to_disk(
+        "https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl",
+        &archive,
+    );
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -1223,7 +1228,10 @@ fn mismatched_version() -> Result<()> {
 
     // Download a wheel.
     let archive = context.temp_dir.child("tomli-3.7.2-py3-none-any.whl");
-    download_to_disk("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl", &archive);
+    download_to_disk(
+        "https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl",
+        &archive,
+    );
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -3286,12 +3294,14 @@ fn compile() -> Result<()> {
     "###
     );
 
-    assert!(context
-        .site_packages()
-        .join("markupsafe")
-        .join("__pycache__")
-        .join("__init__.cpython-312.pyc")
-        .exists());
+    assert!(
+        context
+            .site_packages()
+            .join("markupsafe")
+            .join("__pycache__")
+            .join("__init__.cpython-312.pyc")
+            .exists()
+    );
 
     context.assert_command("import markupsafe").success();
 
@@ -3335,12 +3345,14 @@ fn recompile() -> Result<()> {
     "###
     );
 
-    assert!(context
-        .site_packages()
-        .join("markupsafe")
-        .join("__pycache__")
-        .join("__init__.cpython-312.pyc")
-        .exists());
+    assert!(
+        context
+            .site_packages()
+            .join("markupsafe")
+            .join("__pycache__")
+            .join("__init__.cpython-312.pyc")
+            .exists()
+    );
 
     context.assert_command("import markupsafe").success();
 
@@ -5260,12 +5272,14 @@ fn target_built_distribution() -> Result<()> {
      - iniconfig==1.1.1
     "###);
     // Ensure that the binary is present in the target directory.
-    assert!(context
-        .temp_dir
-        .child("target")
-        .child("bin")
-        .child(format!("flask{EXE_SUFFIX}"))
-        .is_file());
+    assert!(
+        context
+            .temp_dir
+            .child("target")
+            .child("bin")
+            .child(format!("flask{EXE_SUFFIX}"))
+            .is_file()
+    );
 
     Ok(())
 }

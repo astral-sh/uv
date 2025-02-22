@@ -51,7 +51,7 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::{NoBinary, NoBuild, PackageNameSpecifier};
 use uv_distribution_types::{UnresolvedRequirement, UnresolvedRequirementSpecification};
 use uv_fs::Simplified;
-use uv_pep508::{expand_env_vars, Pep508Error, RequirementOrigin, VerbatimUrl};
+use uv_pep508::{Pep508Error, RequirementOrigin, VerbatimUrl, expand_env_vars};
 use uv_pypi_types::{Requirement, VerbatimParsedUrl};
 
 use crate::requirement::EditableError;
@@ -390,7 +390,10 @@ impl RequirementsTxt {
                 RequirementsTxtStatement::UnsupportedOption(flag) => {
                     if requirements_txt == Path::new("-") {
                         if flag.cli() {
-                            uv_warnings::warn_user!("Ignoring unsupported option from stdin: `{flag}` (hint: pass `{flag}` on the command line instead)", flag = flag.green());
+                            uv_warnings::warn_user!(
+                                "Ignoring unsupported option from stdin: `{flag}` (hint: pass `{flag}` on the command line instead)",
+                                flag = flag.green()
+                            );
                         } else {
                             uv_warnings::warn_user!(
                                 "Ignoring unsupported option from stdin: `{flag}`",
@@ -399,7 +402,11 @@ impl RequirementsTxt {
                         }
                     } else {
                         if flag.cli() {
-                            uv_warnings::warn_user!("Ignoring unsupported option in `{path}`: `{flag}` (hint: pass `{flag}` on the command line instead)", path = requirements_txt.user_display().cyan(), flag = flag.green());
+                            uv_warnings::warn_user!(
+                                "Ignoring unsupported option in `{path}`: `{flag}` (hint: pass `{flag}` on the command line instead)",
+                                path = requirements_txt.user_display().cyan(),
+                                flag = flag.green()
+                            );
                         } else {
                             uv_warnings::warn_user!(
                                 "Ignoring unsupported option in `{path}`: `{flag}`",
@@ -1037,7 +1044,10 @@ impl Display for RequirementsTxtParserError {
                 write!(f, "Unsupported editable requirement")
             }
             Self::MissingRequirementPrefix(given) => {
-                write!(f, "Requirement `{given}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?")
+                write!(
+                    f,
+                    "Requirement `{given}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?"
+                )
             }
             Self::NoBinary { specifier, .. } => {
                 write!(f, "Invalid specifier for `--no-binary`: {specifier}")
@@ -1325,7 +1335,7 @@ mod test {
     use uv_client::BaseClientBuilder;
     use uv_fs::Simplified;
 
-    use crate::{calculate_row_column, RequirementsTxt};
+    use crate::{RequirementsTxt, calculate_row_column};
 
     fn workspace_test_data_dir() -> PathBuf {
         Path::new("./test-data").simple_canonicalize().unwrap()

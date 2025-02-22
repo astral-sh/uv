@@ -13,12 +13,12 @@ use std::str::FromStr;
 
 use glob::Pattern;
 use owo_colors::OwoColorize;
-use serde::{de::IntoDeserializer, de::SeqAccess, Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de::IntoDeserializer, de::SeqAccess};
 use thiserror::Error;
 use url::Url;
 
 use uv_distribution_types::{Index, IndexName};
-use uv_fs::{relative_to, PortablePathBuf};
+use uv_fs::{PortablePathBuf, relative_to};
 use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -34,9 +34,13 @@ pub enum PyprojectTomlError {
     TomlSyntax(#[from] toml_edit::TomlError),
     #[error(transparent)]
     TomlSchema(#[from] toml_edit::de::Error),
-    #[error("`pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set")]
+    #[error(
+        "`pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set"
+    )]
     MissingName,
-    #[error("`pyproject.toml` is using the `[project]` table, but the required `project.version` field is neither set nor present in the `project.dynamic` list")]
+    #[error(
+        "`pyproject.toml` is using the `[project]` table, but the required `project.version` field is neither set nor present in the `project.dynamic` list"
+    )]
     MissingVersion,
 }
 
@@ -722,8 +726,8 @@ impl schemars::JsonSchema for SerdePattern {
         <String as schemars::JsonSchema>::schema_name()
     }
 
-    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-        <String as schemars::JsonSchema>::json_schema(gen)
+    fn json_schema(r#gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
+        <String as schemars::JsonSchema>::json_schema(r#gen)
     }
 }
 
@@ -1135,7 +1139,7 @@ impl<'de> Deserialize<'de> for Source {
                 _ => {
                     return Err(serde::de::Error::custom(
                         "expected at most one of `rev`, `tag`, or `branch`",
-                    ))
+                    ));
                 }
             };
 
@@ -1376,15 +1380,25 @@ pub enum SourceError {
     WorkspacePackageUrl(String),
     #[error("Workspace dependency `{0}` must refer to local directory, not a file")]
     WorkspacePackageFile(String),
-    #[error("`{0}` did not resolve to a Git repository, but a Git reference (`--rev {1}`) was provided.")]
+    #[error(
+        "`{0}` did not resolve to a Git repository, but a Git reference (`--rev {1}`) was provided."
+    )]
     UnusedRev(String, String),
-    #[error("`{0}` did not resolve to a Git repository, but a Git reference (`--tag {1}`) was provided.")]
+    #[error(
+        "`{0}` did not resolve to a Git repository, but a Git reference (`--tag {1}`) was provided."
+    )]
     UnusedTag(String, String),
-    #[error("`{0}` did not resolve to a Git repository, but a Git reference (`--branch {1}`) was provided.")]
+    #[error(
+        "`{0}` did not resolve to a Git repository, but a Git reference (`--branch {1}`) was provided."
+    )]
     UnusedBranch(String, String),
-    #[error("`{0}` did not resolve to a local directory, but the `--editable` flag was provided. Editable installs are only supported for local directories.")]
+    #[error(
+        "`{0}` did not resolve to a local directory, but the `--editable` flag was provided. Editable installs are only supported for local directories."
+    )]
     UnusedEditable(String),
-    #[error("Workspace dependency `{0}` was marked as `--no-editable`, but workspace dependencies are always added in editable mode. Pass `--no-editable` to `uv sync` or `uv run` to install workspace dependencies in non-editable mode.")]
+    #[error(
+        "Workspace dependency `{0}` was marked as `--no-editable`, but workspace dependencies are always added in editable mode. Pass `--no-editable` to `uv sync` or `uv run` to install workspace dependencies in non-editable mode."
+    )]
     UnusedNoEditable(String),
     #[error("Failed to resolve absolute path")]
     Absolute(#[from] std::io::Error),
@@ -1392,7 +1406,9 @@ pub enum SourceError {
     NonUtf8Path(PathBuf),
     #[error("Source markers must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
     OverlappingMarkers(String, String, String),
-    #[error("When multiple sources are provided, each source must include a platform marker (e.g., `marker = \"sys_platform == 'linux'\"`)")]
+    #[error(
+        "When multiple sources are provided, each source must include a platform marker (e.g., `marker = \"sys_platform == 'linux'\"`)"
+    )]
     MissingMarkers,
     #[error("Must provide at least one source")]
     EmptySources,
@@ -1591,7 +1607,7 @@ mod serde_from_and_to_string {
     use std::fmt::Display;
     use std::str::FromStr;
 
-    use serde::{de, Deserialize, Deserializer, Serializer};
+    use serde::{Deserialize, Deserializer, Serializer, de};
 
     pub(super) fn serialize<T, S>(value: &T, serializer: S) -> Result<S::Ok, S::Error>
     where

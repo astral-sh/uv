@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::sync::Arc;
 use tracing::{debug, warn};
 
@@ -18,8 +18,8 @@ use uv_pypi_types::{RequirementSource, VerbatimParsedUrl};
 use uv_python::PythonEnvironment;
 use uv_types::HashStrategy;
 
-use crate::satisfies::RequirementSatisfaction;
 use crate::SitePackages;
+use crate::satisfies::RequirementSatisfaction;
 
 /// A planner to generate an [`Plan`] based on a set of requirements.
 #[derive(Debug)]
@@ -85,7 +85,9 @@ impl<'a> Planner<'a> {
                         let source = RequirementSource::from(dist);
                         match RequirementSatisfaction::check(installed, &source)? {
                             RequirementSatisfaction::Mismatch => {
-                                debug!("Requirement installed, but mismatched:\n  Installed: {installed:?}\n  Requested: {source:?}");
+                                debug!(
+                                    "Requirement installed, but mismatched:\n  Installed: {installed:?}\n  Requested: {source:?}"
+                                );
                             }
                             RequirementSatisfaction::Satisfied => {
                                 debug!("Requirement already installed: {installed}");
@@ -273,8 +275,7 @@ impl<'a> Planner<'a> {
 
                         warn!(
                             "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
-                            sdist,
-                            wheel.filename
+                            sdist, wheel.filename
                         );
                     }
                 }
@@ -291,8 +292,7 @@ impl<'a> Planner<'a> {
 
                         warn!(
                             "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
-                            sdist,
-                            wheel.filename
+                            sdist, wheel.filename
                         );
                     }
                 }
@@ -314,8 +314,7 @@ impl<'a> Planner<'a> {
 
                         warn!(
                             "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
-                            sdist,
-                            wheel.filename
+                            sdist, wheel.filename
                         );
                     }
                 }
@@ -337,8 +336,7 @@ impl<'a> Planner<'a> {
 
                         warn!(
                             "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
-                            sdist,
-                            wheel.filename
+                            sdist, wheel.filename
                         );
                     }
                 }

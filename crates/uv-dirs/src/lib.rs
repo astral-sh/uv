@@ -82,9 +82,5 @@ pub fn legacy_user_state_dir() -> Option<PathBuf> {
 /// Return a [`PathBuf`] if the given [`OsString`] is an absolute path.
 fn parse_path(path: OsString) -> Option<PathBuf> {
     let path = PathBuf::from(path);
-    if path.is_absolute() {
-        Some(path)
-    } else {
-        None
-    }
+    if path.is_absolute() { Some(path) } else { None }
 }

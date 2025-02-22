@@ -7,7 +7,7 @@ use owo_colors::OwoColorize;
 use tracing::{Event, Subscriber};
 #[cfg(feature = "tracing-durations-export")]
 use tracing_durations_export::{
-    plot::PlotConfig, DurationsLayer, DurationsLayerBuilder, DurationsLayerDropGuard,
+    DurationsLayer, DurationsLayerBuilder, DurationsLayerDropGuard, plot::PlotConfig,
 };
 use tracing_subscriber::filter::Directive;
 use tracing_subscriber::fmt::format::Writer;
@@ -16,8 +16,8 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer, Registry};
-use tracing_tree::time::Uptime;
 use tracing_tree::HierarchicalLayer;
+use tracing_tree::time::Uptime;
 
 use uv_cli::ColorChoice;
 #[cfg(feature = "tracing-durations-export")]

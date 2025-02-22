@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use futures::{stream::FuturesOrdered, TryStreamExt};
+use futures::{TryStreamExt, stream::FuturesOrdered};
 
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::DistributionMetadata;
@@ -8,7 +8,7 @@ use uv_pypi_types::Requirement;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
 
-use crate::{required_dist, Error};
+use crate::{Error, required_dist};
 
 /// A resolver to expand the requested extras for a set of requirements to include all defined
 /// extras.

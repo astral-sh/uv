@@ -5,8 +5,9 @@ use thiserror::Error;
 use uv_static::EnvVars;
 
 pub use crate::discovery::{
-    find_python_installations, EnvironmentPreference, Error as DiscoveryError, PythonDownloads,
-    PythonNotFound, PythonPreference, PythonRequest, PythonSource, PythonVariant, VersionRequest,
+    EnvironmentPreference, Error as DiscoveryError, PythonDownloads, PythonNotFound,
+    PythonPreference, PythonRequest, PythonSource, PythonVariant, VersionRequest,
+    find_python_installations,
 };
 pub use crate::environment::{InvalidEnvironmentKind, PythonEnvironment};
 pub use crate::implementation::ImplementationName;
@@ -18,7 +19,7 @@ pub use crate::python_version::PythonVersion;
 pub use crate::target::Target;
 pub use crate::version_files::{
     DiscoveryOptions as VersionFileDiscoveryOptions, FilePreference as VersionFilePreference,
-    PythonVersionFile, PYTHON_VERSIONS_FILENAME, PYTHON_VERSION_FILENAME,
+    PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME, PythonVersionFile,
 };
 pub use crate::virtualenv::{Error as VirtualEnvError, PyVenvConfiguration, VirtualEnvironment};
 
@@ -109,7 +110,7 @@ mod tests {
     };
 
     use anyhow::Result;
-    use assert_fs::{fixture::ChildPath, prelude::*, TempDir};
+    use assert_fs::{TempDir, fixture::ChildPath, prelude::*};
     use indoc::{formatdoc, indoc};
     use temp_env::with_vars;
     use test_log::test;
@@ -118,15 +119,15 @@ mod tests {
     use uv_cache::Cache;
 
     use crate::{
-        discovery::{
-            self, find_best_python_installation, find_python_installation, EnvironmentPreference,
-        },
-        PythonPreference,
-    };
-    use crate::{
+        PythonNotFound, PythonRequest, PythonSource, PythonVersion,
         implementation::ImplementationName, installation::PythonInstallation,
         managed::ManagedPythonInstallations, virtualenv::virtualenv_python_executable,
-        PythonNotFound, PythonRequest, PythonSource, PythonVersion,
+    };
+    use crate::{
+        PythonPreference,
+        discovery::{
+            self, EnvironmentPreference, find_best_python_installation, find_python_installation,
+        },
     };
 
     struct TestContext {
@@ -636,12 +637,12 @@ mod tests {
         })??;
         assert!(
             matches!(
-            python,
-            PythonInstallation {
-                source: PythonSource::SearchPath,
-                interpreter: _
-            }
-        ),
+                python,
+                PythonInstallation {
+                    source: PythonSource::SearchPath,
+                    interpreter: _
+                }
+            ),
             "We should skip the Python 2 installation and find the Python 3 interpreter; got {python:?}"
         );
         assert_eq!(python.interpreter().sys_executable(), python3.path());
@@ -937,12 +938,12 @@ mod tests {
             })??;
         assert!(
             matches!(
-            python,
-            PythonInstallation {
-                source: PythonSource::SearchPathFirst,
-                interpreter: _
-            }
-        ),
+                python,
+                PythonInstallation {
+                    source: PythonSource::SearchPathFirst,
+                    interpreter: _
+                }
+            ),
             "We should skip the active environment in favor of the requested version; got {python:?}"
         );
 

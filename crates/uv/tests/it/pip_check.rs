@@ -2,8 +2,8 @@ use anyhow::Result;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
 
-use crate::common::uv_snapshot;
 use crate::common::TestContext;
+use crate::common::uv_snapshot;
 
 #[test]
 fn check_compatible_packages() -> Result<()> {

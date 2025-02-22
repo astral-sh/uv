@@ -9,8 +9,8 @@ use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
 
 use crate::commands::{
-    project::{validate_project_requires_python, WorkspacePython},
     ExitStatus,
+    project::{WorkspacePython, validate_project_requires_python},
 };
 
 /// Find a Python interpreter.

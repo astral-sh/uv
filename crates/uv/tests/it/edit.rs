@@ -10,7 +10,7 @@ use uv_fs::Simplified;
 
 use uv_static::EnvVars;
 
-use crate::common::{self, decode_token, packse_index_url, uv_snapshot, TestContext};
+use crate::common::{self, TestContext, decode_token, packse_index_url, uv_snapshot};
 
 /// Add a PyPI requirement.
 #[test]

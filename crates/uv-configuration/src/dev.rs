@@ -1,6 +1,6 @@
 use std::{borrow::Cow, sync::Arc};
 
-use uv_normalize::{GroupName, DEV_DEPENDENCIES};
+use uv_normalize::{DEV_DEPENDENCIES, GroupName};
 
 /// Manager of all dependency-group decisions and settings history.
 ///

@@ -332,6 +332,8 @@ pub enum HashStrategyError {
     UnpinnedRequirement(String, HashCheckingMode),
     #[error("In `{1}` mode, all requirements must have a hash, but none were provided for: {0}")]
     MissingHashes(String, HashCheckingMode),
-    #[error("In `{1}` mode, all requirements must have a hash, but there were no overlapping hashes between the requirements and constraints for: {0}")]
+    #[error(
+        "In `{1}` mode, all requirements must have a hash, but there were no overlapping hashes between the requirements and constraints for: {0}"
+    )]
     NoIntersection(String, HashCheckingMode),
 }

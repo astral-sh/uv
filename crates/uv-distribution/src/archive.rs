@@ -1,4 +1,4 @@
-use uv_cache::{ArchiveId, Cache, ARCHIVE_VERSION};
+use uv_cache::{ARCHIVE_VERSION, ArchiveId, Cache};
 use uv_distribution_types::Hashed;
 use uv_pypi_types::HashDigest;
 
