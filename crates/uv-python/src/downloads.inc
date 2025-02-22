@@ -3,11 +3,7 @@
 // Generated with `crates/uv-python/template-download-metadata.py`
 // From template at `crates/uv-python/src/downloads.inc.mustache`
 
-use crate::platform::ArchVariant;
-use crate::PythonVariant;
-use uv_pep440::{Prerelease, PrereleaseKind};
-
-pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
+&[
     ManagedPythonDownload {
         key: PythonInstallationKey {
             major: 3,
@@ -22400,4 +22396,4 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         url: "https://downloads.python.org/pypy/pypy3.7-v7.3.3-win32.zip",
         sha256: Some("a282ce40aa4f853e877a5dbb38f0a586a29e563ae9ba82fd50c7e5dc465fb649")
     },
-];
+]
