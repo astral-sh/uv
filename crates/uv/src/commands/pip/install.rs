@@ -9,9 +9,8 @@ use tracing::{debug, enabled, Level};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification, DryRun,
-    ExtrasSpecification, HashCheckingMode, IndexStrategy, PreviewMode, Reinstall, SourceStrategy,
-    TrustedHost, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DryRun, ExtrasSpecification,
+    HashCheckingMode, IndexStrategy, PreviewMode, Reinstall, SourceStrategy, TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -22,6 +21,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{SatisfiesResult, SitePackages};
+use uv_normalize::PipGroupName;
 use uv_pep508::PackageName;
 use uv_pypi_types::{Conflicts, Requirement};
 use uv_python::{
@@ -53,7 +53,7 @@ pub(crate) async fn pip_install(
     overrides_from_workspace: Vec<Requirement>,
     build_constraints_from_workspace: Vec<Requirement>,
     extras: &ExtrasSpecification,
-    groups: &DevGroupsSpecification,
+    groups: &[PipGroupName],
     resolution_mode: ResolutionMode,
     prerelease_mode: PrereleaseMode,
     dependency_mode: DependencyMode,
