@@ -231,14 +231,15 @@ fn python_install_automatic() {
     uv_snapshot!(context.filters(), context.run()
        .env_remove("VIRTUAL_ENV")
        .arg("-p").arg("foobar")
-       .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r###"
+       .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No interpreter found for executable name `foobar` in [PYTHON SOURCES]
-    "###);
+    See [UV_LOG_DIR]/python_install.log for detailed logs
+    ");
 
     // Create a "broken" Python executable in the test context `bin`
     // (the snapshot is different on Windows so we just test on Unix)
@@ -385,7 +386,7 @@ fn python_install_preview() {
     bin_python.assert(predicate::path::is_symlink());
 
     // Uninstallation requires an argument
-    uv_snapshot!(context.filters(), context.python_uninstall(), @r###"
+    uv_snapshot!(context.filters(), context.python_uninstall(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -394,10 +395,10 @@ fn python_install_preview() {
     error: the following required arguments were not provided:
       <TARGETS>...
 
-    Usage: uv python uninstall --install-dir <INSTALL_DIR> <TARGETS>...
+    Usage: uv python uninstall --install-dir <INSTALL_DIR> --log <PATH> <TARGETS>...
 
     For more information, try '--help'.
-    "###);
+    ");
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.13"), @r###"
     success: true
@@ -682,24 +683,26 @@ fn python_install_invalid_request() {
     ");
 
     // Request a version we don't have a download for
-    uv_snapshot!(context.filters(), context.python_install().arg("3.8.0"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.8.0"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No download found for request: cpython-3.8.0-[PLATFORM]
-    "###);
+    See [UV_LOG_DIR]/python_install.log for detailed logs
+    ");
 
     // Request a version we don't have a download for mixed with one we do
-    uv_snapshot!(context.filters(), context.python_install().arg("3.8.0").arg("3.12"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.8.0").arg("3.12"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No download found for request: cpython-3.8.0-[PLATFORM]
-    "###);
+    See [UV_LOG_DIR]/python_install.log for detailed logs
+    ");
 }
 
 #[test]
@@ -815,14 +818,15 @@ fn python_install_default() {
     bin_python_default.assert(predicate::path::missing());
 
     // Install multiple versions, with the `--default` flag
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12").arg("3.13").arg("--default"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12").arg("3.13").arg("--default"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: The `--default` flag cannot be used with multiple targets
-    "###);
+    See [UV_LOG_DIR]/python_install.log for detailed logs
+    ");
 
     // Install 3.12 as a new default
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12").arg("--default"), @r###"
@@ -1016,14 +1020,15 @@ fn python_install_unknown() {
     context.temp_dir.child("foo").create_dir_all().unwrap();
 
     // A directory
-    uv_snapshot!(context.filters(), context.python_install().arg("./foo"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("./foo"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: `./foo` is not a valid Python download request; see `uv help python` for supported formats and `uv python list --only-downloads` for available versions
-    "###);
+    See [UV_LOG_DIR]/python_install.log for detailed logs
+    ");
 }
 
 #[cfg(unix)]
@@ -1122,7 +1127,7 @@ fn python_install_default_from_env() {
     "###);
 
     // Uninstall with no targets should error
-    uv_snapshot!(context.filters(), context.python_uninstall(), @r###"
+    uv_snapshot!(context.filters(), context.python_uninstall(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1131,13 +1136,13 @@ fn python_install_default_from_env() {
     error: the following required arguments were not provided:
       <TARGETS>...
 
-    Usage: uv python uninstall --install-dir <INSTALL_DIR> <TARGETS>...
+    Usage: uv python uninstall --install-dir <INSTALL_DIR> --log <PATH> <TARGETS>...
 
     For more information, try '--help'.
-    "###);
+    ");
 
     // Uninstall with conflicting options should error
-    uv_snapshot!(context.filters(), context.python_uninstall().arg("--all").arg("3.12"), @r###"
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--all").arg("3.12"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1145,10 +1150,10 @@ fn python_install_default_from_env() {
     ----- stderr -----
     error: the argument '--all' cannot be used with '<TARGETS>...'
 
-    Usage: uv python uninstall --all --install-dir <INSTALL_DIR> <TARGETS>...
+    Usage: uv python uninstall --all --install-dir <INSTALL_DIR> --log <PATH> <TARGETS>...
 
     For more information, try '--help'.
-    "###);
+    ");
 }
 
 #[cfg(target_os = "macos")]

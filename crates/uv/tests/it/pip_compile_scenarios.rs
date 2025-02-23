@@ -67,7 +67,7 @@ fn compatible_python_incompatible_override() -> Result<()> {
 
     let output = uv_snapshot!(filters, command(&context, python_versions)
         .arg("--python-version=3.9")
-        , @r###"
+        , @r"
                  success: false
                  exit_code: 1
                  ----- stdout -----
@@ -79,7 +79,8 @@ fn compatible_python_incompatible_override() -> Result<()> {
                        And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
 
                        hint: The `--python-version` value (>=3.9) includes Python versions that are not supported by your dependencies (e.g., package-a==1.0.0 only supports >=3.10). Consider using a higher `--python-version` value.
-                 "###
+                 See [UV_LOG_DIR]/pip_compile_scenarios.log for detailed logs
+                 "
     );
 
     output.assert().failure();

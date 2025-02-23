@@ -12,14 +12,15 @@ fn python_pin() {
     let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
 
     // Without arguments, we attempt to read the current pin (which does not exist yet)
-    uv_snapshot!(context.filters(), context.python_pin(), @r###"
+    uv_snapshot!(context.filters(), context.python_pin(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No pinned Python version found
-    "###);
+    See [UV_LOG_DIR]/python_pin.log for detailed logs
+    ");
 
     // Given an argument, we pin to that version
     uv_snapshot!(context.filters(), context.python_pin().arg("any"), @r###"
@@ -231,24 +232,26 @@ fn python_pin_compatible_with_requires_python() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.python_pin().arg("3.10"), @r###"
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.10"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: The requested Python version `3.10` is incompatible with the project `requires-python` value of `>=3.11`.
-    "###);
+    See [UV_LOG_DIR]/python_pin.log for detailed logs
+    ");
 
     // Request a implementation version that is incompatible
-    uv_snapshot!(context.filters(), context.python_pin().arg("cpython@3.10"), @r###"
+    uv_snapshot!(context.filters(), context.python_pin().arg("cpython@3.10"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: The requested Python version `cpython@3.10` is incompatible with the project `requires-python` value of `>=3.11`.
-    "###);
+    See [UV_LOG_DIR]/python_pin.log for detailed logs
+    ");
 
     // Request an incompatible version with project discovery turned off
     uv_snapshot!(context.filters(), context.python_pin().arg("cpython@3.10").arg("--no-project"), @r###"
@@ -586,14 +589,15 @@ fn python_pin_resolve() {
     // Request an implementation that is not installed
     // (skip on Windows because the snapshot is different and the behavior is not platform dependent)
     #[cfg(unix)]
-    uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("pypy"), @r###"
+    uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("pypy"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No interpreter found for PyPy in managed installations or search path
-    "###);
+    See [UV_LOG_DIR]/python_pin.log for detailed logs
+    ");
 
     let python_version = context.read(PYTHON_VERSION_FILENAME);
     insta::with_settings!({
@@ -605,14 +609,15 @@ fn python_pin_resolve() {
     // Request a version that is not installed
     // (skip on Windows because the snapshot is different and the behavior is not platform dependent)
     #[cfg(unix)]
-    uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("3.7"), @r###"
+    uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("3.7"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No interpreter found for Python 3.7 in managed installations or search path
-    "###);
+    See [UV_LOG_DIR]/python_pin.log for detailed logs
+    ");
 
     let python_version = context.read(PYTHON_VERSION_FILENAME);
     insta::with_settings!({

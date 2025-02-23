@@ -229,7 +229,7 @@ fn tool_install_suggest_other_packages_with_executable() {
     uv_snapshot!(filters, context.tool_install()
         .arg("fastapi==0.111.0")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -275,7 +275,8 @@ fn tool_install_suggest_other_packages_with_executable() {
      + uvicorn==0.29.0
      + watchfiles==0.21.0
      + websockets==12.0
-    "###);
+    See [UV_LOG_DIR]/tool_install.log for detailed logs
+    ");
 }
 
 /// Test installing a tool at a version
@@ -600,7 +601,7 @@ fn tool_install_remove_on_empty() -> Result<()> {
         .arg(black.path())
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -618,7 +619,8 @@ fn tool_install_remove_on_empty() -> Result<()> {
      - packaging==24.0
      - pathspec==0.12.1
      - platformdirs==4.2.0
-    "###);
+    See [UV_LOG_DIR]/tool_install.log for detailed logs
+    ");
 
     // Re-request `black`. It should reinstall, without requiring `--force`.
     uv_snapshot!(context.filters(), context.tool_install()
@@ -785,14 +787,15 @@ fn tool_install_from() {
         .arg("flask==24.2.0")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Package name (`flask`) provided with `--from` does not match install request (`black`)
-    "###);
+    See [UV_LOG_DIR]/tool_install.log for detailed logs
+    ");
 
     // Attempt to install `black` using `--from` with a different version
     uv_snapshot!(context.filters(), context.tool_install()
@@ -801,14 +804,15 @@ fn tool_install_from() {
         .arg("black==24.3.0")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Package requirement (`black==24.3.0`) provided with `--from` conflicts with install request (`black==24.2.0`)
-    "###);
+    See [UV_LOG_DIR]/tool_install.log for detailed logs
+    ");
 }
 
 /// Test installing and reinstalling an already installed tool
@@ -1013,7 +1017,7 @@ fn tool_install_force() {
         .arg("black")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1029,7 +1033,8 @@ fn tool_install_force() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     error: Executable already exists: black (use `--force` to overwrite)
-    "###);
+    See [UV_LOG_DIR]/tool_install.log for detailed logs
+    ");
 
     // We should delete the virtual environment
     assert!(!tool_dir.child("black").exists());
@@ -1052,7 +1057,7 @@ fn tool_install_force() {
         .arg("--reinstall")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1068,7 +1073,8 @@ fn tool_install_force() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     error: Executable already exists: black (use `--force` to overwrite)
-    "###);
+    See [UV_LOG_DIR]/tool_install.log for detailed logs
+    ");
 
     // We should not create a virtual environment
     assert!(!tool_dir.child("black").exists());
@@ -1093,7 +1099,7 @@ fn tool_install_force() {
         .arg("black")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1108,7 +1114,8 @@ fn tool_install_force() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     error: Executables already exist: black, blackd (use `--force` to overwrite)
-    "###);
+    See [UV_LOG_DIR]/tool_install.log for detailed logs
+    ");
 
     // Install `black` with `--force`
     uv_snapshot!(context.filters(), context.tool_install()
@@ -1428,7 +1435,7 @@ fn tool_install_no_entrypoints() {
         .arg("iniconfig")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1439,7 +1446,8 @@ fn tool_install_no_entrypoints() {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    See [UV_LOG_DIR]/tool_install.log for detailed logs
+    ");
 
     // Ensure the tool environment is not created.
     tool_dir
@@ -1471,7 +1479,7 @@ fn tool_install_uninstallable() {
         .arg("pyenv")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1499,7 +1507,8 @@ fn tool_install_uninstallable() {
 
 
           hint: This usually indicates a problem with the package or the build environment.
-    "###);
+    See [UV_LOG_DIR]/tool_install.log for detailed logs
+    ");
 
     // Ensure the tool environment is not created.
     tool_dir.child("pyenv").assert(predicate::path::missing());
@@ -1609,14 +1618,15 @@ fn tool_install_unnamed_conflict() {
         .arg("https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Package name (`iniconfig`) provided with `--from` does not match install request (`black`)
-    "###);
+    See [UV_LOG_DIR]/tool_install.log for detailed logs
+    ");
 }
 
 /// Test installing a tool with a bare URL requirement using `--from`.
@@ -2457,7 +2467,7 @@ fn tool_install_preserve_environment() {
         .arg("packaging==0.0.1")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2466,7 +2476,8 @@ fn tool_install_preserve_environment() {
       × No solution found when resolving dependencies:
       ╰─▶ Because black==24.1.1 depends on packaging>=22.0 and you require black==24.1.1, we can conclude that you require packaging>=22.0.
           And because you require packaging==0.0.1, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/tool_install.log for detailed logs
+    ");
 
     // Install `black`. The tool should already be installed, since we didn't remove the environment.
     uv_snapshot!(context.filters(), context.tool_install()
@@ -2875,14 +2886,15 @@ fn tool_install_at_version() {
         .arg("black==24.1.0")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Package requirement (`black==24.1.0`) provided with `--from` conflicts with install request (`black@24.1.0`)
-    "###);
+    See [UV_LOG_DIR]/tool_install.log for detailed logs
+    ");
 }
 
 /// Test installing a tool with `uv tool install {package}@latest`.
@@ -3328,28 +3340,30 @@ fn tool_install_python() {
         .arg("python")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Cannot install Python with `uv tool install`. Did you mean to use `uv python install`?
-    "###);
+    See [UV_LOG_DIR]/tool_install.log for detailed logs
+    ");
 
     // Install `python@<version>`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("python@3.12")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Cannot install Python with `uv tool install`. Did you mean to use `uv python install`?
-    "###);
+    See [UV_LOG_DIR]/tool_install.log for detailed logs
+    ");
 }
 
 #[test]
@@ -3366,14 +3380,15 @@ fn tool_install_mismatched_name() {
         .arg("https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Package name (`flask`) provided with `--from` does not match install request (`black`)
-    "###);
+    See [UV_LOG_DIR]/tool_install.log for detailed logs
+    ");
 
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
@@ -3381,14 +3396,15 @@ fn tool_install_mismatched_name() {
         .arg("flask @ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Package name (`flask`) provided with `--from` does not match install request (`black`)
-    "###);
+    See [UV_LOG_DIR]/tool_install.log for detailed logs
+    ");
 
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("flask")
@@ -3396,12 +3412,13 @@ fn tool_install_mismatched_name() {
         .arg("black @ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Package name (`black`) provided with `--from` does not match install request (`flask`)
-    "###);
+    See [UV_LOG_DIR]/tool_install.log for detailed logs
+    ");
 }

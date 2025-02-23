@@ -59,7 +59,7 @@ fn missing_venv() -> Result<()> {
     requirements.write_str("anyio")?;
     fs::remove_dir_all(&context.venv)?;
 
-    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt"), @r###"
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -67,19 +67,21 @@ fn missing_venv() -> Result<()> {
     ----- stderr -----
     error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/python`
       Caused by: Python interpreter not found at `[VENV]/[BIN]/python`
-    "###);
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    ");
 
     assert!(predicates::path::missing().eval(&context.venv));
 
     // If not "active", we hint to create one
-    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt").env_remove("VIRTUAL_ENV"), @r###"
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt").env_remove("VIRTUAL_ENV"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No virtual environment found; run `uv venv` to create an environment, or pass `--system` to install into a non-virtual environment
-    "###);
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    ");
 
     assert!(predicates::path::missing().eval(&context.venv));
 
@@ -1234,7 +1236,7 @@ fn mismatched_version() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1244,7 +1246,8 @@ fn mismatched_version() -> Result<()> {
     Prepared 1 package in [TIME]
     error: Failed to install: tomli-3.7.2-py3-none-any.whl (tomli==3.7.2 (from file://[TEMP_DIR]/tomli-3.7.2-py3-none-any.whl))
       Caused by: Wheel version does not match filename: 2.0.1 != 3.7.2
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -1270,7 +1273,7 @@ fn mismatched_name() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1281,7 +1284,8 @@ fn mismatched_name() -> Result<()> {
 
           hint: The structure of `foo` was invalid:
             The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -2614,7 +2618,7 @@ fn incompatible_wheel() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2625,7 +2629,8 @@ fn incompatible_wheel() -> Result<()> {
 
           hint: The structure of `foo` was invalid:
             Failed to read from zip file
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -2766,7 +2771,7 @@ fn find_links_offline_no_match() -> Result<()> {
         .arg("requirements.txt")
         .arg("--offline")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/")), @r###"
+        .arg(context.workspace_root.join("scripts/links/")), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2776,7 +2781,8 @@ fn find_links_offline_no_match() -> Result<()> {
       ╰─▶ Because numpy was not found in the cache and you require numpy, we can conclude that your requirements are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -3373,7 +3379,7 @@ requires-python = ">=3.13"
     requirements_in.write_str(&format!("-e {}", editable_dir.path().display()))?;
 
     uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3382,7 +3388,8 @@ requires-python = ">=3.13"
       × No solution found when resolving dependencies:
       ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -3413,7 +3420,7 @@ requires-python = ">=3.13"
     requirements_in.write_str(&format!("example @ {}", editable_dir.path().display()))?;
 
     uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3422,7 +3429,8 @@ requires-python = ">=3.13"
       × No solution found when resolving dependencies:
       ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -4032,7 +4040,7 @@ fn require_hashes_source_tree() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4040,7 +4048,8 @@ fn require_hashes_source_tree() -> Result<()> {
     ----- stderr -----
       × Failed to build `black @ file://[WORKSPACE]/scripts/packages/black_editable`
       ╰─▶ Hash-checking is not supported for local directories: `black @ file://[WORKSPACE]/scripts/packages/black_editable`
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -4168,7 +4177,7 @@ fn require_hashes_wheel_path_mismatch() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4183,7 +4192,8 @@ fn require_hashes_wheel_path_mismatch() -> Result<()> {
 
           Computed:
             sha256:a34996d4bd5abb2336e14ff0a2d22b92cfd0f0ed344e6883041ce01953276a13
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -4237,7 +4247,7 @@ fn require_hashes_source_path_mismatch() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4251,7 +4261,8 @@ fn require_hashes_source_path_mismatch() -> Result<()> {
 
           Computed:
             sha256:89fa05cffa7f457658373b85de302d24d0c205ceda2819a8739e324b75e9430b
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -4301,14 +4312,15 @@ fn require_hashes_editable() -> Result<()> {
     // Install the editable packages.
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg(requirements_txt.path())
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: file://[WORKSPACE]/scripts/packages/black_editable[d]
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())

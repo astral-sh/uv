@@ -735,7 +735,7 @@ fn file_exists() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -747,7 +747,8 @@ fn file_exists() -> Result<()> {
 
       × Failed to create virtualenv
       ╰─▶ File exists at `.venv`
-    "###
+    See [UV_LOG_DIR]/venv.log for detailed logs
+    "
     );
 
     Ok(())
@@ -790,7 +791,7 @@ fn non_empty_dir_exists() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -802,7 +803,8 @@ fn non_empty_dir_exists() -> Result<()> {
 
       × Failed to create virtualenv
       ╰─▶ The directory `.venv` exists, but it's not a virtual environment
-    "###
+    See [UV_LOG_DIR]/venv.log for detailed logs
+    "
     );
 
     Ok(())
@@ -820,7 +822,7 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -832,7 +834,8 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
 
       × Failed to create virtualenv
       ╰─▶ The directory `.venv` exists, but it's not a virtual environment
-    "###
+    See [UV_LOG_DIR]/venv.log for detailed logs
+    "
     );
 
     uv_snapshot!(context.filters(), context.venv()
