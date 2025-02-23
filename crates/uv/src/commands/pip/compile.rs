@@ -492,12 +492,12 @@ pub(crate) async fn pip_compile(
     // If necessary, include the `--index-url` and `--extra-index-url` locations.
     if include_index_url {
         if let Some(index) = index_locations.default_index() {
-            writeln!(writer, "--index-url {}", index.url().verbatim())?;
+            writeln!(writer, "--index-url {}", index.proxy_or_url().verbatim())?;
             wrote_preamble = true;
         }
         let mut seen = FxHashSet::default();
         for extra_index in index_locations.implicit_indexes() {
-            if seen.insert(extra_index.url()) {
+            if seen.insert(extra_index.proxy_or_url()) {
                 writeln!(writer, "--extra-index-url {}", extra_index.url().verbatim())?;
                 wrote_preamble = true;
             }

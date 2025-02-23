@@ -900,7 +900,7 @@ impl PubGrubReportFormatter<'_> {
                 // indexes were not queried, and could contain a compatible version.
                 if let Some(next_index) = index_locations
                     .indexes()
-                    .map(Index::url)
+                    .map(Index::proxy_or_url)
                     .skip_while(|url| *url != found_index)
                     .nth(1)
                 {
@@ -916,20 +916,20 @@ impl PubGrubReportFormatter<'_> {
 
         // Add hints due to an index returning an unauthorized response.
         for index in index_locations.allowed_indexes() {
-            if index_capabilities.unauthorized(&index.url) {
+            if index_capabilities.unauthorized(&index.proxy_or_url()) {
                 hints.insert(PubGrubHint::UnauthorizedIndex {
-                    index: index.url.clone(),
+                    index: index.proxy_or_url().clone(),
                 });
             }
-            if index_capabilities.forbidden(&index.url) {
+            if index_capabilities.forbidden(&index.proxy_or_url()) {
                 // If the index is a PyTorch index (e.g., `https://download.pytorch.org/whl/cu118`),
                 // avoid noting the lack of credentials. PyTorch returns a 403 (Forbidden) status
                 // code for any package that does not exist.
-                if index.url.url().host_str() == Some("download.pytorch.org") {
+                if index.proxy_or_url().url().host_str() == Some("download.pytorch.org") {
                     continue;
                 }
                 hints.insert(PubGrubHint::ForbiddenIndex {
-                    index: index.url.clone(),
+                    index: index.proxy_or_url().clone(),
                 });
             }
         }
