@@ -145,7 +145,7 @@ mod tests {
 
             Ok(Self {
                 tempdir,
-                cache: Cache::temp()?,
+                cache: Cache::temp(None)?,
                 installations: ManagedPythonInstallations::temp()?,
                 search_path: None,
                 workdir,
