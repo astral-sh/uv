@@ -9,6 +9,7 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{File, FileLocation, IndexUrl, UrlString};
+use uv_pypi_types::HashDigests;
 
 use crate::cached_client::{CacheControl, CachedClientError};
 use crate::html::SimpleHtml;
@@ -283,7 +284,7 @@ impl<'a> FlatIndexClient<'a> {
             let file = File {
                 dist_info_metadata: false,
                 filename: filename.to_string(),
-                hashes: Vec::new(),
+                hashes: HashDigests::empty(),
                 requires_python: None,
                 size: None,
                 upload_time_utc_ms: None,

@@ -7,7 +7,7 @@ use uv_distribution_types::{
     CachedDirectUrlDist, CachedRegistryDist, DirectUrlSourceDist, DirectorySourceDist,
     GitSourceDist, Hashed, PathSourceDist,
 };
-use uv_pypi_types::{HashDigest, VerbatimParsedUrl};
+use uv_pypi_types::{HashDigest, HashDigests, VerbatimParsedUrl};
 
 use crate::archive::Archive;
 use crate::{HttpArchivePointer, LocalArchivePointer};
@@ -19,7 +19,7 @@ pub struct CachedWheel {
     /// The [`CacheEntry`] for the wheel.
     pub entry: CacheEntry,
     /// The [`HashDigest`]s for the wheel.
-    pub hashes: Vec<HashDigest>,
+    pub hashes: HashDigests,
     /// The [`CacheInfo`] for the wheel.
     pub cache_info: CacheInfo,
 }
@@ -36,7 +36,7 @@ impl CachedWheel {
         // Convert to a cached wheel.
         let archive = cache.resolve_link(path).ok()?;
         let entry = CacheEntry::from_path(archive);
-        let hashes = Vec::new();
+        let hashes = HashDigests::empty();
         let cache_info = CacheInfo::default();
         Some(Self {
             filename,
@@ -186,6 +186,6 @@ impl CachedWheel {
 
 impl Hashed for CachedWheel {
     fn hashes(&self) -> &[HashDigest] {
-        &self.hashes
+        self.hashes.as_slice()
     }
 }

@@ -201,12 +201,15 @@ impl VersionMap {
     }
 
     /// Return the [`Hashes`] for the given version, if any.
-    pub(crate) fn hashes(&self, version: &Version) -> Option<Vec<HashDigest>> {
+    pub(crate) fn hashes(&self, version: &Version) -> Option<&[HashDigest]> {
         match self.inner {
-            VersionMapInner::Eager(ref eager) => {
-                eager.map.get(version).map(|file| file.hashes().to_vec())
-            }
-            VersionMapInner::Lazy(ref lazy) => lazy.get(version).map(|file| file.hashes().to_vec()),
+            VersionMapInner::Eager(ref eager) => eager
+                .map
+                .get(version)
+                .map(uv_distribution_types::PrioritizedDist::hashes),
+            VersionMapInner::Lazy(ref lazy) => lazy
+                .get(version)
+                .map(uv_distribution_types::PrioritizedDist::hashes),
         }
     }
 
@@ -422,7 +425,7 @@ impl VersionMapLazy {
                             &filename,
                             &filename.name,
                             &filename.version,
-                            &hashes,
+                            hashes.as_slice(),
                             yanked,
                             excluded,
                             upload_time,
@@ -438,7 +441,7 @@ impl VersionMapLazy {
                         let compatibility = self.source_dist_compatibility(
                             &filename.name,
                             &filename.version,
-                            &hashes,
+                            hashes.as_slice(),
                             yanked,
                             excluded,
                             upload_time,

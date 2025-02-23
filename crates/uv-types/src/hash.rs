@@ -1,6 +1,7 @@
-use rustc_hash::FxHashMap;
 use std::str::FromStr;
 use std::sync::Arc;
+
+use rustc_hash::FxHashMap;
 use url::Url;
 
 use uv_configuration::HashCheckingMode;
@@ -11,7 +12,7 @@ use uv_distribution_types::{
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::{
-    HashDigest, HashError, Hashes, Requirement, RequirementSource, ResolverMarkerEnvironment,
+    HashDigest, HashDigests, HashError, Requirement, RequirementSource, ResolverMarkerEnvironment,
 };
 
 #[derive(Debug, Default, Clone)]
@@ -157,7 +158,8 @@ impl HashStrategy {
                 // it from the fragment.
                 requirement
                     .hashes()
-                    .map(Hashes::into_digests)
+                    .map(HashDigests::from)
+                    .map(|hashes| hashes.to_vec())
                     .unwrap_or_default()
             } else {
                 // Parse the hashes.
@@ -210,7 +212,8 @@ impl HashStrategy {
                 // it from the fragment.
                 requirement
                     .hashes()
-                    .map(Hashes::into_digests)
+                    .map(HashDigests::from)
+                    .map(|hashes| hashes.to_vec())
                     .unwrap_or_default()
             } else {
                 // Parse the hashes.

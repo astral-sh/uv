@@ -1,6 +1,6 @@
 use uv_cache::{ArchiveId, Cache, ARCHIVE_VERSION};
 use uv_distribution_types::Hashed;
-use uv_pypi_types::HashDigest;
+use uv_pypi_types::{HashDigest, HashDigests};
 
 /// An archive (unzipped wheel) that exists in the local cache.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -8,14 +8,14 @@ pub struct Archive {
     /// The unique ID of the entry in the wheel's archive bucket.
     pub id: ArchiveId,
     /// The computed hashes of the archive.
-    pub hashes: Vec<HashDigest>,
+    pub hashes: HashDigests,
     /// The version of the archive bucket.
     pub version: u8,
 }
 
 impl Archive {
     /// Create a new [`Archive`] with the given ID and hashes.
-    pub(crate) fn new(id: ArchiveId, hashes: Vec<HashDigest>) -> Self {
+    pub(crate) fn new(id: ArchiveId, hashes: HashDigests) -> Self {
         Self {
             id,
             hashes,
@@ -31,6 +31,6 @@ impl Archive {
 
 impl Hashed for Archive {
     fn hashes(&self) -> &[HashDigest] {
-        &self.hashes
+        self.hashes.as_slice()
     }
 }

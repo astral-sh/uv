@@ -8,7 +8,7 @@ use uv_distribution_types::IndexUrl;
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
 use uv_pep508::{MarkerTree, VersionOrUrl};
-use uv_pypi_types::{HashDigest, HashError};
+use uv_pypi_types::{HashDigest, HashDigests, HashError};
 use uv_requirements_txt::{RequirementEntry, RequirementsTxtRequirement};
 
 use crate::universal_marker::UniversalMarker;
@@ -32,7 +32,7 @@ pub struct Preference {
     /// If coming from a package with diverging versions, the markers of the forks this preference
     /// is part of, otherwise `None`.
     fork_markers: Vec<UniversalMarker>,
-    hashes: Vec<HashDigest>,
+    hashes: HashDigests,
 }
 
 impl Preference {
@@ -89,7 +89,7 @@ impl Preference {
             marker: MarkerTree::TRUE,
             index: PreferenceIndex::from(package.index(install_path)?),
             fork_markers: package.fork_markers().to_vec(),
-            hashes: Vec::new(),
+            hashes: HashDigests::empty(),
         }))
     }
 
@@ -293,7 +293,7 @@ impl std::fmt::Display for Preference {
 #[derive(Debug, Clone)]
 pub(crate) struct Pin {
     version: Version,
-    hashes: Vec<HashDigest>,
+    hashes: HashDigests,
 }
 
 impl Pin {
@@ -304,7 +304,7 @@ impl Pin {
 
     /// Return the hashes of the pinned package.
     pub(crate) fn hashes(&self) -> &[HashDigest] {
-        &self.hashes
+        self.hashes.as_slice()
     }
 }
 
@@ -312,7 +312,7 @@ impl From<Version> for Pin {
     fn from(version: Version) -> Self {
         Self {
             version,
-            hashes: Vec::new(),
+            hashes: HashDigests::empty(),
         }
     }
 }

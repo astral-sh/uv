@@ -26,7 +26,7 @@ use uv_distribution_types::{
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
 use uv_platform_tags::Tags;
-use uv_pypi_types::HashDigest;
+use uv_pypi_types::{HashDigest, HashDigests};
 use uv_types::{BuildContext, BuildStack};
 
 use crate::archive::Archive;
@@ -719,7 +719,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     })
                     .await??;
 
-                    vec![]
+                    HashDigests::empty()
                 } else {
                     // Create a hasher for each hash algorithm.
                     let algorithms = hashes.algorithms();
@@ -843,7 +843,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             })
         } else if hashes.is_none() {
             // Otherwise, unzip the wheel.
-            let archive = Archive::new(self.unzip_wheel(path, wheel_entry.path()).await?, vec![]);
+            let archive = Archive::new(
+                self.unzip_wheel(path, wheel_entry.path()).await?,
+                HashDigests::empty(),
+            );
 
             // Write the archive pointer to the cache.
             let pointer = LocalArchivePointer {

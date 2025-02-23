@@ -9,7 +9,7 @@ use uv_fs::files;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::Tags;
-use uv_pypi_types::HashDigest;
+use uv_pypi_types::{HashDigest, HashDigests};
 
 /// The information about the wheel we either just built or got from the cache.
 #[derive(Debug, Clone)]
@@ -21,7 +21,7 @@ pub(crate) struct BuiltWheelMetadata {
     /// The parsed filename.
     pub(crate) filename: WheelFilename,
     /// The computed hashes of the source distribution from which the wheel was built.
-    pub(crate) hashes: Vec<HashDigest>,
+    pub(crate) hashes: HashDigests,
     /// The cache information for the underlying source distribution.
     pub(crate) cache_info: CacheInfo,
 }
@@ -49,12 +49,12 @@ impl BuiltWheelMetadata {
             path,
             filename,
             cache_info: CacheInfo::default(),
-            hashes: vec![],
+            hashes: HashDigests::empty(),
         })
     }
 
     #[must_use]
-    pub(crate) fn with_hashes(mut self, hashes: Vec<HashDigest>) -> Self {
+    pub(crate) fn with_hashes(mut self, hashes: HashDigests) -> Self {
         self.hashes = hashes;
         self
     }
@@ -68,6 +68,6 @@ impl BuiltWheelMetadata {
 
 impl Hashed for BuiltWheelMetadata {
     fn hashes(&self) -> &[HashDigest] {
-        &self.hashes
+        self.hashes.as_slice()
     }
 }

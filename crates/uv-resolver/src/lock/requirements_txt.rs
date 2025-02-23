@@ -576,7 +576,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                 let mut hashes = package.hashes();
                 hashes.sort_unstable();
                 if !hashes.is_empty() {
-                    for hash in &hashes {
+                    for hash in hashes.iter() {
                         writeln!(f, " \\")?;
                         write!(f, "    --hash=")?;
                         write!(f, "{hash}")?;
