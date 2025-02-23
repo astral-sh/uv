@@ -13,12 +13,12 @@ use uv_distribution_types::{
     BuildableSource, DirectorySourceUrl, HashGeneration, HashPolicy, SourceUrl, VersionId,
 };
 use uv_fs::Simplified;
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::Requirement;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
-use uv_warnings::warn_user_once;
+
 #[derive(Debug, Clone)]
 pub struct SourceTreeResolution {
     /// The requirements sourced from the source trees.
@@ -37,7 +37,7 @@ pub struct SourceTreeResolver<'a, Context: BuildContext> {
     /// The extras to include when resolving requirements.
     extras: &'a ExtrasSpecification,
     /// The groups to include when resolving requirements.
-    groups: &'a DevGroupsSpecification,
+    groups: &'a [PipGroupName],
     /// The hash policy to enforce.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -50,7 +50,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
     /// Instantiate a new [`SourceTreeResolver`] for a given set of `source_trees`.
     pub fn new(
         extras: &'a ExtrasSpecification,
-        groups: &'a DevGroupsSpecification,
+        groups: &'a [PipGroupName],
         hasher: &'a HashStrategy,
         index: &'a InMemoryIndex,
         database: DistributionDatabase<'a, Context>,
@@ -100,9 +100,28 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
 
         let mut requirements = Vec::new();
 
+        // pip --group is equivalent to --only-group
+        // but only use the ones that match this path
+        let only_groups = self
+            .groups
+            .iter()
+            .filter(|group| group.path == path)
+            .map(|group| group.name.clone())
+            .collect();
+        let groups = DevGroupsSpecification::from_args(
+            false,
+            false,
+            false,
+            Vec::new(),
+            Vec::new(),
+            false,
+            only_groups,
+            false,
+        );
+
         // Flatten any transitive extras and include dependencies
         // (unless something like --only-group was passed)
-        if self.groups.prod() {
+        if groups.prod() {
             requirements.extend(
                 FlatRequiresDist::from_requirements(metadata.requires_dist, &metadata.name)
                     .into_iter()
@@ -116,20 +135,17 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
 
         // Apply dependency-groups
         for (group_name, group) in &metadata.dependency_groups {
-            if self.groups.contains(group_name) {
+            if groups.contains(group_name) {
                 requirements.extend(group.iter().cloned());
             }
         }
         // Complain if dependency groups are named that don't appear.
-        // This is only a warning because *technically* we support passing in
-        // multiple pyproject.tomls, but at this level of abstraction we can't see them all,
-        // so hard erroring on "no pyproject.toml mentions this" is a bit difficult.
-        for name in self.groups.explicit_names() {
+        for name in groups.explicit_names() {
             if !metadata.dependency_groups.contains_key(name) {
-                warn_user_once!(
+                return Err(anyhow::anyhow!(
                     "The dependency-group '{name}' is not defined in {}",
                     path.display()
-                );
+                ));
             }
         }
 
