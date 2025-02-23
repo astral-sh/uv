@@ -1,6 +1,6 @@
-use std::{env, fmt};
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::{env, fmt};
 
 use anyhow::Context;
 use jiff::Timestamp;
@@ -39,7 +39,6 @@ pub(crate) enum Level {
 // Discuss if we need to seperate trace or debug and the heirarchical layer or not into different args (based on what the use cases are)
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum FileLogLevel {
-
     /// Write debug messages to the log file.
     #[default]
     Verbose,
@@ -155,8 +154,7 @@ pub(crate) fn setup_logging(
             .with_target("", tracing::level_filters::LevelFilter::INFO),
     );
 
-    let subscriber = tracing_subscriber::registry()
-        .with(durations_layer);
+    let subscriber = tracing_subscriber::registry().with(durations_layer);
 
     // Building the layers for logging sort of like a builder pattern
     let mut layers = Vec::new();
@@ -193,23 +191,26 @@ pub(crate) fn setup_logging(
                 show_spans: false,
             };
 
-            layers.push(tracing_subscriber::fmt::layer()
-                .event_format(format)
-                .with_writer(writer)
-                .with_ansi(ansi)
-                .with_filter(filter)
-                .boxed());
-
+            layers.push(
+                tracing_subscriber::fmt::layer()
+                    .event_format(format)
+                    .with_writer(writer)
+                    .with_ansi(ansi)
+                    .with_filter(filter)
+                    .boxed(),
+            );
         }
         Level::ExtraVerbose => {
             // Regardless of the tracing level, include the uptime and target for each message.
-            layers.push(HierarchicalLayer::default()
-                .with_targets(true)
-                .with_timer(Uptime::default())
-                .with_writer(writer)
-                .with_ansi(ansi)
-                .with_filter(filter)
-                .boxed());
+            layers.push(
+                HierarchicalLayer::default()
+                    .with_targets(true)
+                    .with_timer(Uptime::default())
+                    .with_writer(writer)
+                    .with_ansi(ansi)
+                    .with_filter(filter)
+                    .boxed(),
+            );
         }
     }
     // TODO might be better to deal with this in settings or something
@@ -224,15 +225,15 @@ pub(crate) fn setup_logging(
     if let Some(path) = log_path {
         // file_filter sets the level of logs by default debug logs are written to the file
         let file_filter_str = match file_log_level {
-            FileLogLevel::Verbose|FileLogLevel::ExtraVerbose => "uv=debug",
-            FileLogLevel::TraceVerbose| FileLogLevel::TraceExtraVerbose => "trace",
+            FileLogLevel::Verbose | FileLogLevel::ExtraVerbose => "uv=debug",
+            FileLogLevel::TraceVerbose | FileLogLevel::TraceExtraVerbose => "trace",
         };
 
-        let file_filter = EnvFilter::try_new(file_filter_str)
-        .unwrap_or_else(|_| EnvFilter::new("uv=debug"));
+        let file_filter =
+            EnvFilter::try_new(file_filter_str).unwrap_or_else(|_| EnvFilter::new("uv=debug"));
         let file_fomat = UvFormat {
-            // Setting timestamp display as false as to mimic the behavior of the console logs 
-            // however wanted to discuss:                                                                                                           the case where user might want to know when they wrote the logs 
+            // Setting timestamp display as false as to mimic the behavior of the console logs
+            // however wanted to discuss:                                                                                                           the case where user might want to know when they wrote the logs
             display_timestamp: false,
             display_level: true,
             show_spans: false,
@@ -244,30 +245,37 @@ pub(crate) fn setup_logging(
         // Discuss if previous content should be overwritten or appended.
         // Should it panic or gracefully exit just without logging in case of failure to open or create the file.
         let log_file = fs_err::OpenOptions::new()
-        .append(true)
-        .create(true)
-        .open(&new_path)
-        .with_context(|| format!("Failed to open or create log file: {new_path:?}"))?;
+            .append(true)
+            .create(true)
+            .open(&new_path)
+            .with_context(|| format!("Failed to open or create log file: {new_path:?}"))?;
 
         // Forcing no anstream in file logs, I don't like the idea of using the same env variable NO_COLOR or cli flag to control both console and file logs
         // If there is a case to introduce color for file logs we can introduce a new env variable or cli flag for it.
-        let file_writer = std::sync::Mutex::new(anstream::AutoStream::new(Box::new(log_file) as Box<dyn std::io::Write + Send>, anstream::ColorChoice::Never));
+        let file_writer = std::sync::Mutex::new(anstream::AutoStream::new(
+            Box::new(log_file) as Box<dyn std::io::Write + Send>,
+            anstream::ColorChoice::Never,
+        ));
 
         // Depending on the log level, different layers are added to the subscriber. However me might need to seperate trace or debug and the heirarchical layer or not into different args (based on what the use cases are)
         match file_log_level {
             FileLogLevel::Verbose | FileLogLevel::TraceVerbose => {
-                layers.push(tracing_subscriber::fmt::layer()
-                    .event_format(file_fomat)
-                    .with_writer(file_writer)
-                    .with_filter(file_filter).boxed());
-                    
-            }
-            FileLogLevel::ExtraVerbose | FileLogLevel::TraceExtraVerbose=> {
                 layers.push(
-                HierarchicalLayer::default()
-                    .with_writer(file_writer)
-                    .with_timer(Uptime::default())
-                    .with_filter(file_filter).boxed());
+                    tracing_subscriber::fmt::layer()
+                        .event_format(file_fomat)
+                        .with_writer(file_writer)
+                        .with_filter(file_filter)
+                        .boxed(),
+                );
+            }
+            FileLogLevel::ExtraVerbose | FileLogLevel::TraceExtraVerbose => {
+                layers.push(
+                    HierarchicalLayer::default()
+                        .with_writer(file_writer)
+                        .with_timer(Uptime::default())
+                        .with_filter(file_filter)
+                        .boxed(),
+                );
             }
         }
     };

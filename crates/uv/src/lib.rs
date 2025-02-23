@@ -1,12 +1,3 @@
-use std::borrow::Cow;
-use std::ffi::OsString;
-use std::fmt::Write;
-use std::io::stdout;
-use std::path::Path;
-use std::process::ExitCode;
-use std::str::FromStr;
-use std::sync::atomic::Ordering;
-use std::env;
 use anstream::eprintln;
 use anyhow::{bail, Context, Result};
 use clap::error::{ContextKind, ContextValue};
@@ -14,6 +5,15 @@ use clap::{CommandFactory, Parser};
 use futures::FutureExt;
 use owo_colors::OwoColorize;
 use settings::PipTreeSettings;
+use std::borrow::Cow;
+use std::env;
+use std::ffi::OsString;
+use std::fmt::Write;
+use std::io::stdout;
+use std::path::Path;
+use std::process::ExitCode;
+use std::str::FromStr;
+use std::sync::atomic::Ordering;
 use tokio::task::spawn_blocking;
 use tracing::{debug, instrument};
 use uv_cache::{Cache, Refresh};
@@ -283,7 +283,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             1 => logging::FileLogLevel::ExtraVerbose,
             2 => logging::FileLogLevel::TraceVerbose,
             3.. => logging::FileLogLevel::TraceExtraVerbose,
-        }
+        },
     )?;
 
     // Configure the `Printer`, which controls user-facing output in the CLI.
@@ -1940,36 +1940,40 @@ where
         .join()
         .expect("Tokio executor failed, was there a panic?");
 
-        // Discuss if pointing to log file should only be done on error or always.
-        // Should we also point to the log file if the error was caused when trying to write to logs - unable to create .log file for example seems counterintuitive to direct in that case, should we add a new ExitStatus to handle that scenario?
-        match result {
-            Ok(code) => {
-                if let ExitStatus::Error | ExitStatus::Failure = code {
-                    if let Some(log_path) = log_path {
-                        print_log_info(&log_path);
-                    }
-                }
-                code.into()
-            }
-            Err(err) => {
-                let mut causes = err.chain();
-                eprintln!(
-                    "{}: {}",
-                    "error".red().bold(),
-                    causes.next().unwrap().to_string().trim()
-                );
-                for cause in causes {
-                    eprintln!("  {}: {}", "Caused by".red().bold(), cause.to_string().trim());
-                }
+    // Discuss if pointing to log file should only be done on error or always.
+    // Should we also point to the log file if the error was caused when trying to write to logs - unable to create .log file for example seems counterintuitive to direct in that case, should we add a new ExitStatus to handle that scenario?
+    match result {
+        Ok(code) => {
+            if let ExitStatus::Error | ExitStatus::Failure = code {
                 if let Some(log_path) = log_path {
                     print_log_info(&log_path);
                 }
-                ExitStatus::Error.into()
             }
+            code.into()
         }
+        Err(err) => {
+            let mut causes = err.chain();
+            eprintln!(
+                "{}: {}",
+                "error".red().bold(),
+                causes.next().unwrap().to_string().trim()
+            );
+            for cause in causes {
+                eprintln!(
+                    "  {}: {}",
+                    "Caused by".red().bold(),
+                    cause.to_string().trim()
+                );
+            }
+            if let Some(log_path) = log_path {
+                print_log_info(&log_path);
+            }
+            ExitStatus::Error.into()
+        }
+    }
 }
 
-// TODO implement in a way that it doesn't panic 
+// TODO implement in a way that it doesn't panic
 fn print_log_info(log_path: &Path) {
     let mut log_file_path = log_path.to_owned();
     log_file_path.set_extension("log");
