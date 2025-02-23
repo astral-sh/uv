@@ -415,16 +415,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = cache_shard.shard(revision.id());
         let source_dist_entry = cache_shard.entry(SOURCE);
 
-        // Validate that the subdirectory exists.
-        if let Some(subdirectory) = subdirectory {
-            if !source_dist_entry.path().join(subdirectory).is_dir() {
-                return Err(Error::MissingSubdirectory(
-                    url.clone(),
-                    subdirectory.to_path_buf(),
-                ));
-            }
-        }
-
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.build_context.config_settings();
         let cache_shard = if config_settings.is_empty() {
@@ -455,6 +445,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             )
             .await?
         };
+
+        // Validate that the subdirectory exists.
+        if let Some(subdirectory) = subdirectory {
+            if !source_dist_entry.path().join(subdirectory).is_dir() {
+                return Err(Error::MissingSubdirectory(
+                    url.clone(),
+                    subdirectory.to_path_buf(),
+                ));
+            }
+        }
 
         let task = self
             .reporter
@@ -528,16 +528,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = cache_shard.shard(revision.id());
         let source_dist_entry = cache_shard.entry(SOURCE);
 
-        // Validate that the subdirectory exists.
-        if let Some(subdirectory) = subdirectory {
-            if !source_dist_entry.path().join(subdirectory).is_dir() {
-                return Err(Error::MissingSubdirectory(
-                    url.clone(),
-                    subdirectory.to_path_buf(),
-                ));
-            }
-        }
-
         // If the metadata is static, return it.
         let dynamic =
             match StaticMetadata::read(source, source_dist_entry.path(), subdirectory).await? {
@@ -585,6 +575,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             )
             .await?
         };
+
+        // Validate that the subdirectory exists.
+        if let Some(subdirectory) = subdirectory {
+            if !source_dist_entry.path().join(subdirectory).is_dir() {
+                return Err(Error::MissingSubdirectory(
+                    url.clone(),
+                    subdirectory.to_path_buf(),
+                ));
+            }
+        }
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.build_context.config_settings();
