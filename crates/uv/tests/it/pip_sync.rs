@@ -35,16 +35,17 @@ fn missing_requirements_txt() {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: File not found: `requirements.txt`
-    "###);
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    ");
 
     requirements_txt.assert(predicates::path::missing());
 }
@@ -278,12 +279,12 @@ fn install_symlink_no_cache() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--link-mode")
         .arg("symlink")
         .arg("--no-cache")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -292,7 +293,8 @@ fn install_symlink_no_cache() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     error: Symlink-based installation is not supported with `--no-cache`. The created environment will be rendered unusable by the removal of the cache.
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -957,10 +959,10 @@ fn install_no_index() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("iniconfig==2.0.0")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--no-index")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -970,7 +972,8 @@ fn install_no_index() -> Result<()> {
       ╰─▶ Because iniconfig was not found in the provided package locations and you require iniconfig==2.0.0, we can conclude that your requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     context.assert_command("import iniconfig").failure();
@@ -987,7 +990,7 @@ fn install_no_index_cached() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("iniconfig==2.0.0")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1006,10 +1009,10 @@ fn install_no_index_cached() -> Result<()> {
 
     context.pip_uninstall().arg("iniconfig").assert().success();
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--no-index")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1019,7 +1022,8 @@ fn install_no_index_cached() -> Result<()> {
       ╰─▶ Because iniconfig was not found in the provided package locations and you require iniconfig==2.0.0, we can conclude that your requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     context.assert_command("import iniconfig").failure();
@@ -1935,9 +1939,9 @@ fn duplicate_package_overlap() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3\nMarkupSafe==2.1.2")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1945,7 +1949,8 @@ fn duplicate_package_overlap() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because you require markupsafe==2.1.3 and markupsafe==2.1.2, we can conclude that your requirements are unsatisfiable.
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -2895,9 +2900,9 @@ fn offline() -> Result<()> {
     requirements_in.write_str("black==23.10.1")?;
 
     // Install with `--offline` with an empty cache.
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
-        .arg("--offline"), @r###"
+        .arg("--offline"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2907,7 +2912,8 @@ fn offline() -> Result<()> {
       ╰─▶ Because black was not found in the cache and you require black==23.10.1, we can conclude that your requirements are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     // Populate the cache.
@@ -2985,10 +2991,10 @@ fn incompatible_constraint() -> Result<()> {
     let constraints_txt = context.temp_dir.child("constraints.txt");
     constraints_txt.write_str("anyio==3.6.0")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--constraint")
-        .arg("constraints.txt"), @r###"
+        .arg("constraints.txt"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2996,7 +3002,8 @@ fn incompatible_constraint() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because you require anyio==3.7.0 and anyio==3.6.0, we can conclude that your requirements are unsatisfiable.
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -3084,8 +3091,8 @@ fn repeat_requirement_incompatible() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio<4.0.0\nanyio==4.0.0")?;
 
-    uv_snapshot!(context.pip_sync()
-        .arg("requirements.in"), @r###"
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.in"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3093,7 +3100,8 @@ fn repeat_requirement_incompatible() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because you require anyio<4.0.0 and anyio==4.0.0, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    ");
 
     Ok(())
 }
@@ -3446,16 +3454,17 @@ fn require_hashes_unknown_algorithm() -> Result<()> {
         "anyio==4.0.0 --hash=foo:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
     )?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Unsupported hash algorithm (expected one of: `md5`, `sha256`, `sha384`, or `sha512`) on: `foo`
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -3485,16 +3494,17 @@ fn require_hashes_missing_hash() -> Result<()> {
     );
 
     // Error when `--require-hashes` is provided.
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: anyio==4.0.0
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -3526,16 +3536,17 @@ fn require_hashes_missing_version() -> Result<()> {
     );
 
     // Error when `--require-hashes` is provided.
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -3567,16 +3578,17 @@ fn require_hashes_invalid_operator() -> Result<()> {
     );
 
     // Error when `--require-hashes` is provided.
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio>4.0.0
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -3591,11 +3603,11 @@ fn require_hashes_wheel_no_binary() -> Result<()> {
     requirements_txt
         .write_str("anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--no-binary")
         .arg(":all:")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3610,7 +3622,8 @@ fn require_hashes_wheel_no_binary() -> Result<()> {
 
           Computed:
             sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -3683,11 +3696,11 @@ fn require_hashes_source_only_binary() -> Result<()> {
     requirements_txt
         .write_str("anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--only-binary")
         .arg(":all:")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3702,7 +3715,8 @@ fn require_hashes_source_only_binary() -> Result<()> {
 
           Computed:
             sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -3717,9 +3731,9 @@ fn require_hashes_wrong_digest() -> Result<()> {
     requirements_txt
         .write_str("anyio==4.0.0 --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3734,7 +3748,8 @@ fn require_hashes_wrong_digest() -> Result<()> {
 
           Computed:
             sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -3749,9 +3764,9 @@ fn require_hashes_wrong_algorithm() -> Result<()> {
     requirements_txt
         .write_str("anyio==4.0.0 --hash=sha512:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3766,7 +3781,8 @@ fn require_hashes_wrong_algorithm() -> Result<()> {
 
           Computed:
             sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -3819,10 +3835,10 @@ fn require_hashes_source_url() -> Result<()> {
     requirements_txt
         .write_str("source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz --hash=sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--reinstall")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3836,7 +3852,8 @@ fn require_hashes_source_url() -> Result<()> {
 
           Computed:
             sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -3851,9 +3868,9 @@ fn require_hashes_source_url_mismatch() -> Result<()> {
     requirements_txt
         .write_str("source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz --hash=sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3867,7 +3884,8 @@ fn require_hashes_source_url_mismatch() -> Result<()> {
 
           Computed:
             sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -3920,10 +3938,10 @@ fn require_hashes_wheel_url() -> Result<()> {
     requirements_txt
         .write_str("anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--reinstall")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3938,7 +3956,8 @@ fn require_hashes_wheel_url() -> Result<()> {
 
           Computed:
             sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     // Sync a new dependency and include the wrong hash for anyio. Verify that we reuse anyio
@@ -3975,9 +3994,9 @@ fn require_hashes_wheel_url_mismatch() -> Result<()> {
     requirements_txt
         .write_str("anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3992,7 +4011,8 @@ fn require_hashes_wheel_url_mismatch() -> Result<()> {
 
           Computed:
             sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -4008,9 +4028,9 @@ fn require_hashes_git() -> Result<()> {
     requirements_txt
         .write_str("anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4018,7 +4038,8 @@ fn require_hashes_git() -> Result<()> {
     ----- stderr -----
       × Failed to download and build `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
       ╰─▶ Hash-checking is not supported for Git repositories: `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -4083,10 +4104,10 @@ fn require_hashes_re_download() -> Result<()> {
     requirements_txt
         .write_str("anyio==4.0.0 --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--reinstall")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4101,7 +4122,8 @@ fn require_hashes_re_download() -> Result<()> {
 
           Computed:
             sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     // Reinstall with `--require-hashes`, and the right hash.
@@ -4335,16 +4357,17 @@ fn require_hashes_repeated_dependency() -> Result<()> {
     requirements_txt
         .write_str("anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a\nanyio")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     // Reverse the order.
@@ -4352,16 +4375,17 @@ fn require_hashes_repeated_dependency() -> Result<()> {
     requirements_txt
         .write_str("anyio\nanyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -4453,10 +4477,10 @@ fn require_hashes_repeated_hash() -> Result<()> {
             anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=md5:520d85e19168705cdf0223621b18831a
     " })?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--require-hashes")
-        .arg("--reinstall"), @r###"
+        .arg("--reinstall"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4471,7 +4495,8 @@ fn require_hashes_repeated_hash() -> Result<()> {
 
           Computed:
             md5:420d85e19168705cdf0223621b18831a
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -4560,7 +4585,7 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
@@ -4582,12 +4607,12 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("example-a-961b4c22==1.0.0 --hash=sha256:123")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/no-hash/simple-html/example-a-961b4c22/index.html"), @r###"
+        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/no-hash/simple-html/example-a-961b4c22/index.html"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4602,7 +4627,8 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
 
           Computed:
             sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     // Third, use the hash from the source distribution. This will actually fail, when it _could_
@@ -4611,12 +4637,12 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/no-hash/simple-html/example-a-961b4c22/index.html"), @r###"
+        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/no-hash/simple-html/example-a-961b4c22/index.html"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4631,7 +4657,8 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
 
           Computed:
             sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     // Fourth, use the hash from the source distribution, and disable wheels. This should succeed.
@@ -4701,12 +4728,12 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("example-a-961b4c22==1.0.0 --hash=sha256:123")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/invalid-hash/simple-html/example-a-961b4c22/index.html"), @r###"
+        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/invalid-hash/simple-html/example-a-961b4c22/index.html"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4721,7 +4748,8 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
 
           Computed:
             sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     // Second, request the invalid hash, that the registry _thinks_ is correct. We should reject it.
@@ -4729,12 +4757,12 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/invalid-hash/simple-html/example-a-961b4c22/index.html"), @r###"
+        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/invalid-hash/simple-html/example-a-961b4c22/index.html"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4749,7 +4777,8 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
 
           Computed:
             sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     // Third, request the correct hash, that the registry _thinks_ is correct. We should accept
@@ -4808,13 +4837,13 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e --hash=sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--refresh")
         .arg("--reinstall")
         .arg("--require-hashes")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/invalid-hash/simple-html/example-a-961b4c22/index.html"), @r###"
+        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/invalid-hash/simple-html/example-a-961b4c22/index.html"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4830,7 +4859,8 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
 
           Computed:
             sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -4875,12 +4905,12 @@ fn require_hashes_registry_valid_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes")
         .arg("--find-links")
-        .arg("https://astral-test.github.io/astral-test-hash/valid-hash/simple-html/"), @r###"
+        .arg("https://astral-test.github.io/astral-test-hash/valid-hash/simple-html/"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4888,7 +4918,8 @@ fn require_hashes_registry_valid_hash() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because example-a-961b4c22 was not found in the package registry and you require example-a-961b4c22==1.0.0, we can conclude that your requirements are unsatisfiable.
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -4903,13 +4934,13 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("example-a-961b4c22==1.0.0 --hash=sha256:123")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
         .arg("--index-url")
-        .arg("https://astral-test.github.io/astral-test-hash/invalid-hash/simple-html/"), @r###"
+        .arg("https://astral-test.github.io/astral-test-hash/invalid-hash/simple-html/"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4924,7 +4955,8 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
 
           Computed:
             sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     // Second, request the invalid hash, that the registry _thinks_ is correct. We should reject it.
@@ -4932,13 +4964,13 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
         .arg("--index-url")
-        .arg("https://astral-test.github.io/astral-test-hash/invalid-hash/simple-html/"), @r###"
+        .arg("https://astral-test.github.io/astral-test-hash/invalid-hash/simple-html/"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4953,7 +4985,8 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
 
           Computed:
             sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     // Third, request the correct hash, that the registry _thinks_ is correct. We should accept
@@ -5014,14 +5047,14 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e --hash=sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--refresh")
         .arg("--reinstall")
         .arg("--require-hashes")
         .arg("--index-url")
-        .arg("https://astral-test.github.io/astral-test-hash/invalid-hash/simple-html/"), @r###"
+        .arg("https://astral-test.github.io/astral-test-hash/invalid-hash/simple-html/"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -5037,7 +5070,8 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
 
           Computed:
             sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -5079,16 +5113,17 @@ fn require_hashes_url_other_fragment() -> Result<()> {
     requirements_txt
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#foo=bar")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#foo=bar
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -5103,9 +5138,9 @@ fn require_hashes_url_invalid() -> Result<()> {
     requirements_txt
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -5120,7 +5155,8 @@ fn require_hashes_url_invalid() -> Result<()> {
 
           Computed:
             sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -5135,9 +5171,9 @@ fn require_hashes_url_ignore() -> Result<()> {
     requirements_txt
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374 --hash sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -5152,7 +5188,8 @@ fn require_hashes_url_ignore() -> Result<()> {
 
           Computed:
             sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -5543,10 +5580,10 @@ fn incompatible_build_constraint() -> Result<()> {
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
     constraints_txt.write_str("setuptools==1")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--build-constraint")
-        .arg("build_constraints.txt"), @r###"
+        .arg("build_constraints.txt"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -5557,7 +5594,8 @@ fn incompatible_build_constraint() -> Result<()> {
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())
@@ -5729,8 +5767,8 @@ fn semicolon_no_space() -> Result<()> {
     let requirements = context.temp_dir.child("requirements.txt");
     requirements.write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl;python_version > '3.10'")?;
 
-    uv_snapshot!(context.pip_sync()
-        .arg("requirements.txt"), @r###"
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -5740,7 +5778,8 @@ fn semicolon_no_space() -> Result<()> {
       Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl;python_version%20%3E%20'3.10'`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
     iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl;python_version > '3.10'
                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    "###
+    See [UV_LOG_DIR]/pip_sync.log for detailed logs
+    "
     );
 
     Ok(())

@@ -312,7 +312,7 @@ fn compile_pyproject_toml_eager_validation() -> Result<()> {
     // This should fail without attempting to build the package.
     uv_snapshot!(context.filters(), context
         .pip_compile()
-        .arg("pyproject.toml"), @r###"
+        .arg("pyproject.toml"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -320,7 +320,8 @@ fn compile_pyproject_toml_eager_validation() -> Result<()> {
     ----- stderr -----
     error: Failed to parse entry: `anyio`
       Caused by: `anyio` references a workspace in `tool.uv.sources` (e.g., `anyio = { workspace = true }`), but is not a workspace member
-    "###);
+    See [UV_LOG_DIR]/pip_compile.log for detailed logs
+    ");
 
     Ok(())
 }
@@ -13581,7 +13582,7 @@ fn incompatible_build_constraint() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.txt")
         .arg("--build-constraint")
-        .arg("build_constraints.txt"), @r###"
+        .arg("build_constraints.txt"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13591,7 +13592,8 @@ fn incompatible_build_constraint() -> Result<()> {
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
-    "###
+    See [UV_LOG_DIR]/pip_compile.log for detailed logs
+    "
     );
 
     Ok(())
@@ -13650,8 +13652,8 @@ build-constraint-dependencies = [
 "#,
     )?;
 
-    uv_snapshot!(context.pip_compile()
-        .arg("pyproject.toml"), @r###"
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("pyproject.toml"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13661,7 +13663,8 @@ build-constraint-dependencies = [
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
-    "###
+    See [UV_LOG_DIR]/pip_compile.log for detailed logs
+    "
     );
 
     Ok(())
@@ -13735,10 +13738,10 @@ build-constraint-dependencies = [
 "#,
     )?;
 
-    uv_snapshot!(context.pip_compile()
+    uv_snapshot!(context.filters(), context.pip_compile()
         .arg("pyproject.toml")
         .arg("--build-constraint")
-        .arg("build_constraints.txt"), @r###"
+        .arg("build_constraints.txt"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13748,7 +13751,8 @@ build-constraint-dependencies = [
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40 and setuptools==1, we can conclude that your requirements are unsatisfiable.
-    "###
+    See [UV_LOG_DIR]/pip_compile.log for detailed logs
+    "
     );
 
     // compatible setuptools version in pyproject.toml, incompatible in build_constraints.txt
@@ -13774,10 +13778,10 @@ build-constraint-dependencies = [
 "#,
     )?;
 
-    uv_snapshot!(context.pip_compile()
+    uv_snapshot!(context.filters(), context.pip_compile()
         .arg("pyproject.toml")
         .arg("--build-constraint")
-        .arg("build_constraints.txt"), @r###"
+        .arg("build_constraints.txt"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13787,7 +13791,8 @@ build-constraint-dependencies = [
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools==1 and setuptools>=40, we can conclude that your requirements are unsatisfiable.
-    "###
+    See [UV_LOG_DIR]/pip_compile.log for detailed logs
+    "
     );
 
     Ok(())
@@ -14834,11 +14839,11 @@ fn invalid_platform() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("open3d")?;
 
-    uv_snapshot!(context
+    uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("--python-platform")
         .arg("linux")
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -14851,7 +14856,8 @@ fn invalid_platform() -> Result<()> {
           hint: You require CPython 3.10 (`cp310`), but we only found wheels for `open3d` (v0.15.2) with the following Python ABI tags: `cp36m`, `cp37m`, `cp38`, `cp39`
 
           hint: Wheels are available for `open3d` (v0.18.0) on the following platforms: `manylinux_2_27_aarch64`, `manylinux_2_27_x86_64`, `macosx_11_0_x86_64`, `macosx_13_0_arm64`, `win_amd64`
-    "###);
+    See [UV_LOG_DIR]/pip_compile.log for detailed logs
+    ");
 
     Ok(())
 }

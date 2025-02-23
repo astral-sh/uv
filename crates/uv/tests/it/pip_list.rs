@@ -177,14 +177,15 @@ fn list_outdated_json() -> Result<()> {
 fn list_outdated_freeze() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.pip_list().arg("--outdated").arg("--format").arg("freeze"), @r###"
+    uv_snapshot!(context.filters(), context.pip_list().arg("--outdated").arg("--format").arg("freeze"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: `--outdated` cannot be used with `--format freeze`
-    "###
+    See [UV_LOG_DIR]/pip_list.log for detailed logs
+    "
     );
 }
 

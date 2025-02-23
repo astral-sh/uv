@@ -586,34 +586,37 @@ fn python_find_unsupported_version() {
     ");
 
     // Request a future version
-    uv_snapshot!(context.filters(), context.python_find().arg("4.2"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg("4.2"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No interpreter found for Python 4.2 in virtual environments, managed installations, or search path
-    "###);
+    See [UV_LOG_DIR]/python_find.log for detailed logs
+    ");
 
     // Request a low version with a range
-    uv_snapshot!(context.filters(), context.python_find().arg("<3.0"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg("<3.0"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No interpreter found for Python <3.0 in virtual environments, managed installations, or search path
-    "###);
+    See [UV_LOG_DIR]/python_find.log for detailed logs
+    ");
 
     // Request free-threaded Python on unsupported version
-    uv_snapshot!(context.filters(), context.python_find().arg("3.12t"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg("3.12t"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Invalid version request: Python <3.13 does not support free-threading but 3.12t was requested.
-    "###);
+    See [UV_LOG_DIR]/python_find.log for detailed logs
+    ");
 }
 
 #[test]

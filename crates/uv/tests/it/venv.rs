@@ -650,14 +650,15 @@ fn create_venv_unknown_python_minor() {
         "###
         );
     } else {
-        uv_snapshot!(&mut command, @r###"
+        uv_snapshot!(context.filters(), &mut command, @r"
         success: false
         exit_code: 1
         ----- stdout -----
 
         ----- stderr -----
           × No interpreter found for Python 3.100 in managed installations or search path
-        "###
+        See [UV_LOG_DIR]/venv.log for detailed logs
+        "
         );
     }
 
@@ -688,14 +689,15 @@ fn create_venv_unknown_python_patch() {
         "###
         );
     } else {
-        uv_snapshot!(&mut command, @r###"
+        uv_snapshot!(context.filters(), &mut command, @r"
         success: false
         exit_code: 1
         ----- stdout -----
 
         ----- stderr -----
-          × No interpreter found for Python 3.12.100 in managed installations or search path
-        "###
+          × No interpreter found for Python 3.12.[X] in managed installations or search path
+        See [UV_LOG_DIR]/venv.log for detailed logs
+        "
         );
     }
 

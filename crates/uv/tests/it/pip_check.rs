@@ -150,7 +150,7 @@ fn check_multiple_incompatible_packages() -> Result<()> {
     let requirements_txt_two = context.temp_dir.child("requirements_two.txt");
     requirements_txt_two.write_str("idna==2.4\nurllib3==1.20")?;
 
-    uv_snapshot!(context.filters(), context
+    uv_snapshot!(context
         .pip_install()
         .arg("-r")
         .arg("requirements_two.txt")
@@ -173,7 +173,7 @@ fn check_multiple_incompatible_packages() -> Result<()> {
     "###
     );
 
-    uv_snapshot!(context.pip_check(), @r###"
+    uv_snapshot!(context.filters(), context.pip_check(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -183,7 +183,8 @@ fn check_multiple_incompatible_packages() -> Result<()> {
     Found 2 incompatibilities
     The package `requests` requires `idna>=2.5,<4`, but `2.4` is installed
     The package `requests` requires `urllib3>=1.21.1,<3`, but `1.20` is installed
-    "###
+    See [UV_LOG_DIR]/pip_check.log for detailed logs
+    "
     );
 
     Ok(())

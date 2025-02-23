@@ -67,16 +67,17 @@ fn empty_requirements_txt() -> Result<()> {
 fn missing_pyproject_toml() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
-        .arg("pyproject.toml"), @r###"
+        .arg("pyproject.toml"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: File not found: `pyproject.toml`
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 }
 
@@ -122,9 +123,9 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str("123 - 456")?;
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
-        .arg("pyproject.toml"), @r###"
+        .arg("pyproject.toml"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -143,8 +144,8 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
     1 | 123 - 456
       |     ^
     expected `.`, `=`
-
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 
     Ok(())
@@ -156,9 +157,9 @@ fn invalid_pyproject_toml_project_schema() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str("[project]")?;
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
-        .arg("pyproject.toml"), @r###"
+        .arg("pyproject.toml"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -170,7 +171,8 @@ fn invalid_pyproject_toml_project_schema() -> Result<()> {
     1 | [project]
       | ^^^^^^^^^
     `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 
     Ok(())
@@ -259,15 +261,16 @@ fn invalid_uv_toml_option_disallowed() -> Result<()> {
         managed = true
     "})?;
 
-    uv_snapshot!(context.pip_install()
-        .arg("iniconfig"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("iniconfig"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Failed to parse: `uv.toml`. The `managed` field is not allowed in a `uv.toml` file. `managed` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 
     Ok(())
@@ -393,10 +396,10 @@ fn missing_pip() {
 fn no_solution() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("flask>=3.0.2")
         .arg("WerkZeug<1.0.0")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -405,7 +408,8 @@ fn no_solution() {
       × No solution found when resolving dependencies:
       ╰─▶ Because only flask<=3.0.2 is available and flask==3.0.2 depends on werkzeug>=3.0.0, we can conclude that flask>=3.0.2 depends on werkzeug>=3.0.0.
           And because you require flask>=3.0.2 and werkzeug<1.0.0, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    ");
 }
 
 /// Install a package from the command line into a virtual environment.
@@ -548,10 +552,10 @@ werkzeug==3.0.1
 ",
     )?;
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -560,7 +564,8 @@ werkzeug==3.0.1
       × No solution found when resolving dependencies:
       ╰─▶ Because flask==3.0.2 depends on click>=8.1.3 and you require click==7.0.0, we can conclude that your requirements and flask==3.0.2 are incompatible.
           And because you require flask==3.0.2, we can conclude that your requirements are unsatisfiable.
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 
     Ok(())
@@ -1646,9 +1651,9 @@ fn reinstall_build_system() -> Result<()> {
 fn install_no_index() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("Flask")
-        .arg("--no-index"), @r###"
+        .arg("--no-index"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1658,7 +1663,8 @@ fn install_no_index() {
       ╰─▶ Because flask was not found in the provided package locations and you require flask, we can conclude that your requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 
     context.assert_command("import flask").failure();
@@ -1670,9 +1676,9 @@ fn install_no_index() {
 fn install_no_index_version() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("Flask==3.0.0")
-        .arg("--no-index"), @r###"
+        .arg("--no-index"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1682,7 +1688,8 @@ fn install_no_index_version() {
       ╰─▶ Because flask was not found in the provided package locations and you require flask==3.0.0, we can conclude that your requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 
     context.assert_command("import flask").failure();
@@ -2425,9 +2432,9 @@ fn install_only_binary_all_and_no_binary_all() {
         .arg("--only-binary")
         .arg(":all:")
         .arg("--strict");
-    uv_snapshot!(
+    uv_snapshot!(context.filters(),
         command,
-        @r###"
+        @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2439,7 +2446,8 @@ fn install_only_binary_all_and_no_binary_all() {
           hint: Pre-releases are available for `anyio` in the requested range (e.g., 4.0.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
 
           hint: Wheels are required for `anyio` because building from source is disabled for all packages (i.e., with `--no-build`)
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 
     context.assert_command("import anyio").failure();
@@ -2519,10 +2527,10 @@ fn only_binary_requirements_txt() {
         })
         .unwrap();
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2532,7 +2540,8 @@ fn only_binary_requirements_txt() {
       ╰─▶ Because django-allauth==0.51.0 has no usable wheels and you require django-allauth==0.51.0, we can conclude that your requirements are unsatisfiable.
 
           hint: Wheels are required for `django-allauth` because building from source is disabled for `django-allauth` (i.e., with `--no-build-package django-allauth`)
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 }
 
@@ -3256,17 +3265,18 @@ fn install_constraints_extra() -> Result<()> {
 fn install_constraints_respects_offline_mode() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
             .arg("--offline")
             .arg("-r")
-            .arg("http://example.com/requirements.txt"), @r###"
+            .arg("http://example.com/requirements.txt"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Network connectivity is disabled, but a remote requirements file was requested: http://example.com/requirements.txt
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 }
 
@@ -5264,7 +5274,7 @@ fn install_package_basic_auth_from_keyring_wrong_password() {
         .assert()
         .success();
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
         .arg("--index-url")
         .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
@@ -5272,7 +5282,7 @@ fn install_package_basic_auth_from_keyring_wrong_password() {
         .arg("subprocess")
         .arg("--strict")
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "foobar"}}"#)
-        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r###"
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -5284,7 +5294,8 @@ fn install_package_basic_auth_from_keyring_wrong_password() {
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
 
           hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 }
 
@@ -5307,7 +5318,7 @@ fn install_package_basic_auth_from_keyring_wrong_username() {
         .assert()
         .success();
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
         .arg("--index-url")
         .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
@@ -5315,7 +5326,7 @@ fn install_package_basic_auth_from_keyring_wrong_username() {
         .arg("subprocess")
         .arg("--strict")
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"other": "heron"}}"#)
-        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r###"
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -5327,7 +5338,8 @@ fn install_package_basic_auth_from_keyring_wrong_username() {
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
 
           hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 }
 
@@ -5463,7 +5475,7 @@ fn reinstall_no_index() {
     );
 
     // Install anyio again
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
         .arg("--no-index")
         .arg("--strict"), @r###"
@@ -5479,11 +5491,11 @@ fn reinstall_no_index() {
     // Reinstall
     // We should not consider the already installed package as a source and
     // should attempt to pull from the index
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
         .arg("--no-index")
         .arg("--reinstall")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -5493,7 +5505,8 @@ fn reinstall_no_index() {
       ╰─▶ Because anyio was not found in the provided package locations and you require anyio, we can conclude that your requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 }
 
@@ -6075,11 +6088,11 @@ fn already_installed_remote_url() {
 
     // Request reinstallation
     // We should fail since the URL was not provided
-    uv_snapshot!(
+    uv_snapshot!(context.filters(),
         context.pip_install()
         .arg("uv-public-pypackage")
         .arg("--no-index")
-        .arg("--reinstall"), @r###"
+        .arg("--reinstall"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -6089,7 +6102,8 @@ fn already_installed_remote_url() {
       ╰─▶ Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage, we can conclude that your requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
-    "###);
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    ");
 
     // Request installation again with just the full URL
     // We should just audit the existing package
@@ -6124,8 +6138,8 @@ fn already_installed_remote_url() {
 
     // Request installation again with a different version
     // We should attempt to pull from the index since the local version does not match
-    uv_snapshot!(
-        context.pip_install().arg("uv-public-pypackage==0.2.0").arg("--no-index"), @r###"
+    uv_snapshot!(context.filters(), 
+        context.pip_install().arg("uv-public-pypackage==0.2.0").arg("--no-index"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -6135,7 +6149,8 @@ fn already_installed_remote_url() {
       ╰─▶ Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage==0.2.0, we can conclude that your requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
-    "###);
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    ");
 }
 
 /// Sync using `--find-links` with a local directory.
@@ -6281,10 +6296,10 @@ fn require_hashes_mismatch() -> Result<()> {
     "})?;
 
     // Raise an error.
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -6300,7 +6315,8 @@ fn require_hashes_mismatch() -> Result<()> {
 
           Computed:
             sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 
     Ok(())
@@ -6318,17 +6334,18 @@ fn require_hashes_missing_dependency() -> Result<()> {
     )?;
 
     // Install without error when `--require-hashes` is omitted.
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `markupsafe`
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 
     Ok(())
@@ -6408,20 +6425,21 @@ fn require_hashes_constraint() -> Result<()> {
     constraints_txt.write_str("anyio==4.0.0")?;
 
     // Install the editable packages.
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg(requirements_txt.path())
         .arg("--no-deps")
         .arg("--require-hashes")
         .arg("-c")
-        .arg(constraints_txt.path()), @r###"
+        .arg(constraints_txt.path()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 
     // Include an empty intersection. This should fail.
@@ -6436,20 +6454,21 @@ fn require_hashes_constraint() -> Result<()> {
     constraints_txt.write_str("anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
     // Install the editable packages.
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg(requirements_txt.path())
         .arg("--no-deps")
         .arg("--require-hashes")
         .arg("-c")
-        .arg(constraints_txt.path()), @r###"
+        .arg(constraints_txt.path()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: In `--require-hashes` mode, all requirements must have a hash, but there were no overlapping hashes between the requirements and constraints for: anyio==4.0.0
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 
     // Include the right hash in both files.
@@ -6617,19 +6636,20 @@ fn require_hashes_override() -> Result<()> {
     overrides_txt.write_str("anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
     // Install the editable packages.
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg(requirements_txt.path())
         .arg("--require-hashes")
         .arg("--override")
-        .arg(overrides_txt.path()), @r###"
+        .arg(overrides_txt.path()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: anyio==4.0.0
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 
     // Include the hash in the requirements file, but pin the version in the override file.
@@ -6642,19 +6662,20 @@ fn require_hashes_override() -> Result<()> {
     overrides_txt.write_str("anyio==4.0.0")?;
 
     // Install the editable packages.
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg(requirements_txt.path())
         .arg("--require-hashes")
         .arg("--override")
-        .arg(overrides_txt.path()), @r###"
+        .arg(overrides_txt.path()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 
     Ok(())
@@ -6896,11 +6917,11 @@ fn verify_hashes_mismatch() -> Result<()> {
     "})?;
 
     // Raise an error.
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-deps")
         .arg("-r")
         .arg("requirements.txt")
-        .arg("--verify-hashes"), @r###"
+        .arg("--verify-hashes"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -6916,7 +6937,8 @@ fn verify_hashes_mismatch() -> Result<()> {
 
           Computed:
             sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 
     uv_snapshot!(context.pip_install()
@@ -7920,10 +7942,10 @@ fn incompatible_build_constraint() -> Result<()> {
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
     constraints_txt.write_str("setuptools==1")?;
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("requests==1.2")
         .arg("--build-constraint")
-        .arg("build_constraints.txt"), @r###"
+        .arg("build_constraints.txt"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7933,7 +7955,8 @@ fn incompatible_build_constraint() -> Result<()> {
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 
     Ok(())
@@ -7980,8 +8003,8 @@ build-constraint-dependencies = [
 "#,
     )?;
 
-    uv_snapshot!(context.pip_install()
-        .arg("requests==1.2"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("requests==1.2"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7991,7 +8014,8 @@ build-constraint-dependencies = [
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 
     Ok(())
@@ -8045,10 +8069,10 @@ build-constraint-dependencies = [
 "#,
     )?;
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("requests==1.2")
         .arg("--build-constraint")
-        .arg("build_constraints.txt"), @r###"
+        .arg("build_constraints.txt"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -8058,7 +8082,8 @@ build-constraint-dependencies = [
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40 and setuptools==1, we can conclude that your requirements are unsatisfiable.
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 
     // Compatible setuptools version in pyproject.toml, incompatible in build_constraints.txt.
@@ -8073,10 +8098,10 @@ build-constraint-dependencies = [
 "#,
     )?;
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("requests==1.2")
         .arg("--build-constraint")
-        .arg("build_constraints.txt"), @r###"
+        .arg("build_constraints.txt"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -8086,7 +8111,8 @@ build-constraint-dependencies = [
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools==1 and setuptools>=40, we can conclude that your requirements are unsatisfiable.
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 
     Ok(())
@@ -8655,8 +8681,8 @@ fn missing_git_prefix() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
 
-    uv_snapshot!(context.pip_install()
-        .arg("workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -8666,7 +8692,8 @@ fn missing_git_prefix() -> Result<()> {
       Caused by: Direct URL (`https://github.com/astral-sh/workspace-in-root-test`) references a Git repository, but is missing the `git+` prefix (e.g., `git+https://github.com/astral-sh/workspace-in-root-test`)
     workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test
                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 
     Ok(())
@@ -8679,8 +8706,8 @@ fn missing_subdirectory_git() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
 
-    uv_snapshot!(context.pip_install()
-        .arg("workspace-in-root-test @ git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("workspace-in-root-test @ git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -8688,7 +8715,8 @@ fn missing_subdirectory_git() -> Result<()> {
     ----- stderr -----
       × Failed to download and build `workspace-in-root-test @ git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing`
       ╰─▶ The source distribution `git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing` has no subdirectory `missing`
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 
     Ok(())
@@ -8700,8 +8728,8 @@ fn missing_subdirectory_url() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
 
-    uv_snapshot!(context.pip_install()
-        .arg("source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -8709,7 +8737,8 @@ fn missing_subdirectory_url() -> Result<()> {
     ----- stderr -----
       × Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing`
       ╰─▶ The source distribution `https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing` has no subdirectory `missing`
-    "###
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    "
     );
 
     Ok(())

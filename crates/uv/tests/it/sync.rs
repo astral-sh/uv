@@ -1966,7 +1966,7 @@ fn sync_corner_groups() -> Result<()> {
     ----- stderr -----
     error: the argument '--all-groups' cannot be used with '--only-dev'
 
-    Usage: uv sync --cache-dir [CACHE_DIR] --all-groups --exclude-newer <EXCLUDE_NEWER>
+    Usage: uv sync --cache-dir [CACHE_DIR] --all-groups --exclude-newer <EXCLUDE_NEWER> --log <PATH>
 
     For more information, try '--help'.
     ");
@@ -1982,7 +1982,7 @@ fn sync_corner_groups() -> Result<()> {
     ----- stderr -----
     error: the argument '--all-groups' cannot be used with '--only-group <ONLY_GROUP>'
 
-    Usage: uv sync --cache-dir [CACHE_DIR] --all-groups --exclude-newer <EXCLUDE_NEWER>
+    Usage: uv sync --cache-dir [CACHE_DIR] --all-groups --exclude-newer <EXCLUDE_NEWER> --log <PATH>
 
     For more information, try '--help'.
     ");
@@ -1998,7 +1998,7 @@ fn sync_corner_groups() -> Result<()> {
     ----- stderr -----
     error: the argument '--group <GROUP>' cannot be used with '--only-group <ONLY_GROUP>'
 
-    Usage: uv sync --cache-dir [CACHE_DIR] --group <GROUP> --exclude-newer <EXCLUDE_NEWER>
+    Usage: uv sync --cache-dir [CACHE_DIR] --group <GROUP> --exclude-newer <EXCLUDE_NEWER> --log <PATH>
 
     For more information, try '--help'.
     ");
@@ -2015,7 +2015,7 @@ fn sync_corner_groups() -> Result<()> {
     ----- stderr -----
     error: the argument '--group <GROUP>' cannot be used with '--only-group <ONLY_GROUP>'
 
-    Usage: uv sync --cache-dir [CACHE_DIR] --group <GROUP> --exclude-newer <EXCLUDE_NEWER>
+    Usage: uv sync --cache-dir [CACHE_DIR] --group <GROUP> --exclude-newer <EXCLUDE_NEWER> --log <PATH>
 
     For more information, try '--help'.
     ");

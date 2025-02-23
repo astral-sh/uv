@@ -6401,7 +6401,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         .arg("requirements.in")
         .arg("--verify-hashes")
         .arg("--no-require-hashes")
-        .arg("--show-settings"), @r###"
+        .arg("--show-settings"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6424,6 +6424,8 @@ fn verify_hashes() -> anyhow::Result<()> {
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
+        log: None,
+        log_verbose: 0,
     }
     CacheSettings {
         no_cache: false,
@@ -6537,7 +6539,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     Ok(())
