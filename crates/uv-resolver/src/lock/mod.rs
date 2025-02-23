@@ -1295,9 +1295,9 @@ impl Lock {
             locations
                 .allowed_indexes()
                 .into_iter()
-                .filter_map(|index| match index.url() {
+                .filter_map(|index| match index.proxy_or_url() {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                        Some(UrlString::from(index.url().redacted().as_ref()))
+                        Some(UrlString::from(index.proxy_or_url().redacted().as_ref()))
                     }
                     IndexUrl::Path(_) => None,
                 })
@@ -1308,7 +1308,7 @@ impl Lock {
             locations
                 .allowed_indexes()
                 .into_iter()
-                .filter_map(|index| match index.url() {
+                .filter_map(|index| match index.proxy_or_url() {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => None,
                     IndexUrl::Path(url) => {
                         let path = url.to_file_path().ok()?;

@@ -246,7 +246,7 @@ impl RegistryClient {
         let indexes = if let Some(index) = index {
             Either::Left(std::iter::once(index))
         } else {
-            Either::Right(self.index_urls.indexes().map(Index::url))
+            Either::Right(self.index_urls.indexes().map(Index::proxy_or_url))
         };
 
         let mut it = indexes.peekable();

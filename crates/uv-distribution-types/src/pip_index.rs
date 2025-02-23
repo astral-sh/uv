@@ -35,7 +35,7 @@ macro_rules! impl_index {
             where
                 S: serde::Serializer,
             {
-                self.0.url().serialize(serializer)
+                self.0.proxy_or_url().serialize(serializer)
             }
         }
 

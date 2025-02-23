@@ -9,7 +9,7 @@ use uv_configuration::{
     TargetTriple, TrustedHost, TrustedPublishing,
 };
 use uv_distribution_types::{
-    Index, IndexUrl, IndexUrlError, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
+    Index, IndexUrl, IndexUrlError, PipExtraIndex, PipFindLinks, PipIndex, ProxyUrlFragment, StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
@@ -339,6 +339,7 @@ pub struct ResolverOptions {
     pub index: Option<Vec<Index>>,
     pub index_url: Option<PipIndex>,
     pub extra_index_url: Option<Vec<PipExtraIndex>>,
+    pub proxy_urls: Option<Vec<ProxyUrlFragment>>,
     pub no_index: Option<bool>,
     pub find_links: Option<Vec<PipFindLinks>>,
     pub index_strategy: Option<IndexStrategy>,
@@ -442,6 +443,8 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub extra_index_url: Option<Vec<PipExtraIndex>>,
+    /// TODO !@ Document
+    pub proxy_urls: Option<Vec<ProxyUrlFragment>>,
     /// Ignore all registry indexes (e.g., PyPI), instead relying on direct URL dependencies and
     /// those provided via `--find-links`.
     #[option(
@@ -1581,6 +1584,7 @@ impl From<ResolverInstallerOptions> for ResolverOptions {
             index: value.index,
             index_url: value.index_url,
             extra_index_url: value.extra_index_url,
+            proxy_urls: value.proxy_urls,
             no_index: value.no_index,
             find_links: value.find_links,
             index_strategy: value.index_strategy,
@@ -1644,6 +1648,7 @@ pub struct ToolOptions {
     pub index: Option<Vec<Index>>,
     pub index_url: Option<PipIndex>,
     pub extra_index_url: Option<Vec<PipExtraIndex>>,
+    pub proxy_urls: Option<Vec<ProxyUrlFragment>>,
     pub no_index: Option<bool>,
     pub find_links: Option<Vec<PipFindLinks>>,
     pub index_strategy: Option<IndexStrategy>,
@@ -1671,6 +1676,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             index: value.index,
             index_url: value.index_url,
             extra_index_url: value.extra_index_url,
+            proxy_urls: value.proxy_urls,
             no_index: value.no_index,
             find_links: value.find_links,
             index_strategy: value.index_strategy,
@@ -1700,6 +1706,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             index: value.index,
             index_url: value.index_url,
             extra_index_url: value.extra_index_url,
+            proxy_urls: value.proxy_urls,
             no_index: value.no_index,
             find_links: value.find_links,
             index_strategy: value.index_strategy,
@@ -1753,6 +1760,7 @@ pub struct OptionsWire {
     extra_index_url: Option<Vec<PipExtraIndex>>,
     no_index: Option<bool>,
     find_links: Option<Vec<PipFindLinks>>,
+    proxy_url: Option<Vec<ProxyUrlFragment>>,
     index_strategy: Option<IndexStrategy>,
     keyring_provider: Option<KeyringProviderType>,
     allow_insecure_host: Option<Vec<TrustedHost>>,
@@ -1836,6 +1844,7 @@ impl From<OptionsWire> for Options {
             extra_index_url,
             no_index,
             find_links,
+            proxy_url,
             index_strategy,
             keyring_provider,
             allow_insecure_host,
@@ -1899,6 +1908,7 @@ impl From<OptionsWire> for Options {
                 index,
                 index_url,
                 extra_index_url,
+                proxy_urls: proxy_url,
                 no_index,
                 find_links,
                 index_strategy,

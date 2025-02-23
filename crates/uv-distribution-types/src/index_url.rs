@@ -12,7 +12,7 @@ use url::{ParseError, Url};
 
 use uv_pep508::{split_scheme, Scheme, VerbatimUrl, VerbatimUrlError};
 
-use crate::{Index, Verbatim};
+use crate::{Index, Origin, ProxyUrlFragment, Verbatim};
 
 static PYPI_URL: LazyLock<Url> = LazyLock::new(|| Url::parse("https://pypi.org/simple").unwrap());
 
@@ -21,6 +21,8 @@ static DEFAULT_INDEX: LazyLock<Index> = LazyLock::new(|| {
         PYPI_URL.clone(),
     ))))
 });
+
+pub static PROXY_URL_PATTERN: &str = "<omitted>";
 
 /// The URL of an index to use for fetching packages (e.g., PyPI).
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
@@ -237,7 +239,23 @@ pub struct IndexLocations {
 
 impl IndexLocations {
     /// Determine the index URLs to use for fetching packages.
-    pub fn new(indexes: Vec<Index>, flat_index: Vec<Index>, no_index: bool) -> Self {
+    pub fn new(
+        mut indexes: Vec<Index>,
+        flat_index: Vec<Index>,
+        proxies: &[ProxyUrlFragment],
+        no_index: bool,
+    ) -> Self {
+        for index in &mut indexes {
+            if let Some(proxy) = proxies
+                .iter()
+                .find(|proxy| index.name.as_ref() == Some(&proxy.name))
+            {
+                // TODO !@ ideally we validate this ahead of time so we don't need a Result
+                index.apply_proxy_template(&proxy.url_fragment).unwrap();
+                index.origin = Some(Origin::Cli);
+            }
+        }
+
         Self {
             indexes,
             flat_index,

@@ -1336,7 +1336,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     .publish_url
                     .clone()
                     .with_context(|| format!("Index is missing a publish URL: `{index_name}`"))?;
-                let check_url = index.url.clone();
+                let check_url = index.proxy_or_url().clone();
                 (publish_url, Some(check_url))
             } else {
                 (publish_url, check_url)

@@ -28,7 +28,7 @@ use uv_configuration::{
     RequiredVersion, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
     VersionControlSystem,
 };
-use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl};
+use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl, ProxyUrlFragment};
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep508::{ExtraName, RequirementOrigin};
@@ -2449,6 +2449,11 @@ impl From<ResolverOptions> for ResolverSettings {
                     .flatten()
                     .map(Index::from)
                     .collect(),
+                &value
+                    .proxy_urls
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<ProxyUrlFragment>>(),
                 value.no_index.unwrap_or_default(),
             ),
             resolution: value.resolution.unwrap_or_default(),
@@ -2586,6 +2591,11 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                     .flatten()
                     .map(Index::from)
                     .collect(),
+                &value
+                    .proxy_urls
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<ProxyUrlFragment>>(),
                 value.no_index.unwrap_or_default(),
             ),
             resolution: value.resolution.unwrap_or_default(),
@@ -2753,6 +2763,7 @@ impl PipSettings {
             index: top_level_index,
             index_url: top_level_index_url,
             extra_index_url: top_level_extra_index_url,
+            proxy_urls: _,
             no_index: top_level_no_index,
             find_links: top_level_find_links,
             index_strategy: top_level_index_strategy,
@@ -2823,6 +2834,7 @@ impl PipSettings {
                     .flatten()
                     .map(Index::from)
                     .collect(),
+                &Vec::new(),
                 args.no_index.combine(no_index).unwrap_or_default(),
             ),
             extras: ExtrasSpecification::from_args(
@@ -3100,6 +3112,7 @@ impl PublishSettings {
                     .chain(index_url.into_iter().map(Index::from))
                     .collect(),
                 Vec::new(),
+                &Vec::new(),
                 false,
             ),
         }

@@ -27,6 +27,10 @@ impl EnvVars {
     /// space-separated list of URLs as additional indexes when searching for packages.
     pub const UV_INDEX: &'static str = "UV_INDEX";
 
+    /// Equivalent to the `--proxy-url` command-line argument. If set, uv will use the
+    /// URL for this proxy in place of the index with the same name.
+    pub const UV_PRIVATE_PROXY_URL: &'static str = "UV_PRIVATE_PROXY_URL";
+
     /// Equivalent to the `--index-url` command-line argument. If set, uv will use this
     /// URL as the default index when searching for packages.
     /// (Deprecated: use `UV_DEFAULT_INDEX` instead.)
