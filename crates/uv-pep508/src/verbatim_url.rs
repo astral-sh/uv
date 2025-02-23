@@ -435,7 +435,7 @@ pub fn looks_like_git_repository(url: &Url) -> bool {
         Some("github.com" | "gitlab.com" | "bitbucket.org")
     ) && Path::new(url.path())
         .extension()
-        .map_or(true, |ext| ext.eq_ignore_ascii_case("git"))
+        .is_none_or(|ext| ext.eq_ignore_ascii_case("git"))
         && url
             .path_segments()
             .is_some_and(|segments| segments.count() == 2)

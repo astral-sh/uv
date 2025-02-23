@@ -2765,8 +2765,8 @@ impl CachedMetadata {
 
     /// Returns `true` if the metadata matches the given package name and version.
     fn matches(&self, name: Option<&PackageName>, version: Option<&Version>) -> bool {
-        name.map_or(true, |name| self.0.name == *name)
-            && version.map_or(true, |version| self.0.version == *version)
+        name.is_none_or(|name| self.0.name == *name)
+            && version.is_none_or(|version| self.0.version == *version)
     }
 }
 

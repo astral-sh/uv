@@ -707,7 +707,7 @@ impl RegistryClient {
         };
 
         // Attempt to fetch via a range request.
-        if index.map_or(true, |index| capabilities.supports_range_requests(index)) {
+        if index.is_none_or(|index| capabilities.supports_range_requests(index)) {
             let req = self
                 .uncached_client(url)
                 .head(url.clone())

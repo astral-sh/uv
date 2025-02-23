@@ -247,7 +247,7 @@ impl Cache {
             Refresh::None(_) => return Ok(Freshness::Fresh),
             Refresh::All(timestamp) => timestamp,
             Refresh::Packages(packages, timestamp) => {
-                if package.map_or(true, |package| packages.contains(package)) {
+                if package.is_none_or(|package| packages.contains(package)) {
                     timestamp
                 } else {
                     return Ok(Freshness::Fresh);
