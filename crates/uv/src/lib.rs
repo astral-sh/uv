@@ -277,7 +277,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         },
         duration_layer,
         globals.color,
-        &globals.log,
+        globals.log.as_ref(),
         match globals.log_verbose {
             0 => logging::FileLogLevel::Verbose,
             1 => logging::FileLogLevel::ExtraVerbose,

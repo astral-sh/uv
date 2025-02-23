@@ -135,7 +135,7 @@ pub(crate) fn setup_logging(
     level: Level,
     durations: impl Layer<Registry> + Send + Sync,
     color: ColorChoice,
-    log_path: &Option<PathBuf>,
+    log_path: Option<&PathBuf>,
     file_log_level: FileLogLevel,
 ) -> anyhow::Result<()> {
     let default_directive = match level {
@@ -243,15 +243,15 @@ pub(crate) fn setup_logging(
 
         // Discuss if previous content should be overwritten or appended.
         // Should it panic or gracefully exit just without logging in case of failure to open or create the file.
-        let log_file = std::fs::OpenOptions::new()
+        let log_file = fs_err::OpenOptions::new()
         .append(true)
         .create(true)
         .open(&new_path)
-        .with_context(|| format!("Failed to open or create log file: {:?}", new_path))?;
+        .with_context(|| format!("Failed to open or create log file: {new_path:?}"))?;
 
         // Forcing no anstream in file logs, I don't like the idea of using the same env variable NO_COLOR or cli flag to control both console and file logs
         // If there is a case to introduce color for file logs we can introduce a new env variable or cli flag for it.
-        let file_writer = std::sync::Mutex::new(anstream::AutoStream::new(log_file, anstream::ColorChoice::Never));
+        let file_writer = std::sync::Mutex::new(anstream::AutoStream::new(Box::new(log_file) as Box<dyn std::io::Write + Send>, anstream::ColorChoice::Never));
 
         // Depending on the log level, different layers are added to the subscriber. However me might need to seperate trace or debug and the heirarchical layer or not into different args (based on what the use cases are)
         match file_log_level {
