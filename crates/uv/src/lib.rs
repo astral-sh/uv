@@ -193,7 +193,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 ) => Pep723Metadata::parse(contents)?.map(Pep723Item::Stdin),
                 _ => None,
             },
+            // For `uv add --script` and `uv lock --script`, we'll create a PEP 723 tag if it
+            // doesn't already exist.
             ProjectCommand::Add(uv_cli::AddArgs {
+                script: Some(script),
+                ..
+            })
+            | ProjectCommand::Lock(uv_cli::LockArgs {
                 script: Some(script),
                 ..
             }) => match Pep723Script::read(&script).await {
@@ -201,11 +207,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 Ok(None) => None,
                 Err(err) => return Err(err.into()),
             },
+            // For the remaining commands, the PEP 723 tag must exist already.
             ProjectCommand::Remove(uv_cli::RemoveArgs {
-                script: Some(script),
-                ..
-            })
-            | ProjectCommand::Lock(uv_cli::LockArgs {
                 script: Some(script),
                 ..
             })
@@ -223,8 +226,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             }) => match Pep723Script::read(&script).await {
                 Ok(Some(script)) => Some(Pep723Item::Script(script)),
                 Ok(None) => {
-                    // TODO(charlie): `uv lock --script` should initialize the tag, if it doesn't
-                    // exist.
                     bail!(
                         "`{}` does not contain a PEP 723 metadata tag; run `{}` to initialize the script",
                         script.user_display().cyan(),
@@ -1582,12 +1583,18 @@ async fn run_project(
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
-            // Unwrap the script.
-            let script = script.map(|script| match script {
-                Pep723Item::Script(script) => script,
-                Pep723Item::Stdin(..) => unreachable!("`uv lock` does not support stdin"),
-                Pep723Item::Remote(..) => unreachable!("`uv lock` does not support remote files"),
-            });
+            // If the script already exists, use it; otherwise, propagate the file path and we'll
+            // initialize it later on.
+            let script = script
+                .map(|script| match script {
+                    Pep723Item::Script(script) => script,
+                    Pep723Item::Stdin(..) => unreachable!("`uv add` does not support stdin"),
+                    Pep723Item::Remote(..) => {
+                        unreachable!("`uv add` does not support remote files")
+                    }
+                })
+                .map(ScriptPath::Script)
+                .or(args.script.map(ScriptPath::Path));
 
             Box::pin(commands::lock(
                 project_dir,

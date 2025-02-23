@@ -10,7 +10,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DevGroupsSpecification, DryRun, ExtrasSpecification, PreviewMode,
     Reinstall, TrustedHost, Upgrade,
@@ -41,10 +41,11 @@ use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceMember};
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    init_script_python_requirement, ProjectError, ProjectInterpreter, ScriptInterpreter,
+    UniversalState,
 };
-use crate::commands::reporters::ResolverReporter;
-use crate::commands::{diagnostics, pip, ExitStatus};
+use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
+use crate::commands::{diagnostics, pip, ExitStatus, ScriptPath};
 use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
 
@@ -83,7 +84,7 @@ pub(crate) async fn lock(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
-    script: Option<Pep723Script>,
+    script: Option<ScriptPath>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
@@ -95,6 +96,33 @@ pub(crate) async fn lock(
     printer: Printer,
     preview: PreviewMode,
 ) -> anyhow::Result<ExitStatus> {
+    // If necessary, initialize the PEP 723 script.
+    let script = match script {
+        Some(ScriptPath::Path(path)) => {
+            let client_builder = BaseClientBuilder::new()
+                .connectivity(connectivity)
+                .native_tls(native_tls)
+                .allow_insecure_host(allow_insecure_host.to_vec());
+            let reporter = PythonDownloadReporter::single(printer);
+            let requires_python = init_script_python_requirement(
+                python.as_deref(),
+                &install_mirrors,
+                project_dir,
+                false,
+                python_preference,
+                python_downloads,
+                no_config,
+                &client_builder,
+                cache,
+                &reporter,
+            )
+            .await?;
+            Some(Pep723Script::init(&path, requires_python.specifiers()).await?)
+        }
+        Some(ScriptPath::Script(script)) => Some(script),
+        None => None,
+    };
+
     // Find the project requirements.
     let workspace;
     let target = if let Some(script) = script.as_ref() {
