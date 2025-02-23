@@ -5431,6 +5431,7 @@ dependencies = [
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
+ "uv-small-str",
 ]
 
 [[package]]

@@ -184,7 +184,7 @@ impl SimpleHtml {
         let yanked = if let Some(yanked) = link.attributes().get("data-yanked").flatten() {
             let yanked = std::str::from_utf8(yanked.as_bytes())?;
             let yanked = html_escape::decode_html_entities(yanked);
-            Some(Yanked::Reason(yanked.to_string()))
+            Some(Yanked::Reason(yanked.into()))
         } else {
             None
         };
