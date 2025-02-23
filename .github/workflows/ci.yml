@@ -731,6 +731,7 @@ jobs:
           ./uvx -v ruff --version
           eval "$(./uv generate-shell-completion bash)"
           eval "$(./uvx --generate-shell-completion bash)"
+          ./uv self uninstall --remove-data
 
   smoke-test-macos:
     timeout-minutes: 10
@@ -755,6 +756,7 @@ jobs:
           ./uvx -v ruff --version
           eval "$(./uv generate-shell-completion bash)"
           eval "$(./uvx --generate-shell-completion bash)"
+          ./uv self uninstall --remove-data
 
   smoke-test-windows-x86_64:
     timeout-minutes: 10
@@ -775,6 +777,7 @@ jobs:
           ./uvx -v ruff --version
           (& ./uv generate-shell-completion powershell) | Out-String | Invoke-Expression
           (& ./uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
+          ./uv self uninstall --remove-data
 
   smoke-test-windows-aarch64:
     timeout-minutes: 10
@@ -798,6 +801,7 @@ jobs:
           ./uvx -v ruff --version
           (& ./uv generate-shell-completion powershell) | Out-String | Invoke-Expression
           (& ./uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
+          ./uv self uninstall --remove-data
 
   integration-test-conda:
     timeout-minutes: 10
