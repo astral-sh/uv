@@ -1,4 +1,4 @@
-use crate::common::{self, get_bin, TestContext};
+use crate::common::{self, TestContext, get_bin};
 use anyhow::Result;
 use insta::assert_snapshot;
 use std::path::Path;

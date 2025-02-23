@@ -15,7 +15,7 @@ use insta::assert_snapshot;
 
 use uv_static::EnvVars;
 
-use crate::common::{packse_index_url, uv_snapshot, TestContext};
+use crate::common::{TestContext, packse_index_url, uv_snapshot};
 
 /// There are two packages, `a` and `b`. We select `a` with `a==2.0.0` first, and then `b`, but `a==2.0.0` conflicts with all new versions of `b`, so we backtrack through versions of `b`.
 ///

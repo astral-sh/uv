@@ -352,7 +352,7 @@ impl schemars::JsonSchema for PortablePathBuf {
         PathBuf::schema_name()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
         PathBuf::json_schema(_gen)
     }
 }

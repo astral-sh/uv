@@ -4,7 +4,7 @@ use owo_colors::OwoColorize;
 
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
-use uv_tool::{tool_executable_dir, InstalledTools};
+use uv_tool::{InstalledTools, tool_executable_dir};
 
 /// Show the tool directory.
 pub(crate) fn dir(bin: bool, _preview: PreviewMode) -> anyhow::Result<()> {

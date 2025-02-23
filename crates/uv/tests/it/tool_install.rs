@@ -11,7 +11,7 @@ use predicates::prelude::predicate;
 use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 
 #[test]
 fn tool_install() {
@@ -126,9 +126,11 @@ fn tool_install() {
     "###);
 
     tool_dir.child("flask").assert(predicate::path::is_dir());
-    assert!(bin_dir
-        .child(format!("flask{}", std::env::consts::EXE_SUFFIX))
-        .exists());
+    assert!(
+        bin_dir
+            .child(format!("flask{}", std::env::consts::EXE_SUFFIX))
+            .exists()
+    );
 
     #[cfg(not(windows))]
     insta::with_settings!({

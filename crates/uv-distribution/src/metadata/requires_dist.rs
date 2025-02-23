@@ -6,14 +6,14 @@ use rustc_hash::FxHashSet;
 
 use uv_configuration::SourceStrategy;
 use uv_distribution_types::IndexLocations;
-use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_normalize::{DEV_DEPENDENCIES, ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_workspace::dependency_groups::FlatDependencyGroups;
 use uv_workspace::pyproject::{Sources, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, ProjectWorkspace};
 
-use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
 use crate::Metadata;
+use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
 
 #[derive(Debug, Clone)]
 pub struct RequiresDist {
@@ -477,8 +477,8 @@ mod test {
     use uv_workspace::pyproject::PyProjectToml;
     use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 
-    use crate::metadata::requires_dist::FlatRequiresDist;
     use crate::RequiresDist;
+    use crate::metadata::requires_dist::FlatRequiresDist;
 
     async fn requires_dist_from_pyproject_toml(contents: &str) -> anyhow::Result<RequiresDist> {
         let pyproject_toml = PyProjectToml::from_string(contents.to_string())?;

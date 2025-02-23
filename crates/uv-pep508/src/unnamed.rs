@@ -8,9 +8,9 @@ use uv_normalize::ExtraName;
 
 use crate::marker::parse;
 use crate::{
-    expand_env_vars, parse_extras_cursor, split_extras, split_scheme, strip_host, Cursor,
-    MarkerEnvironment, MarkerTree, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter,
-    RequirementOrigin, Scheme, TracingReporter, VerbatimUrl, VerbatimUrlError,
+    Cursor, MarkerEnvironment, MarkerTree, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter,
+    RequirementOrigin, Scheme, TracingReporter, VerbatimUrl, VerbatimUrlError, expand_env_vars,
+    parse_extras_cursor, split_extras, split_scheme, strip_host,
 };
 
 /// An extension over [`Pep508Url`] that also supports parsing unnamed requirements, namely paths.
@@ -19,7 +19,7 @@ use crate::{
 pub trait UnnamedRequirementUrl: Pep508Url {
     /// Parse a URL from a relative or absolute path.
     fn parse_path(path: impl AsRef<Path>, working_dir: impl AsRef<Path>)
-        -> Result<Self, Self::Err>;
+    -> Result<Self, Self::Err>;
 
     /// Parse a URL from an absolute path.
     fn parse_absolute_path(path: impl AsRef<Path>) -> Result<Self, Self::Err>;

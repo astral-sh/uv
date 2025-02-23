@@ -4,7 +4,7 @@ use anyhow::Result;
 use indoc::indoc;
 use insta::assert_snapshot;
 
-use crate::common::{make_project, uv_snapshot, TestContext};
+use crate::common::{TestContext, make_project, uv_snapshot};
 
 /// The root package has diverging URLs for disjoint markers:
 /// ```toml

@@ -1,8 +1,8 @@
 use crate::metadata::{BuildBackendSettings, DEFAULT_EXCLUDES};
 use crate::wheel::build_exclude_matcher;
 use crate::{DirectoryWriter, Error, FileList, ListWriter, PyProjectToml};
-use flate2::write::GzEncoder;
 use flate2::Compression;
+use flate2::write::GzEncoder;
 use fs_err::File;
 use globset::{Glob, GlobSet};
 use std::io;
@@ -12,7 +12,7 @@ use tar::{EntryType, Header};
 use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename};
 use uv_fs::Simplified;
-use uv_globfilter::{parse_portable_glob, GlobDirFilter};
+use uv_globfilter::{GlobDirFilter, parse_portable_glob};
 use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
 

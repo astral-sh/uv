@@ -5,7 +5,7 @@ use std::fmt::Write;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, bail, Context};
+use anyhow::{Context, anyhow, bail};
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -45,13 +45,13 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, script_specification, update_environment,
-    validate_project_requires_python, EnvironmentSpecification, ProjectEnvironment, ProjectError,
-    ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
+    EnvironmentSpecification, ProjectEnvironment, ProjectError, ScriptEnvironment,
+    ScriptInterpreter, UniversalState, WorkspacePython, default_dependency_groups,
+    script_specification, update_environment, validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::run::run_to_completion;
-use crate::commands::{diagnostics, project, ExitStatus};
+use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -268,7 +268,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     return diagnostics::OperationDiagnostic::native_tls(native_tls)
                         .with_context("script")
                         .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -313,7 +313,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     return diagnostics::OperationDiagnostic::native_tls(native_tls)
                         .with_context("script")
                         .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             }
@@ -387,7 +387,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         return diagnostics::OperationDiagnostic::native_tls(native_tls)
                             .with_context("script")
                             .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 }
@@ -684,7 +684,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     Err(ProjectError::Operation(err)) => {
                         return diagnostics::OperationDiagnostic::native_tls(native_tls)
                             .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -772,7 +772,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     Err(ProjectError::Operation(err)) => {
                         return diagnostics::OperationDiagnostic::native_tls(native_tls)
                             .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 }
@@ -909,7 +909,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     return diagnostics::OperationDiagnostic::native_tls(native_tls)
                         .with_context("`--with`")
                         .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -1492,7 +1492,7 @@ fn read_recursion_depth_from_environment_variable() -> anyhow::Result<u32> {
         Err(VarError::NotPresent) => return Ok(0),
         Err(e) => {
             return Err(e)
-                .with_context(|| format!("invalid value for {}", EnvVars::UV_RUN_RECURSION_DEPTH))
+                .with_context(|| format!("invalid value for {}", EnvVars::UV_RUN_RECURSION_DEPTH));
         }
     };
 

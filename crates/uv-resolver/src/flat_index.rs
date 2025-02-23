@@ -1,5 +1,5 @@
-use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 
 use rustc_hash::FxHashMap;
 use tracing::instrument;
@@ -158,7 +158,7 @@ impl FlatIndex {
         let priority = match tags {
             Some(tags) => match filename.compatibility(tags) {
                 TagCompatibility::Incompatible(tag) => {
-                    return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag))
+                    return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag));
                 }
                 TagCompatibility::Compatible(priority) => Some(priority),
             },

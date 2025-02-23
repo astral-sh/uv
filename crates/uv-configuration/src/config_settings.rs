@@ -1,5 +1,5 @@
 use std::{
-    collections::{btree_map::Entry, BTreeMap},
+    collections::{BTreeMap, btree_map::Entry},
     str::FromStr,
 };
 use uv_cache_key::CacheKeyHasher;

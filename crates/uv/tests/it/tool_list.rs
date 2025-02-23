@@ -1,4 +1,4 @@
-use crate::common::{self, uv_snapshot, TestContext};
+use crate::common::{self, TestContext, uv_snapshot};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::PathChild;

@@ -7,4 +7,4 @@ mod glob_dir_filter;
 mod portable_glob;
 
 pub use glob_dir_filter::GlobDirFilter;
-pub use portable_glob::{check_portable_glob, parse_portable_glob, PortableGlobError};
+pub use portable_glob::{PortableGlobError, check_portable_glob, parse_portable_glob};

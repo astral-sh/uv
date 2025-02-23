@@ -6,8 +6,8 @@ use std::sync::{LazyLock, Mutex};
 use tracing::trace;
 use uv_fs::write_atomic_sync;
 
-use crate::wheel::read_record_file;
 use crate::Error;
+use crate::wheel::read_record_file;
 
 /// Uninstall the wheel represented by the given `.dist-info` directory.
 pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
@@ -261,11 +261,7 @@ pub fn uninstall_legacy_editable(egg_link: &Path) -> Result<Uninstall, Error> {
         .lines()
         .find_map(|line| {
             let line = line.trim();
-            if line.is_empty() {
-                None
-            } else {
-                Some(line)
-            }
+            if line.is_empty() { None } else { Some(line) }
         })
         .ok_or_else(|| Error::InvalidEggLink(egg_link.to_path_buf()))?;
 

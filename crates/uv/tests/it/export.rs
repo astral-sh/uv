@@ -1,6 +1,6 @@
 #![allow(clippy::disallowed_types)]
 
-use crate::common::{apply_filters, uv_snapshot, TestContext};
+use crate::common::{TestContext, apply_filters, uv_snapshot};
 use anyhow::{Ok, Result};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;

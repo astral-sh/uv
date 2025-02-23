@@ -1,8 +1,8 @@
 use std::process::Command;
 
 use axoupdater::{
-    test::helpers::{perform_runtest, RuntestArgs},
     ReleaseSourceType,
+    test::helpers::{RuntestArgs, perform_runtest},
 };
 
 use uv_static::EnvVars;

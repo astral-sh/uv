@@ -8,7 +8,7 @@ use assert_fs::fixture::PathChild;
 use uv_static::EnvVars;
 
 use crate::common::get_bin;
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 
 #[test]
 fn no_package() {

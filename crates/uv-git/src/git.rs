@@ -8,7 +8,7 @@ use std::str::{self};
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
-use cargo_util::{paths, ProcessBuilder};
+use cargo_util::{ProcessBuilder, paths};
 use reqwest::StatusCode;
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::{debug, warn};

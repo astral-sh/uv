@@ -14,7 +14,7 @@ pub use archive::ArchiveId;
 use uv_cache_info::Timestamp;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::InstalledDist;
-use uv_fs::{cachedir, directories, LockedFile};
+use uv_fs::{LockedFile, cachedir, directories};
 use uv_normalize::PackageName;
 use uv_pypi_types::ResolutionMetadata;
 
@@ -22,7 +22,7 @@ pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
 pub use crate::cli::CacheArgs;
 use crate::removal::Remover;
-pub use crate::removal::{rm_rf, Removal};
+pub use crate::removal::{Removal, rm_rf};
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
 
@@ -1374,11 +1374,7 @@ impl Refresh {
     pub fn combine(self, other: Refresh) -> Self {
         /// Return the maximum of two timestamps.
         fn max(a: Timestamp, b: Timestamp) -> Timestamp {
-            if a > b {
-                a
-            } else {
-                b
-            }
+            if a > b { a } else { b }
         }
 
         match (self, other) {

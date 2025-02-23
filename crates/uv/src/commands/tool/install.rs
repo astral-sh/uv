@@ -1,7 +1,7 @@
 use std::fmt::Write;
 use std::str::FromStr;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
 use tracing::{debug, trace};
 
@@ -24,14 +24,14 @@ use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 
+use crate::commands::ExitStatus;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{
-    resolve_environment, resolve_names, sync_environment, update_environment,
-    EnvironmentSpecification, PlatformState, ProjectError,
+    EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, resolve_names,
+    sync_environment, update_environment,
 };
 use crate::commands::tool::common::{install_executables, refine_interpreter, remove_entrypoints};
 use crate::commands::tool::{Target, ToolRequest};
-use crate::commands::ExitStatus;
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -120,7 +120,11 @@ pub(crate) async fn install(
             // If the user provided an executable name, verify that it matches the `--from` requirement.
             let executable = if let Some(executable) = request.executable {
                 let Ok(executable) = PackageName::from_str(executable) else {
-                    bail!("Package requirement (`{from}`) provided with `--from` conflicts with install request (`{executable}`)", from = from.cyan(), executable = executable.cyan())
+                    bail!(
+                        "Package requirement (`{from}`) provided with `--from` conflicts with install request (`{executable}`)",
+                        from = from.cyan(),
+                        executable = executable.cyan()
+                    )
                 };
                 Some(executable)
             } else {
@@ -158,7 +162,7 @@ pub(crate) async fn install(
             requirement
         }
         // Ex) `ruff@0.6.0`
-        Target::Version(.., name, ref extras, ref version) => {
+        Target::Version(.., name, extras, version) => {
             if editable {
                 bail!("`--editable` is only supported for local packages");
             }
@@ -179,7 +183,7 @@ pub(crate) async fn install(
             }
         }
         // Ex) `ruff@latest`
-        Target::Latest(.., name, ref extras) => {
+        Target::Latest(.., name, extras) => {
             if editable {
                 bail!("`--editable` is only supported for local packages");
             }
@@ -420,7 +424,7 @@ pub(crate) async fn install(
             Err(ProjectError::Operation(err)) => {
                 return diagnostics::OperationDiagnostic::native_tls(native_tls)
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
         };
@@ -553,7 +557,7 @@ pub(crate) async fn install(
             Err(ProjectError::Operation(err)) => {
                 return diagnostics::OperationDiagnostic::native_tls(native_tls)
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
         }

@@ -1,7 +1,7 @@
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use regex_automata::dfa;
 use regex_automata::dfa::Automaton;
-use std::path::{Path, MAIN_SEPARATOR, MAIN_SEPARATOR_STR};
+use std::path::{MAIN_SEPARATOR, MAIN_SEPARATOR_STR, Path};
 use tracing::warn;
 
 /// Chosen at a whim -Konsti
@@ -125,7 +125,7 @@ impl GlobDirFilter {
 mod tests {
     use crate::glob_dir_filter::GlobDirFilter;
     use crate::portable_glob::parse_portable_glob;
-    use std::path::{Path, MAIN_SEPARATOR};
+    use std::path::{MAIN_SEPARATOR, Path};
     use tempfile::tempdir;
     use walkdir::WalkDir;
 

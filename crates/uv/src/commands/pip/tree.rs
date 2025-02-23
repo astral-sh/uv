@@ -4,9 +4,9 @@ use std::fmt::Write;
 use anyhow::Result;
 use futures::StreamExt;
 use owo_colors::OwoColorize;
+use petgraph::Direction;
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::prelude::EdgeRef;
-use petgraph::Direction;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::Semaphore;
 
@@ -23,10 +23,10 @@ use uv_pypi_types::{ResolutionMetadata, ResolverMarkerEnvironment, VerbatimParse
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
 use uv_resolver::{ExcludeNewer, PrereleaseMode, RequiresPython};
 
+use crate::commands::ExitStatus;
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::operations::report_target_environment;
 use crate::commands::reporters::LatestVersionReporter;
-use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Display the installed packages in the current environment as a dependency tree.

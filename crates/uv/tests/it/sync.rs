@@ -4,7 +4,7 @@ use assert_fs::{fixture::ChildPath, prelude::*};
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 
-use crate::common::{download_to_disk, uv_snapshot, venv_bin_path, TestContext};
+use crate::common::{TestContext, download_to_disk, uv_snapshot, venv_bin_path};
 use predicates::prelude::predicate;
 use tempfile::tempdir_in;
 use uv_fs::Simplified;

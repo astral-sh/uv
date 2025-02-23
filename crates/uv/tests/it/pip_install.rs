@@ -12,8 +12,8 @@ use predicates::prelude::predicate;
 use url::Url;
 
 use crate::common::{
-    self, build_vendor_links_url, decode_token, get_bin, uv_snapshot, venv_bin_path,
-    venv_to_interpreter, TestContext,
+    self, TestContext, build_vendor_links_url, decode_token, get_bin, uv_snapshot, venv_bin_path,
+    venv_to_interpreter,
 };
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -2016,7 +2016,9 @@ fn install_git_private_https_pat_at_ref() {
         ""
     };
 
-    let package = format!("uv-private-pypackage @ git+https://{user}{token}@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac");
+    let package = format!(
+        "uv-private-pypackage @ git+https://{user}{token}@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac"
+    );
     uv_snapshot!(filters, context.pip_install()
         .arg(package), @r###"
     success: true
@@ -4880,8 +4882,8 @@ fn dry_run_install_already_installed() -> std::result::Result<(), Box<dyn std::e
 }
 
 #[test]
-fn dry_run_install_transitive_dependency_already_installed(
-) -> std::result::Result<(), Box<dyn std::error::Error>> {
+fn dry_run_install_transitive_dependency_already_installed()
+-> std::result::Result<(), Box<dyn std::error::Error>> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");

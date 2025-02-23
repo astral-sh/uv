@@ -11,7 +11,7 @@ use indoc::indoc;
 use insta::{assert_json_snapshot, assert_snapshot};
 use serde::{Deserialize, Serialize};
 
-use crate::common::{copy_dir_ignore, make_project, uv_snapshot, TestContext};
+use crate::common::{TestContext, copy_dir_ignore, make_project, uv_snapshot};
 
 fn install_workspace(context: &TestContext, current_dir: &Path) -> Command {
     let mut command = context.pip_install();

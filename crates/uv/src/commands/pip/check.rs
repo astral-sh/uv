@@ -10,7 +10,7 @@ use uv_installer::{SitePackages, SitePackagesDiagnostic};
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
 
 use crate::commands::pip::operations::report_target_environment;
-use crate::commands::{elapsed, ExitStatus};
+use crate::commands::{ExitStatus, elapsed};
 use crate::printer::Printer;
 
 /// Check for incompatibilities in installed packages.

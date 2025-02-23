@@ -3,7 +3,7 @@ use assert_fs::fixture::PathChild;
 
 use uv_static::EnvVars;
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 
 #[test]
 fn tool_uninstall() {
