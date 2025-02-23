@@ -1,0 +1,6 @@
+---
+source: crates/uv/tests/it/pip_install.rs
+expression: EXPECTED
+snapshot_kind: text
+---
+? `pyproject.toml` looks like a local metadata file but was passed as a package name. Did you mean `-r pyproject.toml`? [y/n] › yes

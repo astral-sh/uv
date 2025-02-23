@@ -299,6 +299,16 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     anstream::ColorChoice::write_global(globals.color.into());
 
+    (match globals.color {
+        uv_cli::ColorChoice::Auto => None,
+        uv_cli::ColorChoice::Always => Some(true),
+        uv_cli::ColorChoice::Never => Some(false),
+    })
+    .inspect(|colors_enabled| {
+        console::set_colors_enabled(*colors_enabled);
+        console::set_colors_enabled_stderr(*colors_enabled);
+    });
+
     miette::set_hook(Box::new(|_| {
         Box::new(
             miette::MietteHandlerOpts::new()
