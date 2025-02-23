@@ -581,7 +581,7 @@ async fn source_dist_pkg_info(file: &Path) -> Result<Vec<u8>, PublishPrepareErro
     let mut pkg_infos: Vec<(PathBuf, Vec<u8>)> = archive
         .entries()?
         .map_err(PublishPrepareError::from)
-        .try_filter_map(|mut entry| async move {
+        .try_filter_map(async |mut entry| {
             let path = entry
                 .path()
                 .map_err(PublishPrepareError::from)?

@@ -274,7 +274,7 @@ impl RegistryClient {
             // Otherwise, fetch concurrently.
             IndexStrategy::UnsafeBestMatch | IndexStrategy::UnsafeFirstMatch => {
                 results = futures::stream::iter(it)
-                    .map(|index| async move {
+                    .map(async |index| {
                         let _permit = download_concurrency.acquire().await;
                         let metadata = self
                             .simple_single_index(package_name, index, capabilities)
@@ -282,12 +282,10 @@ impl RegistryClient {
                         Ok((index, metadata))
                     })
                     .buffered(8)
-                    .filter_map(|result: Result<_, Error>| async move {
-                        match result {
-                            Ok((index, Some(metadata))) => Some(Ok((index, metadata))),
-                            Ok((_, None)) => None,
-                            Err(err) => Some(Err(err)),
-                        }
+                    .filter_map(async |result: Result<_, Error>| match result {
+                        Ok((index, Some(metadata))) => Some(Ok((index, metadata))),
+                        Ok((_, None)) => None,
+                        Err(err) => Some(Err(err)),
                     })
                     .try_collect::<Vec<_>>()
                     .await?;

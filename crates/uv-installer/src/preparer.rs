@@ -70,7 +70,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
     ) -> impl Stream<Item = Result<CachedDist, Error>> + 'stream {
         distributions
             .into_iter()
-            .map(|dist| async move {
+            .map(async |dist| {
                 let wheel = self
                     .get_wheel((*dist).clone(), in_flight, resolution)
                     .boxed_local()

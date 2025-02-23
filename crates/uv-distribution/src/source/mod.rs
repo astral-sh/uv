@@ -734,7 +734,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Ok(revision)
         } else {
             client
-                .managed(|client| async move {
+                .managed(async |client| {
                     client
                         .cached_client()
                         .skip_cache_with_retry(
@@ -2019,7 +2019,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .instrument(info_span!("download", source_dist = %source))
         };
         client
-            .managed(|client| async move {
+            .managed(async |client| {
                 client
                     .cached_client()
                     .skip_cache_with_retry(

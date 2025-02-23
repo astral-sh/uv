@@ -231,11 +231,10 @@ pub(crate) async fn tree(
             let reporter = LatestVersionReporter::from(printer).with_length(packages.len() as u64);
 
             // Fetch the latest version for each package.
-            let download_concurrency = &download_concurrency;
             let mut fetches = futures::stream::iter(packages)
-                .map(|(package, index)| async move {
+                .map(async |(package, index)| {
                     let Some(filename) = client
-                        .find_latest(package.name(), Some(&index), download_concurrency)
+                        .find_latest(package.name(), Some(&index), &download_concurrency)
                         .await?
                     else {
                         return Ok(None);

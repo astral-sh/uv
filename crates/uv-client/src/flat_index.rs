@@ -106,7 +106,7 @@ impl<'a> FlatIndexClient<'a> {
         indexes: impl Iterator<Item = &IndexUrl>,
     ) -> Result<FlatIndexEntries, FlatIndexError> {
         let mut fetches = futures::stream::iter(indexes)
-            .map(|index| async move {
+            .map(async |index| {
                 let entries = match index {
                     IndexUrl::Path(url) => {
                         let path = url
