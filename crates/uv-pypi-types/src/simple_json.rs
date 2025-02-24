@@ -143,36 +143,6 @@ pub struct Hashes {
 }
 
 impl Hashes {
-    /// Convert a set of [`Hashes`] into a list of [`HashDigest`]s.
-    pub fn into_digests(self) -> Vec<HashDigest> {
-        let mut digests = Vec::new();
-        if let Some(sha512) = self.sha512 {
-            digests.push(HashDigest {
-                algorithm: HashAlgorithm::Sha512,
-                digest: sha512,
-            });
-        }
-        if let Some(sha384) = self.sha384 {
-            digests.push(HashDigest {
-                algorithm: HashAlgorithm::Sha384,
-                digest: sha384,
-            });
-        }
-        if let Some(sha256) = self.sha256 {
-            digests.push(HashDigest {
-                algorithm: HashAlgorithm::Sha256,
-                digest: sha256,
-            });
-        }
-        if let Some(md5) = self.md5 {
-            digests.push(HashDigest {
-                algorithm: HashAlgorithm::Md5,
-                digest: md5,
-            });
-        }
-        digests
-    }
-
     /// Parse the hash from a fragment, as in: `sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61`
     pub fn parse_fragment(fragment: &str) -> Result<Self, HashError> {
         let mut parts = fragment.split('=');
@@ -400,6 +370,131 @@ impl FromStr for HashDigest {
             algorithm,
             digest: value.to_owned().into_boxed_str(),
         })
+    }
+}
+
+/// A collection of [`HashDigest`] entities.
+#[derive(
+    Debug,
+    Clone,
+    Ord,
+    PartialOrd,
+    Eq,
+    PartialEq,
+    Hash,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
+pub struct HashDigests(Box<[HashDigest]>);
+
+impl HashDigests {
+    /// Initialize an empty collection of [`HashDigest`] entities.
+    pub fn empty() -> Self {
+        Self(Box::new([]))
+    }
+
+    /// Return the [`HashDigest`] entities as a slice.
+    pub fn as_slice(&self) -> &[HashDigest] {
+        self.0.as_ref()
+    }
+
+    /// Returns `true` if the [`HashDigests`] are empty.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Returns the first [`HashDigest`] entity.
+    pub fn first(&self) -> Option<&HashDigest> {
+        self.0.first()
+    }
+
+    /// Return the [`HashDigest`] entities as a vector.
+    pub fn to_vec(&self) -> Vec<HashDigest> {
+        self.0.to_vec()
+    }
+
+    /// Returns an [`Iterator`] over the [`HashDigest`] entities.
+    pub fn iter(&self) -> impl Iterator<Item = &HashDigest> {
+        self.0.iter()
+    }
+
+    /// Sort the underlying [`HashDigest`] entities.
+    pub fn sort_unstable(&mut self) {
+        self.0.sort_unstable();
+    }
+}
+
+/// Convert a set of [`Hashes`] into a list of [`HashDigest`]s.
+impl From<Hashes> for HashDigests {
+    fn from(value: Hashes) -> Self {
+        let mut digests = Vec::with_capacity(
+            usize::from(value.sha512.is_some())
+                + usize::from(value.sha384.is_some())
+                + usize::from(value.sha256.is_some())
+                + usize::from(value.md5.is_some()),
+        );
+        if let Some(sha512) = value.sha512 {
+            digests.push(HashDigest {
+                algorithm: HashAlgorithm::Sha512,
+                digest: sha512,
+            });
+        }
+        if let Some(sha384) = value.sha384 {
+            digests.push(HashDigest {
+                algorithm: HashAlgorithm::Sha384,
+                digest: sha384,
+            });
+        }
+        if let Some(sha256) = value.sha256 {
+            digests.push(HashDigest {
+                algorithm: HashAlgorithm::Sha256,
+                digest: sha256,
+            });
+        }
+        if let Some(md5) = value.md5 {
+            digests.push(HashDigest {
+                algorithm: HashAlgorithm::Md5,
+                digest: md5,
+            });
+        }
+        Self::from(digests)
+    }
+}
+
+impl From<HashDigest> for HashDigests {
+    fn from(value: HashDigest) -> Self {
+        Self(Box::new([value]))
+    }
+}
+
+impl From<&[HashDigest]> for HashDigests {
+    fn from(value: &[HashDigest]) -> Self {
+        Self(Box::from(value))
+    }
+}
+
+impl From<Vec<HashDigest>> for HashDigests {
+    fn from(value: Vec<HashDigest>) -> Self {
+        Self(value.into_boxed_slice())
+    }
+}
+
+impl FromIterator<HashDigest> for HashDigests {
+    fn from_iter<T: IntoIterator<Item = HashDigest>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
+
+impl IntoIterator for HashDigests {
+    type Item = HashDigest;
+    type IntoIter = std::vec::IntoIter<HashDigest>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_vec().into_iter()
     }
 }
 

@@ -4,7 +4,7 @@ use crate::Error;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{CachedDist, Dist, Hashed};
 use uv_metadata::read_flat_wheel_metadata;
-use uv_pypi_types::{HashDigest, ResolutionMetadata};
+use uv_pypi_types::{HashDigest, HashDigests, ResolutionMetadata};
 
 use uv_cache_info::CacheInfo;
 
@@ -21,7 +21,7 @@ pub struct LocalWheel {
     /// The cache index of the wheel.
     pub(crate) cache: CacheInfo,
     /// The computed hashes of the wheel.
-    pub(crate) hashes: Vec<HashDigest>,
+    pub(crate) hashes: HashDigests,
 }
 
 impl LocalWheel {
@@ -49,7 +49,7 @@ impl LocalWheel {
 
 impl Hashed for LocalWheel {
     fn hashes(&self) -> &[HashDigest] {
-        &self.hashes
+        self.hashes.as_slice()
     }
 }
 

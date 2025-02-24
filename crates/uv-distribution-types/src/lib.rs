@@ -1127,19 +1127,19 @@ impl Identifier for Url {
 
 impl Identifier for File {
     fn distribution_id(&self) -> DistributionId {
-        if let Some(hash) = self.hashes.first() {
-            DistributionId::Digest(hash.clone())
-        } else {
-            self.url.distribution_id()
-        }
+        self.hashes
+            .first()
+            .cloned()
+            .map(DistributionId::Digest)
+            .unwrap_or_else(|| self.url.distribution_id())
     }
 
     fn resource_id(&self) -> ResourceId {
-        if let Some(hash) = self.hashes.first() {
-            ResourceId::Digest(hash.clone())
-        } else {
-            self.url.resource_id()
-        }
+        self.hashes
+            .first()
+            .cloned()
+            .map(ResourceId::Digest)
+            .unwrap_or_else(|| self.url.resource_id())
     }
 }
 
