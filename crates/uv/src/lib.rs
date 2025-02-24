@@ -279,9 +279,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     let duration_layer = None::<tracing_subscriber::layer::Identity>;
     logging::setup_logging(
         match globals.verbose {
-            0 => logging::Level::Default,
-            1 => logging::Level::Verbose,
-            2.. => logging::Level::ExtraVerbose,
+            0 => logging::Level::Off,
+            1 => logging::Level::DebugUv,
+            2 => logging::Level::TraceUv,
+            3.. => logging::Level::TraceAll,
         },
         duration_layer,
         globals.color,

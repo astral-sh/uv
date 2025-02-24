@@ -20,18 +20,17 @@ use tracing_tree::time::Uptime;
 use tracing_tree::HierarchicalLayer;
 
 use uv_cli::ColorChoice;
+use uv_static::EnvVars;
 #[cfg(feature = "tracing-durations-export")]
 use uv_static::EnvVars;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Level {
-    /// Suppress all tracing output by default (overridable by `RUST_LOG`).
     #[default]
-    Default,
-    /// Show debug messages by default (overridable by `RUST_LOG`).
-    Verbose,
-    /// Show messages in a hierarchical span tree. By default, debug messages are shown (overridable by `RUST_LOG`).
-    ExtraVerbose,
+    Off,
+    DebugUv,
+    TraceUv,
+    TraceAll,
 }
 
 struct UvFormat {
@@ -120,14 +119,23 @@ pub(crate) fn setup_logging(
     durations: impl Layer<Registry> + Send + Sync,
     color: ColorChoice,
 ) -> anyhow::Result<()> {
+    // We use directives here to ensure `RUST_LOG` can override them
     let default_directive = match level {
-        Level::Default => {
-            // Show nothing, but allow `RUST_LOG` to override.
+        Level::Off => {
+            // Show nothing
             tracing::level_filters::LevelFilter::OFF.into()
         }
-        Level::Verbose | Level::ExtraVerbose => {
-            // Show `DEBUG` messages from the CLI crate, but allow `RUST_LOG` to override.
+        Level::DebugUv => {
+            // Show `DEBUG` messages from the CLI crate
             Directive::from_str("uv=debug").unwrap()
+        }
+        Level::TraceUv => {
+            // Show `TRACE` messages from the CLI crate, but allow `RUST_LOG` to override.
+            Directive::from_str("uv=trace").unwrap()
+        }
+        Level::TraceAll => {
+            // Show `TRACE` messages from the CLI crate, but allow `RUST_LOG` to override.
+            Directive::from_str("trace").unwrap()
         }
     };
 
@@ -160,40 +168,38 @@ pub(crate) fn setup_logging(
         };
     let writer = std::sync::Mutex::new(anstream::AutoStream::new(std::io::stderr(), color_choice));
 
-    match level {
-        Level::Default | Level::Verbose => {
-            // Regardless of the tracing level, show messages without any adornment.
-            let format = UvFormat {
-                display_timestamp: false,
-                display_level: true,
-                show_spans: false,
-            };
+    let detailed_logging = std::env::var(EnvVars::UV_LOG_CONTEXT).is_ok();
+    if detailed_logging {
+        // Regardless of the tracing level, include the uptime and target for each message.
+        tracing_subscriber::registry()
+            .with(durations_layer)
+            .with(
+                HierarchicalLayer::default()
+                    .with_targets(true)
+                    .with_timer(Uptime::default())
+                    .with_writer(writer)
+                    .with_ansi(ansi)
+                    .with_filter(filter),
+            )
+            .init();
+    } else {
+        // Regardless of the tracing level, show messages without any adornment.
+        let format = UvFormat {
+            display_timestamp: false,
+            display_level: true,
+            show_spans: false,
+        };
 
-            tracing_subscriber::registry()
-                .with(durations_layer)
-                .with(
-                    tracing_subscriber::fmt::layer()
-                        .event_format(format)
-                        .with_writer(writer)
-                        .with_ansi(ansi)
-                        .with_filter(filter),
-                )
-                .init();
-        }
-        Level::ExtraVerbose => {
-            // Regardless of the tracing level, include the uptime and target for each message.
-            tracing_subscriber::registry()
-                .with(durations_layer)
-                .with(
-                    HierarchicalLayer::default()
-                        .with_targets(true)
-                        .with_timer(Uptime::default())
-                        .with_writer(writer)
-                        .with_ansi(ansi)
-                        .with_filter(filter),
-                )
-                .init();
-        }
+        tracing_subscriber::registry()
+            .with(durations_layer)
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .event_format(format)
+                    .with_writer(writer)
+                    .with_ansi(ansi)
+                    .with_filter(filter),
+            )
+            .init();
     }
 
     Ok(())
