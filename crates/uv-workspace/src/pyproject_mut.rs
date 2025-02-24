@@ -1187,7 +1187,7 @@ fn find_dependencies(
     let mut to_replace = Vec::new();
     for (i, dep) in deps.iter().enumerate() {
         if let Some(req) = dep.as_str().and_then(try_parse_requirement) {
-            if marker.map_or(true, |m| *m == req.marker) && *name == req.name {
+            if marker.is_none_or(|m| *m == req.marker) && *name == req.name {
                 to_replace.push((i, req));
             }
         }

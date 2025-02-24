@@ -1123,6 +1123,20 @@ impl ValidatedLock {
                 }
                 Ok(Self::Preferable(lock))
             }
+            SatisfiesResult::MismatchedPackageProvidesExtra(name, version, expected, actual) => {
+                if let Some(version) = version {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched extras for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
+                        expected, actual
+                    );
+                } else {
+                    debug!(
+                        "Ignoring existing lockfile due to mismatched extras for: `{name}`\n  Requested: {:?}\n  Existing: {:?}",
+                        expected, actual
+                    );
+                }
+                Ok(Self::Preferable(lock))
+            }
             SatisfiesResult::MissingVersion(name) => {
                 debug!("Ignoring existing lockfile due to missing version: `{name}`");
                 Ok(Self::Preferable(lock))

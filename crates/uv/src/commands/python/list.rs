@@ -119,7 +119,7 @@ pub(crate) async fn list(
                 result
                     .as_ref()
                     .err()
-                    .map_or(true, DiscoveryError::is_critical)
+                    .is_none_or(DiscoveryError::is_critical)
             })
             .collect::<Result<Vec<Result<PythonInstallation, PythonNotFound>>, DiscoveryError>>()?
             .into_iter()

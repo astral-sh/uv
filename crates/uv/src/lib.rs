@@ -33,7 +33,7 @@ use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
-use crate::commands::{ExitStatus, RunCommand, ToolRunCommand};
+use crate::commands::{ExitStatus, RunCommand, ScriptPath, ToolRunCommand};
 use crate::printer::Printer;
 use crate::settings::{
     CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
@@ -192,6 +192,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     RunCommand::PythonStdin(contents, _) | RunCommand::PythonGuiStdin(contents, _),
                 ) => Pep723Metadata::parse(contents)?.map(Pep723Item::Stdin),
                 _ => None,
+            },
+            ProjectCommand::Add(uv_cli::AddArgs {
+                script: Some(script),
+                ..
+            }) => match Pep723Script::read(&script).await {
+                Ok(Some(script)) => Some(Pep723Item::Script(script)),
+                Ok(None) => None,
+                Err(err) => return Err(err.into()),
             },
             ProjectCommand::Remove(uv_cli::RemoveArgs {
                 script: Some(script),
@@ -1622,6 +1630,19 @@ async fn run_project(
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
+            // If the script already exists, use it; otherwise, propagate the file path and we'll
+            // initialize it later on.
+            let script = script
+                .map(|script| match script {
+                    Pep723Item::Script(script) => script,
+                    Pep723Item::Stdin(..) => unreachable!("`uv add` does not support stdin"),
+                    Pep723Item::Remote(..) => {
+                        unreachable!("`uv add` does not support remote files")
+                    }
+                })
+                .map(ScriptPath::Script)
+                .or(args.script.map(ScriptPath::Path));
+
             let requirements = args
                 .packages
                 .into_iter()
@@ -1652,7 +1673,7 @@ async fn run_project(
                 args.python,
                 args.install_mirrors,
                 args.settings,
-                args.script,
+                script,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.installer_metadata,
@@ -1977,6 +1998,10 @@ where
 fn print_log_info(log_path: &Path) {
     let mut log_file_path = log_path.to_owned();
     log_file_path.set_extension("log");
+    let log_file_path = std::env::current_dir()
+        .map(|dir| dir.join(&log_file_path))
+        .unwrap_or(log_file_path);
+
     let log_file_path = env::var(uv_static::EnvVars::UV_LOG_DIR)
         .map(|dir| Path::new(&dir).join(log_file_path.file_name().unwrap()))
         .unwrap_or_else(|_| {

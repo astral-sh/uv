@@ -267,7 +267,7 @@ impl<'a> IndexLocations {
             let mut seen = FxHashSet::default();
             self.indexes
                 .iter()
-                .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
+                .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
                 .find(|index| index.default)
                 .or_else(|| Some(&DEFAULT_INDEX))
         }
@@ -284,7 +284,7 @@ impl<'a> IndexLocations {
             Either::Right(
                 self.indexes
                     .iter()
-                    .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
+                    .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
                     .filter(|index| !index.default && !index.explicit),
             )
         }
@@ -313,9 +313,9 @@ impl<'a> IndexLocations {
         } else {
             let mut seen = FxHashSet::default();
             Either::Right(
-                self.indexes.iter().filter(move |index| {
-                    index.name.as_ref().map_or(true, |name| seen.insert(name))
-                }),
+                self.indexes
+                    .iter()
+                    .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name))),
             )
         }
     }
@@ -356,7 +356,7 @@ impl<'a> IndexLocations {
                 self.indexes
                     .iter()
                     .chain(self.flat_index.iter())
-                    .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
+                    .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
             } {
                 if index.default {
                     if default {
@@ -406,7 +406,7 @@ impl<'a> IndexUrls {
             let mut seen = FxHashSet::default();
             self.indexes
                 .iter()
-                .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
+                .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
                 .find(|index| index.default)
                 .or_else(|| Some(&DEFAULT_INDEX))
         }
@@ -423,7 +423,7 @@ impl<'a> IndexUrls {
             Either::Right(
                 self.indexes
                     .iter()
-                    .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
+                    .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
                     .filter(|index| !index.default && !index.explicit),
             )
         }
@@ -462,7 +462,7 @@ impl<'a> IndexUrls {
                     self.indexes
                         .iter()
                         .filter(move |index| {
-                            index.name.as_ref().map_or(true, |name| seen.insert(name))
+                            index.name.as_ref().is_none_or(|name| seen.insert(name))
                         })
                         .filter(|index| !index.default)
                 }
@@ -471,7 +471,7 @@ impl<'a> IndexUrls {
                     self.indexes
                         .iter()
                         .filter(move |index| {
-                            index.name.as_ref().map_or(true, |name| seen.insert(name))
+                            index.name.as_ref().is_none_or(|name| seen.insert(name))
                         })
                         .find(|index| index.default)
                         .into_iter()

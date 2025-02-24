@@ -20,7 +20,7 @@ use url::Url;
 
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::BuildOptions;
-use uv_distribution::{DistributionDatabase, FlatRequiresDist, RequiresDist};
+use uv_distribution::{DistributionDatabase, FlatRequiresDist};
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
@@ -580,6 +580,12 @@ impl Lock {
         self
     }
 
+    /// Returns `true` if this [`Lock`] includes `provides-extra` metadata.
+    pub fn supports_provides_extra(&self) -> bool {
+        // `provides-extra` was added in Version 1 Revision 1.
+        (self.version(), self.revision()) >= (1, 1)
+    }
+
     /// Returns the lockfile version.
     pub fn version(&self) -> u32 {
         self.version
@@ -1020,30 +1026,55 @@ impl Lock {
         dist
     }
 
-    /// Return a [`SatisfiesResult`] if the given [`RequiresDist`] does not match the [`Package`].
+    /// Return a [`SatisfiesResult`] if the given extras do not match the [`Package`] metadata.
+    fn satisfies_provides_extra<'lock>(
+        &self,
+        provides_extra: Vec<ExtraName>,
+        package: &'lock Package,
+    ) -> SatisfiesResult<'lock> {
+        if !self.supports_provides_extra() {
+            return SatisfiesResult::Satisfied;
+        }
+
+        let expected: BTreeSet<_> = provides_extra.iter().collect();
+        let actual: BTreeSet<_> = package.metadata.provides_extras.iter().collect();
+
+        if expected != actual {
+            let expected = provides_extra.into_iter().collect();
+            return SatisfiesResult::MismatchedPackageProvidesExtra(
+                &package.id.name,
+                package.id.version.as_ref(),
+                expected,
+                actual,
+            );
+        }
+
+        SatisfiesResult::Satisfied
+    }
+
+    /// Return a [`SatisfiesResult`] if the given requirements do not match the [`Package`] metadata.
+    #[allow(clippy::unused_self)]
     fn satisfies_requires_dist<'lock>(
-        metadata: RequiresDist,
+        &self,
+        requires_dist: Vec<Requirement>,
+        dependency_groups: BTreeMap<GroupName, Vec<Requirement>>,
         package: &'lock Package,
         root: &Path,
     ) -> Result<SatisfiesResult<'lock>, LockError> {
         // Special-case: if the version is dynamic, compare the flattened requirements.
         let flattened = if package.is_dynamic() {
             Some(
-                FlatRequiresDist::from_requirements(
-                    metadata.requires_dist.clone(),
-                    &package.id.name,
-                )
-                .into_iter()
-                .map(|requirement| normalize_requirement(requirement, root))
-                .collect::<Result<BTreeSet<_>, _>>()?,
+                FlatRequiresDist::from_requirements(requires_dist.clone(), &package.id.name)
+                    .into_iter()
+                    .map(|requirement| normalize_requirement(requirement, root))
+                    .collect::<Result<BTreeSet<_>, _>>()?,
             )
         } else {
             None
         };
 
         // Validate the `requires-dist` metadata.
-        let expected: BTreeSet<_> = metadata
-            .requires_dist
+        let expected: BTreeSet<_> = requires_dist
             .into_iter()
             .map(|requirement| normalize_requirement(requirement, root))
             .collect::<Result<_, _>>()?;
@@ -1065,8 +1096,7 @@ impl Lock {
         }
 
         // Validate the `dependency-groups` metadata.
-        let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = metadata
-            .dependency_groups
+        let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = dependency_groups
             .into_iter()
             .filter(|(_, requirements)| !requirements.is_empty())
             .map(|(group, requirements)| {
@@ -1402,8 +1432,19 @@ impl Lock {
                     ));
                 }
 
+                // Validate the `provides-extras` metadata.
+                match self.satisfies_provides_extra(metadata.provides_extras, package) {
+                    SatisfiesResult::Satisfied => {}
+                    result => return Ok(result),
+                }
+
                 // Validate that the requirements are unchanged.
-                match Self::satisfies_requires_dist(RequiresDist::from(metadata), package, root)? {
+                match self.satisfies_requires_dist(
+                    metadata.requires_dist,
+                    metadata.dependency_groups,
+                    package,
+                    root,
+                )? {
                     SatisfiesResult::Satisfied => {}
                     result => return Ok(result),
                 }
@@ -1432,21 +1473,30 @@ impl Lock {
                         return false;
                     }
 
+                    // Validate that the extras are unchanged.
+                    if let SatisfiesResult::Satisfied = self.satisfies_provides_extra(metadata.provides_extras, package, ) {
+                        debug!("Static `provides-extra` for `{}` is up-to-date", package.id);
+                    } else {
+                        debug!("Static `provides-extra` for `{}` is out-of-date; falling back to distribution database", package.id);
+                        return false;
+                    }
+
                     // Validate that the requirements are unchanged.
-                    match Self::satisfies_requires_dist(metadata, package, root) {
+                    match self.satisfies_requires_dist(metadata.requires_dist, metadata.dependency_groups, package, root) {
                         Ok(SatisfiesResult::Satisfied) => {
                             debug!("Static `requires-dist` for `{}` is up-to-date", package.id);
-                            true
                         },
                         Ok(..) => {
                             debug!("Static `requires-dist` for `{}` is out-of-date; falling back to distribution database", package.id);
-                            false
+                            return false;
                         },
                         Err(..) => {
                             debug!("Static `requires-dist` for `{}` is invalid; falling back to distribution database", package.id);
-                            false
+                            return false;
                         },
                     }
+
+                    true
                 });
 
                 // If the `requires-dist` metadata matches the requirements, we're done; otherwise,
@@ -1504,9 +1554,16 @@ impl Lock {
                         return Ok(SatisfiesResult::MismatchedDynamic(&package.id.name, true));
                     }
 
+                    // Validate that the extras are unchanged.
+                    match self.satisfies_provides_extra(metadata.provides_extras, package) {
+                        SatisfiesResult::Satisfied => {}
+                        result => return Ok(result),
+                    }
+
                     // Validate that the requirements are unchanged.
-                    match Self::satisfies_requires_dist(
-                        RequiresDist::from(metadata),
+                    match self.satisfies_requires_dist(
+                        metadata.requires_dist,
+                        metadata.dependency_groups,
                         package,
                         root,
                     )? {
@@ -1519,8 +1576,6 @@ impl Lock {
             }
 
             // Recurse.
-            // TODO(charlie): Do we care about extras here, or any other fields on the `Dependency`?
-            // Should we instead recurse on `requires_dist`?
             for dep in &package.dependencies {
                 if seen.insert(&dep.package_id) {
                     let dep_dist = self.find_by_id(&dep.package_id);
@@ -1607,6 +1662,13 @@ pub enum SatisfiesResult<'lock> {
         Option<&'lock Version>,
         BTreeSet<Requirement>,
         BTreeSet<Requirement>,
+    ),
+    /// A package in the lockfile contains different `provides-extra` metadata than expected.
+    MismatchedPackageProvidesExtra(
+        &'lock PackageName,
+        Option<&'lock Version>,
+        BTreeSet<ExtraName>,
+        BTreeSet<&'lock ExtraName>,
     ),
     /// A package in the lockfile contains different `dependency-groups` metadata than expected.
     MismatchedPackageDependencyGroups(

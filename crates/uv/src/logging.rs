@@ -252,11 +252,16 @@ pub(crate) fn setup_logging(
 
         // Forcing no anstream in file logs, I don't like the idea of using the same env variable NO_COLOR or cli flag to control both console and file logs
         // If there is a case to introduce color for file logs we can introduce a new env variable or cli flag for it.
+        // fs_err doesn't implement RawStream so we Box it and then cast it to the trait std::io::Write, and Send is needed to be explicitly specified as Mutex needs to be shared between threads.
+
         let file_writer = std::sync::Mutex::new(anstream::AutoStream::new(
             Box::new(log_file) as Box<dyn std::io::Write + Send>,
             anstream::ColorChoice::Never,
         ));
 
+        // Depending on the log level, different layers are added to the subscriber.
+        // However me might need to seperate trace or debug and the heirarchical layer or not into different args (based on what the use cases are)
+        // An equivalent of `RUST_LOG` for file logs might be needed to be implemented.
         // Depending on the log level, different layers are added to the subscriber. However me might need to seperate trace or debug and the heirarchical layer or not into different args (based on what the use cases are)
         match file_log_level {
             FileLogLevel::Verbose | FileLogLevel::TraceVerbose => {
@@ -271,6 +276,7 @@ pub(crate) fn setup_logging(
             FileLogLevel::ExtraVerbose | FileLogLevel::TraceExtraVerbose => {
                 layers.push(
                     HierarchicalLayer::default()
+                        .with_targets(true)
                         .with_writer(file_writer)
                         .with_timer(Uptime::default())
                         .with_filter(file_filter)

@@ -12,7 +12,7 @@ use uv_distribution_types::{InstalledDist, InstalledDistError, IsBuildBackendErr
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pypi_types::{HashAlgorithm, HashDigest, ParsedUrlError};
+use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_types::AnyErrorBuild;
 
 #[derive(Debug, thiserror::Error)]
@@ -25,8 +25,6 @@ pub enum Error {
     RelativePath(PathBuf),
     #[error(transparent)]
     InvalidUrl(#[from] uv_distribution_types::ToUrlError),
-    #[error(transparent)]
-    ParsedUrl(#[from] ParsedUrlError),
     #[error(transparent)]
     JoinRelativeUrl(#[from] uv_pypi_types::JoinRelativeError),
     #[error("Expected a file URL, but received: {0}")]
@@ -86,8 +84,6 @@ pub enum Error {
     ReadInstalled(Box<InstalledDist>, #[source] InstalledDistError),
     #[error("Failed to read zip archive from built wheel")]
     Zip(#[from] ZipError),
-    #[error("Source distribution directory contains neither readable `pyproject.toml` nor `setup.py`: `{}`", _0.user_display())]
-    DirWithoutEntrypoint(PathBuf),
     #[error("Failed to extract archive")]
     Extract(#[from] uv_extract::Error),
     #[error("The source distribution is missing a `PKG-INFO` file")]
