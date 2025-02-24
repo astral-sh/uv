@@ -23622,26 +23622,16 @@ fn lock_script_path() -> Result<()> {
 /// `uv lock --script` should add a PEP 723 tag, if it doesn't exist already.
 #[test]
 fn lock_script_initialize() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_missing_file_error();
 
-    let error = regex::escape("The system cannot find the path specified. (os error 2)");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain(std::iter::once((
-            error.as_str(),
-            "No such file or directory (os error 2)",
-        )))
-        .collect::<Vec<_>>();
-
-    uv_snapshot!(filters, context.lock().arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to read from file `script.py`: No such file or directory (os error 2)
-    "###);
+    error: failed to read from file `script.py`: [OS ERROR 2]
+    ");
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! { r"

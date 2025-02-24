@@ -152,6 +152,19 @@ impl TestContext {
         self
     }
 
+    /// Add extra standard filtering for Windows-compatible missing file errors.
+    pub fn with_filtered_missing_file_error(mut self) -> Self {
+        self.filters.push((
+            regex::escape("The system cannot find the file specified. (os error 2)"),
+            "[OS ERROR 2]".to_string(),
+        ));
+        self.filters.push((
+            regex::escape("No such file or directory (os error 2)"),
+            "[OS ERROR 2]".to_string(),
+        ));
+        self
+    }
+
     /// Add extra standard filtering for executable suffixes on the current platform e.g.
     /// drops `.exe` on Windows.
     #[must_use]
