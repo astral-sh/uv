@@ -21,8 +21,6 @@ use tracing_tree::HierarchicalLayer;
 
 use uv_cli::ColorChoice;
 use uv_static::EnvVars;
-#[cfg(feature = "tracing-durations-export")]
-use uv_static::EnvVars;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Level {
