@@ -138,10 +138,10 @@ impl Default for Yanked {
 /// PEP 691 says multiple hashes can be included and the interpretation is left to the client.
 #[derive(Debug, Clone, Eq, PartialEq, Default, Deserialize)]
 pub struct Hashes {
-    pub md5: Option<Box<str>>,
-    pub sha256: Option<Box<str>>,
-    pub sha384: Option<Box<str>>,
-    pub sha512: Option<Box<str>>,
+    pub md5: Option<SmallString>,
+    pub sha256: Option<SmallString>,
+    pub sha384: Option<SmallString>,
+    pub sha512: Option<SmallString>,
 }
 
 impl Hashes {
@@ -163,42 +163,30 @@ impl Hashes {
         }
 
         match name {
-            "md5" => {
-                let md5 = value.to_owned().into_boxed_str();
-                Ok(Hashes {
-                    md5: Some(md5),
-                    sha256: None,
-                    sha384: None,
-                    sha512: None,
-                })
-            }
-            "sha256" => {
-                let sha256 = value.to_owned().into_boxed_str();
-                Ok(Hashes {
-                    md5: None,
-                    sha256: Some(sha256),
-                    sha384: None,
-                    sha512: None,
-                })
-            }
-            "sha384" => {
-                let sha384 = value.to_owned().into_boxed_str();
-                Ok(Hashes {
-                    md5: None,
-                    sha256: None,
-                    sha384: Some(sha384),
-                    sha512: None,
-                })
-            }
-            "sha512" => {
-                let sha512 = value.to_owned().into_boxed_str();
-                Ok(Hashes {
-                    md5: None,
-                    sha256: None,
-                    sha384: None,
-                    sha512: Some(sha512),
-                })
-            }
+            "md5" => Ok(Hashes {
+                md5: Some(SmallString::from(value)),
+                sha256: None,
+                sha384: None,
+                sha512: None,
+            }),
+            "sha256" => Ok(Hashes {
+                md5: None,
+                sha256: Some(SmallString::from(value)),
+                sha384: None,
+                sha512: None,
+            }),
+            "sha384" => Ok(Hashes {
+                md5: None,
+                sha256: None,
+                sha384: Some(SmallString::from(value)),
+                sha512: None,
+            }),
+            "sha512" => Ok(Hashes {
+                md5: None,
+                sha256: None,
+                sha384: None,
+                sha512: Some(SmallString::from(value)),
+            }),
             _ => Err(HashError::UnsupportedHashAlgorithm(fragment.to_string())),
         }
     }
@@ -224,42 +212,30 @@ impl FromStr for Hashes {
         }
 
         match name {
-            "md5" => {
-                let md5 = value.to_owned().into_boxed_str();
-                Ok(Hashes {
-                    md5: Some(md5),
-                    sha256: None,
-                    sha384: None,
-                    sha512: None,
-                })
-            }
-            "sha256" => {
-                let sha256 = value.to_owned().into_boxed_str();
-                Ok(Hashes {
-                    md5: None,
-                    sha256: Some(sha256),
-                    sha384: None,
-                    sha512: None,
-                })
-            }
-            "sha384" => {
-                let sha384 = value.to_owned().into_boxed_str();
-                Ok(Hashes {
-                    md5: None,
-                    sha256: None,
-                    sha384: Some(sha384),
-                    sha512: None,
-                })
-            }
-            "sha512" => {
-                let sha512 = value.to_owned().into_boxed_str();
-                Ok(Hashes {
-                    md5: None,
-                    sha256: None,
-                    sha384: None,
-                    sha512: Some(sha512),
-                })
-            }
+            "md5" => Ok(Hashes {
+                md5: Some(SmallString::from(value)),
+                sha256: None,
+                sha384: None,
+                sha512: None,
+            }),
+            "sha256" => Ok(Hashes {
+                md5: None,
+                sha256: Some(SmallString::from(value)),
+                sha384: None,
+                sha512: None,
+            }),
+            "sha384" => Ok(Hashes {
+                md5: None,
+                sha256: None,
+                sha384: Some(SmallString::from(value)),
+                sha512: None,
+            }),
+            "sha512" => Ok(Hashes {
+                md5: None,
+                sha256: None,
+                sha384: None,
+                sha512: Some(SmallString::from(value)),
+            }),
             _ => Err(HashError::UnsupportedHashAlgorithm(s.to_string())),
         }
     }
@@ -331,7 +307,7 @@ impl std::fmt::Display for HashAlgorithm {
 #[rkyv(derive(Debug))]
 pub struct HashDigest {
     pub algorithm: HashAlgorithm,
-    pub digest: Box<str>,
+    pub digest: SmallString,
 }
 
 impl HashDigest {
@@ -367,11 +343,9 @@ impl FromStr for HashDigest {
         }
 
         let algorithm = HashAlgorithm::from_str(name)?;
+        let digest = SmallString::from(value);
 
-        Ok(HashDigest {
-            algorithm,
-            digest: value.to_owned().into_boxed_str(),
-        })
+        Ok(Self { algorithm, digest })
     }
 }
 
