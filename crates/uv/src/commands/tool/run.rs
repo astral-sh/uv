@@ -681,7 +681,7 @@ async fn get_or_create_environment(
             let existing_environment = installed_tools
                 .get_environment(&requirement.name, cache)?
                 .filter(|environment| {
-                    python_request.as_ref().map_or(true, |python_request| {
+                    python_request.as_ref().is_none_or(|python_request| {
                         python_request.satisfied(environment.interpreter(), cache)
                     })
                 });

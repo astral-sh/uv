@@ -61,8 +61,8 @@ impl BuiltWheelMetadata {
 
     /// Returns `true` if the wheel matches the given package name and version.
     pub(crate) fn matches(&self, name: Option<&PackageName>, version: Option<&Version>) -> bool {
-        name.map_or(true, |name| self.filename.name == *name)
-            && version.map_or(true, |version| self.filename.version == *version)
+        name.is_none_or(|name| self.filename.name == *name)
+            && version.is_none_or(|version| self.filename.version == *version)
     }
 }
 

@@ -1,7 +1,7 @@
 use std::collections::hash_map::Entry;
 use std::fmt::Write;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -51,7 +51,7 @@ use crate::commands::project::{
     ProjectInterpreter, ScriptInterpreter, UniversalState,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{diagnostics, project, ExitStatus};
+use crate::commands::{diagnostics, project, ExitStatus, ScriptPath};
 use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverInstallerSettingsRef};
 
@@ -76,7 +76,7 @@ pub(crate) async fn add(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
-    script: Option<PathBuf>,
+    script: Option<ScriptPath>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
@@ -136,23 +136,24 @@ pub(crate) async fn add(
 
         // If we found a script, add to the existing metadata. Otherwise, create a new inline
         // metadata tag.
-        let script = if let Some(script) = Pep723Script::read(&script).await? {
-            script
-        } else {
-            let requires_python = init_script_python_requirement(
-                python.as_deref(),
-                &install_mirrors,
-                project_dir,
-                false,
-                python_preference,
-                python_downloads,
-                no_config,
-                &client_builder,
-                cache,
-                &reporter,
-            )
-            .await?;
-            Pep723Script::init(&script, requires_python.specifiers()).await?
+        let script = match script {
+            ScriptPath::Script(script) => script,
+            ScriptPath::Path(path) => {
+                let requires_python = init_script_python_requirement(
+                    python.as_deref(),
+                    &install_mirrors,
+                    project_dir,
+                    false,
+                    python_preference,
+                    python_downloads,
+                    no_config,
+                    &client_builder,
+                    cache,
+                    &reporter,
+                )
+                .await?;
+                Pep723Script::init(&path, requires_python.specifiers()).await?
+            }
         };
 
         // Discover the interpreter.

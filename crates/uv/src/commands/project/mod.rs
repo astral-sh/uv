@@ -654,7 +654,7 @@ impl ScriptInterpreter {
 
         match PythonEnvironment::from_root(&root, cache) {
             Ok(venv) => {
-                if python_request.as_ref().map_or(true, |request| {
+                if python_request.as_ref().is_none_or(|request| {
                     if request.satisfied(venv.interpreter(), cache) {
                         debug!(
                             "The script environment's Python version satisfies `{}`",
@@ -796,7 +796,7 @@ impl ProjectInterpreter {
         let venv = workspace.venv(active);
         match PythonEnvironment::from_root(&venv, cache) {
             Ok(venv) => {
-                if python_request.as_ref().map_or(true, |request| {
+                if python_request.as_ref().is_none_or(|request| {
                     if request.satisfied(venv.interpreter(), cache) {
                         debug!(
                             "The virtual environment's Python version satisfies `{}`",

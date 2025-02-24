@@ -117,8 +117,6 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
 /// Create a symlink at `dst` pointing to `src`, replacing any existing symlink if necessary.
 ///
 /// On Unix, this method creates a temporary file, then moves it into place.
-///
-/// TODO(charlie): Consider using the `rust-atomicwrites` crate.
 #[cfg(unix)]
 pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
     // Attempt to create the symlink directly.

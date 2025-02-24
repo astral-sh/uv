@@ -26,7 +26,6 @@ uv-distribution-filename = { workspace = true }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
-uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-shell = { workspace = true }
 uv-trampoline-builder = { workspace = true }
@@ -39,7 +38,6 @@ data-encoding = { workspace = true }
 fs-err = { workspace = true }
 mailparse = { workspace = true }
 pathdiff = { workspace = true }
-platform-info = { workspace = true }
 reflink-copy = { workspace = true }
 regex = { workspace = true }
 rustc-hash = { workspace = true }
@@ -51,7 +49,6 @@ tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 walkdir = { workspace = true }
-zip = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 same-file = { workspace = true }
