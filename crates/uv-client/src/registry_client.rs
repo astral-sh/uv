@@ -15,6 +15,7 @@ use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
+use uv_cache_key::cache_digest;
 use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
@@ -618,7 +619,7 @@ impl RegistryClient {
             let cache_entry = self.cache.entry(
                 CacheBucket::Wheels,
                 WheelCache::Index(index).wheel_dir(filename.name.as_ref()),
-                format!("{}.msgpack", filename.stem()),
+                format!("{}.msgpack", cache_digest(&filename.stem())),
             );
             let cache_control = match self.connectivity {
                 Connectivity::Online => CacheControl::from(
@@ -688,7 +689,7 @@ impl RegistryClient {
         let cache_entry = self.cache.entry(
             CacheBucket::Wheels,
             cache_shard.wheel_dir(filename.name.as_ref()),
-            format!("{}.msgpack", filename.stem()),
+            format!("{}.msgpack", cache_digest(&filename.stem())),
         );
         let cache_control = match self.connectivity {
             Connectivity::Online => CacheControl::from(

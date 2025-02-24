@@ -363,9 +363,9 @@ impl Cache {
         let before = {
             let mut references = FxHashSet::default();
             for bucket in CacheBucket::iter() {
-                let bucket = self.bucket(bucket);
-                if bucket.is_dir() {
-                    for entry in walkdir::WalkDir::new(bucket) {
+                let bucket_path = self.bucket(bucket);
+                if bucket_path.is_dir() {
+                    for entry in walkdir::WalkDir::new(bucket_path) {
                         let entry = entry?;
 
                         // Ignore any `.lock` files.
@@ -386,9 +386,17 @@ impl Cache {
                             continue;
                         };
 
-                        if WheelFilename::from_stem(filename).is_err() {
+                        if bucket == CacheBucket::Wheels {
+                            // In `wheels` bucket hash is used for the directory name so we can't rely on stem pattern.
+                            // Instead we skip if it contains an extension (example: .whl, .http, .rev and .msgpack files).
+                            if std::path::Path::new(filename).extension().is_some() {
+                                continue;
+                            }
+                        } else if WheelFilename::from_stem(filename).is_err() {
+                            // For other buckets only include entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
                             continue;
                         }
+
                         if let Ok(target) = self.resolve_link(entry.path()) {
                             references.insert(target);
                         }
@@ -408,9 +416,9 @@ impl Cache {
         let after = {
             let mut references = FxHashSet::default();
             for bucket in CacheBucket::iter() {
-                let bucket = self.bucket(bucket);
-                if bucket.is_dir() {
-                    for entry in walkdir::WalkDir::new(bucket) {
+                let bucket_path = self.bucket(bucket);
+                if bucket_path.is_dir() {
+                    for entry in walkdir::WalkDir::new(bucket_path) {
                         let entry = entry?;
 
                         // Ignore any `.lock` files.
@@ -430,9 +438,18 @@ impl Cache {
                         else {
                             continue;
                         };
-                        if WheelFilename::from_stem(filename).is_err() {
+
+                        if bucket == CacheBucket::Wheels {
+                            // In `wheels` bucket hash is used for the directory name so we can't rely on stem pattern.
+                            // Instead we skip if it contains an extension (example: .whl, .http, .rev and .msgpack files).
+                            if std::path::Path::new(filename).extension().is_some() {
+                                continue;
+                            }
+                        } else if WheelFilename::from_stem(filename).is_err() {
+                            // For other buckets only include entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
                             continue;
                         }
+
                         if let Ok(target) = self.resolve_link(entry.path()) {
                             references.insert(target);
                         }
@@ -565,9 +582,9 @@ impl Cache {
         let mut references = FxHashSet::default();
 
         for bucket in CacheBucket::iter() {
-            let bucket = self.bucket(bucket);
-            if bucket.is_dir() {
-                for entry in walkdir::WalkDir::new(bucket) {
+            let bucket_path = self.bucket(bucket);
+            if bucket_path.is_dir() {
+                for entry in walkdir::WalkDir::new(bucket_path) {
                     let entry = entry?;
 
                     // Ignore any `.lock` files.
@@ -579,7 +596,6 @@ impl Cache {
                         continue;
                     }
 
-                    // Identify entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
                     let Some(filename) = entry
                         .path()
                         .file_name()
@@ -587,9 +603,18 @@ impl Cache {
                     else {
                         continue;
                     };
-                    if WheelFilename::from_stem(filename).is_err() {
+
+                    if bucket == CacheBucket::Wheels {
+                        // In `wheels` bucket hash is used for the directory name so we can't rely on stem pattern.
+                        // Instead we skip if it contains an extension (example: .whl, .http, .rev and .msgpack files).
+                        if std::path::Path::new(filename).extension().is_some() {
+                            continue;
+                        }
+                    } else if WheelFilename::from_stem(filename).is_err() {
+                        // For other buckets only include entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
                         continue;
                     }
+
                     if let Ok(target) = self.resolve_link(entry.path()) {
                         references.insert(target);
                     }
@@ -1040,7 +1065,7 @@ impl CacheBucket {
             Self::Simple => "simple-v15",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/it/cache_prune.rs`.
-            Self::Wheels => "wheels-v4",
+            Self::Wheels => "wheels-v5",
             // Note that when bumping this, you'll also need to bump
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
             Self::Archive => "archive-v0",

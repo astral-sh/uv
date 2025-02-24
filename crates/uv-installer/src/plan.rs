@@ -4,6 +4,7 @@ use tracing::{debug, warn};
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_info::Timestamp;
+use uv_cache_key::cache_digest;
 use uv_configuration::{BuildOptions, ConfigSettings, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, LocalArchivePointer, RegistryWheelIndex,
@@ -159,7 +160,7 @@ impl<'a> Planner<'a> {
                             CacheBucket::Wheels,
                             WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
                         )
-                        .entry(format!("{}.http", wheel.filename.stem()));
+                        .entry(format!("{}.http", cache_digest(&wheel.filename.stem())));
 
                     // Read the HTTP pointer.
                     if let Some(pointer) = HttpArchivePointer::read_from(&cache_entry)? {
@@ -210,7 +211,7 @@ impl<'a> Planner<'a> {
                             CacheBucket::Wheels,
                             WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
                         )
-                        .entry(format!("{}.rev", wheel.filename.stem()));
+                        .entry(format!("{}.rev", cache_digest(&wheel.filename.stem())));
 
                     if let Some(pointer) = LocalArchivePointer::read_from(&cache_entry)? {
                         let timestamp = Timestamp::from_path(&wheel.install_path)?;
