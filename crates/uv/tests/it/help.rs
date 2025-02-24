@@ -151,7 +151,7 @@ fn help_flag() {
           --project <PROJECT>
               Run the command within the given project directory
           --log <PATH>
-              Path to a verbose appending log. [env: UV_LOG=]
+              Path to a verbose appending log. [env: UV_LOG=help.rs]
       -l, --log-verbose...
               Determines the verbosity of the file logs
           --config-file <CONFIG_FILE>
@@ -234,7 +234,9 @@ fn help_short_flag() {
           --project <PROJECT>
               Run the command within the given project directory
           --log <PATH>
-              Path to a verbose appending log. [env: UV_LOG=]
+              Path to a verbose appending log. [env: UV_LOG=help.rs]
+
+      
       -l, --log-verbose...
               Determines the verbosity of the file logs
           --config-file <CONFIG_FILE>
@@ -776,7 +778,8 @@ fn help_flag_subcommand() {
           --project <PROJECT>
               Run the command within the given project directory
           --log <PATH>
-              Path to a verbose appending log. [env: UV_LOG=]
+              Path to a verbose appending log. [env: UV_LOG=help.rs]
+
       -l, --log-verbose...
               Determines the verbosity of the file logs
           --config-file <CONFIG_FILE>
@@ -853,7 +856,8 @@ fn help_flag_subsubcommand() {
           --project <PROJECT>
               Run the command within the given project directory
           --log <PATH>
-              Path to a verbose appending log. [env: UV_LOG=]
+              Path to a verbose appending log. [env: UV_LOG=help.rs]
+
       -l, --log-verbose...
               Determines the verbosity of the file logs
           --config-file <CONFIG_FILE>

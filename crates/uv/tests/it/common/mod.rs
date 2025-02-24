@@ -4,6 +4,7 @@
 use std::borrow::BorrowMut;
 use std::ffi::OsString;
 use std::iter::Iterator;
+use std::panic::Location;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Output};
 use std::str::FromStr;
@@ -114,8 +115,24 @@ impl TestContext {
     ///
     /// See [`TestContext::new_with_versions`] if multiple versions are needed or
     /// if creation of the virtual environment should be deferred.
+    #[track_caller]
     pub fn new(python_version: &str) -> Self {
-        let new = Self::new_with_versions(&[python_version]);
+        // making the test context mutable to add the env var UV_LOG based on what test is running.
+        // Currently this creates one log file per test file and log file name is same as the test file name.
+        // However if we choose to manually add the --log arg to each test command, we can remove this. This would tedious but cleaner however it might be more work to turn off logs on testing if implemented this way.
+        // To Disucess: As things stand currently all tests would create file logs but the logs wouldn't persist (would be cleaned up when the Temp_dir is cleaned) unless the `UV_LOG_DIR` env var is set. However this might be costly and slow testing for those who don't want to log for tests and cli testing, so do we add an option to turn off testing.
+        // Seperating how logging is done for snapshot compareted to a how a user would log might be something to dicuss too. Like use a seperate env variable for setting the log file for snapshot testing.
+        let mut new = Self::new_with_versions(&[python_version]);
+        new.extra_env.push((
+            EnvVars::UV_LOG.into(),
+            Location::caller()
+                .file()
+                .to_string()
+                .rsplit('/')
+                .next()
+                .unwrap()
+                .into(),
+        ));
         new.create_venv();
         new
     }
@@ -313,6 +330,7 @@ impl TestContext {
     /// can be used to create a virtual environment with [`TestContext::create_venv`].
     ///
     /// See [`TestContext::new`] if only a single version is desired.
+    #[track_caller]
     pub fn new_with_versions(python_versions: &[&str]) -> Self {
         let bucket = Self::test_bucket_dir();
         fs_err::create_dir_all(&bucket).expect("Failed to create test bucket");
@@ -359,6 +377,16 @@ impl TestContext {
             .parent()
             .expect("CARGO_MANIFEST_DIR should be doubly nested in workspace")
             .to_path_buf();
+
+        let log_directory = env::var(EnvVars::UV_LOG_DIR)
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                workspace_root
+                    .join("crates")
+                    .join("uv")
+                    .join("tests")
+                    .join("logs")
+            });
 
         let python_versions: Vec<_> = python_versions
             .iter()
@@ -460,6 +488,12 @@ impl TestContext {
                 .map(|pattern| (pattern, "[HOME]/".to_string())),
         );
         filters.extend(
+            Self::path_patterns(&log_directory)
+                .into_iter()
+                .map(|pattern| (pattern, "[UV_LOG_DIR]/".to_string())),
+        );
+
+        filters.extend(
             Self::path_patterns(&workspace_root)
                 .into_iter()
                 .map(|pattern| (pattern, "[WORKSPACE]/".to_string())),
@@ -520,7 +554,16 @@ impl TestContext {
             python_version,
             python_versions,
             filters,
-            extra_env: vec![],
+            extra_env: vec![(
+                EnvVars::UV_LOG.into(),
+                Location::caller()
+                    .file()
+                    .to_string()
+                    .rsplit('/')
+                    .next()
+                    .unwrap()
+                    .into(),
+            )],
             _root: root,
         }
     }

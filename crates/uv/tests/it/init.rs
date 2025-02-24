@@ -760,14 +760,15 @@ fn init_script_file_conflicts() -> Result<()> {
     Initialized script at `name_conflict.py`
     "###);
 
-    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("name_conflict.py"), @r###"
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("name_conflict.py"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: `name_conflict.py` is already a PEP 723 script; use `uv run` to execute it
-    "###);
+    See [UV_LOG_DIR]/init.log for detailed logs
+    ");
 
     let contents = "print(\"Hello, world!\")";
     fs_err::write(child.join("existing_script.py"), contents)?;
@@ -839,7 +840,7 @@ fn init_library_no_package() -> Result<()> {
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
 
-    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--lib").arg("--no-package"), @r###"
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--lib").arg("--no-package"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -847,10 +848,10 @@ fn init_library_no_package() -> Result<()> {
     ----- stderr -----
     error: the argument '--lib' cannot be used with '--no-package'
 
-    Usage: uv init --cache-dir [CACHE_DIR] --lib [PATH]
+    Usage: uv init --cache-dir [CACHE_DIR] --lib --log <PATH> [PATH]
 
     For more information, try '--help'.
-    "###);
+    ");
 
     Ok(())
 }
@@ -2398,14 +2399,15 @@ fn init_unmanaged() -> Result<()> {
 fn init_hidden() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.filters(), context.init().arg(".foo"), @r###"
+    uv_snapshot!(context.filters(), context.init().arg(".foo"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Not a valid package or extra name: ".foo". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
-    "###);
+    See [UV_LOG_DIR]/init.log for detailed logs
+    "#);
 }
 
 /// Run `uv init` with an invalid `pyproject.toml` in a parent directory.
@@ -2417,7 +2419,7 @@ fn init_failure() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.touch()?;
 
-    uv_snapshot!(context.filters(), context.init().arg("foo"), @r###"
+    uv_snapshot!(context.filters(), context.init().arg("foo"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2425,7 +2427,8 @@ fn init_failure() -> Result<()> {
     ----- stderr -----
     error: Failed to discover parent workspace; use `uv init --no-workspace` to ignore
       Caused by: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
-    "###);
+    See [UV_LOG_DIR]/init.log for detailed logs
+    ");
 
     uv_snapshot!(context.filters(), context.init().arg("foo").arg("--no-workspace"), @r###"
     success: true
@@ -2605,14 +2608,15 @@ fn init_git_not_installed() {
     // With explicit `--vcs git`, `uv init` will fail.
     let child = context.temp_dir.child("bar");
     // Set `PATH` to child to make `git` command cannot be found.
-    uv_snapshot!(context.filters(), context.init().env(EnvVars::PATH, &*child).arg(child.as_ref()).arg("--vcs").arg("git"), @r###"
+    uv_snapshot!(context.filters(), context.init().env(EnvVars::PATH, &*child).arg(child.as_ref()).arg("--vcs").arg("git"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Attempted to initialize a Git repository, but `git` was not found in PATH
-    "###);
+    See [UV_LOG_DIR]/init.log for detailed logs
+    ");
 }
 
 #[test]

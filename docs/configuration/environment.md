@@ -177,6 +177,11 @@ Equivalent to the `--locked` command-line argument. If set, uv will assert that 
 
 Path to log file that uv would write to
 
+
+### `UV_LOG_DIR`
+
+Path to the directory where uv will write logs
+
 ### `UV_NATIVE_TLS`
 
 Equivalent to the `--native-tls` command-line argument. If set to `true`, uv will

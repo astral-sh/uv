@@ -1,6 +1,6 @@
-use std::fmt;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::{env, fmt};
 
 use anyhow::Context;
 use jiff::Timestamp;
@@ -213,8 +213,15 @@ pub(crate) fn setup_logging(
             );
         }
     }
+    // TODO might be better to deal with this in settings or something
+    let original_dir = env::current_dir().expect("Failed to get current directory");
+
+    if let Ok(log_dir) = env::var(uv_static::EnvVars::UV_LOG_DIR) {
+        env::set_current_dir(&log_dir).expect("Failed to set current directory to TEST_DIR");
+    }
 
     // If log path is provided the setup for persistent file logging is done
+    // Should there be a case where logging is done if UV_LOG_DIR is set but no --log flag is provided?
     if let Some(path) = log_path {
         // file_filter sets the level of logs by default debug logs are written to the file
         let file_filter_str = match file_log_level {
@@ -246,6 +253,7 @@ pub(crate) fn setup_logging(
         // Forcing no anstream in file logs, I don't like the idea of using the same env variable NO_COLOR or cli flag to control both console and file logs
         // If there is a case to introduce color for file logs we can introduce a new env variable or cli flag for it.
         // fs_err doesn't implement RawStream so we Box it and then cast it to the trait std::io::Write, and Send is needed to be explicitly specified as Mutex needs to be shared between threads.
+
         let file_writer = std::sync::Mutex::new(anstream::AutoStream::new(
             Box::new(log_file) as Box<dyn std::io::Write + Send>,
             anstream::ColorChoice::Never,
@@ -254,6 +262,7 @@ pub(crate) fn setup_logging(
         // Depending on the log level, different layers are added to the subscriber.
         // However me might need to seperate trace or debug and the heirarchical layer or not into different args (based on what the use cases are)
         // An equivalent of `RUST_LOG` for file logs might be needed to be implemented.
+        // Depending on the log level, different layers are added to the subscriber. However me might need to seperate trace or debug and the heirarchical layer or not into different args (based on what the use cases are)
         match file_log_level {
             FileLogLevel::Verbose | FileLogLevel::TraceVerbose => {
                 layers.push(
@@ -276,7 +285,7 @@ pub(crate) fn setup_logging(
             }
         }
     };
-
+    env::set_current_dir(&original_dir).expect("Failed to set current directory back to original");
     subscriber.with(layers).init();
 
     Ok(())
