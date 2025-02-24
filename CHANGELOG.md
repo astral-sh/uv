@@ -3,6 +3,52 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.6.3
+
+### Enhancements
+
+- Allow quotes around command-line options in `requirement.txt files` ([#11644](https://github.com/astral-sh/uv/pull/11644))
+- Initialize PEP 723 script in `uv lock --script` ([#11717](https://github.com/astral-sh/uv/pull/11717))
+- Re-allow HTTP schemes for Git dependencies ([#11687](https://github.com/astral-sh/uv/pull/11687))
+
+### Configuration
+
+- Accept multiple `.env` files in `UV_ENV_FILE` ([#11665](https://github.com/astral-sh/uv/pull/11665))
+
+### Performance
+
+- Reduce overhead in converting resolutions ([#11660](https://github.com/astral-sh/uv/pull/11660))
+- Use `SmallString` on `Hashes` ([#11756](https://github.com/astral-sh/uv/pull/11756))
+- Use a `Box` for `Yanked` on `File` ([#11755](https://github.com/astral-sh/uv/pull/11755))
+- Use a `SmallString` for the Yanked enum ([#11715](https://github.com/astral-sh/uv/pull/11715))
+- Use boxed slices for hash vector ([#11714](https://github.com/astral-sh/uv/pull/11714))
+
+### Bug fixes
+
+- Avoid installing duplicate dependencies across conflicting groups ([#11653](https://github.com/astral-sh/uv/pull/11653))
+- Check subdirectory existence after cache heal ([#11719](https://github.com/astral-sh/uv/pull/11719))
+- Include uppercase platforms for Windows wheels ([#11681](https://github.com/astral-sh/uv/pull/11681))
+- Respect existing PEP 723 script settings in `uv add` ([#11716](https://github.com/astral-sh/uv/pull/11716))
+- Reuse refined interpreter to create tool environment ([#11680](https://github.com/astral-sh/uv/pull/11680))
+- Skip removed directories during bytecode compilation ([#11633](https://github.com/astral-sh/uv/pull/11633))
+- Support conflict markers in `uv export` ([#11643](https://github.com/astral-sh/uv/pull/11643))
+- Treat lockfile as outdated if (empty) extras are added ([#11702](https://github.com/astral-sh/uv/pull/11702))
+
+### Documentation
+
+- Add anchor links to arguments and options in the CLI reference ([#11754](https://github.com/astral-sh/uv/pull/11754))
+- Add link to environment marker specification ([#11748](https://github.com/astral-sh/uv/pull/11748))
+- Fix missing a closing bracket in the cache-keys setting ([#11669](https://github.com/astral-sh/uv/pull/11669))
+- Remove the last edited date from documentation pages ([#11753](https://github.com/astral-sh/uv/pull/11753))
+- [Docs] fix readme typo ([#11742](https://github.com/astral-sh/uv/pull/11742))
+
+### Other changes
+
+- Display path separators as backslashes on Windows ([#11667](https://github.com/astral-sh/uv/pull/11667))
+- Display the built file name instead of the canonicalized name in `uv build` ([#11593](https://github.com/astral-sh/uv/pull/11593))
+- Fix message when there are no buildable packages ([#11722](https://github.com/astral-sh/uv/pull/11722))
+- Use install concurrency for bytecode compilation too ([#11615](https://github.com/astral-sh/uv/pull/11615))
+
 ## 0.6.2
 
 ### Enhancements
