@@ -241,7 +241,7 @@ pub(crate) fn setup_logging(
             .append(true)
             .create(true)
             .open(&new_path)
-            .with_context(|| format!("Failed to open or create log file: {new_path:?}"))?;
+            .with_context(|| format!("{} {}", uv_static::LOG_FILE_ERROR, new_path.display()))?;
 
         // Forcing no anstream in file logs, I don't like the idea of using the same env variable NO_COLOR or cli flag to control both console and file logs
         // If there is a case to introduce color for file logs we can introduce a new env variable or cli flag for it.

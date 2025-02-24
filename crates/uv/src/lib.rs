@@ -32,7 +32,7 @@ use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
-use crate::commands::{ExitStatus, RunCommand, ScriptPath, ToolRunCommand};
+use crate::commands::{ExitStatus, RunCommand, ScriptPath, ToolRunCommand, UvError};
 use crate::printer::Printer;
 use crate::settings::{
     CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
@@ -1913,7 +1913,15 @@ where
         }
     };
 
-    let log_path = cli.top_level.global_args.log.clone();
+    // Cloning log path before moving cli to the main2 thread.
+    let log_set: bool = cli.top_level.global_args.log.is_some();
+    let log_path = if let Some(path) = cli.top_level.global_args.log.as_ref() {
+        let mut log_file_path = path.to_owned();
+        log_file_path.set_extension("log");
+        log_file_path
+    } else {
+        std::path::PathBuf::default()
+    };
     // Running out of stack has been an issue for us. We box types and futures in various places
     // to mitigate this, with this being an especially important case.
     //
@@ -1960,13 +1968,15 @@ where
         .join()
         .expect("Tokio executor failed, was there a panic?");
 
+    // Prepending current dir to log path, and this is done after run to account for commands that change directory.    
+    let log_path = std::env::current_dir().unwrap_or_default().join(log_path);
     // Discuss if pointing to log file should only be done on error or always.
-    // Should we also point to the log file if the error was caused when trying to write to logs - unable to create .log file for example seems counterintuitive to direct in that case, should we add a new ExitStatus to handle that scenario?
+    // Incase the cli logs are more verbose than the log file, should the message still say See <path> for detailed logs?
     match result {
         Ok(code) => {
             if let ExitStatus::Error | ExitStatus::Failure = code {
-                if let Some(log_path) = log_path {
-                    print_log_info(&log_path);
+                if log_set {
+                    eprintln!("See {} for detailed logs", log_path.display().cyan().bold());
                 }
             }
             code.into()
@@ -1985,22 +1995,16 @@ where
                     cause.to_string().trim()
                 );
             }
-            if let Some(log_path) = log_path {
-                print_log_info(&log_path);
+            let err_uv: UvError = err.into();
+            match err_uv {
+                UvError::Other => {
+                    if log_set {
+                        eprintln!("See {} for detailed logs", log_path.display().cyan().bold());
+                    }
+                }
+                UvError::LogSetupError => {}
             }
             ExitStatus::Error.into()
         }
     }
-}
-
-fn print_log_info(log_path: &Path) {
-    let mut log_file_path = log_path.to_owned();
-    log_file_path.set_extension("log");
-    let log_file_path = std::env::current_dir()
-        .map(|dir| dir.join(&log_file_path))
-        .unwrap_or(log_file_path);
-    eprintln!(
-        "See {} for detailed logs",
-        log_file_path.display().to_string().cyan().bold()
-    );
 }
