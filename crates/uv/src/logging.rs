@@ -126,15 +126,15 @@ pub(crate) fn setup_logging(
             tracing::level_filters::LevelFilter::OFF.into()
         }
         Level::DebugUv => {
-            // Show `DEBUG` messages from the CLI crate
+            // Show `DEBUG` messages from the CLI crate (and ERROR/WARN/INFO)
             Directive::from_str("uv=debug").unwrap()
         }
         Level::TraceUv => {
-            // Show `TRACE` messages from the CLI crate, but allow `RUST_LOG` to override.
+            // Show `TRACE` messages from the CLI crate (and ERROR/WARN/INFO/DEBUG)
             Directive::from_str("uv=trace").unwrap()
         }
         Level::TraceAll => {
-            // Show `TRACE` messages from the CLI crate, but allow `RUST_LOG` to override.
+            // Show all `TRACE` messages (and ERROR/WARN/INFO/DEBUG)
             Directive::from_str("trace").unwrap()
         }
     };
