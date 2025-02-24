@@ -7808,3 +7808,54 @@ fn multiple_group_conflicts() -> Result<()> {
 
     Ok(())
 }
+
+/// See: <https://github.com/astral-sh/uv/issues/11703>
+#[test]
+fn prune_cache_url_subdirectory() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "root",
+        ]
+
+        [tool.uv.sources]
+        root = { url = "https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz", subdirectory = "packages/root" }
+    "#})?;
+
+    // Lock the project.
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "###);
+
+    // Prune the cache.
+    context.prune().arg("--ci").assert().success();
+
+    // Install the project.
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + root==0.0.1 (from https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root)
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}

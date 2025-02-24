@@ -2616,16 +2616,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
-name = "platform-info"
-version = "2.0.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7539aeb3fdd8cb4f6a331307cf71a1039cee75e94e8a71725b9484f4a0d9451a"
-dependencies = [
- "libc",
- "winapi",
-]
-
-[[package]]
 name = "png"
 version = "0.17.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5198,7 +5188,6 @@ dependencies = [
  "indoc",
  "mailparse",
  "pathdiff",
- "platform-info",
  "reflink-copy",
  "regex",
  "rustc-hash",
@@ -5216,13 +5205,11 @@ dependencies = [
  "uv-fs",
  "uv-normalize",
  "uv-pep440",
- "uv-platform-tags",
  "uv-pypi-types",
  "uv-shell",
  "uv-trampoline-builder",
  "uv-warnings",
  "walkdir",
- "zip",
 ]
 
 [[package]]
@@ -5789,7 +5776,6 @@ dependencies = [
  "thiserror 2.0.11",
  "tracing",
  "uv-fs",
- "uv-platform-tags",
  "uv-pypi-types",
  "uv-python",
  "uv-shell",

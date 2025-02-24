@@ -68,7 +68,7 @@ impl Indexes {
                 entry
                     .conflict
                     .as_ref()
-                    .map_or(true, |conflict| env.included_by_group(conflict.as_ref()))
+                    .is_none_or(|conflict| env.included_by_group(conflict.as_ref()))
             })
             .map(|entry| &entry.index)
             .collect()

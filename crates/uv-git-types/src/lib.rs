@@ -54,7 +54,7 @@ impl GitUrl {
         precise: Option<GitOid>,
     ) -> Result<Self, GitUrlParseError> {
         match repository.scheme() {
-            "https" | "ssh" | "file" => {}
+            "http" | "https" | "ssh" | "file" => {}
             unsupported => {
                 return Err(GitUrlParseError::UnsupportedGitScheme(
                     unsupported.to_string(),
