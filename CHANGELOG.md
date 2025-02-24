@@ -40,7 +40,7 @@
 - Add link to environment marker specification ([#11748](https://github.com/astral-sh/uv/pull/11748))
 - Fix missing a closing bracket in the cache-keys setting ([#11669](https://github.com/astral-sh/uv/pull/11669))
 - Remove the last edited date from documentation pages ([#11753](https://github.com/astral-sh/uv/pull/11753))
-- [Docs] fix readme typo ([#11742](https://github.com/astral-sh/uv/pull/11742))
+- Fix readme typo ([#11742](https://github.com/astral-sh/uv/pull/11742))
 
 ### Other changes
 
