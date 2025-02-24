@@ -267,6 +267,7 @@ pub(crate) fn setup_logging(
             FileLogLevel::ExtraVerbose | FileLogLevel::TraceExtraVerbose => {
                 layers.push(
                     HierarchicalLayer::default()
+                        .with_targets(true)
                         .with_writer(file_writer)
                         .with_timer(Uptime::default())
                         .with_filter(file_filter)
