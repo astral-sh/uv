@@ -417,7 +417,7 @@ impl VersionMapLazy {
                 };
 
                 // Prioritize amongst all available files.
-                let yanked = file.yanked.clone();
+                let yanked = file.yanked.as_deref();
                 let hashes = file.hashes.clone();
                 match filename {
                     DistFilename::WheelFilename(filename) => {
@@ -472,7 +472,7 @@ impl VersionMapLazy {
         name: &PackageName,
         version: &Version,
         hashes: &[HashDigest],
-        yanked: Option<Yanked>,
+        yanked: Option<&Yanked>,
         excluded: bool,
         upload_time: Option<i64>,
     ) -> SourceDistCompatibility {
@@ -491,7 +491,9 @@ impl VersionMapLazy {
         // Check if yanked
         if let Some(yanked) = yanked {
             if yanked.is_yanked() && !self.allowed_yanks.contains(name, version) {
-                return SourceDistCompatibility::Incompatible(IncompatibleSource::Yanked(yanked));
+                return SourceDistCompatibility::Incompatible(IncompatibleSource::Yanked(
+                    yanked.clone(),
+                ));
             }
         }
 
@@ -519,7 +521,7 @@ impl VersionMapLazy {
         name: &PackageName,
         version: &Version,
         hashes: &[HashDigest],
-        yanked: Option<Yanked>,
+        yanked: Option<&Yanked>,
         excluded: bool,
         upload_time: Option<i64>,
     ) -> WheelCompatibility {
@@ -536,7 +538,7 @@ impl VersionMapLazy {
         // Check if yanked
         if let Some(yanked) = yanked {
             if yanked.is_yanked() && !self.allowed_yanks.contains(name, version) {
-                return WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(yanked));
+                return WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(yanked.clone()));
             }
         }
 
