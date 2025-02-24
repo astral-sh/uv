@@ -19,13 +19,13 @@ use fs_err as fs;
 use indoc::formatdoc;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
-use serde::de::{value, IntoDeserializer, SeqAccess, Visitor};
-use serde::{de, Deserialize, Deserializer};
+use serde::de::{IntoDeserializer, SeqAccess, Visitor, value};
+use serde::{Deserialize, Deserializer, de};
 use tempfile::TempDir;
 use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
-use tracing::{debug, info_span, instrument, Instrument};
+use tracing::{Instrument, debug, info_span, instrument};
 
 use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
 use uv_distribution::BuildRequires;
@@ -941,7 +941,7 @@ async fn create_pep517_build_environment(
                 package_name,
                 package_version,
                 version_id,
-            ))
+            ));
         }
     };
 
@@ -1090,7 +1090,7 @@ impl PythonRunner {
                 return Err(Error::CommandFailed(
                     venv.python_executable().to_path_buf(),
                     err,
-                ))
+                ));
             }
         }
 

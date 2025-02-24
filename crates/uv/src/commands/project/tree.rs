@@ -21,13 +21,13 @@ use uv_workspace::{DiscoveryOptions, Workspace};
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
-use crate::commands::project::lock::{do_safe_lock, LockMode};
+use crate::commands::project::lock::{LockMode, do_safe_lock};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, default_dependency_groups,
 };
 use crate::commands::reporters::LatestVersionReporter;
-use crate::commands::{diagnostics, ExitStatus};
+use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 
@@ -154,7 +154,7 @@ pub(crate) async fn tree(
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -231,11 +231,10 @@ pub(crate) async fn tree(
             let reporter = LatestVersionReporter::from(printer).with_length(packages.len() as u64);
 
             // Fetch the latest version for each package.
-            let download_concurrency = &download_concurrency;
             let mut fetches = futures::stream::iter(packages)
-                .map(|(package, index)| async move {
+                .map(async |(package, index)| {
                     let Some(filename) = client
-                        .find_latest(package.name(), Some(&index), download_concurrency)
+                        .find_latest(package.name(), Some(&index), &download_concurrency)
                         .await?
                     else {
                         return Ok(None);

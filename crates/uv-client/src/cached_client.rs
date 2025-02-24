@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::time::{Duration, SystemTime};
-use std::{borrow::Cow, future::Future, path::Path};
+use std::{borrow::Cow, path::Path};
 
 use futures::FutureExt;
 use reqwest::{Request, Response};
@@ -217,7 +217,6 @@ impl CachedClient {
         Payload: Serialize + DeserializeOwned + Send + 'static,
         CallBackError: std::error::Error + 'static,
         Callback,
-        CallbackReturn,
     >(
         &self,
         req: Request,
@@ -226,8 +225,7 @@ impl CachedClient {
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>>
     where
-        Callback: Fn(Response) -> CallbackReturn,
-        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
+        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
     {
         let payload = self
             .get_cacheable(req, cache_entry, cache_control, |resp| async {
@@ -255,7 +253,6 @@ impl CachedClient {
         Payload: Cacheable,
         CallBackError: std::error::Error + 'static,
         Callback,
-        CallbackReturn,
     >(
         &self,
         req: Request,
@@ -264,8 +261,7 @@ impl CachedClient {
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>>
     where
-        Callback: Fn(Response) -> CallbackReturn,
-        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
+        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
     {
         let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
         let cached_response = if let Some(cached) = Self::read_cache(cache_entry).await {
@@ -345,7 +341,6 @@ impl CachedClient {
         Payload: Serialize + DeserializeOwned + Send + 'static,
         CallBackError: std::error::Error + 'static,
         Callback,
-        CallbackReturn,
     >(
         &self,
         req: Request,
@@ -353,8 +348,7 @@ impl CachedClient {
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>>
     where
-        Callback: FnOnce(Response) -> CallbackReturn,
-        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
+        Callback: AsyncFnOnce(Response) -> Result<Payload, CallBackError>,
     {
         let (response, cache_policy) = self.fresh_request(req).await?;
 
@@ -372,7 +366,6 @@ impl CachedClient {
         Payload: Cacheable,
         CallBackError: std::error::Error + 'static,
         Callback,
-        CallbackReturn,
     >(
         &self,
         req: Request,
@@ -380,8 +373,7 @@ impl CachedClient {
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>>
     where
-        Callback: FnOnce(Response) -> CallbackReturn,
-        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
+        Callback: AsyncFnOnce(Response) -> Result<Payload, CallBackError>,
     {
         let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;
         let (response, cache_policy) = self.fresh_request(req).await?;
@@ -393,7 +385,6 @@ impl CachedClient {
         Payload: Cacheable,
         CallBackError: std::error::Error + 'static,
         Callback,
-        CallbackReturn,
     >(
         &self,
         cache_entry: &CacheEntry,
@@ -402,8 +393,7 @@ impl CachedClient {
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>>
     where
-        Callback: FnOnce(Response) -> CallbackReturn,
-        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
+        Callback: AsyncFnOnce(Response) -> Result<Payload, CallBackError>,
     {
         let new_cache = info_span!("new_cache", file = %cache_entry.path().display());
         let data = response_callback(response)
@@ -572,7 +562,6 @@ impl CachedClient {
         Payload: Serialize + DeserializeOwned + Send + 'static,
         CallBackError: std::error::Error + 'static,
         Callback,
-        CallbackReturn,
     >(
         &self,
         req: Request,
@@ -581,8 +570,7 @@ impl CachedClient {
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>>
     where
-        Callback: Fn(Response) -> CallbackReturn,
-        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
+        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
     {
         let payload = self
             .get_cacheable_with_retry(req, cache_entry, cache_control, |resp| async {
@@ -601,7 +589,6 @@ impl CachedClient {
         Payload: Cacheable,
         CallBackError: std::error::Error + 'static,
         Callback,
-        CallbackReturn,
     >(
         &self,
         req: Request,
@@ -610,8 +597,7 @@ impl CachedClient {
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>>
     where
-        Callback: Fn(Response) -> CallbackReturn,
-        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
+        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
     {
         let mut n_past_retries = 0;
         let start_time = SystemTime::now();
@@ -651,7 +637,6 @@ impl CachedClient {
         Payload: Serialize + DeserializeOwned + Send + 'static,
         CallBackError: std::error::Error + 'static,
         Callback,
-        CallbackReturn,
     >(
         &self,
         req: Request,
@@ -659,8 +644,7 @@ impl CachedClient {
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>>
     where
-        Callback: Fn(Response) -> CallbackReturn,
-        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
+        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
     {
         let mut n_past_retries = 0;
         let start_time = SystemTime::now();

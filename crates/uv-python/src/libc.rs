@@ -16,7 +16,9 @@ use uv_fs::Simplified;
 
 #[derive(Debug, Error)]
 pub enum LibcDetectionError {
-    #[error("Could not detect either glibc version nor musl libc version, at least one of which is required")]
+    #[error(
+        "Could not detect either glibc version nor musl libc version, at least one of which is required"
+    )]
     NoLibcFound,
     #[error("Failed to get base name of symbolic link path {0}")]
     MissingBasePath(PathBuf),
@@ -66,7 +68,9 @@ pub(crate) fn detect_linux_libc() -> Result<LibcVersion, LibcDetectionError> {
     match detect_linux_libc_from_ld_symlink(&ld_path) {
         Ok(os) => return Ok(os),
         Err(err) => {
-            trace!("Tried to find libc version from possible symlink at {ld_path:?}, but failed: {err}");
+            trace!(
+                "Tried to find libc version from possible symlink at {ld_path:?}, but failed: {err}"
+            );
         }
     }
     match detect_glibc_version_from_ldd(&ld_path) {

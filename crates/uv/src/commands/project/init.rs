@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use owo_colors::OwoColorize;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
@@ -12,7 +12,7 @@ use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{
     PreviewMode, ProjectBuildBackend, TrustedHost, VersionControlError, VersionControlSystem,
 };
-use uv_fs::{Simplified, CWD};
+use uv_fs::{CWD, Simplified};
 use uv_git::GIT;
 use uv_pep440::Version;
 use uv_pep508::PackageName;
@@ -28,9 +28,9 @@ use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceError};
 
+use crate::commands::ExitStatus;
 use crate::commands::project::{find_requires_python, init_script_python_requirement};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Add one or more packages to the project requirements.
@@ -1221,7 +1221,9 @@ fn init_vcs(path: &Path, vcs: Option<VersionControlSystem>) -> Result<()> {
         (Some(vcs), Some(existing)) => {
             // If they differ, raise an error.
             if vcs != existing {
-                anyhow::bail!("The project is already in a version control system (`{existing}`); cannot initialize with `--vcs {vcs}`");
+                anyhow::bail!(
+                    "The project is already in a version control system (`{existing}`); cannot initialize with `--vcs {vcs}`"
+                );
             }
 
             // Otherwise, ignore the specified VCS, since it's already in use.

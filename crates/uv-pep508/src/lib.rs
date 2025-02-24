@@ -21,7 +21,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::path::Path;
 use std::str::FromStr;
 
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use thiserror::Error;
 use url::Url;
 
@@ -42,8 +42,8 @@ pub use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 pub use uv_pep440;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 pub use verbatim_url::{
-    expand_env_vars, looks_like_git_repository, split_scheme, strip_host, Scheme, VerbatimUrl,
-    VerbatimUrlError,
+    Scheme, VerbatimUrl, VerbatimUrlError, expand_env_vars, looks_like_git_repository,
+    split_scheme, strip_host,
 };
 
 mod cursor;
@@ -283,7 +283,7 @@ impl<T: Pep508Url> schemars::JsonSchema for Requirement<T> {
         "Requirement".to_string()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
         schemars::schema::SchemaObject {
             instance_type: Some(schemars::schema::InstanceType::String.into()),
             metadata: Some(Box::new(schemars::schema::Metadata {
@@ -558,9 +558,9 @@ fn parse_extras_cursor<T: Pep508Url>(
             }
             (Some((pos, other)), false) => {
                 return Err(Pep508Error {
-                    message: Pep508ErrorSource::String(
-                        format!("Expected either `,` (separating extras) or `]` (ending the extras section), found `{other}`")
-                    ),
+                    message: Pep508ErrorSource::String(format!(
+                        "Expected either `,` (separating extras) or `]` (ending the extras section), found `{other}`"
+                    )),
                     start: pos,
                     len: 1,
                     input: cursor.to_string(),
@@ -968,7 +968,7 @@ mod tests {
     use uv_pep440::{Operator, Version, VersionPattern, VersionSpecifier};
 
     use crate::cursor::Cursor;
-    use crate::marker::{parse, MarkerExpression, MarkerTree, MarkerValueVersion};
+    use crate::marker::{MarkerExpression, MarkerTree, MarkerValueVersion, parse};
     use crate::{
         MarkerOperator, MarkerValueString, Requirement, TracingReporter, VerbatimUrl, VersionOrUrl,
     };
@@ -1108,7 +1108,10 @@ mod tests {
     #[cfg(feature = "non-pep508-extensions")]
     fn direct_url_no_extras() {
         let numpy = crate::UnnamedRequirement::<VerbatimUrl>::from_str("https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl").unwrap();
-        assert_eq!(numpy.url.to_string(), "https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl");
+        assert_eq!(
+            numpy.url.to_string(),
+            "https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl"
+        );
         assert_eq!(numpy.extras, vec![]);
     }
 

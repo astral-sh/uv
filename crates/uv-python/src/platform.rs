@@ -1,5 +1,5 @@
 use crate::cpuinfo::detect_hardware_floating_point_support;
-use crate::libc::{detect_linux_libc, LibcDetectionError, LibcVersion};
+use crate::libc::{LibcDetectionError, LibcVersion, detect_linux_libc};
 use std::fmt::Display;
 use std::ops::Deref;
 use std::{fmt, str::FromStr};

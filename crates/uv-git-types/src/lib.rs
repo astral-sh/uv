@@ -59,7 +59,7 @@ impl GitUrl {
                 return Err(GitUrlParseError::UnsupportedGitScheme(
                     unsupported.to_string(),
                     repository,
-                ))
+                ));
             }
         }
         Ok(Self {

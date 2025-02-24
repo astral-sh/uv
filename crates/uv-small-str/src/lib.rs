@@ -125,7 +125,7 @@ impl schemars::JsonSchema for SmallString {
         String::schema_name()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
         String::json_schema(_gen)
     }
 }

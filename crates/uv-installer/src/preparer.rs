@@ -1,7 +1,7 @@
 use std::cmp::Reverse;
 use std::sync::Arc;
 
-use futures::{stream::FuturesUnordered, FutureExt, Stream, TryFutureExt, TryStreamExt};
+use futures::{FutureExt, Stream, TryFutureExt, TryStreamExt, stream::FuturesUnordered};
 use tracing::{debug, instrument};
 use url::Url;
 
@@ -70,7 +70,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
     ) -> impl Stream<Item = Result<CachedDist, Error>> + 'stream {
         distributions
             .into_iter()
-            .map(|dist| async move {
+            .map(async |dist| {
                 let wheel = self
                     .get_wheel((*dist).clone(), in_flight, resolution)
                     .boxed_local()

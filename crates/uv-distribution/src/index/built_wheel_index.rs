@@ -8,9 +8,9 @@ use uv_distribution_types::{
 use uv_platform_tags::Tags;
 use uv_types::HashStrategy;
 
-use crate::index::cached_wheel::CachedWheel;
-use crate::source::{HttpRevisionPointer, LocalRevisionPointer, HTTP_REVISION, LOCAL_REVISION};
 use crate::Error;
+use crate::index::cached_wheel::CachedWheel;
+use crate::source::{HTTP_REVISION, HttpRevisionPointer, LOCAL_REVISION, LocalRevisionPointer};
 
 /// A local index of built distributions for a specific source distribution.
 #[derive(Debug)]

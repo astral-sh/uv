@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use anstream::eprint;
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::process::Command;
@@ -29,20 +29,20 @@ use uv_python::{
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
-use uv_tool::{entrypoint_paths, InstalledTools};
+use uv_tool::{InstalledTools, entrypoint_paths};
 use uv_warnings::warn_user;
 
+use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
 use crate::commands::project::{
-    resolve_names, EnvironmentSpecification, PlatformState, ProjectError,
+    EnvironmentSpecification, PlatformState, ProjectError, resolve_names,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::run::run_to_completion;
 use crate::commands::tool::common::{matching_packages, refine_interpreter};
 use crate::commands::tool::{Target, ToolRequest};
-use crate::commands::ExitStatus;
 use crate::commands::{diagnostics, project::environment::CachedEnvironment};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -101,7 +101,9 @@ pub(crate) async fn run(
     };
 
     let Some(target) = target.to_str() else {
-        return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
+        return Err(anyhow::anyhow!(
+            "Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."
+        ));
     };
 
     let request = ToolRequest::parse(target, from.as_deref());
@@ -141,7 +143,7 @@ pub(crate) async fn run(
             return diagnostics::OperationDiagnostic::native_tls(native_tls)
                 .with_context("tool")
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(ProjectError::Requirements(err)) => {
             let err = miette::Report::msg(format!("{err}"))
@@ -484,7 +486,7 @@ async fn get_or_create_environment(
                 return Err(anyhow::anyhow!(
                     "Requesting the 'latest' Python version is not yet supported"
                 )
-                .into())
+                .into());
             }
         };
 

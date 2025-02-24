@@ -1,7 +1,7 @@
 //! Vendored from <https://github.com/PyO3/python-pkginfo-rs>
 
-use crate::metadata::Headers;
 use crate::MetadataError;
+use crate::metadata::Headers;
 use std::fmt::Display;
 use std::str;
 use std::str::FromStr;

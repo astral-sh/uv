@@ -8,15 +8,15 @@ use uv_client::BaseClientBuilder;
 use uv_pep440::{Prerelease, Version};
 
 use crate::discovery::{
-    find_best_python_installation, find_python_installation, EnvironmentPreference, PythonRequest,
+    EnvironmentPreference, PythonRequest, find_best_python_installation, find_python_installation,
 };
 use crate::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest, Reporter};
 use crate::implementation::LenientImplementationName;
 use crate::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use crate::platform::{Arch, Libc, Os};
 use crate::{
-    downloads, Error, ImplementationName, Interpreter, PythonDownloads, PythonPreference,
-    PythonSource, PythonVariant, PythonVersion,
+    Error, ImplementationName, Interpreter, PythonDownloads, PythonPreference, PythonSource,
+    PythonVariant, PythonVersion, downloads,
 };
 
 /// A Python interpreter and accompanying tools.

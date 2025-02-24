@@ -6,7 +6,7 @@ use owo_colors::OwoColorize;
 use uv_cache::{Cache, Removal};
 use uv_fs::Simplified;
 
-use crate::commands::{human_readable_bytes, ExitStatus};
+use crate::commands::{ExitStatus, human_readable_bytes};
 use crate::printer::Printer;
 
 /// Prune all unreachable objects from the cache.

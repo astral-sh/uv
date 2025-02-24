@@ -17,7 +17,7 @@ use tracing::{debug, trace, warn};
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
 use uv_cache_info::Timestamp;
 use uv_cache_key::cache_digest;
-use uv_fs::{write_atomic_sync, PythonExt, Simplified};
+use uv_fs::{PythonExt, Simplified, write_atomic_sync};
 use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
@@ -698,7 +698,9 @@ enum InterpreterInfoResult {
 pub enum InterpreterInfoError {
     #[error("Could not detect a glibc or a musl libc (while running on Linux)")]
     LibcNotFound,
-    #[error("Broken Python installation, `platform.mac_ver()` returned an empty value, please reinstall Python")]
+    #[error(
+        "Broken Python installation, `platform.mac_ver()` returned an empty value, please reinstall Python"
+    )]
     BrokenMacVer,
     #[error("Unknown operating system: `{operating_system}`")]
     UnknownOperatingSystem { operating_system: String },
@@ -706,7 +708,9 @@ pub enum InterpreterInfoError {
     UnsupportedPythonVersion { python_version: String },
     #[error("Python executable does not support `-I` flag. Please use Python 3.8 or newer.")]
     UnsupportedPython,
-    #[error("Python installation is missing `distutils`, which is required for packaging on older Python versions. Your system may package it separately, e.g., as `python{python_major}-distutils` or `python{python_major}.{python_minor}-distutils`.")]
+    #[error(
+        "Python installation is missing `distutils`, which is required for packaging on older Python versions. Your system may package it separately, e.g., as `python{python_major}-distutils` or `python{python_major}.{python_minor}-distutils`."
+    )]
     MissingRequiredDistutils {
         python_major: usize,
         python_minor: usize,

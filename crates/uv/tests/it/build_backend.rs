@@ -1,4 +1,4 @@
-use crate::common::{uv_snapshot, venv_bin_path, TestContext};
+use crate::common::{TestContext, uv_snapshot, venv_bin_path};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use flate2::bufread::GzDecoder;

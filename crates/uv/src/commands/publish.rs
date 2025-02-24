@@ -1,7 +1,7 @@
 use crate::commands::reporters::PublishReporter;
-use crate::commands::{human_readable_bytes, ExitStatus};
+use crate::commands::{ExitStatus, human_readable_bytes};
 use crate::printer::Printer;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use console::Term;
 use owo_colors::OwoColorize;
 use std::fmt::Write;
@@ -18,7 +18,7 @@ use uv_client::{
 use uv_configuration::{KeyringProviderType, TrustedHost, TrustedPublishing};
 use uv_distribution_types::{Index, IndexCapabilities, IndexLocations, IndexUrl};
 use uv_publish::{
-    check_trusted_publishing, files_for_publishing, upload, CheckUrlClient, TrustedPublishResult,
+    CheckUrlClient, TrustedPublishResult, check_trusted_publishing, files_for_publishing, upload,
 };
 use uv_warnings::warn_user_once;
 

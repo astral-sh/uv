@@ -7,7 +7,7 @@ use itertools::Itertools;
 use uv_distribution_types::{DistributionMetadata, Name, ResolvedDist, Verbatim, VersionOrUrlRef};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::{split_scheme, MarkerTree, Scheme};
+use uv_pep508::{MarkerTree, Scheme, split_scheme};
 use uv_pypi_types::HashDigest;
 
 use crate::{

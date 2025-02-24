@@ -4,8 +4,8 @@
 //! code initialize the threadpool lazily only if they are actually used by calling
 //! `LazyLock::force(&RAYON_INITIALIZE)`.
 
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::LazyLock;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The number of threads for the rayon threadpool.
 ///

@@ -3,9 +3,9 @@ use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use anyhow::{anyhow, Result};
-use clap::builder::styling::{AnsiColor, Effects, Style};
+use anyhow::{Result, anyhow};
 use clap::builder::Styles;
+use clap::builder::styling::{AnsiColor, Effects, Style};
 use clap::{Args, Parser, Subcommand};
 
 use url::Url;

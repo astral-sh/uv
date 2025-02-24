@@ -125,8 +125,7 @@ impl CandidateSelector {
             if let Some(installed) = installed {
                 trace!(
                     "Using installed {} {} that satisfies {range}",
-                    installed.name,
-                    installed.version
+                    installed.name, installed.version
                 );
                 return Some(installed);
             }
@@ -150,8 +149,7 @@ impl CandidateSelector {
             }) {
                 trace!(
                     "Using installed {} {} that satisfies {range}",
-                    installed.name,
-                    installed.version
+                    installed.name, installed.version
                 );
                 return Some(installed);
             }
@@ -262,7 +260,9 @@ impl CandidateSelector {
                     [] => {}
                     [dist] => {
                         if dist.version() == version {
-                            debug!("Found installed version of {dist} that satisfies preference in {range}");
+                            debug!(
+                                "Found installed version of {dist} that satisfies preference in {range}"
+                            );
 
                             return Some(Candidate {
                                 name: package_name,
@@ -278,7 +278,9 @@ impl CandidateSelector {
                     // We do not consider installed distributions with multiple versions because
                     // during installation these must be reinstalled from the remote
                     _ => {
-                        debug!("Ignoring installed versions of {package_name}: multiple distributions found");
+                        debug!(
+                            "Ignoring installed versions of {package_name}: multiple distributions found"
+                        );
                     }
                 }
             }
@@ -526,7 +528,9 @@ impl CandidateSelector {
                 let Some(dist) = maybe_dist.prioritized_dist() else {
                     continue;
                 };
-                trace!("Found candidate for package {package_name} with range {range} after {steps} steps: {version} version");
+                trace!(
+                    "Found candidate for package {package_name} with range {range} after {steps} steps: {version} version"
+                );
                 Candidate::new(package_name, version, dist, VersionChoiceKind::Compatible)
             };
 
@@ -584,7 +588,9 @@ impl CandidateSelector {
             return incompatible;
         }
 
-        trace!("Exhausted all candidates for package {package_name} with range {range} after {steps} steps");
+        trace!(
+            "Exhausted all candidates for package {package_name} with range {range} after {steps} steps"
+        );
         None
     }
 }

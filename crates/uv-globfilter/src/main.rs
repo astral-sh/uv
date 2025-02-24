@@ -3,7 +3,7 @@
 use globset::GlobSetBuilder;
 use std::env::args;
 use tracing::trace;
-use uv_globfilter::{parse_portable_glob, GlobDirFilter};
+use uv_globfilter::{GlobDirFilter, parse_portable_glob};
 use walkdir::WalkDir;
 
 fn main() {

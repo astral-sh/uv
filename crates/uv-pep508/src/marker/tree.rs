@@ -6,13 +6,13 @@ use std::str::FromStr;
 
 use arcstr::ArcStr;
 use itertools::Itertools;
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use version_ranges::Ranges;
 
 use uv_normalize::ExtraName;
 use uv_pep440::{Version, VersionParseError, VersionSpecifier};
 
-use super::algebra::{Edges, NodeId, Variable, INTERNER};
+use super::algebra::{Edges, INTERNER, NodeId, Variable};
 use super::simplify;
 use crate::cursor::Cursor;
 use crate::marker::lowering::{
@@ -1685,7 +1685,7 @@ impl schemars::JsonSchema for MarkerTree {
         "MarkerTree".to_string()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
         schemars::schema::SchemaObject {
             instance_type: Some(schemars::schema::InstanceType::String.into()),
             metadata: Some(Box::new(schemars::schema::Metadata {
@@ -1974,7 +1974,7 @@ mod test {
         let string_string = MarkerTree::from_str("'b' >= 'a'").unwrap();
         string_string.evaluate(&env37, &[]);
         logs_contain(
-            "Comparing two quoted strings with each other doesn't make sense: 'b' >= 'a', will evaluate to false"
+            "Comparing two quoted strings with each other doesn't make sense: 'b' >= 'a', will evaluate to false",
         );
     }
 
@@ -1990,13 +1990,13 @@ mod test {
                 .iter()
                 .map(|s| s.split_once("  ").unwrap().1)
                 .collect();
-            let expected =  [
+            let expected = [
                 "WARN warnings4: uv_pep508: os.name is deprecated in favor of os_name",
                 "WARN warnings4: uv_pep508: platform.machine is deprecated in favor of platform_machine",
                 "WARN warnings4: uv_pep508: platform.python_implementation is deprecated in favor of platform_python_implementation",
                 "WARN warnings4: uv_pep508: platform.version is deprecated in favor of platform_version",
                 "WARN warnings4: uv_pep508: sys.platform is deprecated in favor of sys_platform",
-                "WARN warnings4: uv_pep508: Comparing linux and posix lexicographically"
+                "WARN warnings4: uv_pep508: Comparing linux and posix lexicographically",
             ];
             if lines == expected {
                 Ok(())
@@ -2941,9 +2941,11 @@ mod test {
     #[test]
     fn test_is_false() {
         assert!(m("python_version < '3.10' and python_version >= '3.10'").is_false());
-        assert!(m("(python_version < '3.10' and python_version >= '3.10') \
+        assert!(
+            m("(python_version < '3.10' and python_version >= '3.10') \
               or (python_version < '3.9' and python_version >= '3.9')")
-        .is_false());
+            .is_false()
+        );
 
         assert!(!m("python_version < '3.10'").is_false());
         assert!(!m("python_version < '0'").is_false());
@@ -3200,11 +3202,13 @@ mod test {
             m("os_name == 'Linux'"),
         );
 
-        assert!(m("
+        assert!(
+            m("
                 (os_name == 'Linux' and extra == 'foo')
                 or (os_name != 'Linux' and extra == 'bar')")
-        .without_extras()
-        .is_true());
+            .without_extras()
+            .is_true()
+        );
 
         assert_eq!(
             m("os_name == 'Linux' and extra != 'foo'").without_extras(),
@@ -3233,11 +3237,13 @@ mod test {
             m("os_name == 'Linux' and extra == 'foo'").only_extras(),
             m("extra == 'foo'"),
         );
-        assert!(m("
+        assert!(
+            m("
                 (os_name == 'foo' and extra == 'foo')
                 or (os_name == 'bar' and extra != 'foo')")
-        .only_extras()
-        .is_true());
+            .only_extras()
+            .is_true()
+        );
         assert_eq!(
             m("
                 (os_name == 'Linux' and extra == 'foo')
