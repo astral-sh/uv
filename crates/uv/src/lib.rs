@@ -33,9 +33,7 @@ use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
-use crate::commands::{
-    print_log_info, ExitStatus, RunCommand, ScriptPath, ToolRunCommand, UvError,
-};
+use crate::commands::{ExitStatus, RunCommand, ScriptPath, ToolRunCommand, UvError};
 use crate::printer::Printer;
 use crate::settings::{
     CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
@@ -1980,7 +1978,9 @@ where
     match result {
         Ok(code) => {
             if let ExitStatus::Error | ExitStatus::Failure = code {
-                print_log_info(&log_path);
+                if log_path != Path::new("") {
+                    eprintln!("See {} for detailed logs", log_path.display().cyan().bold());
+                }
             }
             code.into()
         }
@@ -2001,7 +2001,9 @@ where
             let err_uv: UvError = err.into();
             match err_uv {
                 UvError::Other => {
-                    print_log_info(&log_path);
+                    if log_path != Path::new("") {
+                        eprintln!("See {} for detailed logs", log_path.display().cyan().bold());
+                    }
                 }
                 UvError::LogSetupError => {}
             }

@@ -318,10 +318,3 @@ impl From<anyhow::Error> for UvError {
         }
     }
 }
-
-// Print the log file path to the user on error or failure
-pub(crate) fn print_log_info(log_path: &Path) -> () {
-    if log_path != Path::new("") {
-        eprintln!("See {} for detailed logs", log_path.display().to_string());
-    }
-}
