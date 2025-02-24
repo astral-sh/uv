@@ -144,9 +144,9 @@ as, e.g., resolvers will backtrack to the first published version that omits the
 By default, the universal resolver attempts to solve for all platforms and Python versions.
 
 If your project supports only a limited set of platforms or Python versions, you can constrain the
-set of solved platforms via the `environments` setting, which accepts a list of PEP 508 environment
-markers. In other words, you can use the `environments` setting to _reduce_ the set of supported
-platforms.
+set of solved platforms via the `environments` setting, which accepts a list of
+[PEP 508 environment markers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers).
+In other words, you can use the `environments` setting to _reduce_ the set of supported platforms.
 
 For example, to constrain the lockfile to macOS and Linux, and avoid solving for Windows:
 
@@ -190,7 +190,9 @@ typically be at least one platform or Python version for which the package is no
 
 By default, uv requires each such package to include at least one wheel that is compatible with the
 target Python version. The `required-environments` setting can be used to ensure that the resulting
-resolution contains wheels for specific platforms, or fails if no such wheels are available.
+resolution contains wheels for specific platforms, or fails if no such wheels are available. The
+setting accepts a list of
+[PEP 508 environment markers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers).
 
 While the `environments` setting _limits_ the set of environments that uv will consider when
 resolving dependencies, `required-environments` _expands_ the set of platforms that uv _must_
