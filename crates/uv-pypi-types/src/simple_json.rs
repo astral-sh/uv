@@ -54,7 +54,7 @@ pub struct File {
     pub size: Option<u64>,
     pub upload_time: Option<Timestamp>,
     pub url: String,
-    pub yanked: Option<Yanked>,
+    pub yanked: Option<Box<Yanked>>,
 }
 
 fn deserialize_version_specifiers_lenient<'de, D>(

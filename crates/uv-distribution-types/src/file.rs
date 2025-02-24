@@ -33,7 +33,7 @@ pub struct File {
     // milliseconds.
     pub upload_time_utc_ms: Option<i64>,
     pub url: FileLocation,
-    pub yanked: Option<Yanked>,
+    pub yanked: Option<Box<Yanked>>,
 }
 
 impl File {
