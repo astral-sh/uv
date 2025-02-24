@@ -22,6 +22,7 @@
 - Use a `Box` for `Yanked` on `File` ([#11755](https://github.com/astral-sh/uv/pull/11755))
 - Use a `SmallString` for the Yanked enum ([#11715](https://github.com/astral-sh/uv/pull/11715))
 - Use boxed slices for hash vector ([#11714](https://github.com/astral-sh/uv/pull/11714))
+- Use install concurrency for bytecode compilation too ([#11615](https://github.com/astral-sh/uv/pull/11615))
 
 ### Bug fixes
 
@@ -33,6 +34,10 @@
 - Skip removed directories during bytecode compilation ([#11633](https://github.com/astral-sh/uv/pull/11633))
 - Support conflict markers in `uv export` ([#11643](https://github.com/astral-sh/uv/pull/11643))
 - Treat lockfile as outdated if (empty) extras are added ([#11702](https://github.com/astral-sh/uv/pull/11702))
+- Display path separators as backslashes on Windows ([#11667](https://github.com/astral-sh/uv/pull/11667))
+- Display the built file name instead of the canonicalized name in `uv build` ([#11593](https://github.com/astral-sh/uv/pull/11593))
+- Fix message when there are no buildable packages ([#11722](https://github.com/astral-sh/uv/pull/11722))
+
 
 ### Documentation
 
@@ -41,13 +46,6 @@
 - Fix missing a closing bracket in the cache-keys setting ([#11669](https://github.com/astral-sh/uv/pull/11669))
 - Remove the last edited date from documentation pages ([#11753](https://github.com/astral-sh/uv/pull/11753))
 - Fix readme typo ([#11742](https://github.com/astral-sh/uv/pull/11742))
-
-### Other changes
-
-- Display path separators as backslashes on Windows ([#11667](https://github.com/astral-sh/uv/pull/11667))
-- Display the built file name instead of the canonicalized name in `uv build` ([#11593](https://github.com/astral-sh/uv/pull/11593))
-- Fix message when there are no buildable packages ([#11722](https://github.com/astral-sh/uv/pull/11722))
-- Use install concurrency for bytecode compilation too ([#11615](https://github.com/astral-sh/uv/pull/11615))
 
 ## 0.6.2
 
