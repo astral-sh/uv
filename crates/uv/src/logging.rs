@@ -213,12 +213,8 @@ pub(crate) fn setup_logging(
             );
         }
     }
-    // TODO might be better to deal with this in settings or something
-    let original_dir = env::current_dir().expect("Failed to get current directory");
 
-    if let Ok(log_dir) = env::var(uv_static::EnvVars::UV_LOG_DIR) {
-        env::set_current_dir(&log_dir).expect("Failed to set current directory to TEST_DIR");
-    }
+    let original_dir = env::current_dir().expect("Failed to get current directory");
 
     // If log path is provided the setup for persistent file logging is done
     // Should there be a case where logging is done if UV_LOG_DIR is set but no --log flag is provided?
@@ -242,13 +238,17 @@ pub(crate) fn setup_logging(
         let mut new_path = path.clone();
         new_path.set_extension("log");
 
+        if let Ok(log_dir) = env::var(uv_static::EnvVars::UV_LOG_DIR) {
+            env::set_current_dir(&log_dir)
+                .with_context(|| format!("{} {}", uv_static::LOG_DIR_ERROR, log_dir))?;
+        }
         // Discuss if previous content should be overwritten or appended.
         // Should it panic or gracefully exit just without logging in case of failure to open or create the file.
         let log_file = fs_err::OpenOptions::new()
             .append(true)
             .create(true)
             .open(&new_path)
-            .with_context(|| format!("Failed to open or create log file: {new_path:?}"))?;
+            .with_context(|| format!("{} {}", uv_static::LOG_FILE_ERROR, new_path.display()))?;
 
         // Forcing no anstream in file logs, I don't like the idea of using the same env variable NO_COLOR or cli flag to control both console and file logs
         // If there is a case to introduce color for file logs we can introduce a new env variable or cli flag for it.
@@ -284,8 +284,9 @@ pub(crate) fn setup_logging(
                 );
             }
         }
+        env::set_current_dir(&original_dir)
+            .expect("Failed to set current directory back to original");
     };
-    env::set_current_dir(&original_dir).expect("Failed to set current directory back to original");
     subscriber.with(layers).init();
 
     Ok(())

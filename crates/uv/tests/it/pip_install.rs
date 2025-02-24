@@ -2119,6 +2119,7 @@ fn install_git_private_https_pat_not_authorized() {
           --- stderr
           remote: Invalid username or password.
           fatal: Authentication failed for 'https://github.com/astral-test/uv-private-pypackage/'
+
     See [UV_LOG_DIR]/pip_install.log for detailed logs
     ");
 }

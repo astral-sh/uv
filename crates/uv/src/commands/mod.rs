@@ -300,3 +300,28 @@ pub(crate) enum ScriptPath {
     /// The Python file does not include a PEP 723 script tag.
     Path(PathBuf),
 }
+
+#[derive(Debug)]
+pub(crate) enum UvError {
+    LogSetupError,
+    Other,
+}
+
+impl From<anyhow::Error> for UvError {
+    fn from(err: anyhow::Error) -> Self {
+        if err.to_string().contains(uv_static::LOG_DIR_ERROR)
+            || err.to_string().contains(uv_static::LOG_FILE_ERROR)
+        {
+            UvError::LogSetupError
+        } else {
+            UvError::Other
+        }
+    }
+}
+
+// Print the log file path to the user on error or failure
+pub(crate) fn print_log_info(log_path: &Path) -> () {
+    if log_path != Path::new("") {
+        eprintln!("See {} for detailed logs", log_path.display().to_string());
+    }
+}

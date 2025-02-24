@@ -25782,7 +25782,7 @@ fn lock_empty_extra() -> Result<()> {
     )?;
 
     // Re-run with `--locked`. We expect this to fail, since we've added an extra.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -25790,7 +25790,8 @@ fn lock_empty_extra() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    See [UV_LOG_DIR]/lock.log for detailed logs
+    ");
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
@@ -25818,7 +25819,7 @@ fn lock_empty_extra() -> Result<()> {
     )?;
 
     // Re-run with `--locked`. We expect this to fail, since we've added an extra.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -25826,7 +25827,8 @@ fn lock_empty_extra() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    See [UV_LOG_DIR]/lock.log for detailed logs
+    ");
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true

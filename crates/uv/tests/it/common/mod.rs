@@ -554,16 +554,20 @@ impl TestContext {
             python_version,
             python_versions,
             filters,
-            extra_env: vec![(
-                EnvVars::UV_LOG.into(),
-                Location::caller()
-                    .file()
-                    .to_string()
-                    .rsplit('/')
-                    .next()
-                    .unwrap()
-                    .into(),
-            )],
+            extra_env: vec![
+                (
+                    EnvVars::UV_LOG.into(),
+                    Location::caller()
+                        .file()
+                        .to_string()
+                        .rsplit('/')
+                        .next()
+                        .unwrap()
+                        .into(),
+                ),
+                // Sets `UV_LOG_DIR` to the log directory in project for testing.
+                (EnvVars::UV_LOG_DIR.into(), log_directory.into()),
+            ],
             _root: root,
         }
     }

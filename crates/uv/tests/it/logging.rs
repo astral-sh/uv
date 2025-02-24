@@ -16,14 +16,25 @@ fn logging_on_fail() -> Result<()> {
 
     // Adding `iniconfig` should fail, since virtual workspace roots don't support production
     // dependencies.
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--log").arg("test"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--log").arg("log_test"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Project is missing a `[project]` table; add a `[project]` table to use production dependencies, or run `uv add --dev` instead
-    See [TEMP_DIR]/test.log for detailed logs
+    See [UV_LOG_DIR]/log_test.log for detailed logs
+    ");
+
+    // Invalid log path should give error
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--log").arg("foo/test"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Error writing to log file: foo/test.log
+      Caused by: No such file or directory (os error 2)
     ");
 
     // Should give clap error if `--log` used but no argument provided
@@ -48,7 +59,7 @@ fn logs_on_pass() -> Result<()> {
         .with_managed_python_dirs();
 
     // No see <path> for detailed logs on pass
-    uv_snapshot!(context.filters(), context.python_install().arg("--log").arg("foo"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("--log").arg("log_test"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
