@@ -252,8 +252,8 @@ In some cases, you may want to use CPU-only builds in one environment (e.g., mac
 CUDA-enabled builds in another (e.g., Linux).
 
 With `tool.uv.sources`, you can use environment markers to specify the desired index for each
-platform. For example, the following configuration would use PyTorch's CPU-only builds on Windows
-(and macOS, by way of falling back to PyPI), and CUDA-enabled builds on Linux:
+platform. For example, the following configuration would use PyTorch's CUDA-enabled builds on Linux,
+and CPU-only builds on all other platforms (e.g., macOS and Windows):
 
 ```toml
 [project]
@@ -267,11 +267,11 @@ dependencies = [
 
 [tool.uv.sources]
 torch = [
-  { index = "pytorch-cpu", marker = "sys_platform == 'win32'" },
+  { index = "pytorch-cpu", marker = "sys_platform != 'linux'" },
   { index = "pytorch-cu124", marker = "sys_platform == 'linux'" },
 ]
 torchvision = [
-  { index = "pytorch-cpu", marker = "sys_platform == 'win32'" },
+  { index = "pytorch-cpu", marker = "sys_platform != 'linux'" },
   { index = "pytorch-cu124", marker = "sys_platform == 'linux'" },
 ]
 
