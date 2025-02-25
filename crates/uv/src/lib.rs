@@ -1968,7 +1968,7 @@ where
         .join()
         .expect("Tokio executor failed, was there a panic?");
 
-    // Prepending current dir to log path, and this is done after run to account for commands that change directory.    
+    // Prepending current dir to log path, and this is done after run to account for commands that change directory.
     let log_path = std::env::current_dir().unwrap_or_default().join(log_path);
     // Discuss if pointing to log file should only be done on error or always.
     // Incase the cli logs are more verbose than the log file, should the message still say See <path> for detailed logs?

@@ -36,7 +36,7 @@ pub(crate) enum Level {
 }
 
 /// Enum to set the log level for the file logs
-// Discuss if we need to seperate trace or debug and the heirarchical layer or not into different args (based on what the use cases are)
+// Discuss if we need to separate trace or debug and the hierarchical layer or not into different args (based on what the use cases are)
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum FileLogLevel {
     /// Write debug messages to the log file.
@@ -224,7 +224,7 @@ pub(crate) fn setup_logging(
 
         let file_filter =
             EnvFilter::try_new(file_filter_str).unwrap_or_else(|_| EnvFilter::new("uv=debug"));
-        let file_fomat = UvFormat {
+        let file_format = UvFormat {
             // Setting timestamp display as false as to mimic the behavior of the console logs
             // however wanted to discuss:                                                                                                           the case where user might want to know when they wrote the logs
             display_timestamp: false,
@@ -252,13 +252,12 @@ pub(crate) fn setup_logging(
         ));
 
         // Depending on the log level, different layers are added to the subscriber.
-        // However me might need to seperate trace or debug and the heirarchical layer or not into different args (based on what the use cases are)
         // An equivalent of `RUST_LOG` for file logs might be needed to be implemented.
         match file_log_level {
             FileLogLevel::Verbose | FileLogLevel::TraceVerbose => {
                 layers.push(
                     tracing_subscriber::fmt::layer()
-                        .event_format(file_fomat)
+                        .event_format(file_format)
                         .with_writer(file_writer)
                         .with_filter(file_filter)
                         .boxed(),

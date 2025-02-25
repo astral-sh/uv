@@ -41,7 +41,7 @@ fn logging_on_fail() -> Result<()> {
 }
 
 #[test]
-fn logs_on_pass() -> Result<()> {
+fn logs_on_pass() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
@@ -57,7 +57,6 @@ fn logs_on_pass() -> Result<()> {
     Installed Python 3.13.2 in [TIME]
      + cpython-3.13.2-[PLATFORM]
     ");
-    Ok(())
 }
 
 #[test]
@@ -77,7 +76,7 @@ fn test_log_levels() -> Result<()> {
             cmd.arg("-l");
         }
 
-        insta::allow_duplicates!((|| {
+        insta::allow_duplicates!({
             uv_snapshot!(context.filters(), cmd, @r"
             success: true
             exit_code: 0
@@ -85,7 +84,7 @@ fn test_log_levels() -> Result<()> {
 
             ----- stderr -----
             ")
-        })());
+        });
 
         // Verify log content matches verbosity
         let log_content = fs_err::read_to_string(log_path.path().with_extension("log"))?;
