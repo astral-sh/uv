@@ -20,7 +20,7 @@ impl Metadata10 {
     /// Parse the [`Metadata10`] from a `PKG-INFO` file, as included in a source distribution.
     pub fn parse_pkg_info(content: &[u8]) -> Result<Self, MetadataError> {
         let headers = Headers::parse(content)?;
-        let name = PackageName::new(
+        let name = PackageName::from_owned(
             headers
                 .get_first_value("Name")
                 .ok_or(MetadataError::FieldNotFound("Name"))?,

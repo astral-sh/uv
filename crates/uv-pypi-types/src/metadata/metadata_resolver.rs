@@ -40,7 +40,7 @@ impl ResolutionMetadata {
     pub fn parse_metadata(content: &[u8]) -> Result<Self, MetadataError> {
         let headers = Headers::parse(content)?;
 
-        let name = PackageName::new(
+        let name = PackageName::from_owned(
             headers
                 .get_first_value("Name")
                 .ok_or(MetadataError::FieldNotFound("Name"))?,
@@ -63,13 +63,15 @@ impl ResolutionMetadata {
             .map(VersionSpecifiers::from);
         let provides_extras = headers
             .get_all_values("Provides-Extra")
-            .filter_map(|provides_extra| match ExtraName::new(provides_extra) {
-                Ok(extra_name) => Some(extra_name),
-                Err(err) => {
-                    warn!("Ignoring invalid extra: {err}");
-                    None
-                }
-            })
+            .filter_map(
+                |provides_extra| match ExtraName::from_owned(provides_extra) {
+                    Ok(extra_name) => Some(extra_name),
+                    Err(err) => {
+                        warn!("Ignoring invalid extra: {err}");
+                        None
+                    }
+                },
+            )
             .collect::<Vec<_>>();
         let dynamic = headers
             .get_all_values("Dynamic")
@@ -116,7 +118,7 @@ impl ResolutionMetadata {
         }
 
         // The `Name` and `Version` fields are required, and can't be dynamic.
-        let name = PackageName::new(
+        let name = PackageName::from_owned(
             headers
                 .get_first_value("Name")
                 .ok_or(MetadataError::FieldNotFound("Name"))?,
@@ -141,13 +143,15 @@ impl ResolutionMetadata {
             .map(VersionSpecifiers::from);
         let provides_extras = headers
             .get_all_values("Provides-Extra")
-            .filter_map(|provides_extra| match ExtraName::new(provides_extra) {
-                Ok(extra_name) => Some(extra_name),
-                Err(err) => {
-                    warn!("Ignoring invalid extra: {err}");
-                    None
-                }
-            })
+            .filter_map(
+                |provides_extra| match ExtraName::from_owned(provides_extra) {
+                    Ok(extra_name) => Some(extra_name),
+                    Err(err) => {
+                        warn!("Ignoring invalid extra: {err}");
+                        None
+                    }
+                },
+            )
             .collect::<Vec<_>>();
 
         Ok(Self {

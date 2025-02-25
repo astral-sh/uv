@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use uv_small_str::SmallString;
 
-use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNameError};
+use crate::{validate_and_normalize_ref, InvalidNameError};
 
 /// The normalized name of a dependency group.
 ///
@@ -20,8 +20,11 @@ pub struct GroupName(SmallString);
 
 impl GroupName {
     /// Create a validated, normalized group name.
-    pub fn new(name: String) -> Result<Self, InvalidNameError> {
-        validate_and_normalize_owned(name).map(Self)
+    ///
+    /// At present, this is no more efficient than calling [`GroupName::from_str`].
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn from_owned(name: String) -> Result<Self, InvalidNameError> {
+        validate_and_normalize_ref(&name).map(Self)
     }
 }
 
@@ -69,4 +72,4 @@ impl AsRef<str> for GroupName {
 /// Internally, we model dependency groups as a generic concept; but externally, we only expose the
 /// `dev-dependencies` group.
 pub static DEV_DEPENDENCIES: LazyLock<GroupName> =
-    LazyLock::new(|| GroupName::new("dev".to_string()).unwrap());
+    LazyLock::new(|| GroupName::from_str("dev").unwrap());

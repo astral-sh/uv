@@ -126,7 +126,7 @@ pub(crate) async fn init(
                     // Pre-normalize the package name by removing any leading or trailing
                     // whitespace, and replacing any internal whitespace with hyphens.
                     let name = name.trim().replace(' ', "-");
-                    PackageName::new(name)?
+                    PackageName::from_owned(name)?
                 }
             };
 
