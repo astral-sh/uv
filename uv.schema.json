@@ -392,6 +392,16 @@
         "null"
       ]
     },
+    "proxy-urls": {
+      "description": "FIXME Document",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/ProxyUrl"
+      }
+    },
     "publish-url": {
       "description": "The URL for publishing packages to the Python package index (by default: <https://upload.pypi.org/legacy/>).",
       "type": [
@@ -723,6 +733,17 @@
           "anyOf": [
             {
               "$ref": "#/definitions/IndexName"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "proxy-url": {
+          "description": "FIXME Document",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IndexUrl"
             },
             {
               "type": "null"
@@ -1348,6 +1369,22 @@
           ]
         }
       ]
+    },
+    "ProxyUrl": {
+      "description": "FIXME Document",
+      "type": "object",
+      "required": [
+        "name",
+        "url"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/IndexName"
+        },
+        "url": {
+          "type": "string"
+        }
+      }
     },
     "PythonDownloads": {
       "oneOf": [

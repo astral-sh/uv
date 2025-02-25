@@ -82,6 +82,8 @@ pub struct Index {
     /// publish-url = "https://upload.pypi.org/legacy/"
     /// ```
     pub publish_url: Option<Url>,
+    /// FIXME Document
+    pub proxy_url: Option<IndexUrl>,
 }
 
 // #[derive(
@@ -106,6 +108,7 @@ impl Index {
             default: true,
             origin: None,
             publish_url: None,
+            proxy_url: None,
         }
     }
 
@@ -118,6 +121,7 @@ impl Index {
             default: false,
             origin: None,
             publish_url: None,
+            proxy_url: None,
         }
     }
 
@@ -130,6 +134,7 @@ impl Index {
             default: false,
             origin: None,
             publish_url: None,
+            proxy_url: None,
         }
     }
 
@@ -143,6 +148,15 @@ impl Index {
     /// Return the [`IndexUrl`] of the index.
     pub fn url(&self) -> &IndexUrl {
         &self.url
+    }
+
+    /// Return the [`IndexUrl`] of the index, preferring a proxy if it exists.
+    pub fn proxy_or_url(&self) -> &IndexUrl {
+        if let Some(ref proxy_url) = self.proxy_url {
+            proxy_url
+        } else {
+            &self.url
+        }
     }
 
     /// Consume the [`Index`] and return the [`IndexUrl`].
@@ -216,6 +230,7 @@ impl FromStr for Index {
                     default: false,
                     origin: None,
                     publish_url: None,
+                    proxy_url: None,
                 });
             }
         }
@@ -229,6 +244,7 @@ impl FromStr for Index {
             default: false,
             origin: None,
             publish_url: None,
+            proxy_url: None,
         })
     }
 }
@@ -242,4 +258,62 @@ pub enum IndexSourceError {
     IndexName(#[from] IndexNameError),
     #[error("Index included a name, but the name was empty")]
     EmptyName,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct ProxyWithCanonicalUrl {
+    pub url: IndexUrl,
+    pub url_base: String,
+    pub canonical_url: IndexUrl,
+    pub raw_canonical_url: String,
+}
+
+impl ProxyWithCanonicalUrl {
+    pub fn new(url: IndexUrl, canonical_url: IndexUrl) -> Self {
+        let mut raw_url = url.url().clone();
+        raw_url.set_path("");
+        let raw_canonical_url = canonical_url.url().to_string();
+        Self {
+            url,
+            url_base: raw_url.to_string(),
+            canonical_url,
+            raw_canonical_url,
+        }
+    }
+}
+
+/// FIXME Document
+#[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct ProxyUrl {
+    pub name: IndexName,
+    pub url: String,
+}
+
+impl FromStr for ProxyUrl {
+    type Err = ProxyIndexSourceError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Some((name, url)) = s.split_once('=') {
+            let name = IndexName::from_str(name)?;
+            Ok(Self {
+                name,
+                url: url.to_string(),
+            })
+        } else {
+            Err(ProxyIndexSourceError::MissingName)
+        }
+    }
+}
+
+/// An error that can occur when parsing an [`Index`].
+#[derive(Error, Debug)]
+pub enum ProxyIndexSourceError {
+    #[error(transparent)]
+    IndexName(#[from] IndexNameError),
+    #[error("Proxy index requires a name, but the name was empty")]
+    MissingName,
+    // #[error(transparent)]
+    // UrlParse(#[from] url::ParseError),
 }

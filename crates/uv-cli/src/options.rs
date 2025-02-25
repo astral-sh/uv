@@ -191,6 +191,7 @@ impl From<IndexArgs> for PipOptions {
             index,
             index_url,
             extra_index_url,
+            index_proxy_url: _,
             no_index,
             find_links,
         } = args;
@@ -256,15 +257,7 @@ pub fn resolver_options(
     } = build_args;
 
     ResolverOptions {
-        index: index_args
-            .default_index
-            .and_then(Maybe::into_option)
-            .map(|default_index| vec![default_index])
-            .combine(
-                index_args
-                    .index
-                    .map(|index| index.into_iter().filter_map(Maybe::into_option).collect()),
-            ),
+        index: index_args.combined_index(),
         index_url: index_args.index_url.and_then(Maybe::into_option),
         extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
             extra_index_url
@@ -272,6 +265,9 @@ pub fn resolver_options(
                 .filter_map(Maybe::into_option)
                 .collect()
         }),
+        proxy_urls: index_args
+            .index_proxy_url
+            .map(|proxies| proxies.into_iter().filter_map(Maybe::into_option).collect()),
         no_index: if index_args.no_index {
             Some(true)
         } else {
@@ -348,16 +344,8 @@ pub fn resolver_installer_options(
         no_binary_package,
     } = build_args;
 
-    let default_index = index_args
-        .default_index
-        .and_then(Maybe::into_option)
-        .map(|default_index| vec![default_index]);
-    let index = index_args
-        .index
-        .map(|index| index.into_iter().filter_map(Maybe::into_option).collect());
-
     ResolverInstallerOptions {
-        index: default_index.combine(index),
+        index: index_args.combined_index(),
         index_url: index_args.index_url.and_then(Maybe::into_option),
         extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
             extra_index_url
@@ -365,6 +353,9 @@ pub fn resolver_installer_options(
                 .filter_map(Maybe::into_option)
                 .collect()
         }),
+        proxy_urls: index_args
+            .index_proxy_url
+            .map(|proxies| proxies.into_iter().filter_map(Maybe::into_option).collect()),
         no_index: if index_args.no_index {
             Some(true)
         } else {

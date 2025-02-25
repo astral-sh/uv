@@ -10186,3 +10186,98 @@ fn add_unsupported_git_scheme() {
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     "###);
 }
+
+/// Install a package from an index that requires authentication
+#[test]
+fn add_with_proxy_url() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [[tool.uv.index]]
+        name = "alpha"
+        url = "https://not-real.astral.sh"
+        default = true
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add()
+        .arg("anyio>=4.3.0")
+        .arg("--index-proxy-url")
+        .arg("alpha=https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "
+    );
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio>=4.3.0",
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [[tool.uv.index]]
+        name = "alpha"
+        url = "https://not-real.astral.sh"
+        default = true
+        "#
+        );
+    });
+
+    fs_err::remove_dir_all(context.temp_dir.join(".venv"))?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--index-proxy-url")
+        .arg("alpha=https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "
+    );
+
+    context.assert_command("import anyio").success();
+    Ok(())
+}
