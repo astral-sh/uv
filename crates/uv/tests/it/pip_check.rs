@@ -100,7 +100,7 @@ fn check_incompatible_packages() -> Result<()> {
     "###
     );
 
-    uv_snapshot!(context.pip_check(), @r###"
+    uv_snapshot!(context.filters(), context.pip_check(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -109,7 +109,8 @@ fn check_incompatible_packages() -> Result<()> {
     Checked 5 packages in [TIME]
     Found 1 incompatibility
     The package `requests` requires `idna>=2.5,<4`, but `2.4` is installed
-    "###
+    See [UV_LOG_DIR]/pip_check.log for detailed logs
+    "
     );
 
     Ok(())
@@ -172,7 +173,7 @@ fn check_multiple_incompatible_packages() -> Result<()> {
     "###
     );
 
-    uv_snapshot!(context.pip_check(), @r###"
+    uv_snapshot!(context.filters(), context.pip_check(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -182,7 +183,8 @@ fn check_multiple_incompatible_packages() -> Result<()> {
     Found 2 incompatibilities
     The package `requests` requires `idna>=2.5,<4`, but `2.4` is installed
     The package `requests` requires `urllib3>=1.21.1,<3`, but `1.20` is installed
-    "###
+    See [UV_LOG_DIR]/pip_check.log for detailed logs
+    "
     );
 
     Ok(())

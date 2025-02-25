@@ -177,14 +177,15 @@ fn list_outdated_json() -> Result<()> {
 fn list_outdated_freeze() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.pip_list().arg("--outdated").arg("--format").arg("freeze"), @r###"
+    uv_snapshot!(context.filters(), context.pip_list().arg("--outdated").arg("--format").arg("freeze"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: `--outdated` cannot be used with `--format freeze`
-    "###
+    See [UV_LOG_DIR]/pip_list.log for detailed logs
+    "
     );
 }
 
@@ -378,7 +379,7 @@ fn list_editable_only() {
 
     uv_snapshot!(filters, context.pip_list()
         .arg("--editable")
-        .arg("--exclude-editable"), @r###"
+        .arg("--exclude-editable"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -386,10 +387,10 @@ fn list_editable_only() {
     ----- stderr -----
     error: the argument '--editable' cannot be used with '--exclude-editable'
 
-    Usage: uv pip list --cache-dir [CACHE_DIR] --editable --exclude-newer <EXCLUDE_NEWER>
+    Usage: uv pip list --cache-dir [CACHE_DIR] --editable --exclude-newer <EXCLUDE_NEWER> --log <PATH>
 
     For more information, try '--help'.
-    "###
+    "
     );
 }
 
@@ -691,7 +692,7 @@ Version: 0.1-bulbasaur
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, context.pip_list()
-        .arg("--editable"), @r###"
+        .arg("--editable"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -699,7 +700,8 @@ Version: 0.1-bulbasaur
     ----- stderr -----
     error: Failed to read metadata from: `[SITE_PACKAGES]/paramiko.egg-link`
      Caused by: after parsing `0.1-b`, found `ulbasaur`, which is not part of a valid version
-    "###
+    See [UV_LOG_DIR]/pip_list.log for detailed logs
+    "
     );
 
     Ok(())

@@ -166,14 +166,15 @@ fn missing_record() -> Result<()> {
     fs_err::remove_file(dist_info.join("RECORD"))?;
 
     uv_snapshot!(context.filters(), context.pip_uninstall()
-        .arg("MarkupSafe"), @r###"
+        .arg("MarkupSafe"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Cannot uninstall package; `RECORD` file not found at: [SITE_PACKAGES]/MarkupSafe-2.1.3.dist-info/RECORD
-    "###
+    See [UV_LOG_DIR]/pip_uninstall.log for detailed logs
+    "
     );
 
     Ok(())

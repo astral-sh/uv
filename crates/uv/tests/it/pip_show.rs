@@ -14,14 +14,15 @@ use crate::common::{uv_snapshot, TestContext};
 fn show_empty() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.pip_show(), @r###"
+    uv_snapshot!(context.filters(), context.pip_show(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     warning: Please provide a package name or names.
-    "###
+    See [UV_LOG_DIR]/pip_show.log for detailed logs
+    "
     );
 }
 
@@ -333,7 +334,7 @@ fn show_empty_quiet() -> Result<()> {
     "
     })?;
 
-    uv_snapshot!(context
+    uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("-r")
         .arg("requirements.txt")
@@ -354,15 +355,16 @@ fn show_empty_quiet() -> Result<()> {
     context.assert_command("import markupsafe").success();
 
     // Flask isn't installed, so the command should fail.
-    uv_snapshot!(context.pip_show()
+    uv_snapshot!(context.filters(), context.pip_show()
         .arg("flask")
-        .arg("--quiet"), @r###"
+        .arg("--quiet"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    "###
+    See [UV_LOG_DIR]/pip_show.log for detailed logs
+    "
     );
 
     Ok(())

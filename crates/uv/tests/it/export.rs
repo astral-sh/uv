@@ -888,7 +888,7 @@ fn frozen() -> Result<()> {
     // Remove the child `pyproject.toml`.
     fs_err::remove_dir_all(child.path())?;
 
-    uv_snapshot!(context.filters(), context.export().arg("--all-packages"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--all-packages"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -897,7 +897,8 @@ fn frozen() -> Result<()> {
       × Failed to build `project @ file://[TEMP_DIR]/`
       ├─▶ Failed to parse entry: `child`
       ╰─▶ `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
-    "###);
+    See [UV_LOG_DIR]/export.log for detailed logs
+    ");
 
     uv_snapshot!(context.filters(), context.export().arg("--all-packages").arg("--frozen"), @r###"
     success: true
@@ -2056,7 +2057,7 @@ fn export_group() -> Result<()> {
     Resolved 6 packages in [TIME]
     "###);
 
-    uv_snapshot!(context.filters(), context.export().arg("--all-groups").arg("--no-group").arg("baz"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--all-groups").arg("--no-group").arg("baz"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2064,7 +2065,8 @@ fn export_group() -> Result<()> {
     ----- stderr -----
     Resolved 6 packages in [TIME]
     error: Group `baz` is not defined in the project's `dependency-groups` table
-    "###);
+    See [UV_LOG_DIR]/export.log for detailed logs
+    ");
 
     Ok(())
 }
@@ -2412,7 +2414,7 @@ fn conflicts() -> Result<()> {
     Resolved 4 packages in [TIME]
     "###);
 
-    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("extra1").arg("--extra").arg("extra2"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("extra1").arg("--extra").arg("extra2"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2420,7 +2422,8 @@ fn conflicts() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: Extras `extra1` and `extra2` are incompatible with the declared conflicts: {`project[extra1]`, `project[extra2]`}
-    "###);
+    See [UV_LOG_DIR]/export.log for detailed logs
+    ");
 
     Ok(())
 }

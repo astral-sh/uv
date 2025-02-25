@@ -302,7 +302,7 @@ fn tool_upgrade_non_existing_package() {
         .arg("black")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -310,7 +310,8 @@ fn tool_upgrade_non_existing_package() {
     ----- stderr -----
     error: Failed to upgrade black
       Caused by: `black` is not installed; run `uv tool install black` to install
-    "###);
+    See [UV_LOG_DIR]/tool_upgrade.log for detailed logs
+    ");
 
     // Attempt to upgrade all.
     uv_snapshot!(context.filters(), context.tool_upgrade()
@@ -389,7 +390,7 @@ fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
         .arg("https://pypi.org/simple/")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -402,7 +403,8 @@ fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
     Installed 1 executable: pybabel
     error: Failed to upgrade python-dotenv
       Caused by: `python-dotenv` is missing a valid receipt; run `uv tool install --force python-dotenv` to reinstall
-    "###);
+    See [UV_LOG_DIR]/tool_upgrade.log for detailed logs
+    ");
 
     Ok(())
 }

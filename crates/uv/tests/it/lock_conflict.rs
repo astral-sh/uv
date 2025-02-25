@@ -38,7 +38,7 @@ fn extra_basic() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -47,7 +47,8 @@ fn extra_basic() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
           And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/lock_conflict.log for detailed logs
+    ");
 
     // And now with the same extra configuration, we tell uv about
     // the conflicting extras, which forces it to resolve each in
@@ -186,23 +187,25 @@ fn extra_basic() -> Result<()> {
      + sortedcontainers==2.4.0
     "###);
     // And finally, installing both extras should error.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--all-extras"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--all-extras"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Extras `extra1` and `extra2` are incompatible with the declared conflicts: {`project[extra1]`, `project[extra2]`}
-    "###);
+    See [UV_LOG_DIR]/lock_conflict.log for detailed logs
+    ");
     // As should exporting them.
-    uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--all-extras"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--all-extras"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Extras `extra1` and `extra2` are incompatible with the declared conflicts: {`project[extra1]`, `project[extra2]`}
-    "###);
+    See [UV_LOG_DIR]/lock_conflict.log for detailed logs
+    ");
 
     Ok(())
 }
@@ -230,7 +233,7 @@ fn extra_basic_three_extras() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -239,7 +242,8 @@ fn extra_basic_three_extras() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because project[extra2] depends on sortedcontainers==2.3.0 and project[extra1] depends on sortedcontainers==2.2.0, we can conclude that project[extra1] and project[extra2] are incompatible.
           And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/lock_conflict.log for detailed logs
+    ");
 
     // And now with the same extra configuration, we tell uv about
     // the conflicting extras, which forces it to resolve each in
@@ -409,26 +413,28 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
     uv_snapshot!(
         context.filters(),
         context.sync().arg("--frozen").arg("--extra=extra1").arg("--extra=extra2"),
-        @r###"
+        @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Extras `extra1` and `extra2` are incompatible with the declared conflicts: {`project[extra1]`, `project[extra2]`}
-    "###);
+    See [UV_LOG_DIR]/lock_conflict.log for detailed logs
+    ");
     // project3/project4 conflict!
     uv_snapshot!(
         context.filters(),
         context.sync().arg("--frozen").arg("--extra=project3").arg("--extra=project4"),
-        @r###"
+        @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Extras `project3` and `project4` are incompatible with the declared conflicts: {`project[project3]`, `project[project4]`}
-    "###);
+    See [UV_LOG_DIR]/lock_conflict.log for detailed logs
+    ");
     // ... but extra1/project3 does not.
     uv_snapshot!(
         context.filters(),
@@ -506,7 +512,7 @@ fn extra_multiple_not_conflicting2() -> Result<()> {
     )?;
 
     // Fails, as expected.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -515,7 +521,8 @@ fn extra_multiple_not_conflicting2() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
           And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/lock_conflict.log for detailed logs
+    ");
 
     // If we define extra1/extra2 as conflicting and project3/project4
     // as conflicting, that still isn't enough! That's because extra1
@@ -546,7 +553,7 @@ fn extra_multiple_not_conflicting2() -> Result<()> {
         project4 = ["sortedcontainers==2.4.0"]
         "#,
     )?;
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -555,7 +562,8 @@ fn extra_multiple_not_conflicting2() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because project[project3] depends on sortedcontainers==2.3.0 and project[extra2] depends on sortedcontainers==2.4.0, we can conclude that project[extra2] and project[project3] are incompatible.
           And because your project requires project[extra2] and project[project3], we can conclude that your project's requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/lock_conflict.log for detailed logs
+    ");
 
     // One could try to declare all pairs of conflicting extras as
     // conflicting, but this doesn't quite work either. For example,
@@ -667,7 +675,7 @@ fn extra_multiple_independent() -> Result<()> {
         project4 = ["anyio==4.2.0"]
         "#,
     )?;
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -676,7 +684,8 @@ fn extra_multiple_independent() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
           And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/lock_conflict.log for detailed logs
+    ");
 
     // OK, responding to the error, we declare our anyio extras
     // as conflicting. But now we should see sortedcontainers as
@@ -703,7 +712,7 @@ fn extra_multiple_independent() -> Result<()> {
         project4 = ["anyio==4.2.0"]
         "#,
     )?;
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -712,7 +721,8 @@ fn extra_multiple_independent() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
           And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/lock_conflict.log for detailed logs
+    ");
 
     // Once we declare ALL our conflicting extras, resolution succeeds.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -987,7 +997,7 @@ fn extra_config_change_ignore_lockfile() -> Result<()> {
     )?;
     // Re-run with `--locked`, which should now fail because of
     // the conflicting group config removal.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -996,7 +1006,8 @@ fn extra_config_change_ignore_lockfile() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
           And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/lock_conflict.log for detailed logs
+    ");
 
     Ok(())
 }
@@ -1058,14 +1069,15 @@ fn extra_unconditional() -> Result<()> {
     Resolved 6 packages in [TIME]
     "###);
     // This should error since we're enabling two conflicting extras.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Found conflicting extras `proxy1[extra1]` and `proxy1[extra2]` enabled simultaneously
-    "###);
+    See [UV_LOG_DIR]/lock_conflict.log for detailed logs
+    ");
 
     root_pyproject_toml.write_str(
         r#"
@@ -1330,14 +1342,15 @@ fn extra_unconditional_in_optional() -> Result<()> {
     uv_snapshot!(
         context.filters(),
         context.sync().arg("--frozen").arg("--extra=x1").arg("--extra=x2"),
-        @r###"
+        @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Found conflicting extras `proxy1[nested-x1]` and `proxy1[nested-x2]` enabled simultaneously
-    "###);
+    See [UV_LOG_DIR]/lock_conflict.log for detailed logs
+    ");
 
     Ok(())
 }
@@ -1434,14 +1447,15 @@ fn extra_unconditional_non_local_conflict() -> Result<()> {
     // This should fail. If it doesn't and we generated a lock
     // file above, then this will likely result in the installation
     // of two different versions of the same package.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Found conflicting extras `c[x1]` and `c[x2]` enabled simultaneously
-    "###);
+    See [UV_LOG_DIR]/lock_conflict.log for detailed logs
+    ");
 
     Ok(())
 }
@@ -1547,7 +1561,7 @@ fn extra_nested_across_workspace() -> Result<()> {
     // `dummy[extra1]` conflicts with `dummysub[extra2]` and that
     // `dummy[extra2]` conflicts with `dummysub[extra1]`. So we end
     // up with a resolution failure.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1560,7 +1574,8 @@ fn extra_nested_across_workspace() -> Result<()> {
           And because we know from (1) that dummy[extra2] depends on proxy1[extra2]==0.1.0, we can conclude that dummy[extra2] and proxy1[extra1]==0.1.0 are incompatible.
           And because only proxy1[extra1]==0.1.0 is available and dummysub[extra1] depends on proxy1[extra1], we can conclude that dummysub[extra1] and dummy[extra2] are incompatible.
           And because your workspace requires dummy[extra2] and dummysub[extra1], we can conclude that your workspace's requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/lock_conflict.log for detailed logs
+    ");
 
     // Now let's write out the full set of conflicts, taking
     // advantage of the optional `package` key.
@@ -1671,7 +1686,7 @@ fn group_basic() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1680,7 +1695,8 @@ fn group_basic() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because project:group2 depends on sortedcontainers==2.4.0 and project:group1 depends on sortedcontainers==2.3.0, we can conclude that project:group1 and project:group2 are incompatible.
           And because your project requires project:group1 and project:group2, we can conclude that your project's requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/lock_conflict.log for detailed logs
+    ");
 
     // And now with the same group configuration, we tell uv about
     // the conflicting groups, which forces it to resolve each in
@@ -1819,14 +1835,15 @@ fn group_basic() -> Result<()> {
      + sortedcontainers==2.4.0
     "###);
     // And finally, installing both groups should error.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1").arg("--group=group2"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1").arg("--group=group2"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Groups `group1` and `group2` are incompatible with the declared conflicts: {`project:group1`, `project:group2`}
-    "###);
+    See [UV_LOG_DIR]/lock_conflict.log for detailed logs
+    ");
 
     Ok(())
 }
@@ -1964,36 +1981,39 @@ fn group_default() -> Result<()> {
 
     // Another install, but with the other group enabled. This should error, since `group1` is
     // enabled by default.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group2"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group2"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Groups `group1` (enabled by default) and `group2` are incompatible with the declared conflicts: {`project:group1`, `project:group2`}
-    "###);
+    See [UV_LOG_DIR]/lock_conflict.log for detailed logs
+    ");
 
     // If the group is explicitly requested, we should still fail, but shouldn't mark it as
     // "enabled by default".
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1").arg("--group=group2"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1").arg("--group=group2"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Groups `group1` and `group2` are incompatible with the declared conflicts: {`project:group1`, `project:group2`}
-    "###);
+    See [UV_LOG_DIR]/lock_conflict.log for detailed logs
+    ");
 
     // If we install via `--all-groups`, we should also avoid marking the group as "enabled by
     // default".
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--all-groups"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--all-groups"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Groups `group1` and `group2` are incompatible with the declared conflicts: {`project:group1`, `project:group2`}
-    "###);
+    See [UV_LOG_DIR]/lock_conflict.log for detailed logs
+    ");
 
     // Disabling the default group should succeed.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-group=group1").arg("--group=group2"), @r###"
@@ -2036,7 +2056,7 @@ fn mixed() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2045,7 +2065,8 @@ fn mixed() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because project:group1 depends on sortedcontainers==2.3.0 and project[extra1] depends on sortedcontainers==2.4.0, we can conclude that project:group1 and project[extra1] are incompatible.
           And because your project requires project[extra1] and project:group1, we can conclude that your project's requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/lock_conflict.log for detailed logs
+    ");
 
     // And now with the same extra/group configuration, we tell uv
     // about the conflicting groups, which forces it to resolve each in
@@ -2189,14 +2210,15 @@ fn mixed() -> Result<()> {
      + sortedcontainers==2.4.0
     "###);
     // And finally, installing both the group and the extra should fail.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1").arg("--extra=extra1"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1").arg("--extra=extra1"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Group `group1` and extra `extra1` are incompatible with the declared conflicts: {`project:group1`, `project[extra1]`}
-    "###);
+    See [UV_LOG_DIR]/lock_conflict.log for detailed logs
+    ");
 
     Ok(())
 }
@@ -4450,7 +4472,7 @@ conflicts = [
     )?;
 
     // Error out, as x2 extra is only on the child.
-    uv_snapshot!(context.filters(), context.sync().arg("--extra=x2"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--extra=x2"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4458,7 +4480,8 @@ conflicts = [
     ----- stderr -----
     Resolved 7 packages in [TIME]
     error: Extra `x2` is not defined in the project's `optional-dependencies` table
-    "###);
+    See [UV_LOG_DIR]/lock_conflict.log for detailed logs
+    ");
 
     uv_snapshot!(context.filters(), context.sync(), @r###"
     success: true

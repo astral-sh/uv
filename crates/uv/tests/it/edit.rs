@@ -567,24 +567,26 @@ fn add_git_error() -> Result<()> {
     "###);
 
     // Provide a tag without a Git source.
-    uv_snapshot!(context.filters(), context.add().arg("flask").arg("--tag").arg("0.0.1"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("flask").arg("--tag").arg("0.0.1"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: `flask` did not resolve to a Git repository, but a Git reference (`--tag 0.0.1`) was provided.
-    "###);
+    See [UV_LOG_DIR]/edit.log for detailed logs
+    ");
 
     // Provide a tag with a non-Git source.
-    uv_snapshot!(context.filters(), context.add().arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl").arg("--branch").arg("0.0.1"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl").arg("--branch").arg("0.0.1"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: `flask` did not resolve to a Git repository, but a Git reference (`--branch 0.0.1`) was provided.
-    "###);
+    See [UV_LOG_DIR]/edit.log for detailed logs
+    ");
 
     Ok(())
 }
@@ -864,7 +866,7 @@ fn add_raw_error() -> Result<()> {
     "#})?;
 
     // Provide a tag without a Git source.
-    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag").arg("0.0.1").arg("--raw-sources"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag").arg("0.0.1").arg("--raw-sources"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -872,10 +874,10 @@ fn add_raw_error() -> Result<()> {
     ----- stderr -----
     error: the argument '--tag <TAG>' cannot be used with '--raw-sources'
 
-    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
+    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> --log <PATH> <PACKAGES|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
-    "###);
+    ");
 
     Ok(())
 }
@@ -899,14 +901,15 @@ fn add_editable_error() -> Result<()> {
     "#})?;
 
     // Provide `--editable` with a non-source tree.
-    uv_snapshot!(context.filters(), context.add().arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl").arg("--editable"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl").arg("--editable"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: `flask` did not resolve to a local directory, but the `--editable` flag was provided. Editable installs are only supported for local directories.
-    "###);
+    See [UV_LOG_DIR]/edit.log for detailed logs
+    ");
 
     Ok(())
 }
@@ -1147,7 +1150,7 @@ fn add_remove_dev() -> Result<()> {
     "###);
 
     // This should fail without --dev.
-    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1155,7 +1158,8 @@ fn add_remove_dev() -> Result<()> {
     ----- stderr -----
     hint: `anyio` is in the `dev` group (try: `uv remove anyio --group dev`)
     error: The dependency `anyio` could not be found in `project.dependencies`
-    "###);
+    See [UV_LOG_DIR]/edit.log for detailed logs
+    ");
 
     // Remove the dependency.
     uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--dev"), @r###"
@@ -1373,7 +1377,7 @@ fn add_remove_optional() -> Result<()> {
     "###);
 
     // This should fail without --optional.
-    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1381,7 +1385,8 @@ fn add_remove_optional() -> Result<()> {
     ----- stderr -----
     hint: `anyio` is an optional dependency (try: `uv remove anyio --optional io`)
     error: The dependency `anyio` could not be found in `project.dependencies`
-    "###);
+    See [UV_LOG_DIR]/edit.log for detailed logs
+    ");
 
     // Remove the dependency.
     uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--optional=io"), @r###"
@@ -1604,14 +1609,15 @@ fn add_remove_workspace() -> Result<()> {
         .arg("child1")
         .current_dir(&context.temp_dir);
 
-    uv_snapshot!(context.filters(), add_cmd, @r###"
+    uv_snapshot!(context.filters(), add_cmd, @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Workspace dependency `child2` must refer to local directory, not a Git repository
-    "###);
+    See [UV_LOG_DIR]/edit.log for detailed logs
+    ");
 
     // Workspace packages should be detected automatically.
     let child1 = context.temp_dir.join("child1");
@@ -2241,14 +2247,15 @@ fn add_workspace_editable() -> Result<()> {
         .arg("--no-editable")
         .current_dir(&child1);
 
-    uv_snapshot!(context.filters(), add_cmd, @r###"
+    uv_snapshot!(context.filters(), add_cmd, @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Workspace dependency `child2` was marked as `--no-editable`, but workspace dependencies are always added in editable mode. Pass `--no-editable` to `uv sync` or `uv run` to install workspace dependencies in non-editable mode.
-    "###);
+    See [UV_LOG_DIR]/edit.log for detailed logs
+    ");
 
     // `--editable` should not.
     let mut add_cmd = context.add();
@@ -3871,7 +3878,7 @@ fn add_reject_multiple_git_ref_flags() {
         .arg("--tag")
         .arg("0.0.1")
         .arg("--branch")
-        .arg("test"), @r###"
+        .arg("test"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3879,10 +3886,10 @@ fn add_reject_multiple_git_ref_flags() {
     ----- stderr -----
     error: the argument '--tag <TAG>' cannot be used with '--branch <BRANCH>'
 
-    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
+    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> --log <PATH> <PACKAGES|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
-    "###
+    "
     );
 
     // --tag and --rev
@@ -3892,7 +3899,7 @@ fn add_reject_multiple_git_ref_flags() {
         .arg("--tag")
         .arg("0.0.1")
         .arg("--rev")
-        .arg("326b943"), @r###"
+        .arg("326b943"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3900,10 +3907,10 @@ fn add_reject_multiple_git_ref_flags() {
     ----- stderr -----
     error: the argument '--tag <TAG>' cannot be used with '--rev <REV>'
 
-    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
+    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> --log <PATH> <PACKAGES|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
-    "###
+    "
     );
 
     // --tag and --tag
@@ -3946,7 +3953,7 @@ fn add_error() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("xyz"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("xyz"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3955,7 +3962,8 @@ fn add_error() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because there are no versions of xyz and your project depends on xyz, we can conclude that your project's requirements are unsatisfiable.
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
-    "###);
+    See [UV_LOG_DIR]/edit.log for detailed logs
+    ");
 
     uv_snapshot!(context.filters(), context.add().arg("xyz").arg("--frozen"), @r###"
     success: true
@@ -4442,25 +4450,27 @@ fn add_non_project() -> Result<()> {
 
     // Adding `iniconfig` should fail, since virtual workspace roots don't support production
     // dependencies.
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Project is missing a `[project]` table; add a `[project]` table to use production dependencies, or run `uv add --dev` instead
-    "###);
+    See [UV_LOG_DIR]/edit.log for detailed logs
+    ");
 
     // Adding `iniconfig` as optional should fail, since virtual workspace roots don't support
     // optional dependencies.
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--optional").arg("async"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--optional").arg("async"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Project is missing a `[project]` table; add a `[project]` table to use optional dependencies, or run `uv add --dev` instead
-    "###);
+    See [UV_LOG_DIR]/edit.log for detailed logs
+    ");
 
     // Adding `iniconfig` as a dev dependency should succeed.
     uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--dev"), @r###"
@@ -4701,17 +4711,18 @@ fn add_requirements_file() -> Result<()> {
     "###);
 
     // Passing a `setup.py` should fail.
-    uv_snapshot!(context.filters(), context.add().arg("-r").arg("setup.py"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("setup.py"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Adding requirements from a `setup.py` is not supported in `uv add`
-    "###);
+    See [UV_LOG_DIR]/edit.log for detailed logs
+    ");
 
     // Passing nothing should fail.
-    uv_snapshot!(context.filters(), context.add(), @r###"
+    uv_snapshot!(context.filters(), context.add(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4720,10 +4731,10 @@ fn add_requirements_file() -> Result<()> {
     error: the following required arguments were not provided:
       <PACKAGES|--requirements <REQUIREMENTS>>
 
-    Usage: uv add --cache-dir [CACHE_DIR] --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
+    Usage: uv add --cache-dir [CACHE_DIR] --exclude-newer <EXCLUDE_NEWER> --log <PATH> <PACKAGES|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
-    "###);
+    ");
 
     Ok(())
 }
@@ -5124,14 +5135,15 @@ fn remove_group() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--group").arg("test"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--group").arg("test"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: The dependency `anyio` could not be found in `dependency-groups.test`
-    "###);
+    See [UV_LOG_DIR]/edit.log for detailed logs
+    ");
 
     let pyproject_toml = context.read("pyproject.toml");
 
@@ -5152,14 +5164,15 @@ fn remove_group() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--group").arg("test"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--group").arg("test"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: The dependency `anyio` could not be found in `dependency-groups.test`
-    "###);
+    See [UV_LOG_DIR]/edit.log for detailed logs
+    ");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -5170,7 +5183,7 @@ fn remove_group() -> Result<()> {
         dependencies = ["anyio"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--group").arg("test"), @r###"
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--group").arg("test"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -5178,7 +5191,8 @@ fn remove_group() -> Result<()> {
     ----- stderr -----
     hint: `anyio` is a production dependency
     error: The dependency `anyio` could not be found in `dependency-groups.test`
-    "###);
+    See [UV_LOG_DIR]/edit.log for detailed logs
+    ");
 
     Ok(())
 }
@@ -6613,7 +6627,7 @@ fn fail_to_add_revert_project() -> Result<()> {
     let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
         .chain(context.filters())
         .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.add().arg("./child"), @r###"
+    uv_snapshot!(filters, context.add().arg("./child"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -6639,7 +6653,8 @@ fn fail_to_add_revert_project() -> Result<()> {
 
           hint: This usually indicates a problem with the package or the build environment.
       help: `child` was included because `parent` (v0.1.0) depends on `child`
-    "###);
+    See [UV_LOG_DIR]/edit.log for detailed logs
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -6724,7 +6739,7 @@ fn fail_to_edit_revert_project() -> Result<()> {
     let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
         .chain(context.filters())
         .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.add().arg("./child"), @r###"
+    uv_snapshot!(filters, context.add().arg("./child"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -6750,7 +6765,8 @@ fn fail_to_edit_revert_project() -> Result<()> {
 
           hint: This usually indicates a problem with the package or the build environment.
       help: `child` was included because `parent` (v0.1.0) depends on `child`
-    "###);
+    See [UV_LOG_DIR]/edit.log for detailed logs
+    "#);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
@@ -7119,7 +7135,7 @@ fn add_shadowed_name() -> Result<()> {
     "#})?;
 
     // Pinned constrained, check for a direct dependency loop.
-    uv_snapshot!(context.filters(), context.add().arg("dagster-webserver==1.6.13"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("dagster-webserver==1.6.13"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7130,10 +7146,11 @@ fn add_shadowed_name() -> Result<()> {
 
           hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
-    "###);
+    See [UV_LOG_DIR]/edit.log for detailed logs
+    ");
 
     // Constraint with several available versions, check for an indirect dependency loop.
-    uv_snapshot!(context.filters(), context.add().arg("dagster-webserver>=1.6.11,<1.7.0"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("dagster-webserver>=1.6.11,<1.7.0"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7155,7 +7172,8 @@ fn add_shadowed_name() -> Result<()> {
 
           hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
-    "###);
+    See [UV_LOG_DIR]/edit.log for detailed logs
+    ");
 
     Ok(())
 }
@@ -7249,7 +7267,7 @@ fn add_warn_index_url() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--extra-index-url").arg("https://test.pypi.org/simple"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--extra-index-url").arg("https://test.pypi.org/simple"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7261,7 +7279,8 @@ fn add_warn_index_url() -> Result<()> {
 
           hint: `idna` was found on https://test.pypi.org/simple, but not at the requested version (idna>=3.6). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
-    "###);
+    See [UV_LOG_DIR]/edit.log for detailed logs
+    ");
 
     Ok(())
 }
@@ -8746,14 +8765,15 @@ fn add_self() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Requirement name `anyio` matches project name `anyio`, but self-dependencies are not permitted without the `--dev` or `--optional` flags. If your project name (`anyio`) is shadowing that of a third-party dependency, consider renaming the project.
-    "###);
+    See [UV_LOG_DIR]/edit.log for detailed logs
+    ");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -10138,6 +10158,7 @@ fn add_with_build_constraints() -> Result<()> {
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
       help: `requests` (v1.2.0) was included because `project` (v0.1.0) depends on `requests==1.2`
+    See [UV_LOG_DIR]/edit.log for detailed logs
     ");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -10174,7 +10195,7 @@ fn add_unsupported_git_scheme() {
 
     context.init().arg(".").assert().success();
 
-    uv_snapshot!(context.filters(), context.add().arg("git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -10184,5 +10205,6 @@ fn add_unsupported_git_scheme() {
       Caused by: Unsupported Git URL scheme `fantasy:` in `fantasy://ferris/dreams/of/urls` (expected one of `https:`, `ssh:`, or `file:`)
     git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    "###);
+    See [UV_LOG_DIR]/edit.log for detailed logs
+    ");
 }

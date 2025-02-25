@@ -22,14 +22,15 @@ fn python_find() {
         error: No interpreter found in virtual environments, managed installations, search path, or registry
         "###);
     } else {
-        uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, ""), @r###"
+        uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, ""), @r"
         success: false
         exit_code: 2
         ----- stdout -----
 
         ----- stderr -----
         error: No interpreter found in virtual environments, managed installations, or search path
-        "###);
+        See [UV_LOG_DIR]/python_find.log for detailed logs
+        ");
     }
 
     // We find the first interpreter on the path
@@ -118,14 +119,15 @@ fn python_find() {
         error: No interpreter found for PyPy in virtual environments, managed installations, search path, or registry
         "###);
     } else {
-        uv_snapshot!(context.filters(), context.python_find().arg("pypy"), @r###"
+        uv_snapshot!(context.filters(), context.python_find().arg("pypy"), @r"
         success: false
         exit_code: 2
         ----- stdout -----
 
         ----- stderr -----
         error: No interpreter found for PyPy in virtual environments, managed installations, or search path
-        "###);
+        See [UV_LOG_DIR]/python_find.log for detailed logs
+        ");
     }
 
     // Swap the order of the Python versions
@@ -405,7 +407,7 @@ fn python_find_venv() {
 
     // Unless, `--no-system` is included
     // TODO(zanieb): Report this as a bug upstream — this should be allowed.
-    uv_snapshot!(context.filters(), context.python_find().arg("--no-system").env(EnvVars::UV_SYSTEM_PYTHON, "1"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg("--no-system").env(EnvVars::UV_SYSTEM_PYTHON, "1"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -413,10 +415,10 @@ fn python_find_venv() {
     ----- stderr -----
     error: the argument '--no-system' cannot be used with '--system'
 
-    Usage: uv python find --cache-dir [CACHE_DIR] [REQUEST]
+    Usage: uv python find --cache-dir [CACHE_DIR] --log <PATH> [REQUEST]
 
     For more information, try '--help'.
-    "###);
+    ");
 
     // We should find virtual environments from a child directory
     #[cfg(not(windows))]
@@ -540,74 +542,81 @@ fn python_find_unsupported_version() {
     let context: TestContext = TestContext::new_with_versions(&["3.12"]);
 
     // Request a low version
-    uv_snapshot!(context.filters(), context.python_find().arg("3.6"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg("3.6"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Invalid version request: Python <3.7 is not supported but 3.6 was requested.
-    "###);
+    See [UV_LOG_DIR]/python_find.log for detailed logs
+    ");
 
     // Request a low version with a patch
-    uv_snapshot!(context.filters(), context.python_find().arg("3.6.9"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg("3.6.9"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Invalid version request: Python <3.7 is not supported but 3.6.9 was requested.
-    "###);
+    See [UV_LOG_DIR]/python_find.log for detailed logs
+    ");
 
     // Request a really low version
-    uv_snapshot!(context.filters(), context.python_find().arg("2.6"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg("2.6"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Invalid version request: Python <3.7 is not supported but 2.6 was requested.
-    "###);
+    See [UV_LOG_DIR]/python_find.log for detailed logs
+    ");
 
     // Request a really low version with a patch
-    uv_snapshot!(context.filters(), context.python_find().arg("2.6.8"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg("2.6.8"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Invalid version request: Python <3.7 is not supported but 2.6.8 was requested.
-    "###);
+    See [UV_LOG_DIR]/python_find.log for detailed logs
+    ");
 
     // Request a future version
-    uv_snapshot!(context.filters(), context.python_find().arg("4.2"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg("4.2"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No interpreter found for Python 4.2 in virtual environments, managed installations, or search path
-    "###);
+    See [UV_LOG_DIR]/python_find.log for detailed logs
+    ");
 
     // Request a low version with a range
-    uv_snapshot!(context.filters(), context.python_find().arg("<3.0"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg("<3.0"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No interpreter found for Python <3.0 in virtual environments, managed installations, or search path
-    "###);
+    See [UV_LOG_DIR]/python_find.log for detailed logs
+    ");
 
     // Request free-threaded Python on unsupported version
-    uv_snapshot!(context.filters(), context.python_find().arg("3.12t"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg("3.12t"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Invalid version request: Python <3.13 does not support free-threading but 3.12t was requested.
-    "###);
+    See [UV_LOG_DIR]/python_find.log for detailed logs
+    ");
 }
 
 #[test]
@@ -631,7 +640,7 @@ fn python_find_venv_invalid() {
     // If the binaries are missing from a virtual environment, we fail
     fs_err::remove_dir_all(venv_bin_path(&context.venv)).unwrap();
 
-    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str()), @r###"
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -639,7 +648,8 @@ fn python_find_venv_invalid() {
     ----- stderr -----
     error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/python`
       Caused by: Python interpreter not found at `[VENV]/[BIN]/python`
-    "###);
+    See [UV_LOG_DIR]/python_find.log for detailed logs
+    ");
 
     // Unless the virtual environment is not active
     uv_snapshot!(context.filters(), context.python_find(), @r###"
