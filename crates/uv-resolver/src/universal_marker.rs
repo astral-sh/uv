@@ -1,7 +1,9 @@
 use std::borrow::Borrow;
+use std::str::FromStr;
 
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
+
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::{
     ExtraOperator, MarkerEnvironment, MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator,
@@ -506,7 +508,7 @@ fn encode_package_extra(package: &PackageName, extra: &ExtraName) -> ExtraName {
     // character in `package` or `extra` values. But if we know the length of
     // the package name, we can always parse each field unambiguously.
     let package_len = package.as_str().len();
-    ExtraName::new(format!("extra-{package_len}-{package}-{extra}")).unwrap()
+    ExtraName::from_owned(format!("extra-{package_len}-{package}-{extra}")).unwrap()
 }
 
 /// Encodes the given package name and its corresponding group into a valid
@@ -514,7 +516,7 @@ fn encode_package_extra(package: &PackageName, extra: &ExtraName) -> ExtraName {
 fn encode_package_group(package: &PackageName, group: &GroupName) -> ExtraName {
     // See `encode_package_extra`, the same considerations apply here.
     let package_len = package.as_str().len();
-    ExtraName::new(format!("group-{package_len}-{package}-{group}")).unwrap()
+    ExtraName::from_owned(format!("group-{package_len}-{package}-{group}")).unwrap()
 }
 
 #[derive(Debug)]
@@ -583,7 +585,7 @@ impl<'a> ParsedRawExtra<'a> {
     }
 
     fn to_conflict_item(&self) -> Result<ConflictItem, ResolveError> {
-        let package = PackageName::new(self.package().to_string()).map_err(|name_error| {
+        let package = PackageName::from_str(self.package()).map_err(|name_error| {
             ResolveError::InvalidValueInConflictMarker {
                 kind: "package",
                 name_error,
@@ -591,7 +593,7 @@ impl<'a> ParsedRawExtra<'a> {
         })?;
         match *self {
             ParsedRawExtra::Extra { extra, .. } => {
-                let extra = ExtraName::new(extra.to_string()).map_err(|name_error| {
+                let extra = ExtraName::from_str(extra).map_err(|name_error| {
                     ResolveError::InvalidValueInConflictMarker {
                         kind: "extra",
                         name_error,
@@ -600,7 +602,7 @@ impl<'a> ParsedRawExtra<'a> {
                 Ok(ConflictItem::from((package, extra)))
             }
             ParsedRawExtra::Group { group, .. } => {
-                let group = GroupName::new(group.to_string()).map_err(|name_error| {
+                let group = GroupName::from_str(group).map_err(|name_error| {
                     ResolveError::InvalidValueInConflictMarker {
                         kind: "group",
                         name_error,
@@ -760,7 +762,7 @@ mod tests {
 
     /// Shortcut for creating an extra name.
     fn create_extra(name: &str) -> ExtraName {
-        ExtraName::new(name.to_string()).unwrap()
+        ExtraName::from_str(name).unwrap()
     }
 
     /// Shortcut for creating a conflict marker from an extra name.

@@ -625,7 +625,8 @@ fn parse_extras_cursor<T: Pep508Url>(
 
         // Add the parsed extra
         extras.push(
-            ExtraName::new(buffer).expect("`ExtraName` validation should match PEP 508 parsing"),
+            ExtraName::from_str(&buffer)
+                .expect("`ExtraName` validation should match PEP 508 parsing"),
         );
         is_first_iteration = false;
     }
