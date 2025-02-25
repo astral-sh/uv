@@ -7,8 +7,6 @@ use crate::{CanonicalMarkerValueString, CanonicalMarkerValueVersion, StringVersi
 /// The marker values for a python interpreter, normally the current one
 ///
 /// <https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers>
-///
-/// Some are `(String, Version)` because we have to support version comparison
 #[allow(missing_docs, clippy::unsafe_derive_deserialize)]
 #[derive(Clone, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct MarkerEnvironment {
