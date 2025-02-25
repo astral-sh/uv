@@ -111,6 +111,11 @@ Timeout (in seconds) for HTTP requests. (default: 30 s)
 Equivalent to the `--index` command-line argument. If set, uv will use this
 space-separated list of URLs as additional indexes when searching for packages.
 
+### `UV_INDEX_PROXY_URL`
+
+Equivalent to the `--index_proxy-url` command-line argument. If set, uv will use the
+URL for this proxy in place of the index with the same name.
+
 ### `UV_INDEX_STRATEGY`
 
 Equivalent to the `--index-strategy` command-line argument.

@@ -51,7 +51,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     // Resolution should use the lowest direct version, and generate hashes.
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -133,6 +133,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -216,14 +217,14 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     // Resolution should use the highest version, and generate hashes.
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in")
-        .arg("--resolution=highest"), @r###"
+        .arg("--resolution=highest"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -305,6 +306,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -388,7 +390,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     // Resolution should use the highest version, and omit hashes.
@@ -396,7 +398,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--resolution=highest")
-        .arg("--no-generate-hashes"), @r###"
+        .arg("--no-generate-hashes"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -478,6 +480,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -561,7 +564,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     Ok(())
@@ -601,7 +604,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     // Resolution should use the lowest direct version, and generate hashes.
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -683,6 +686,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -766,7 +770,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     // Remove the `uv.toml` file.
@@ -928,7 +932,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     // Resolution should use the lowest direct version, and generate hashes.
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1010,6 +1014,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -1093,7 +1098,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     Ok(())
@@ -1125,7 +1130,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
 
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1207,6 +1212,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         default: false,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                     Index {
                         name: None,
@@ -1236,6 +1242,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -1319,7 +1326,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     // Providing an additional index URL on the command-line should be merged with the
@@ -1328,7 +1335,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--extra-index-url")
-        .arg("https://test.pypi.org/simple"), @r###"
+        .arg("https://test.pypi.org/simple"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1412,6 +1419,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                             Cli,
                         ),
                         publish_url: None,
+                        proxy_url: None,
                     },
                     Index {
                         name: None,
@@ -1441,6 +1449,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         default: false,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                     Index {
                         name: None,
@@ -1470,6 +1479,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -1553,7 +1563,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     Ok(())
@@ -1585,7 +1595,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
 
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1668,6 +1678,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
                         default: false,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 no_index: true,
@@ -1750,7 +1761,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     Ok(())
@@ -1940,7 +1951,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
 
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2022,6 +2033,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         default: false,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                     Index {
                         name: None,
@@ -2051,6 +2063,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         default: false,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -2134,14 +2147,14 @@ fn resolve_top_level() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     // But the command-line should take precedence over both.
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in")
-        .arg("--resolution=lowest-direct"), @r###"
+        .arg("--resolution=lowest-direct"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2223,6 +2236,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         default: false,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                     Index {
                         name: None,
@@ -2252,6 +2266,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         default: false,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -2335,7 +2350,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     Ok(())
@@ -2985,7 +3000,7 @@ fn resolve_tool() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.tool_install(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in")
-        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3036,6 +3051,7 @@ fn resolve_tool() -> anyhow::Result<()> {
             index: None,
             index_url: None,
             extra_index_url: None,
+            proxy_urls: None,
             no_index: None,
             find_links: None,
             index_strategy: None,
@@ -3071,6 +3087,7 @@ fn resolve_tool() -> anyhow::Result<()> {
                 no_index: false,
             },
             index_strategy: FirstIndex,
+            index_proxies: None,
             keyring_provider: Disabled,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
@@ -3103,7 +3120,7 @@ fn resolve_tool() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     Ok(())
@@ -3321,7 +3338,7 @@ fn resolve_both() -> anyhow::Result<()> {
     // Resolution should succeed, but warn that the `pip` section in `pyproject.toml` is ignored.
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3403,6 +3420,7 @@ fn resolve_both() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -3487,7 +3505,7 @@ fn resolve_both() -> anyhow::Result<()> {
 
     ----- stderr -----
     warning: Found both a `uv.toml` file and a `[tool.uv]` section in an adjacent `pyproject.toml`. The `[tool.uv]` section will be ignored in favor of the `uv.toml` file.
-    "###
+    "#
     );
 
     Ok(())
@@ -3616,7 +3634,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("--config-file")
         .arg(config.path())
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3698,6 +3716,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -3781,7 +3800,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     // Write in `pyproject.toml` schema.
@@ -3801,7 +3820,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("--config-file")
         .arg(config.path())
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3812,8 +3831,8 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `publish-url`, `trusted-publishing`, `check-url`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`, `build-backend`
-    "###
+    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `proxy-url`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `publish-url`, `trusted-publishing`, `check-url`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`, `build-backend`
+    "
     );
 
     // Write an _actual_ `pyproject.toml`.
@@ -4375,7 +4394,7 @@ fn index_priority() -> anyhow::Result<()> {
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--index-url")
-        .arg("https://cli.pypi.org/simple"), @r###"
+        .arg("https://cli.pypi.org/simple"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4459,6 +4478,7 @@ fn index_priority() -> anyhow::Result<()> {
                             Cli,
                         ),
                         publish_url: None,
+                        proxy_url: None,
                     },
                     Index {
                         name: None,
@@ -4488,6 +4508,7 @@ fn index_priority() -> anyhow::Result<()> {
                         default: false,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -4571,14 +4592,14 @@ fn index_priority() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--default-index")
-        .arg("https://cli.pypi.org/simple"), @r###"
+        .arg("https://cli.pypi.org/simple"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4662,6 +4683,7 @@ fn index_priority() -> anyhow::Result<()> {
                             Cli,
                         ),
                         publish_url: None,
+                        proxy_url: None,
                     },
                     Index {
                         name: None,
@@ -4691,6 +4713,7 @@ fn index_priority() -> anyhow::Result<()> {
                         default: false,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -4774,7 +4797,7 @@ fn index_priority() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     let config = context.temp_dir.child("uv.toml");
@@ -4787,7 +4810,7 @@ fn index_priority() -> anyhow::Result<()> {
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--default-index")
-        .arg("https://cli.pypi.org/simple"), @r###"
+        .arg("https://cli.pypi.org/simple"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4871,6 +4894,7 @@ fn index_priority() -> anyhow::Result<()> {
                             Cli,
                         ),
                         publish_url: None,
+                        proxy_url: None,
                     },
                     Index {
                         name: None,
@@ -4900,6 +4924,7 @@ fn index_priority() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -4983,7 +5008,7 @@ fn index_priority() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     // Prefer the `--index` from the CLI, but treat the index from the file as the default.
@@ -4991,7 +5016,7 @@ fn index_priority() -> anyhow::Result<()> {
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--index")
-        .arg("https://cli.pypi.org/simple"), @r###"
+        .arg("https://cli.pypi.org/simple"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5075,6 +5100,7 @@ fn index_priority() -> anyhow::Result<()> {
                             Cli,
                         ),
                         publish_url: None,
+                        proxy_url: None,
                     },
                     Index {
                         name: None,
@@ -5104,6 +5130,7 @@ fn index_priority() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -5187,7 +5214,7 @@ fn index_priority() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     let config = context.temp_dir.child("uv.toml");
@@ -5202,7 +5229,7 @@ fn index_priority() -> anyhow::Result<()> {
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--index-url")
-        .arg("https://cli.pypi.org/simple"), @r###"
+        .arg("https://cli.pypi.org/simple"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5286,6 +5313,7 @@ fn index_priority() -> anyhow::Result<()> {
                             Cli,
                         ),
                         publish_url: None,
+                        proxy_url: None,
                     },
                     Index {
                         name: None,
@@ -5315,6 +5343,7 @@ fn index_priority() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -5398,7 +5427,7 @@ fn index_priority() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     // Prefer the `--extra-index-url` from the CLI, but not as the default.
@@ -5406,7 +5435,7 @@ fn index_priority() -> anyhow::Result<()> {
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--extra-index-url")
-        .arg("https://cli.pypi.org/simple"), @r###"
+        .arg("https://cli.pypi.org/simple"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5490,6 +5519,7 @@ fn index_priority() -> anyhow::Result<()> {
                             Cli,
                         ),
                         publish_url: None,
+                        proxy_url: None,
                     },
                     Index {
                         name: None,
@@ -5519,6 +5549,7 @@ fn index_priority() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -5602,7 +5633,7 @@ fn index_priority() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     Ok(())

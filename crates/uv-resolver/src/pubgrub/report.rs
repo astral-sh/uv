@@ -916,12 +916,12 @@ impl PubGrubReportFormatter<'_> {
 
         // Add hints due to an index returning an unauthorized response.
         for index in index_locations.allowed_indexes() {
-            if index_capabilities.unauthorized(&index.proxy_or_url()) {
+            if index_capabilities.unauthorized(index.proxy_or_url()) {
                 hints.insert(PubGrubHint::UnauthorizedIndex {
                     index: index.proxy_or_url().clone(),
                 });
             }
-            if index_capabilities.forbidden(&index.proxy_or_url()) {
+            if index_capabilities.forbidden(index.proxy_or_url()) {
                 // If the index is a PyTorch index (e.g., `https://download.pytorch.org/whl/cu118`),
                 // avoid noting the lack of credentials. PyTorch returns a 403 (Forbidden) status
                 // code for any package that does not exist.

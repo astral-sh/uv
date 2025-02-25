@@ -270,7 +270,7 @@ pub(super) async fn do_safe_lock(
         LockMode::Frozen => {
             // Read the existing lockfile, but don't attempt to lock the project.
             let existing = target
-                .read()
+                .read(settings.index_proxies.as_ref())
                 .await?
                 .ok_or_else(|| ProjectError::MissingLockfile)?;
             Ok(LockResult::Unchanged(existing))
@@ -278,7 +278,7 @@ pub(super) async fn do_safe_lock(
         LockMode::Locked(interpreter) => {
             // Read the existing lockfile.
             let existing = target
-                .read()
+                .read(settings.index_proxies.as_ref())
                 .await?
                 .ok_or_else(|| ProjectError::MissingLockfile)?;
 
@@ -309,7 +309,7 @@ pub(super) async fn do_safe_lock(
         }
         LockMode::Write(interpreter) | LockMode::DryRun(interpreter) => {
             // Read the existing lockfile.
-            let existing = match target.read().await {
+            let existing = match target.read(settings.index_proxies.as_ref()).await {
                 Ok(Some(existing)) => Some(existing),
                 Ok(None) => None,
                 Err(ProjectError::Lock(err)) => {
@@ -342,7 +342,7 @@ pub(super) async fn do_safe_lock(
             // If the lockfile changed, write it to disk.
             if !matches!(mode, LockMode::DryRun(_)) {
                 if let LockResult::Changed(_, lock) = &result {
-                    target.commit(lock).await?;
+                    target.commit(lock, settings.index_proxies.as_ref()).await?;
                 }
             }
 
@@ -373,6 +373,7 @@ async fn do_lock(
     let ResolverSettingsRef {
         index_locations,
         index_strategy,
+        index_proxies: _,
         keyring_provider,
         resolution,
         prerelease,

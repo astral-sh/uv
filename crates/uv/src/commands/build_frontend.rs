@@ -203,6 +203,7 @@ async fn build_impl(
     let ResolverSettingsRef {
         index_locations,
         index_strategy,
+        index_proxies: _,
         keyring_provider,
         resolution: _,
         prerelease: _,

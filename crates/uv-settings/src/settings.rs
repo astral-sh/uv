@@ -9,7 +9,7 @@ use uv_configuration::{
     TargetTriple, TrustedHost, TrustedPublishing,
 };
 use uv_distribution_types::{
-    Index, IndexUrl, IndexUrlError, PipExtraIndex, PipFindLinks, PipIndex, ProxyUrlFragment, StaticMetadata,
+    Index, IndexUrl, IndexUrlError, PipExtraIndex, PipFindLinks, PipIndex, ProxyUrl, StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
@@ -339,7 +339,7 @@ pub struct ResolverOptions {
     pub index: Option<Vec<Index>>,
     pub index_url: Option<PipIndex>,
     pub extra_index_url: Option<Vec<PipExtraIndex>>,
-    pub proxy_urls: Option<Vec<ProxyUrlFragment>>,
+    pub proxy_urls: Option<Vec<ProxyUrl>>,
     pub no_index: Option<bool>,
     pub find_links: Option<Vec<PipFindLinks>>,
     pub index_strategy: Option<IndexStrategy>,
@@ -443,8 +443,8 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub extra_index_url: Option<Vec<PipExtraIndex>>,
-    /// TODO !@ Document
-    pub proxy_urls: Option<Vec<ProxyUrlFragment>>,
+    /// FIXME Document
+    pub proxy_urls: Option<Vec<ProxyUrl>>,
     /// Ignore all registry indexes (e.g., PyPI), instead relying on direct URL dependencies and
     /// those provided via `--find-links`.
     #[option(
@@ -1648,7 +1648,7 @@ pub struct ToolOptions {
     pub index: Option<Vec<Index>>,
     pub index_url: Option<PipIndex>,
     pub extra_index_url: Option<Vec<PipExtraIndex>>,
-    pub proxy_urls: Option<Vec<ProxyUrlFragment>>,
+    pub proxy_urls: Option<Vec<ProxyUrl>>,
     pub no_index: Option<bool>,
     pub find_links: Option<Vec<PipFindLinks>>,
     pub index_strategy: Option<IndexStrategy>,
@@ -1760,7 +1760,7 @@ pub struct OptionsWire {
     extra_index_url: Option<Vec<PipExtraIndex>>,
     no_index: Option<bool>,
     find_links: Option<Vec<PipFindLinks>>,
-    proxy_url: Option<Vec<ProxyUrlFragment>>,
+    proxy_url: Option<Vec<ProxyUrl>>,
     index_strategy: Option<IndexStrategy>,
     keyring_provider: Option<KeyringProviderType>,
     allow_insecure_host: Option<Vec<TrustedHost>>,

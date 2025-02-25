@@ -639,7 +639,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // in any `--with` requirements.
                 if !isolated && !requirements.is_empty() {
                     lock = LockTarget::from(project.workspace())
-                        .read()
+                        .read(settings.index_proxies.as_ref())
                         .await
                         .ok()
                         .flatten()

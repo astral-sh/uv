@@ -190,6 +190,7 @@ pub(crate) async fn tree(
             let ResolverSettings {
                 index_locations: _,
                 index_strategy: _,
+                index_proxies: _,
                 keyring_provider,
                 resolution: _,
                 prerelease: _,

@@ -191,7 +191,7 @@ impl From<IndexArgs> for PipOptions {
             index,
             index_url,
             extra_index_url,
-            proxy_url: _,
+            index_proxy_url: _,
             no_index,
             find_links,
         } = args;
@@ -256,29 +256,6 @@ pub fn resolver_options(
         no_binary_package,
     } = build_args;
 
-    // let mut maybe_index = index_args
-    //     .default_index
-    //     .and_then(Maybe::into_option)
-    //     .map(|default_index| vec![default_index])
-    //     .combine(
-    //         index_args
-    //             .index
-    //             .map(|index| index.into_iter().filter_map(Maybe::into_option).collect()),
-    //     );
-
-    // // Replace any proxied index with its proxy.
-    // if let Some(indexes) = &mut maybe_index {
-    //     if let Some(proxies) = index_args.proxy_url {
-    //         let proxies: Vec<ProxyUrl> = proxies.iter().filter_map(|proxy| Maybe::into_option(proxy.clone())).collect();
-    //         for index in indexes.iter_mut() {
-    //             if let Some(proxy) = proxies.iter().find(|proxy| index.name.as_ref().map_or(false, |name| name == &proxy.name)) {
-    //                 index.url = proxy.url.clone();
-    //                 index.origin = Some(Origin::Cli);
-    //             }
-    //         }
-    //     }
-    // }
-
     ResolverOptions {
         index: index_args.combined_index(),
         index_url: index_args.index_url.and_then(Maybe::into_option),
@@ -289,7 +266,7 @@ pub fn resolver_options(
                 .collect()
         }),
         proxy_urls: index_args
-            .proxy_url
+            .index_proxy_url
             .map(|proxies| proxies.into_iter().filter_map(Maybe::into_option).collect()),
         no_index: if index_args.no_index {
             Some(true)
@@ -377,7 +354,7 @@ pub fn resolver_installer_options(
                 .collect()
         }),
         proxy_urls: index_args
-            .proxy_url
+            .index_proxy_url
             .map(|proxies| proxies.into_iter().filter_map(Maybe::into_option).collect()),
         no_index: if index_args.no_index {
             Some(true)

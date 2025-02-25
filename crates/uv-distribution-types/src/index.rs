@@ -8,7 +8,7 @@ use uv_auth::Credentials;
 
 use crate::index_name::{IndexName, IndexNameError};
 use crate::origin::Origin;
-use crate::{IndexUrl, IndexUrlError, PROXY_URL_PATTERN};
+use crate::{IndexUrl, IndexUrlError};
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -82,9 +82,7 @@ pub struct Index {
     /// publish-url = "https://upload.pypi.org/legacy/"
     /// ```
     pub publish_url: Option<Url>,
-    /// TODO !@: Document.
-    pub proxy_template: Option<String>,
-    /// TODO !@: Document
+    /// FIXME Document
     pub proxy_url: Option<IndexUrl>,
 }
 
@@ -110,7 +108,6 @@ impl Index {
             default: true,
             origin: None,
             publish_url: None,
-            proxy_template: None,
             proxy_url: None,
         }
     }
@@ -124,7 +121,6 @@ impl Index {
             default: false,
             origin: None,
             publish_url: None,
-            proxy_template: None,
             proxy_url: None,
         }
     }
@@ -138,7 +134,6 @@ impl Index {
             default: false,
             origin: None,
             publish_url: None,
-            proxy_template: None,
             proxy_url: None,
         }
     }
@@ -158,7 +153,7 @@ impl Index {
     /// Return the [`IndexUrl`] of the index, preferring a proxy if it exists.
     pub fn proxy_or_url(&self) -> &IndexUrl {
         if let Some(ref proxy_url) = self.proxy_url {
-            &proxy_url
+            proxy_url
         } else {
             &self.url
         }
@@ -208,21 +203,6 @@ impl Index {
         Credentials::from_url(self.url.url())
     }
 
-    /// TODO !@ Document
-    pub fn apply_proxy_template(
-        &mut self,
-        proxy_url_replacer: &str,
-    ) -> Result<(), ProxyIndexSourceError> {
-        self.proxy_url = Some(self
-            .proxy_template
-            .as_ref()
-            .map(|template| template.replace(PROXY_URL_PATTERN, proxy_url_replacer))
-            .map(|url| IndexUrl::from_str(&url))
-            .transpose()?
-            .ok_or(ProxyIndexSourceError::MissingTemplate)?);
-        Ok(())
-    }
-
     /// Resolve the index relative to the given root directory.
     pub fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
         if let IndexUrl::Path(ref url) = self.url {
@@ -250,7 +230,6 @@ impl FromStr for Index {
                     default: false,
                     origin: None,
                     publish_url: None,
-                    proxy_template: None,
                     proxy_url: None,
                 });
             }
@@ -265,7 +244,6 @@ impl FromStr for Index {
             default: false,
             origin: None,
             publish_url: None,
-            proxy_template: None,
             proxy_url: None,
         })
     }
@@ -282,24 +260,47 @@ pub enum IndexSourceError {
     EmptyName,
 }
 
-/// TODO !@: Document
 #[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub struct ProxyUrlFragment {
-    pub name: IndexName,
-    pub url_fragment: String,
+pub struct ProxyWithCanonicalUrl {
+    pub url: IndexUrl,
+    pub url_base: String,
+    pub canonical_url: IndexUrl,
+    pub raw_canonical_url: String,
 }
 
-impl FromStr for ProxyUrlFragment {
+impl ProxyWithCanonicalUrl {
+    pub fn new(url: IndexUrl, canonical_url: IndexUrl) -> Self {
+        let mut raw_url = url.url().clone();
+        raw_url.set_path("");
+        let raw_canonical_url = canonical_url.url().to_string();
+        Self {
+            url,
+            url_base: raw_url.to_string(),
+            canonical_url,
+            raw_canonical_url,
+        }
+    }
+}
+
+/// FIXME Document
+#[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct ProxyUrl {
+    pub name: IndexName,
+    pub url: String,
+}
+
+impl FromStr for ProxyUrl {
     type Err = ProxyIndexSourceError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Some((name, url_fragment)) = s.split_once('=') {
-            // TODO !@ Check this case
-            //assert !name.chars().any(|c| c == ':') {
-
+        if let Some((name, url)) = s.split_once('=') {
             let name = IndexName::from_str(name)?;
-            Ok(Self { name, url_fragment: url_fragment.to_string() })
+            Ok(Self {
+                name,
+                url: url.to_string(),
+            })
         } else {
             Err(ProxyIndexSourceError::MissingName)
         }
@@ -310,11 +311,9 @@ impl FromStr for ProxyUrlFragment {
 #[derive(Error, Debug)]
 pub enum ProxyIndexSourceError {
     #[error(transparent)]
-    Url(#[from] IndexUrlError),
-    #[error(transparent)]
     IndexName(#[from] IndexNameError),
     #[error("Proxy index requires a name, but the name was empty")]
     MissingName,
-    #[error("Proxy index requires a template in pyproject.toml, but there was none")]
-    MissingTemplate,
+    // #[error(transparent)]
+    // UrlParse(#[from] url::ParseError),
 }

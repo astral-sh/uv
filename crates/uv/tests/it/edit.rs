@@ -10207,13 +10207,13 @@ fn add_with_proxy_url() -> anyhow::Result<()> {
         [[tool.uv.index]]
         name = "alpha"
         url = "https://not-real.astral.sh"
-        proxy-template = "https://<omitted>/basic-auth/simple"
+        default = true
     "#})?;
 
     uv_snapshot!(context.filters(), context.add()
         .arg("anyio>=4.3.0")
-        .arg("--proxy-url")
-        .arg("alpha=public:heron@pypi-proxy.fly.dev"), @r"
+        .arg("--index-proxy-url")
+        .arg("alpha=https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10251,10 +10251,32 @@ fn add_with_proxy_url() -> anyhow::Result<()> {
         [[tool.uv.index]]
         name = "alpha"
         url = "https://not-real.astral.sh"
-        proxy-template = "https://<omitted>/basic-auth/simple"
+        default = true
         "#
         );
     });
+
+    fs_err::remove_dir_all(context.temp_dir.join(".venv"))?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--index-proxy-url")
+        .arg("alpha=https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "
+    );
 
     context.assert_command("import anyio").success();
     Ok(())
