@@ -585,20 +585,23 @@ url = "https://download.pytorch.org/whl/cu124"
 
 ## Development dependencies
 
+uv uses the `[dependency-groups]` table (as defined in [PEP 735](https://peps.python.org/pep-0735/))
+for declaration of development dependencies.
+
 Unlike optional dependencies, development dependencies are local-only and will _not_ be included in
 the project requirements when published to PyPI or other indexes. As such, development dependencies
 are not included in the `[project]` table.
 
-Development dependencies can have entries in `tool.uv.sources` the same as normal dependencies.
+### "Dev" group
 
-To add a development dependency, use the `--dev` flag:
+uv has special handling for the "dev" dependency group. To add a development dependency, use the
+`--dev` flag:
 
 ```console
 $ uv add --dev pytest
 ```
 
-uv uses the `[dependency-groups]` table (as defined in [PEP 735](https://peps.python.org/pep-0735/))
-for declaration of development dependencies. The above command will create a `dev` group:
+which creates a `dev` group in the project's config:
 
 ```toml title="pyproject.toml"
 [dependency-groups]
@@ -607,55 +610,12 @@ dev = [
 ]
 ```
 
-The `dev` group is special-cased; there are `--dev`, `--only-dev`, and `--no-dev` flags to toggle
-inclusion or exclusion of its dependencies. See `--no-default-groups` to disable all default groups
-instead. Additionally, the `dev` group is [synced by default](#default-groups).
+### Default group(s)
 
-### Dependency groups
+By default, uv includes the `dev` dependency group in the environment, e.g. during `uv run` or
+`uv sync`.
 
-Development dependencies can be divided into multiple groups, using the `--group` flag.
-
-For example, to add a development dependency in the `lint` group:
-
-```console
-$ uv add --group lint ruff
-```
-
-Which results in the following `[dependency-groups]` definition:
-
-```toml title="pyproject.toml"
-[dependency-groups]
-dev = [
-  "pytest"
-]
-lint = [
-  "ruff"
-]
-```
-
-Once groups are defined, the `--all-groups`, `--no-default-groups`, `--group`, `--only-group`, and
-`--no-group` options can be used to include or exclude their dependencies.
-
-!!! tip
-
-    The `--dev`, `--only-dev`, and `--no-dev` flags are equivalent to `--group dev`,
-    `--only-group dev`, and `--no-group dev` respectively.
-
-uv requires that all dependency groups are compatible with each other and resolves all groups
-together when creating the lockfile.
-
-If dependencies declared in one group are not compatible with those in another group, uv will fail
-to resolve the requirements of the project with an error.
-
-!!! note
-
-    If you have dependency groups that conflict with one another, resolution will fail
-    unless you explicitly [declare them as conflicting](./config.md#conflicting-dependencies).
-
-### Default groups
-
-By default, uv includes the `dev` dependency group in the environment (e.g., during `uv run` or
-`uv sync`). The default groups to include can be changed using the `tool.uv.default-groups` setting.
+The default groups to include can be changed using the `tool.uv.default-groups` setting:
 
 ```toml title="pyproject.toml"
 [tool.uv]
@@ -665,7 +625,69 @@ default-groups = ["dev", "foo"]
 !!! tip
 
     To disable this behaviour during `uv run` or `uv sync`, use `--no-default-groups`.
-    To exclude a specific default group, use `--no-group <name>`.
+
+### Additional groups
+
+Support for dependency groups extends beyond the `dev` group:
+
+```toml title="pyproject.toml"
+[dependency-groups]
+dev = [
+  {include-group = "lint"},
+  "pytest",
+]
+lint = [
+  "ruff"
+]
+```
+
+uv requires that all dependency groups are compatible with each other and resolves all groups
+together when creating the lockfile.
+
+If dependencies declared in one group are not compatible with those in another group, uv will fail
+to resolve the requirements of the project with an error unless you explicitly
+[declare them as conflicting](./config.md#conflicting-dependencies).
+
+### CLI Options
+
+Development dependencies added from the CLI can be directed to a particular group using the
+`--group` flag:
+
+```console
+$ uv add --group ci tox pip-audit
+```
+
+Which results in:
+
+```toml title="pyproject.toml"
+[dependency-groups]
+ci = [
+  "pip-audit",
+  "tox",
+]
+dev = [
+  # NOTE: include-group is set by editing the file, not with `uv add` (see #9054)
+  {include-group = "lint"},
+  "pytest",
+]
+lint = [
+  "ruff"
+]
+```
+
+The CLI has multiple dependency group related options including:
+
+- `--group <group>`
+- `--only-group <group>`
+- `--no-group <group>`
+- `--dev`, `--only-dev`, and `--no-dev` which are aliases for the `dev` group and the above commands
+- `--all-groups`
+- `--no-default-groups`
+
+See [`uv run --help`][uv-run] or [`uv sync --help`][uv-sync] for an explanation of the options.
+
+[uv-run]: https://docs.astral.sh/uv/reference/cli/#uv-run
+[uv-sync]: https://docs.astral.sh/uv/reference/cli/#uv-sync
 
 ### Legacy `dev-dependencies`
 
