@@ -27,8 +27,8 @@ use uv_distribution_filename::{
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
     Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations, IndexUrl, Name,
-    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
-    RemoteSource, ResolvedDist, StaticMetadata, ToUrlError, UrlString,
+    PathBuiltDist, PathSourceDist, ProxyWithCanonicalUrl, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RemoteSource, ResolvedDist, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{relative_to, PortablePath, PortablePathBuf};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -717,7 +717,10 @@ impl Lock {
     }
 
     /// Returns the TOML representation of this lockfile.
-    pub fn to_toml(&self) -> Result<String, toml_edit::ser::Error> {
+    pub fn to_toml(
+        &self,
+        proxies: Option<&Vec<ProxyWithCanonicalUrl>>,
+    ) -> Result<String, toml_edit::ser::Error> {
         // We construct a TOML document manually instead of going through Serde to enable
         // the use of inline tables.
         let mut doc = toml_edit::DocumentMut::new();
@@ -965,11 +968,39 @@ impl Lock {
 
         let mut packages = ArrayOfTables::new();
         for dist in &self.packages {
+            let dist = match proxies.as_ref().and_then(|proxies| {
+                proxies.iter().find(|p| {
+                    dist.registry_source_index_url()
+                        .is_ok_and(|url| url.is_some_and(|url| url == p.url))
+                })
+            }) {
+                Some(proxy) => &dist.with_canonical_urls(proxy).expect("FIXME"),
+                None => dist,
+            };
             packages.push(dist.to_toml(&self.requires_python, &dist_count_by_name)?);
         }
 
         doc.insert("package", Item::ArrayOfTables(packages));
         Ok(doc.to_string())
+    }
+
+    /// FIXME Document
+    pub fn with_proxy_urls(
+        mut self,
+        proxies: Option<&Vec<ProxyWithCanonicalUrl>>,
+    ) -> Result<Self, url::ParseError> {
+        for package in &mut self.packages {
+            if let Some(proxy) = proxies.as_ref().and_then(|proxies| {
+                proxies.iter().find(|p| {
+                    package
+                        .registry_source_index_url()
+                        .is_ok_and(|url| url.is_some_and(|url| url == p.url))
+                })
+            }) {
+                package.set_proxy_urls(proxy)?;
+            };
+        }
+        Ok(self)
     }
 
     /// Returns the package with the given name. If there are multiple
@@ -1911,6 +1942,39 @@ pub struct Package {
 }
 
 impl Package {
+    /// FIXME Document
+    pub fn with_canonical_urls(
+        &self,
+        proxy: &ProxyWithCanonicalUrl,
+    ) -> Result<Self, url::ParseError> {
+        let mut package = self.clone();
+        package.id = package.id.with_replaced_url(&proxy.raw_canonical_url);
+        package.sdist = package
+            .sdist
+            .map(|sdist| sdist.with_replaced_url(&proxy.url_base, &proxy.raw_canonical_url));
+        package.wheels = package
+            .wheels
+            .iter()
+            .map(|w| w.with_canonical_url(proxy))
+            .collect();
+        Ok(package)
+    }
+
+    /// FIXME Document
+    pub fn set_proxy_urls(&mut self, proxy: &ProxyWithCanonicalUrl) -> Result<(), url::ParseError> {
+        self.id = self.id.with_replaced_url(&proxy.url_base);
+        self.sdist = self
+            .sdist
+            .as_ref()
+            .map(|sdist| sdist.with_replaced_url(&proxy.raw_canonical_url, &proxy.url_base));
+        self.wheels = self
+            .wheels
+            .iter()
+            .map(|w| w.with_canonical_url(proxy))
+            .collect();
+        Ok(())
+    }
+
     fn from_annotated_dist(
         annotated_dist: &AnnotatedDist,
         fork_markers: Vec<UniversalMarker>,
@@ -2723,6 +2787,20 @@ impl Package {
         }
     }
 
+    /// Returns the [`IndexUrl`] for the package, if it is a registry source url
+    /// and not a path.
+    pub fn registry_source_index_url(&self) -> Result<Option<IndexUrl>, LockError> {
+        match &self.id.source {
+            Source::Registry(RegistrySource::Url(url)) => {
+                let index = IndexUrl::from(VerbatimUrl::from_url(
+                    url.to_url().map_err(LockErrorKind::InvalidUrl)?,
+                ));
+                Ok(Some(index))
+            }
+            _ => Ok(None),
+        }
+    }
+
     /// Returns all the hashes associated with this [`Package`].
     fn hashes(&self) -> HashDigests {
         let mut hashes = Vec::with_capacity(
@@ -2910,6 +2988,16 @@ impl PackageId {
             }
             self.source.to_toml(table);
         }
+    }
+
+    /// FIXME Document
+    fn with_replaced_url(&self, new_url: &str) -> Self {
+        let mut id = self.clone();
+        if let Source::Registry(RegistrySource::Url(..)) = id.source {
+            let new_url = UrlString::new(SmallString::from(new_url));
+            id.source = Source::Registry(RegistrySource::Url(new_url));
+        };
+        id
     }
 }
 
@@ -3575,6 +3663,21 @@ impl SourceDist {
             SourceDist::Path { metadata, .. } => metadata.size,
         }
     }
+
+    /// FIXME Document
+    fn with_replaced_url(&self, old_url: &str, new_url: &str) -> Self {
+        let dist = self.clone();
+        match self {
+            Self::Url { url, metadata } => {
+                let url = UrlString::new(url.base_str().replace(old_url, new_url).into());
+                Self::Url {
+                    url,
+                    metadata: metadata.clone(),
+                }
+            }
+            _ => dist,
+        }
+    }
 }
 
 impl SourceDist {
@@ -4078,6 +4181,25 @@ impl Wheel {
                     index,
                 })
             }
+        }
+    }
+
+    /// FIXME Document
+    fn with_canonical_url(&self, proxy: &ProxyWithCanonicalUrl) -> Self {
+        let dist = self.clone();
+        match &self.url {
+            WheelWireSource::Url { url } => {
+                let url = UrlString::new(
+                    url.base_str()
+                        .replace(&proxy.url_base, &proxy.raw_canonical_url)
+                        .into(),
+                );
+                Self {
+                    url: WheelWireSource::Url { url },
+                    ..dist
+                }
+            }
+            _ => dist,
         }
     }
 }

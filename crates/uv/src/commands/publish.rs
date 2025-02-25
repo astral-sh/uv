@@ -91,7 +91,6 @@ pub(crate) async fn publish(
         let index_urls = IndexLocations::new(
             vec![Index::from_index_url(index_url.clone())],
             Vec::new(),
-            &Vec::new(),
             false,
         )
         .index_urls();

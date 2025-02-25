@@ -15,7 +15,7 @@ use uv_configuration::{
     ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{
-    Index, IndexUrl, Origin, PipExtraIndex, PipFindLinks, PipIndex, ProxyUrlFragment,
+    Index, IndexUrl, Origin, PipExtraIndex, PipFindLinks, PipIndex, ProxyUrl,
 };
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::Requirement;
@@ -904,12 +904,12 @@ fn parse_default_index(input: &str) -> Result<Maybe<Index>, String> {
     }
 }
 
-/// Parse a `--proxy-url` argument into an [`ProxyUrl`].
-fn parse_proxy_url(input: &str) -> Result<Maybe<ProxyUrlFragment>, String> {
+/// Parse a `--index-proxy-url` argument into an [`ProxyUrl`].
+fn parse_index_proxy_url(input: &str) -> Result<Maybe<ProxyUrl>, String> {
     if input.is_empty() {
         Ok(Maybe::None)
     } else {
-        match ProxyUrlFragment::from_str(input) {
+        match ProxyUrl::from_str(input) {
             Ok(proxy_url) => Ok(Maybe::Some(proxy_url)),
             Err(err) => Err(err.to_string()),
         }
@@ -4753,16 +4753,9 @@ pub struct IndexArgs {
     #[arg(long, env = EnvVars::UV_EXTRA_INDEX_URL, value_delimiter = ' ', value_parser = parse_extra_index_url, help_heading = "Index options")]
     pub extra_index_url: Option<Vec<Maybe<PipExtraIndex>>>,
 
-    /// The URLs to use when resolving dependencies, in addition to the default index.
-    ///
-    /// Accepts either a repository compliant with PEP 503 (the simple repository API), or a local
-    /// directory laid out in the same format.
-    ///
-    /// All indexes provided via this flag take priority over the index specified by
-    /// `--default-index` (which defaults to PyPI). When multiple `--index` flags are provided,
-    /// earlier values take priority.
-    #[arg(long, env = EnvVars::UV_PRIVATE_PROXY_URL, value_delimiter = ' ', value_parser = parse_proxy_url, help_heading = "Index options")]
-    pub proxy_url: Option<Vec<Maybe<ProxyUrlFragment>>>,
+    /// FIXME Document
+    #[arg(long, env = EnvVars::UV_INDEX_PROXY_URL, value_delimiter = ' ', value_parser = parse_index_proxy_url, help_heading = "Index options")]
+    pub index_proxy_url: Option<Vec<Maybe<ProxyUrl>>>,
 
     /// Locations to search for candidate distributions, in addition to those found in the registry
     /// indexes.

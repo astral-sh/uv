@@ -221,12 +221,7 @@ impl LoweredRequirement {
                                 .find(|Index { name, .. }| {
                                     name.as_ref().is_some_and(|name| *name == index)
                                 })
-                                .map(
-                                    |Index {
-                                         url: index,
-                                         ..
-                                     }| index.clone(),
-                                )
+                                .map(|Index { url: index, .. }| index.clone())
                             else {
                                 return Err(LoweringError::MissingIndex(
                                     requirement.name.clone(),
@@ -447,12 +442,7 @@ impl LoweredRequirement {
                                 .find(|Index { name, .. }| {
                                     name.as_ref().is_some_and(|name| *name == index)
                                 })
-                                .map(
-                                    |Index {
-                                         url: index,
-                                         ..
-                                     }| index.clone(),
-                                )
+                                .map(|Index { url: index, .. }| index.clone())
                             else {
                                 return Err(LoweringError::MissingIndex(
                                     requirement.name.clone(),
