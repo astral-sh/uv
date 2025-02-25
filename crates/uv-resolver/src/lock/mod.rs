@@ -43,6 +43,7 @@ use uv_pypi_types::{
     redact_credentials, ConflictPackage, Conflicts, HashDigest, HashDigests, ParsedArchiveUrl,
     ParsedGitUrl, Requirement, RequirementSource,
 };
+use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::WorkspaceMember;
 
@@ -2395,7 +2396,7 @@ impl Package {
                 let ext = SourceDistExtension::from_path(filename.as_ref())?;
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
-                    filename: filename.to_string(),
+                    filename: SmallString::from(filename),
                     hashes: sdist.hash().map_or(HashDigests::empty(), |hash| {
                         HashDigests::from(hash.0.clone())
                     }),
@@ -2446,7 +2447,7 @@ impl Package {
                 let ext = SourceDistExtension::from_path(filename.as_ref())?;
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
-                    filename: filename.to_string(),
+                    filename: SmallString::from(filename),
                     hashes: sdist.hash().map_or(HashDigests::empty(), |hash| {
                         HashDigests::from(hash.0.clone())
                     }),
@@ -4027,7 +4028,7 @@ impl Wheel {
                 };
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
-                    filename: filename.to_string(),
+                    filename: SmallString::from(filename.to_string()),
                     hashes: self.hash.iter().map(|h| h.0.clone()).collect(),
                     requires_python: None,
                     size: self.size,
@@ -4059,7 +4060,7 @@ impl Wheel {
                     .map_err(|()| LockErrorKind::PathToUrl)?;
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
-                    filename: filename.to_string(),
+                    filename: SmallString::from(filename.to_string()),
                     hashes: self.hash.iter().map(|h| h.0.clone()).collect(),
                     requires_python: None,
                     size: self.size,

@@ -14,6 +14,12 @@ use tokio::sync::Semaphore;
 use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
+use crate::base_client::{BaseClientBuilder, ExtraMiddleware};
+use crate::cached_client::CacheControl;
+use crate::html::SimpleHtml;
+use crate::remote_metadata::wheel_metadata_from_remote_zip;
+use crate::rkyvutil::OwnedArchive;
+use crate::{BaseClient, CachedClient, CachedClientError, Error, ErrorKind};
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
@@ -27,13 +33,7 @@ use uv_pep440::Version;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
 use uv_pypi_types::{ResolutionMetadata, SimpleJson};
-
-use crate::base_client::{BaseClientBuilder, ExtraMiddleware};
-use crate::cached_client::CacheControl;
-use crate::html::SimpleHtml;
-use crate::remote_metadata::wheel_metadata_from_remote_zip;
-use crate::rkyvutil::OwnedArchive;
-use crate::{BaseClient, CachedClient, CachedClientError, Error, ErrorKind};
+use uv_small_str::SmallString;
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -894,10 +894,12 @@ impl SimpleMetadata {
     fn from_files(files: Vec<uv_pypi_types::File>, package_name: &PackageName, base: &Url) -> Self {
         let mut map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
 
+        // Convert to a reference-counted string.
+        let base = SmallString::from(base.as_str());
+
         // Group the distributions by version and kind
         for file in files {
-            let Some(filename) =
-                DistFilename::try_from_filename(file.filename.as_str(), package_name)
+            let Some(filename) = DistFilename::try_from_filename(&file.filename, package_name)
             else {
                 warn!("Skipping file for {package_name}: {}", file.filename);
                 continue;
@@ -906,7 +908,7 @@ impl SimpleMetadata {
                 DistFilename::SourceDistFilename(ref inner) => &inner.version,
                 DistFilename::WheelFilename(ref inner) => &inner.version,
             };
-            let file = match File::try_from(file, base) {
+            let file = match File::try_from(file, &base) {
                 Ok(file) => file,
                 Err(err) => {
                     // Ignore files with unparsable version specifiers.

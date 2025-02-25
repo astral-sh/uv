@@ -40,10 +40,12 @@ fn sorted_simple_json_files<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<File>
 pub struct File {
     // PEP 714-renamed field, followed by PEP 691-compliant field, followed by non-PEP 691-compliant
     // alias used by PyPI.
+    //
+    // TODO(charlie): Use a single value here and move this into the deserializer, to save space.
     pub core_metadata: Option<CoreMetadata>,
     pub dist_info_metadata: Option<CoreMetadata>,
     pub data_dist_info_metadata: Option<CoreMetadata>,
-    pub filename: String,
+    pub filename: SmallString,
     pub hashes: Hashes,
     /// There are a number of invalid specifiers on PyPI, so we first try to parse it into a
     /// [`VersionSpecifiers`] according to spec (PEP 440), then a [`LenientVersionSpecifiers`] with
@@ -53,7 +55,7 @@ pub struct File {
     pub requires_python: Option<Result<VersionSpecifiers, VersionSpecifiersParseError>>,
     pub size: Option<u64>,
     pub upload_time: Option<Timestamp>,
-    pub url: String,
+    pub url: SmallString,
     pub yanked: Option<Box<Yanked>>,
 }
 
