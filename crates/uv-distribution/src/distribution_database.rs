@@ -527,7 +527,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         };
 
         // Create an entry for the HTTP cache.
-        let http_entry = wheel_entry.with_file(format!("{}.http", cache_digest(&filename.stem())));
+        let http_entry = wheel_entry.with_file(format!("{}.http", cache_digest(filename)));
 
         let download = |response: reqwest::Response| {
             async {
@@ -660,7 +660,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         };
 
         // Create an entry for the HTTP cache.
-        let http_entry = wheel_entry.with_file(format!("{}.http", cache_digest(&filename.stem())));
+        let http_entry = wheel_entry.with_file(format!("{}.http", cache_digest(filename)));
 
         let download = |response: reqwest::Response| {
             async {
@@ -825,8 +825,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let modified = Timestamp::from_path(path).map_err(Error::CacheRead)?;
 
         // Attempt to read the archive pointer from the cache.
-        let pointer_entry =
-            wheel_entry.with_file(format!("{}.rev", cache_digest(&filename.stem())));
+        let pointer_entry = wheel_entry.with_file(format!("{}.rev", cache_digest(filename)));
         let pointer = LocalArchivePointer::read_from(&pointer_entry)?;
 
         // Extract the archive from the pointer.

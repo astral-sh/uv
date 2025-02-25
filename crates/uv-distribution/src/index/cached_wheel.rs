@@ -194,7 +194,7 @@ impl Hashed for CachedWheel {
     }
 }
 
-/// Returns `true` if a string is a viable hexadecimal cache digest (e.g., `1a7c8ade9`).
+/// Returns `true` if a string is a viable hexadecimal cache digest (e.g., `0aea8e0d2045fe72`).
 fn looks_like_cache_digest(s: &str) -> bool {
-    s.bytes().all(|c| matches!(c, b'a'..=b'z' | b'0'..=b'9'))
+    s.bytes().len() == 16 && s.bytes().all(|c| matches!(c, b'a'..=b'z' | b'0'..=b'9'))
 }
