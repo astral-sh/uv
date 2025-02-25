@@ -115,6 +115,7 @@ flate2 = { workspace = true, default-features = false }
 ignore = { version = "0.4.23" }
 indoc = { workspace = true }
 insta = { version = "1.40.0", features = ["filters", "json"] }
+portable-pty = "0.9.0"
 predicates = { version = "3.1.2" }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"], default-features = false }

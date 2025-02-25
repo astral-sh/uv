@@ -1,4 +1,4 @@
-use std::io::Cursor;
+use std::io::{Cursor, Read};
 use std::process::Command;
 
 use anyhow::Result;
@@ -9096,4 +9096,69 @@ fn unsupported_git_scheme() {
     ^^^^^^^^^^^^^^^^^
     "###
     );
+}
+
+/* This is a regression test for a bug where Ctrl-C'ing the installation
+confirmation prompt would cause a crash due to the handling of Ctrl-C and the
+resulting SIGINT.  */
+#[test]
+fn ctrl_c_install_confirmation_prompt() -> Result<()> {
+    const EXPECTED_PROMPT: &str = "? `pyproject.toml` looks like a local metadata file but was passed as a package name. Did you mean `-r pyproject.toml`? [y/n] › yes";
+
+    let pty_sys = portable_pty::native_pty_system();
+
+    let pair = pty_sys.openpty(portable_pty::PtySize::default())?;
+
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.touch()?;
+
+    let mut cmd = context.pip_install();
+    cmd.arg("pyproject.toml");
+    cmd.args(["--color", "never"]); // ANSI escapes make the expectations harder to read
+
+    let mut argv = Vec::new();
+
+    argv.push(cmd.get_program().into());
+    argv.extend(cmd.get_args().map(Into::into));
+
+    let mut cmdbuild = portable_pty::CommandBuilder::from_argv(argv);
+
+    for (key, value) in cmd.get_envs() {
+        match value {
+            Some(value) => {
+                cmdbuild.env(key, value);
+            }
+            None => {
+                cmdbuild.env_remove(key);
+            }
+        }
+    }
+
+    match cmd.get_current_dir() {
+        Some(cwd) => cmdbuild.cwd(cwd),
+        None => cmdbuild.clear_cwd(),
+    };
+
+    let mut child = pair.slave.spawn_command(cmdbuild)?;
+    let mut reader = pair.master.try_clone_reader()?;
+    let mut writer = pair.master.take_writer()?;
+
+    let mut buffer = [0u8; EXPECTED_PROMPT.len()];
+    reader.read_exact(&mut buffer)?;
+    let output = String::from_utf8_lossy(&buffer).to_string();
+
+    assert_eq!(output, EXPECTED_PROMPT);
+
+    // 0x03 = ETX
+    writer.write_all(&[0x03])?;
+    writer.flush()?;
+
+    let exit_status = child.wait()?;
+
+    let expected_exit_code = if cfg!(windows) { 0xC000_013A_u32 } else { 130 };
+    assert_eq!(exit_status.exit_code(), expected_exit_code);
+
+    Ok(())
 }
