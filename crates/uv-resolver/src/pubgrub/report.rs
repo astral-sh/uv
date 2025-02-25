@@ -1666,7 +1666,7 @@ impl std::fmt::Display for PubGrubHint {
                         ":".bold(),
                         "MACOSX_DEPLOYMENT_TARGET".cyan(),
                     ))
-                    .unwrap_or(String::from(""));
+                    .unwrap_or(String::new());
                 let formatted_tags = tags
                     .iter()
                     .map(|tag| format!("`{}`", tag.cyan()))
