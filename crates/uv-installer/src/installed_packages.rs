@@ -1,16 +1,17 @@
 use std::collections::BTreeSet;
 use std::iter::Flatten;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use same_file::is_same_file;
 use tracing::{debug, trace};
 use url::Url;
 
 use uv_distribution_types::{
-    Diagnostic, InstalledDirectUrlDist, InstalledDist, Name, NameRequirementSpecification,
-    UnresolvedRequirement, UnresolvedRequirementSpecification,
+    Diagnostic, InstalledDirectUrlDist, InstalledDist, InstalledEggInfoDirectory, Name,
+    NameRequirementSpecification, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -112,58 +113,13 @@ impl InstalledPackages {
                 let idx = distributions.len();
 
                 // Ignore exact duplicate and log problematic duplications.
-                if let Some(existing) = by_name
-                    .get(dist_info.name())
-                    .into_iter()
-                    .flatten()
-                    .find_map(|dist_id| distributions[*dist_id].as_ref())
-                {
-                    // Ignore duplicate paths in `sys.path`
-                    if *existing == dist_info {
-                        continue;
-                    }
-
-                    // egg-info directories are special: We may see them twice, once as dist-info
-                    // directory, and then again as egg-info directory in a subdirectory of the
-                    // package of the same name, linked from the `sys.path` entry added by the
-                    // editable. If they both point to the same path, we want to only consider the
-                    // dist-info that already covers the package.
-                    if let InstalledDist::EggInfoDirectory(egg_info) = &dist_info {
-                        if let InstalledDist::Url(InstalledDirectUrlDist { url, .. }) = existing {
-                            if (Some(url.path().to_string()))
-                                == (egg_info
-                                    .base_path
-                                    .as_ref()
-                                    .map(|path| path.display().to_string()))
-                            {
-                                debug!(
-                                    "Ignoring already processed egg-info at: `{}`",
-                                    path.user_display()
-                                );
-                                continue;
-                            }
-                        }
-                    }
-
-                    if existing.path().parent() == dist_info.path().parent() {
-                        // It can be valid to shadow packages, but two different distributions for the
-                        // same package name in the same directory should never happen, see e.g.
-                        // https://github.com/astral-sh/uv/issues/11648. In this case, it is not clear
-                        // of which version the module that Python will pick up is. We must keep both
-                        // to remove both.
-                        debug!(
-                            "The package `{}` has multiple installed distributions:\n\
-                              - version {} at `{}`\n\
-                              - version {} at `{}`",
-                            dist_info.name(),
-                            existing.version(),
-                            existing.path().user_display(),
-                            dist_info.version(),
-                            dist_info.path().user_display(),
-                        );
-                    }
-
-                    // We can't skip duplicate distributions as we must uninstall them
+                if Self::is_duplicate_distribution(
+                    &mut distributions,
+                    &mut by_name,
+                    path,
+                    &dist_info,
+                ) {
+                    continue;
                 }
 
                 // Index the distribution by name.
@@ -188,6 +144,90 @@ impl InstalledPackages {
             by_name,
             by_url,
         })
+    }
+
+    /// Whether the distribution is a duplicate instance of one already tracked.
+    ///
+    /// Returns `true` only if the distribution refers to exact same installed distribution, while
+    /// returning false for shadowed distributions of the same name (since we have to remove both).
+    fn is_duplicate_distribution(
+        distributions: &[Option<InstalledDist>],
+        by_name: &mut FxHashMap<PackageName, Vec<usize>>,
+        path: PathBuf,
+        dist_info: &InstalledDist,
+    ) -> bool {
+        // In most cases, there is no other distribution of the same name in path.
+        let Some(existing) = by_name
+            .get(dist_info.name())
+            .into_iter()
+            .flatten()
+            .find_map(|dist_id| distributions[*dist_id].as_ref())
+        else {
+            return false;
+        };
+
+        // Ignore duplicate paths in `sys.path`
+        if existing == dist_info {
+            return true;
+        }
+
+        // On fedora, purelib and platlib in a venv are `.venv/lib` and `.venv/lib64`,
+        // with `.venv/lib64` being a symlink to `.venv/lib`. We have to deduplicate
+        // access across this symlink, such as:
+        // * `.venv/lib/python3.13/site-packages/foo-1.0.0.dist-info`
+        // * `.venv/lib64/python3.13/site-packages/foo-1.0.0.dist-info`
+        if is_same_file(existing.path(), dist_info.path()).unwrap_or(false) {
+            return true;
+        }
+
+        // egg-info directories are special: We may see them twice, once as dist-info
+        // directory, and then again as egg-info directory in a subdirectory of the
+        // package of the same name, linked from the `sys.path` entry added by the
+        // editable. If they both point to the same path, we want to only consider the
+        // dist-info that already covers the package.
+        if let InstalledDist::EggInfoDirectory(InstalledEggInfoDirectory {
+            base_path: Some(base_path),
+            ..
+        }) = &dist_info
+        {
+            if let InstalledDist::Url(InstalledDirectUrlDist { url, .. }) = existing {
+                if !is_same_file(url.path().to_string(), base_path.display().to_string())
+                    .unwrap_or(false)
+                {
+                    debug!(
+                        "Ignoring already processed egg-info at: `{}`",
+                        path.user_display()
+                    );
+                    return true;
+                }
+            }
+        }
+
+        // It can be valid to shadow packages, but two different distributions for the
+        // same package name in the same directory should never happen, see e.g.
+        // https://github.com/astral-sh/uv/issues/11648. In this case, it is not clear
+        // of which version the module that Python will pick up is. We must keep both
+        // to remove both.
+        if !is_same_file(
+            existing.path().parent().unwrap_or(&Path::new("")),
+            dist_info.path().parent().unwrap_or(&Path::new("")),
+        )
+        .unwrap_or(false)
+        {
+            debug!(
+                "The package `{}` has multiple installed distributions:\n\
+                  - version {} at `{}`\n\
+                  - version {} at `{}`",
+                dist_info.name(),
+                existing.version(),
+                existing.path().user_display(),
+                dist_info.version(),
+                dist_info.path().user_display(),
+            );
+        }
+
+        // We can't skip duplicate distributions as we must uninstall them
+        false
     }
 
     /// Returns the [`Interpreter`] used to install the packages.

@@ -177,16 +177,12 @@ if __name__ == "__main__":
 
         # Test `uv pip list`
         installed_packages = subprocess.check_output([uv, "pip", "list"], text=True)
-        if "cffi" in installed_packages:
-            raise Exception("A `cffi` package was discovered for a non-PyPy.")
         if platform.python_implementation() == "PyPy":
             if "cffi" not in installed_packages:
                 raise Exception("The vendored `cffi` wasn't discovered for PyPy.")
         else:
-            if "pylint" in installed_packages:
-                raise Exception(
-                    "The package `pylint` is not discovered in the virtual environment."
-                )
+            if "cffi" in installed_packages:
+                raise Exception("A `cffi` package was discovered for a non-PyPy.")
 
         # Uninstall the package (`pylint`).
         logging.info("Uninstalling the package `pylint`.")

@@ -524,7 +524,7 @@ impl Interpreter {
         let interpreter = if target.is_none() && prefix.is_none() {
             let purelib = self.purelib();
             let platlib = self.platlib();
-            Some(std::iter::once(purelib).chain(
+            Some(iter::once(purelib).chain(
                 if purelib == platlib || is_same_file(purelib, platlib).unwrap_or(false) {
                     None
                 } else {
@@ -568,10 +568,22 @@ impl Interpreter {
                     .chain(iter::once(Cow::Borrowed(self.stdlib.as_path()))),
             )
         } else {
+            // On platforms such as fedora, the system interpreter exclude the installation location
+            // from `sys.path` if run with `-I`.
+            let purelib = self.purelib();
+            let platlib = self.platlib();
+            let lib = iter::once(Cow::Borrowed(purelib)).chain(
+                if purelib == platlib || is_same_file(purelib, platlib).unwrap_or(false) {
+                    None
+                } else {
+                    Some(Cow::Borrowed(platlib))
+                },
+            );
             Either::Right(
                 self.sys_path()
                     .iter()
-                    .map(|path| Cow::Borrowed(path.as_path())),
+                    .map(|path| Cow::Borrowed(path.as_path()))
+                    .chain(lib),
             )
         }
     }
