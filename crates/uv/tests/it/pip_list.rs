@@ -3,6 +3,7 @@ use assert_fs::fixture::ChildPath;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
 use assert_fs::prelude::*;
+use uv_fs::PythonExt;
 
 use crate::common::{uv_snapshot, TestContext};
 
@@ -164,7 +165,7 @@ fn list_outdated_json() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"anyio","version":"3.0.0","latest_version":"4.3.0","latest_filetype":"wheel"}]
+    [{"name":"anyio","version":"3.0.0","latest_version":"4.3.0","latest_filetype":"wheel","shadowed":false}]
 
     ----- stderr -----
     "###
@@ -509,7 +510,7 @@ fn list_format_json() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"anyio","version":"4.3.0"},{"name":"idna","version":"3.6"},{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/scripts/packages/poetry_editable"},{"name":"sniffio","version":"1.3.1"}]
+    [{"name":"anyio","version":"4.3.0","shadowed":false},{"name":"idna","version":"3.6","shadowed":false},{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/scripts/packages/poetry_editable","shadowed":false},{"name":"sniffio","version":"1.3.1","shadowed":false}]
 
     ----- stderr -----
     "###
@@ -521,7 +522,7 @@ fn list_format_json() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/scripts/packages/poetry_editable"}]
+    [{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/scripts/packages/poetry_editable","shadowed":false}]
 
     ----- stderr -----
     "###
@@ -533,7 +534,7 @@ fn list_format_json() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"anyio","version":"4.3.0"},{"name":"idna","version":"3.6"},{"name":"sniffio","version":"1.3.1"}]
+    [{"name":"anyio","version":"4.3.0","shadowed":false},{"name":"idna","version":"3.6","shadowed":false},{"name":"sniffio","version":"1.3.1","shadowed":false}]
 
     ----- stderr -----
     "###
@@ -777,4 +778,149 @@ fn list_ignores_quiet_flag_format_freeze() {
     ----- stderr -----
     "###
     );
+}
+
+/// List packages that are not installed in the venv itself, but are listed in `sys.path`.
+#[test]
+fn list_extended_sys_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let extra_path = context.temp_dir.child("extra_path");
+    extra_path.create_dir_all()?;
+
+    let mut filters = context.filters();
+    filters.push((
+        r"Using CPython 3.12.\[X\] interpreter at: .*",
+        "Using CPython 3.12.[X] interpreter at: [PYTHON]",
+    ));
+    uv_snapshot!(filters, context.pip_install()
+        .arg("--strict")
+        .arg("--target")
+        .arg(extra_path.path())
+        .arg("MarkupSafe==2.1.3")
+        .arg("sniffio==1.0.0"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON]
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + markupsafe==2.1.3
+     + sniffio==1.0.0
+    "###
+    );
+
+    uv_snapshot!(context.pip_install()
+        .arg("--strict")
+        .arg("anyio==4.3.0"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    // Extend sys.path, adding the path twice to check deduplication.
+    fs_err::write(
+        context.site_packages().join("extra.pth"),
+        format!(
+            r#"import sys; sys.path.append("{0}"); sys.path.append("{0}")"#,
+            extra_path.path().escape_for_python()
+        ),
+    )?;
+
+    // Our cache still has the `sys.path` without the `extra.pth`, so we have to hack around this
+    // by ignoring the cache.
+    uv_snapshot!(context.pip_list().arg("--no-cache"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package    Version
+    ---------- -------
+    anyio      4.3.0
+    idna       3.6
+    markupsafe 2.1.3
+    sniffio    1.3.1
+
+    ----- stderr -----
+    hint: The are shadowed package installations for sniffio==1.0.0
+    "###
+    );
+
+    uv_snapshot!(context.pip_list().arg("--format").arg("json"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [{"name":"anyio","version":"4.3.0","shadowed":false},{"name":"idna","version":"3.6","shadowed":false},{"name":"sniffio","version":"1.3.1","shadowed":false}]
+
+    ----- stderr -----
+    "###
+    );
+
+    // The main sniffio 1.3.1 entry is up-to-date so we don't show anything.
+    uv_snapshot!(context.pip_list().arg("--outdated").arg("--format").arg("json"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    []
+
+    ----- stderr -----
+    "###
+    );
+
+    // This version must be the same as in the `uv pip list` output.
+    uv_snapshot!(context.run().arg("python").arg("-c").arg("import sniffio; print(sniffio.__version__)"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1.3.1
+
+    ----- stderr -----
+    "###
+    );
+
+    // Simulate broken site-packages.
+    uv_fs::copy_dir_all(
+        extra_path.path().join("sniffio-1.0.0.dist-info"),
+        context.site_packages().join("sniffio-1.0.0.dist-info"),
+    )?;
+
+    uv_snapshot!(context.pip_list().arg("--no-cache"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package    Version
+    ---------- -------
+    anyio      4.3.0
+    idna       3.6
+    markupsafe 2.1.3
+    sniffio    1.0.0
+
+    ----- stderr -----
+    hint: The are shadowed package installations for sniffio==1.3.1, sniffio==1.0.0
+    "###
+    );
+
+    // The main sniffio 1.3.1 entry is outdated so we show it.
+    uv_snapshot!(context.pip_list().arg("--outdated").arg("--format").arg("json"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [{"name":"sniffio","version":"1.0.0","latest_version":"1.3.1","latest_filetype":"wheel","shadowed":false}]
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
 }

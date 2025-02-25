@@ -10607,7 +10607,7 @@ fn lock_mixed_extras() -> Result<()> {
         [tool.uv.workspace]
         members = ["packages/*"]
     "#})?;
-    workspace1.child("src/__init__.py").touch()?;
+    workspace1.child("src/workspace1/__init__.py").touch()?;
 
     let leaf1 = workspace1.child("packages").child("leaf1");
     leaf1.child("pyproject.toml").write_str(indoc! {r#"
@@ -10624,7 +10624,7 @@ fn lock_mixed_extras() -> Result<()> {
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
-    leaf1.child("src/__init__.py").touch()?;
+    leaf1.child("src/leaf1/__init__.py").touch()?;
 
     // Create a second workspace (`workspace2`) with an extra of the same name.
     let workspace2 = context.temp_dir.child("workspace2");
@@ -10645,7 +10645,7 @@ fn lock_mixed_extras() -> Result<()> {
         [tool.uv.workspace]
         members = ["packages/*"]
     "#})?;
-    workspace2.child("src/__init__.py").touch()?;
+    workspace2.child("src/workspace2/__init__.py").touch()?;
 
     let leaf2 = workspace2.child("packages").child("leaf2");
     leaf2.child("pyproject.toml").write_str(indoc! {r#"
@@ -10662,7 +10662,7 @@ fn lock_mixed_extras() -> Result<()> {
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
-    leaf2.child("src/__init__.py").touch()?;
+    leaf2.child("src/leaf2/__init__.py").touch()?;
 
     // Lock the first workspace.
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace1), @r###"

@@ -1,13 +1,14 @@
 use std::borrow::Cow;
 use std::env::consts::ARCH;
 use std::fmt::{Display, Formatter};
-use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 use std::sync::OnceLock;
+use std::{io, iter};
 
 use configparser::ini::Ini;
 use fs_err as fs;
+use itertools::Either;
 use owo_colors::OwoColorize;
 use same_file::is_same_file;
 use serde::{Deserialize, Serialize};
@@ -523,7 +524,7 @@ impl Interpreter {
         let interpreter = if target.is_none() && prefix.is_none() {
             let purelib = self.purelib();
             let platlib = self.platlib();
-            Some(std::iter::once(purelib).chain(
+            Some(iter::once(purelib).chain(
                 if purelib == platlib || is_same_file(purelib, platlib).unwrap_or(false) {
                     None
                 } else {
@@ -540,6 +541,51 @@ impl Interpreter {
             .map(Cow::Borrowed)
             .chain(prefix.into_iter().flatten().map(Cow::Owned))
             .chain(interpreter.into_iter().flatten().map(Cow::Borrowed))
+    }
+
+    /// The paths to consider for discovering installed packages
+    pub fn discovery_paths(&self) -> impl Iterator<Item = Cow<Path>> {
+        let target = self.target().map(Target::site_packages);
+
+        let prefix = self
+            .prefix()
+            .map(|prefix| prefix.site_packages(self.virtualenv()));
+
+        debug_assert!(
+            !(target.is_some() && prefix.is_some()),
+            "target and prefix can't both be defined"
+        );
+
+        // When installing into a specific directory, we ignore all other `sys.path` entries. The
+        // exception is the std path since PyPy vendors packages into std.
+        if target.is_some() || prefix.is_some() {
+            Either::Left(
+                target
+                    .into_iter()
+                    .flatten()
+                    .map(Cow::Borrowed)
+                    .chain(prefix.into_iter().flatten().map(Cow::Owned))
+                    .chain(iter::once(Cow::Borrowed(self.stdlib.as_path()))),
+            )
+        } else {
+            // On platforms such as fedora, the system interpreter exclude the installation location
+            // from `sys.path` if run with `-I`.
+            let purelib = self.purelib();
+            let platlib = self.platlib();
+            let lib = iter::once(Cow::Borrowed(purelib)).chain(
+                if purelib == platlib || is_same_file(purelib, platlib).unwrap_or(false) {
+                    None
+                } else {
+                    Some(Cow::Borrowed(platlib))
+                },
+            );
+            Either::Right(
+                self.sys_path()
+                    .iter()
+                    .map(|path| Cow::Borrowed(path.as_path()))
+                    .chain(lib),
+            )
+        }
     }
 
     /// Check if the interpreter matches the given Python version.
