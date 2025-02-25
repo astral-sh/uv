@@ -301,8 +301,21 @@ impl<'de> Deserialize<'de> for WheelFilename {
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        FromStr::from_str(&s).map_err(de::Error::custom)
+        struct Visitor;
+
+        impl de::Visitor<'_> for Visitor {
+            type Value = WheelFilename;
+
+            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                WheelFilename::from_str(v).map_err(de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 
