@@ -40,8 +40,8 @@ use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
 use uv_pypi_types::{
-    redact_credentials, ConflictPackage, Conflicts, HashDigest, ParsedArchiveUrl, ParsedGitUrl,
-    Requirement, RequirementSource,
+    redact_credentials, ConflictPackage, Conflicts, HashDigest, HashDigests, ParsedArchiveUrl,
+    ParsedGitUrl, Requirement, RequirementSource,
 };
 use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::WorkspaceMember;
@@ -2396,10 +2396,9 @@ impl Package {
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
                     filename: filename.to_string(),
-                    hashes: sdist
-                        .hash()
-                        .map(|hash| vec![hash.0.clone()])
-                        .unwrap_or_default(),
+                    hashes: sdist.hash().map_or(HashDigests::empty(), |hash| {
+                        HashDigests::from(hash.0.clone())
+                    }),
                     requires_python: None,
                     size: sdist.size(),
                     upload_time_utc_ms: None,
@@ -2448,10 +2447,9 @@ impl Package {
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
                     filename: filename.to_string(),
-                    hashes: sdist
-                        .hash()
-                        .map(|hash| vec![hash.0.clone()])
-                        .unwrap_or_default(),
+                    hashes: sdist.hash().map_or(HashDigests::empty(), |hash| {
+                        HashDigests::from(hash.0.clone())
+                    }),
                     requires_python: None,
                     size: sdist.size(),
                     upload_time_utc_ms: None,
@@ -2725,8 +2723,15 @@ impl Package {
     }
 
     /// Returns all the hashes associated with this [`Package`].
-    fn hashes(&self) -> Vec<HashDigest> {
-        let mut hashes = Vec::new();
+    fn hashes(&self) -> HashDigests {
+        let mut hashes = Vec::with_capacity(
+            usize::from(self.sdist.as_ref().and_then(|sdist| sdist.hash()).is_some())
+                + self
+                    .wheels
+                    .iter()
+                    .map(|wheel| usize::from(wheel.hash.is_some()))
+                    .sum::<usize>(),
+        );
         if let Some(ref sdist) = self.sdist {
             if let Some(hash) = sdist.hash() {
                 hashes.push(hash.0.clone());
@@ -2735,7 +2740,7 @@ impl Package {
         for wheel in &self.wheels {
             hashes.extend(wheel.hash.as_ref().map(|h| h.0.clone()));
         }
-        hashes
+        HashDigests::from(hashes)
     }
 
     /// Returns the [`ResolvedRepositoryReference`] for the package, if it is a Git source.
@@ -3579,9 +3584,12 @@ impl SourceDist {
         match annotated_dist.dist {
             // We pass empty installed packages for locking.
             ResolvedDist::Installed { .. } => unreachable!(),
-            ResolvedDist::Installable { ref dist, .. } => {
-                SourceDist::from_dist(id, dist, &annotated_dist.hashes, annotated_dist.index())
-            }
+            ResolvedDist::Installable { ref dist, .. } => SourceDist::from_dist(
+                id,
+                dist,
+                annotated_dist.hashes.as_slice(),
+                annotated_dist.index(),
+            ),
         }
     }
 
@@ -3877,9 +3885,11 @@ impl Wheel {
         match annotated_dist.dist {
             // We pass empty installed packages for locking.
             ResolvedDist::Installed { .. } => unreachable!(),
-            ResolvedDist::Installable { ref dist, .. } => {
-                Wheel::from_dist(dist, &annotated_dist.hashes, annotated_dist.index())
-            }
+            ResolvedDist::Installable { ref dist, .. } => Wheel::from_dist(
+                dist,
+                annotated_dist.hashes.as_slice(),
+                annotated_dist.index(),
+            ),
         }
     }
 

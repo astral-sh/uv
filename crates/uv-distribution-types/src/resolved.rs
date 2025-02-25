@@ -75,8 +75,10 @@ impl ResolvedDist {
     pub fn yanked(&self) -> Option<&Yanked> {
         match self {
             Self::Installable { dist, .. } => match dist.as_ref() {
-                Dist::Source(SourceDist::Registry(sdist)) => sdist.file.yanked.as_ref(),
-                Dist::Built(BuiltDist::Registry(wheel)) => wheel.best_wheel().file.yanked.as_ref(),
+                Dist::Source(SourceDist::Registry(sdist)) => sdist.file.yanked.as_deref(),
+                Dist::Built(BuiltDist::Registry(wheel)) => {
+                    wheel.best_wheel().file.yanked.as_deref()
+                }
                 _ => None,
             },
             Self::Installed { .. } => None,

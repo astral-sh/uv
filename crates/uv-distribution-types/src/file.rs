@@ -7,7 +7,7 @@ use url::Url;
 
 use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
 use uv_pep508::split_scheme;
-use uv_pypi_types::{CoreMetadata, HashDigest, Yanked};
+use uv_pypi_types::{CoreMetadata, HashDigests, Yanked};
 
 /// Error converting [`uv_pypi_types::File`] to [`distribution_type::File`].
 #[derive(Debug, thiserror::Error)]
@@ -24,7 +24,7 @@ pub enum FileConversionError {
 pub struct File {
     pub dist_info_metadata: bool,
     pub filename: String,
-    pub hashes: Vec<HashDigest>,
+    pub hashes: HashDigests,
     pub requires_python: Option<VersionSpecifiers>,
     pub size: Option<u64>,
     // N.B. We don't use a Jiff timestamp here because it's a little
@@ -33,7 +33,7 @@ pub struct File {
     // milliseconds.
     pub upload_time_utc_ms: Option<i64>,
     pub url: FileLocation,
-    pub yanked: Option<Yanked>,
+    pub yanked: Option<Box<Yanked>>,
 }
 
 impl File {
@@ -47,7 +47,7 @@ impl File {
                 .or(file.data_dist_info_metadata.as_ref())
                 .is_some_and(CoreMetadata::is_available),
             filename: file.filename,
-            hashes: file.hashes.into_digests(),
+            hashes: HashDigests::from(file.hashes),
             requires_python: file
                 .requires_python
                 .transpose()
