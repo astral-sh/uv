@@ -23703,8 +23703,7 @@ fn lock_script_initialize() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to read `script.py` (not found); run `uv init --script script.py` to create a PEP 723 script
-    See [UV_LOG_DIR]/lock.log for detailed logs
+    error: failed to read from file `script.py`: [OS ERROR 2]
     ");
 
     let script = context.temp_dir.child("script.py");

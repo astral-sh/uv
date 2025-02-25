@@ -3352,7 +3352,6 @@ fn run_script_explicit_directory() -> Result<()> {
 
     ----- stderr -----
     error: failed to read from file `script`: Is a directory (os error 21)
-    See [UV_LOG_DIR]/run.log for detailed logs
     ");
 
     Ok(())

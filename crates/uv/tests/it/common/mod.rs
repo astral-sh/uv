@@ -120,8 +120,7 @@ impl TestContext {
         // making the test context mutable to add the env var UV_LOG based on what test is running.
         // Currently this creates one log file per test file and log file name is same as the test file name.
         // However if we choose to manually add the --log arg to each test command, we can remove this. This would tedious but cleaner however it might be more work to turn off logs on testing if implemented this way.
-        // To Disucess: As things stand currently all tests would create file logs but the logs wouldn't persist (would be cleaned up when the Temp_dir is cleaned) unless the `UV_LOG_DIR` env var is set. However this might be costly and slow testing for those who don't want to log for tests and cli testing, so do we add an option to turn off testing.
-        // Seperating how logging is done for snapshot compareted to a how a user would log might be something to dicuss too. Like use a seperate env variable for setting the log file for snapshot testing.
+        // This might be costly and slow testing for those who don't want to log for tests and for cli testing, so do we add an option to turn off testing.
         let mut new = Self::new_with_versions(&[python_version]);
         new.extra_env.push((
             EnvVars::UV_LOG.into(),

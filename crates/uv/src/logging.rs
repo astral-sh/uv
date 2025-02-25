@@ -261,7 +261,6 @@ pub(crate) fn setup_logging(
 
         // Depending on the log level, different layers are added to the subscriber.
         // An equivalent of `RUST_LOG` for file logs might be needed to be implemented.
-        // Depending on the log level, different layers are added to the subscriber. However me might need to seperate trace or debug and the heirarchical layer or not into different args (based on what the use cases are)
         match file_log_level {
             FileLogLevel::Verbose | FileLogLevel::TraceVerbose => {
                 layers.push(

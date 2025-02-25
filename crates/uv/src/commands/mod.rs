@@ -305,11 +305,14 @@ pub(crate) enum ScriptPath {
 pub(crate) enum UvError {
     LogSetupError,
     Other,
+    Pep723Error,
 }
 
 impl From<anyhow::Error> for UvError {
     fn from(err: anyhow::Error) -> Self {
-        if err.to_string().contains(uv_static::LOG_DIR_ERROR)
+        if err.to_string().contains("failed to read") || err.to_string().contains("metadata tag") {
+            UvError::Pep723Error
+        } else if err.to_string().contains(uv_static::LOG_DIR_ERROR)
             || err.to_string().contains(uv_static::LOG_FILE_ERROR)
         {
             UvError::LogSetupError

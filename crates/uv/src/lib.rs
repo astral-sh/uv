@@ -2007,14 +2007,12 @@ where
                 );
             }
             let err_uv: UvError = err.into();
-            match err_uv {
-                UvError::Other => {
-                    if log_set {
-                        eprintln!("See {} for detailed logs", log_path.display().cyan().bold());
-                    }
+            if let UvError::Other = err_uv {
+                if log_set {
+                    eprintln!("See {} for detailed logs", log_path.display().cyan().bold());
                 }
-                UvError::LogSetupError => {}
             }
+
             ExitStatus::Error.into()
         }
     }
