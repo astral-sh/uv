@@ -30,7 +30,7 @@ use tracing::warn;
     derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
 )]
 #[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
-pub struct VersionSpecifiers(Vec<VersionSpecifier>);
+pub struct VersionSpecifiers(Box<[VersionSpecifier]>);
 
 impl std::ops::Deref for VersionSpecifiers {
     type Target = [VersionSpecifier];
@@ -43,7 +43,7 @@ impl std::ops::Deref for VersionSpecifiers {
 impl VersionSpecifiers {
     /// Matches all versions.
     pub fn empty() -> Self {
-        Self(Vec::new())
+        Self(Box::new([]))
     }
 
     /// Whether all specifiers match the given version.
@@ -61,7 +61,7 @@ impl VersionSpecifiers {
         // TODO(konsti): This seems better than sorting on insert and not getting the size hint,
         // but i haven't measured it.
         specifiers.sort_by(|a, b| a.version().cmp(b.version()));
-        Self(specifiers)
+        Self(specifiers.into_boxed_slice())
     }
 
     /// Returns the [`VersionSpecifiers`] whose union represents the given range.
@@ -117,7 +117,7 @@ impl IntoIterator for VersionSpecifiers {
     type IntoIter = std::vec::IntoIter<VersionSpecifier>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
+        self.0.into_vec().into_iter()
     }
 }
 
@@ -131,7 +131,7 @@ impl FromStr for VersionSpecifiers {
 
 impl From<VersionSpecifier> for VersionSpecifiers {
     fn from(specifier: VersionSpecifier) -> Self {
-        Self(vec![specifier])
+        Self(Box::new([specifier]))
     }
 }
 
@@ -1285,7 +1285,7 @@ mod tests {
     fn test_parse_version_specifiers() {
         let result = VersionSpecifiers::from_str("~= 0.9, >= 1.0, != 1.3.4.*, < 2.0").unwrap();
         assert_eq!(
-            result.0,
+            result.0.as_ref(),
             [
                 VersionSpecifier {
                     operator: Operator::TildeEqual,
