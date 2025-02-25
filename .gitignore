@@ -39,3 +39,6 @@ profile.json
 # IDE
 .idea
 .vscode
+
+# Logs
+*.log

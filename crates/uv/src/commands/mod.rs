@@ -300,3 +300,19 @@ pub(crate) enum ScriptPath {
     /// The Python file does not include a PEP 723 script tag.
     Path(PathBuf),
 }
+
+#[derive(Debug)]
+pub(crate) enum UvError {
+    LogSetupError,
+    Other,
+}
+
+impl From<anyhow::Error> for UvError {
+    fn from(err: anyhow::Error) -> Self {
+        if err.to_string().contains(uv_static::LOG_FILE_ERROR) {
+            UvError::LogSetupError
+        } else {
+            UvError::Other
+        }
+    }
+}

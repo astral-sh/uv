@@ -2084,7 +2084,7 @@ fn install_git_private_https_pat_not_authorized() {
     // and hang the test
     uv_snapshot!(filters, context.pip_install()
         .arg(format!("uv-private-pypackage @ git+https://git:{token}@github.com/astral-test/uv-private-pypackage"))
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2097,7 +2097,7 @@ fn install_git_private_https_pat_not_authorized() {
           --- stderr
           remote: Invalid username or password.
           fatal: Authentication failed for 'https://github.com/astral-test/uv-private-pypackage/'
-    "###);
+    ");
 }
 
 /// Install a package from a private GitHub repository using a PAT

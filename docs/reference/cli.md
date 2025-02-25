@@ -284,6 +284,11 @@ uv run [OPTIONS] [COMMAND]
 <p>Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated, uv will exit with an error.</p>
 
 <p>May also be set with the <code>UV_LOCKED</code> environment variable.</p>
+</dd><dt id="uv-run--log"><a href="#uv-run--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-run--log-verbose"><a href="#uv-run--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-run--module"><a href="#uv-run--module"><code>--module</code></a>, <code>-m</code></dt><dd><p>Run a Python module.</p>
 
 <p>Equivalent to <code>python -m &lt;module&gt;</code>.</p>
@@ -621,6 +626,11 @@ uv init [OPTIONS] [PATH]
 
 <p>A library is a project that is intended to be built and distributed as a Python package.</p>
 
+</dd><dt id="uv-init--log"><a href="#uv-init--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-init--log-verbose"><a href="#uv-init--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-init--name"><a href="#uv-init--name"><code>--name</code></a> <i>name</i></dt><dd><p>The name of the project.</p>
 
 <p>Defaults to the name of the directory.</p>
@@ -949,6 +959,11 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated, uv will exit with an error.</p>
 
 <p>May also be set with the <code>UV_LOCKED</code> environment variable.</p>
+</dd><dt id="uv-add--log"><a href="#uv-add--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-add--log-verbose"><a href="#uv-add--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-add--native-tls"><a href="#uv-add--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -1312,6 +1327,11 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated, uv will exit with an error.</p>
 
 <p>May also be set with the <code>UV_LOCKED</code> environment variable.</p>
+</dd><dt id="uv-remove--log"><a href="#uv-remove--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-remove--log-verbose"><a href="#uv-remove--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-remove--native-tls"><a href="#uv-remove--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -1687,6 +1707,11 @@ uv sync [OPTIONS]
 <p>Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated, uv will exit with an error.</p>
 
 <p>May also be set with the <code>UV_LOCKED</code> environment variable.</p>
+</dd><dt id="uv-sync--log"><a href="#uv-sync--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-sync--log-verbose"><a href="#uv-sync--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-sync--native-tls"><a href="#uv-sync--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -2060,6 +2085,11 @@ uv lock [OPTIONS]
 
 <li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
 </ul>
+</dd><dt id="uv-lock--log"><a href="#uv-lock--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-lock--log-verbose"><a href="#uv-lock--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-lock--native-tls"><a href="#uv-lock--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -2407,6 +2437,11 @@ uv export [OPTIONS]
 <p>Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated, uv will exit with an error.</p>
 
 <p>May also be set with the <code>UV_LOCKED</code> environment variable.</p>
+</dd><dt id="uv-export--log"><a href="#uv-export--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-export--log-verbose"><a href="#uv-export--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-export--native-tls"><a href="#uv-export--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -2787,6 +2822,11 @@ uv tree [OPTIONS]
 <p>Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated, uv will exit with an error.</p>
 
 <p>May also be set with the <code>UV_LOCKED</code> environment variable.</p>
+</dd><dt id="uv-tree--log"><a href="#uv-tree--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-tree--log-verbose"><a href="#uv-tree--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-tree--native-tls"><a href="#uv-tree--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -3262,6 +3302,11 @@ uv tool run [OPTIONS] [COMMAND]
 
 <li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
 </ul>
+</dd><dt id="uv-tool-run--log"><a href="#uv-tool-run--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-tool-run--log-verbose"><a href="#uv-tool-run--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-tool-run--native-tls"><a href="#uv-tool-run--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -3593,6 +3638,11 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
 </ul>
+</dd><dt id="uv-tool-install--log"><a href="#uv-tool-install--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-tool-install--log-verbose"><a href="#uv-tool-install--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-tool-install--native-tls"><a href="#uv-tool-install--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -3918,6 +3968,11 @@ uv tool upgrade [OPTIONS] <NAME>...
 
 <li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
 </ul>
+</dd><dt id="uv-tool-upgrade--log"><a href="#uv-tool-upgrade--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-tool-upgrade--log-verbose"><a href="#uv-tool-upgrade--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-tool-upgrade--native-tls"><a href="#uv-tool-upgrade--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -4103,6 +4158,11 @@ uv tool list [OPTIONS]
 
 </dd><dt id="uv-tool-list--help"><a href="#uv-tool-list--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt id="uv-tool-list--log"><a href="#uv-tool-list--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-tool-list--log-verbose"><a href="#uv-tool-list--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-tool-list--native-tls"><a href="#uv-tool-list--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -4213,6 +4273,11 @@ uv tool uninstall [OPTIONS] <NAME>...
 <p>See <code>--project</code> to only change the project root directory.</p>
 
 </dd><dt id="uv-tool-uninstall--help"><a href="#uv-tool-uninstall--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+
+</dd><dt id="uv-tool-uninstall--log"><a href="#uv-tool-uninstall--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-tool-uninstall--log-verbose"><a href="#uv-tool-uninstall--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
 
 </dd><dt id="uv-tool-uninstall--native-tls"><a href="#uv-tool-uninstall--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
@@ -4336,6 +4401,11 @@ uv tool update-shell [OPTIONS]
 <p>See <code>--project</code> to only change the project root directory.</p>
 
 </dd><dt id="uv-tool-update-shell--help"><a href="#uv-tool-update-shell--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+
+</dd><dt id="uv-tool-update-shell--log"><a href="#uv-tool-update-shell--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-tool-update-shell--log-verbose"><a href="#uv-tool-update-shell--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
 
 </dd><dt id="uv-tool-update-shell--native-tls"><a href="#uv-tool-update-shell--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
@@ -4477,6 +4547,11 @@ uv tool dir [OPTIONS]
 <p>See <code>--project</code> to only change the project root directory.</p>
 
 </dd><dt id="uv-tool-dir--help"><a href="#uv-tool-dir--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+
+</dd><dt id="uv-tool-dir--log"><a href="#uv-tool-dir--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-tool-dir--log-verbose"><a href="#uv-tool-dir--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
 
 </dd><dt id="uv-tool-dir--native-tls"><a href="#uv-tool-dir--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
@@ -4679,6 +4754,11 @@ uv python list [OPTIONS]
 
 </dd><dt id="uv-python-list--help"><a href="#uv-python-list--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt id="uv-python-list--log"><a href="#uv-python-list--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-python-list--log-verbose"><a href="#uv-python-list--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-python-list--native-tls"><a href="#uv-python-list--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -4859,6 +4939,11 @@ uv python install [OPTIONS] [TARGETS]...
 <p>See <code>uv python dir</code> to view the current Python installation directory. Defaults to <code>~/.local/share/uv/python</code>.</p>
 
 <p>May also be set with the <code>UV_PYTHON_INSTALL_DIR</code> environment variable.</p>
+</dd><dt id="uv-python-install--log"><a href="#uv-python-install--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-python-install--log-verbose"><a href="#uv-python-install--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-python-install--mirror"><a href="#uv-python-install--mirror"><code>--mirror</code></a> <i>mirror</i></dt><dd><p>Set the URL to use as the source for downloading Python installations.</p>
 
 <p>The provided URL will replace <code>https://github.com/astral-sh/python-build-standalone/releases/download</code> in, e.g., <code>https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz</code>.</p>
@@ -5006,6 +5091,11 @@ uv python find [OPTIONS] [REQUEST]
 
 </dd><dt id="uv-python-find--help"><a href="#uv-python-find--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt id="uv-python-find--log"><a href="#uv-python-find--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-python-find--log-verbose"><a href="#uv-python-find--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-python-find--native-tls"><a href="#uv-python-find--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -5151,6 +5241,11 @@ uv python pin [OPTIONS] [REQUEST]
 <p>See <code>--project</code> to only change the project root directory.</p>
 
 </dd><dt id="uv-python-pin--help"><a href="#uv-python-pin--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+
+</dd><dt id="uv-python-pin--log"><a href="#uv-python-pin--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-python-pin--log-verbose"><a href="#uv-python-pin--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
 
 </dd><dt id="uv-python-pin--native-tls"><a href="#uv-python-pin--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
@@ -5301,6 +5396,11 @@ uv python dir [OPTIONS]
 
 </dd><dt id="uv-python-dir--help"><a href="#uv-python-dir--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt id="uv-python-dir--log"><a href="#uv-python-dir--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-python-dir--log-verbose"><a href="#uv-python-dir--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-python-dir--native-tls"><a href="#uv-python-dir--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -5431,6 +5531,11 @@ uv python uninstall [OPTIONS] <TARGETS>...
 </dd><dt id="uv-python-uninstall--install-dir"><a href="#uv-python-uninstall--install-dir"><code>--install-dir</code></a>, <code>-i</code> <i>install-dir</i></dt><dd><p>The directory where the Python was installed</p>
 
 <p>May also be set with the <code>UV_PYTHON_INSTALL_DIR</code> environment variable.</p>
+</dd><dt id="uv-python-uninstall--log"><a href="#uv-python-uninstall--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-python-uninstall--log-verbose"><a href="#uv-python-uninstall--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-python-uninstall--native-tls"><a href="#uv-python-uninstall--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -5740,6 +5845,11 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
 </ul>
+</dd><dt id="uv-pip-compile--log"><a href="#uv-pip-compile--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-pip-compile--log-verbose"><a href="#uv-pip-compile--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-pip-compile--native-tls"><a href="#uv-pip-compile--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -6188,6 +6298,11 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
 </ul>
+</dd><dt id="uv-pip-sync--log"><a href="#uv-pip-sync--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-pip-sync--log-verbose"><a href="#uv-pip-sync--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-pip-sync--native-tls"><a href="#uv-pip-sync--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -6612,6 +6727,11 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 
 <li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
 </ul>
+</dd><dt id="uv-pip-install--log"><a href="#uv-pip-install--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-pip-install--log-verbose"><a href="#uv-pip-install--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-pip-install--native-tls"><a href="#uv-pip-install--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -6975,6 +7095,11 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>>
 
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul>
+</dd><dt id="uv-pip-uninstall--log"><a href="#uv-pip-uninstall--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-pip-uninstall--log-verbose"><a href="#uv-pip-uninstall--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-pip-uninstall--native-tls"><a href="#uv-pip-uninstall--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -7113,6 +7238,11 @@ uv pip freeze [OPTIONS]
 </dd><dt id="uv-pip-freeze--exclude-editable"><a href="#uv-pip-freeze--exclude-editable"><code>--exclude-editable</code></a></dt><dd><p>Exclude any editable packages from output</p>
 
 </dd><dt id="uv-pip-freeze--help"><a href="#uv-pip-freeze--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+
+</dd><dt id="uv-pip-freeze--log"><a href="#uv-pip-freeze--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-pip-freeze--log-verbose"><a href="#uv-pip-freeze--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
 
 </dd><dt id="uv-pip-freeze--native-tls"><a href="#uv-pip-freeze--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
@@ -7335,6 +7465,11 @@ uv pip list [OPTIONS]
 
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul>
+</dd><dt id="uv-pip-list--log"><a href="#uv-pip-list--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-pip-list--log-verbose"><a href="#uv-pip-list--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-pip-list--native-tls"><a href="#uv-pip-list--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -7481,6 +7616,11 @@ uv pip show [OPTIONS] [PACKAGE]...
 </dd><dt id="uv-pip-show--files"><a href="#uv-pip-show--files"><code>--files</code></a>, <code>-f</code></dt><dd><p>Show the full list of installed files for each package</p>
 
 </dd><dt id="uv-pip-show--help"><a href="#uv-pip-show--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+
+</dd><dt id="uv-pip-show--log"><a href="#uv-pip-show--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-pip-show--log-verbose"><a href="#uv-pip-show--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
 
 </dd><dt id="uv-pip-show--native-tls"><a href="#uv-pip-show--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
@@ -7688,6 +7828,11 @@ uv pip tree [OPTIONS]
 
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul>
+</dd><dt id="uv-pip-tree--log"><a href="#uv-pip-tree--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-pip-tree--log-verbose"><a href="#uv-pip-tree--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-pip-tree--native-tls"><a href="#uv-pip-tree--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -7832,6 +7977,11 @@ uv pip check [OPTIONS]
 <p>See <code>--project</code> to only change the project root directory.</p>
 
 </dd><dt id="uv-pip-check--help"><a href="#uv-pip-check--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+
+</dd><dt id="uv-pip-check--log"><a href="#uv-pip-check--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-pip-check--log-verbose"><a href="#uv-pip-check--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
 
 </dd><dt id="uv-pip-check--native-tls"><a href="#uv-pip-check--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
@@ -8074,6 +8224,11 @@ uv venv [OPTIONS] [PATH]
 
 <li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
 </ul>
+</dd><dt id="uv-venv--log"><a href="#uv-venv--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-venv--log-verbose"><a href="#uv-venv--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-venv--native-tls"><a href="#uv-venv--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -8364,6 +8519,11 @@ uv build [OPTIONS] [SRC]
 
 <li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
 </ul>
+</dd><dt id="uv-build--log"><a href="#uv-build--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-build--log-verbose"><a href="#uv-build--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-build--native-tls"><a href="#uv-build--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -8631,6 +8791,11 @@ With these settings, the following two calls are equivalent:</code></pre>
 
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul>
+</dd><dt id="uv-publish--log"><a href="#uv-publish--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-publish--log-verbose"><a href="#uv-publish--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-publish--native-tls"><a href="#uv-publish--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -8805,6 +8970,11 @@ uv cache clean [OPTIONS] [PACKAGE]...
 
 </dd><dt id="uv-cache-clean--help"><a href="#uv-cache-clean--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt id="uv-cache-clean--log"><a href="#uv-cache-clean--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-cache-clean--log-verbose"><a href="#uv-cache-clean--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-cache-clean--native-tls"><a href="#uv-cache-clean--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -8927,6 +9097,11 @@ uv cache prune [OPTIONS]
 <p>See <code>--project</code> to only change the project root directory.</p>
 
 </dd><dt id="uv-cache-prune--help"><a href="#uv-cache-prune--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+
+</dd><dt id="uv-cache-prune--log"><a href="#uv-cache-prune--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-cache-prune--log-verbose"><a href="#uv-cache-prune--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
 
 </dd><dt id="uv-cache-prune--native-tls"><a href="#uv-cache-prune--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
@@ -9052,6 +9227,11 @@ uv cache dir [OPTIONS]
 <p>See <code>--project</code> to only change the project root directory.</p>
 
 </dd><dt id="uv-cache-dir--help"><a href="#uv-cache-dir--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+
+</dd><dt id="uv-cache-dir--log"><a href="#uv-cache-dir--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-cache-dir--log-verbose"><a href="#uv-cache-dir--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
 
 </dd><dt id="uv-cache-dir--native-tls"><a href="#uv-cache-dir--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
@@ -9192,6 +9372,11 @@ uv self update [OPTIONS] [TARGET_VERSION]
 
 </dd><dt id="uv-self-update--help"><a href="#uv-self-update--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt id="uv-self-update--log"><a href="#uv-self-update--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-self-update--log-verbose"><a href="#uv-self-update--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-self-update--native-tls"><a href="#uv-self-update--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -9312,6 +9497,11 @@ uv version [OPTIONS]
 
 </dd><dt id="uv-version--help"><a href="#uv-version--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt id="uv-version--log"><a href="#uv-version--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-version--log-verbose"><a href="#uv-version--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-version--native-tls"><a href="#uv-version--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -9408,6 +9598,11 @@ uv generate-shell-completion [OPTIONS] <SHELL>
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
+</dd><dt id="uv-generate-shell-completion--log"><a href="#uv-generate-shell-completion--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-generate-shell-completion--log-verbose"><a href="#uv-generate-shell-completion--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
+
 </dd><dt id="uv-generate-shell-completion--project"><a href="#uv-generate-shell-completion--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
@@ -9477,6 +9672,11 @@ uv help [OPTIONS] [COMMAND]...
 <p>See <code>--project</code> to only change the project root directory.</p>
 
 </dd><dt id="uv-help--help"><a href="#uv-help--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+
+</dd><dt id="uv-help--log"><a href="#uv-help--log"><code>--log</code></a> <i>path</i></dt><dd><p>Path to a verbose appending log.</p>
+
+<p>May also be set with the <code>UV_LOG</code> environment variable.</p>
+</dd><dt id="uv-help--log-verbose"><a href="#uv-help--log-verbose"><code>--log-verbose</code></a>, <code>-l</code></dt><dd><p>Determines the verbosity of the file logs</p>
 
 </dd><dt id="uv-help--native-tls"><a href="#uv-help--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
