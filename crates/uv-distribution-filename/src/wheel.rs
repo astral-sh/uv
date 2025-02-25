@@ -1,11 +1,13 @@
 use std::fmt::{Display, Formatter};
+use std::hash::Hash;
+use std::str::FromStr;
 
 use memchr::memchr;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
 
+use uv_cache_key::{cache_digest, CacheKey, CacheKeyHasher};
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::{Version, VersionParseError};
 use uv_platform_tags::{
@@ -16,6 +18,8 @@ use uv_platform_tags::{
 use crate::splitter::MemchrSplitter;
 use crate::wheel_tag::{WheelTag, WheelTagLarge, WheelTagSmall};
 use crate::{BuildTag, BuildTagError};
+
+const TRIMMED_STEM_LENGTH: usize = 30;
 
 #[derive(
     Debug,
@@ -102,6 +106,14 @@ impl WheelFilename {
             self.version,
             self.tags
         )
+    }
+
+    /// Returns a consistent identifier useful where full stem might be too long.
+    /// format: `{truncated(version-tags)}-{digest}`
+    pub fn stem_identifier(&self) -> String {
+        let mut prefix = format!("{}-{}", self.version, self.tags);
+        prefix.truncate(TRIMMED_STEM_LENGTH);
+        format!("{}-{}", prefix, cache_digest(&self))
     }
 
     /// Return the wheel's Python tags.
@@ -323,6 +335,14 @@ impl Serialize for WheelFilename {
         S: Serializer,
     {
         serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl CacheKey for WheelFilename {
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        self.name.hash(state);
+        self.version.hash(state);
+        self.tags.hash(state);
     }
 }
 
