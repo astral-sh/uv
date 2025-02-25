@@ -1915,15 +1915,11 @@ where
     };
 
     // Cloning log path before moving cli to the main2 thread.
+    let log_set: bool = cli.top_level.global_args.log.is_some();
     let log_path = if let Some(path) = cli.top_level.global_args.log.as_ref() {
         let mut log_file_path = path.to_owned();
         log_file_path.set_extension("log");
-
-        if let Ok(dir) = env::var(uv_static::EnvVars::UV_LOG_DIR) {
-            Path::new(&dir).join(log_file_path.file_name().unwrap_or_default())
-        } else {
-            log_file_path
-        }
+        log_file_path
     } else {
         std::path::PathBuf::default()
     };
@@ -1973,12 +1969,17 @@ where
         .join()
         .expect("Tokio executor failed, was there a panic?");
 
+    let log_path = if let Ok(log_dir) = env::var(uv_static::EnvVars::UV_LOG_DIR) {
+        std::path::PathBuf::from(log_dir).join(log_path)
+    } else {
+        std::env::current_dir().unwrap_or_default().join(log_path)
+    };
     // Discuss if pointing to log file should only be done on error or always.
     // Incase the cli logs are more verbose than the log file, should the message still say See <path> for detailed logs?
     match result {
         Ok(code) => {
             if let ExitStatus::Error | ExitStatus::Failure = code {
-                if log_path != Path::new("") {
+                if log_set {
                     eprintln!("See {} for detailed logs", log_path.display().cyan().bold());
                 }
             }
@@ -2001,7 +2002,7 @@ where
             let err_uv: UvError = err.into();
             match err_uv {
                 UvError::Other => {
-                    if log_path != Path::new("") {
+                    if log_set {
                         eprintln!("See {} for detailed logs", log_path.display().cyan().bold());
                     }
                 }
