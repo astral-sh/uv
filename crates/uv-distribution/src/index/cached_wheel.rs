@@ -120,6 +120,12 @@ impl CachedWheel {
     pub fn from_http_pointer(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
         let path = path.as_ref();
 
+        // We expect the filename to be the cache digest of the normalized wheel filename.
+        let filename = path.file_stem()?.to_str()?;
+        if !looks_like_cache_digest(filename) {
+            return None;
+        }
+
         // Read the pointer.
         let pointer = HttpArchivePointer::read_from(path).ok()??;
         let cache_info = pointer.to_cache_info();
@@ -146,6 +152,12 @@ impl CachedWheel {
     /// Read a cached wheel from a `.rev` pointer (e.g., `anyio-4.0.0-py3-none-any.rev`).
     pub fn from_local_pointer(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
         let path = path.as_ref();
+
+        // We expect the filename to be the cache digest of the normalized wheel filename.
+        let filename = path.file_stem()?.to_str()?;
+        if !looks_like_cache_digest(filename) {
+            return None;
+        }
 
         // Read the pointer.
         let pointer = LocalArchivePointer::read_from(path).ok()??;
@@ -180,4 +192,9 @@ impl Hashed for CachedWheel {
     fn hashes(&self) -> &[HashDigest] {
         self.hashes.as_slice()
     }
+}
+
+/// Returns `true` if a string is a viable hexadecimal cache digest (e.g., `1a7c8ade9`).
+fn looks_like_cache_digest(s: &str) -> bool {
+    s.bytes().all(|c| matches!(c, b'a'..=b'z' | b'0'..=b'9'))
 }

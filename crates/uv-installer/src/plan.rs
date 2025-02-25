@@ -160,7 +160,7 @@ impl<'a> Planner<'a> {
                             CacheBucket::Wheels,
                             WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
                         )
-                        .entry(format!("{}.http", cache_digest(&wheel.filename.stem())));
+                        .entry(format!("{}.http", cache_digest(&wheel.filename)));
 
                     // Read the HTTP pointer.
                     if let Some(pointer) = HttpArchivePointer::read_from(&cache_entry)? {
@@ -211,7 +211,7 @@ impl<'a> Planner<'a> {
                             CacheBucket::Wheels,
                             WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
                         )
-                        .entry(format!("{}.rev", cache_digest(&wheel.filename.stem())));
+                        .entry(format!("{}.rev", cache_digest(&wheel.filename)));
 
                     if let Some(pointer) = LocalArchivePointer::read_from(&cache_entry)? {
                         let timestamp = Timestamp::from_path(&wheel.install_path)?;

@@ -1,11 +1,13 @@
 use std::fmt::{Display, Formatter};
+use std::hash::Hash;
+use std::str::FromStr;
 
 use memchr::memchr;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
 
+use uv_cache_key::{CacheKey, CacheKeyHasher};
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::{Version, VersionParseError};
 use uv_platform_tags::{
@@ -310,6 +312,14 @@ impl Serialize for WheelFilename {
         S: Serializer,
     {
         serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl CacheKey for WheelFilename {
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        self.name.hash(state);
+        self.version.hash(state);
+        self.tags.hash(state);
     }
 }
 

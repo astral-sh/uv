@@ -190,7 +190,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let wheel_entry = self.build_context.cache().entry(
                     CacheBucket::Wheels,
                     WheelCache::Index(&wheel.index).wheel_dir(wheel.name().as_ref()),
-                    cache_digest(&wheel.filename.stem()),
+                    cache_digest(&wheel.filename),
                 );
 
                 // If the URL is a file URL, load the wheel directly.
@@ -263,7 +263,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let wheel_entry = self.build_context.cache().entry(
                     CacheBucket::Wheels,
                     WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
-                    cache_digest(&wheel.filename.stem()),
+                    cache_digest(&wheel.filename),
                 );
 
                 // Download and unzip.
@@ -318,7 +318,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let cache_entry = self.build_context.cache().entry(
                     CacheBucket::Wheels,
                     WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
-                    cache_digest(&wheel.filename.stem()),
+                    cache_digest(&wheel.filename),
                 );
 
                 self.load_wheel(
