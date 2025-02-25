@@ -85,26 +85,21 @@ impl serde::Serialize for SmallString {
 
 impl<'de> serde::Deserialize<'de> for SmallString {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s = deserializer.deserialize_str(SmallStringVisitor)?;
-        Ok(s)
-    }
-}
+        struct Visitor;
 
-struct SmallStringVisitor;
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = SmallString;
 
-impl serde::de::Visitor<'_> for SmallStringVisitor {
-    type Value = SmallString;
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
 
-    fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.write_str("a string")
-    }
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                Ok(v.into())
+            }
+        }
 
-    fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
-        Ok(v.into())
-    }
-
-    fn visit_string<E: serde::de::Error>(self, v: String) -> Result<Self::Value, E> {
-        Ok(v.into())
+        deserializer.deserialize_str(Visitor)
     }
 }
 

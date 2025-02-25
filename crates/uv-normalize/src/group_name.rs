@@ -1,5 +1,3 @@
-use std::fmt;
-use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use std::sync::LazyLock;
 
@@ -41,8 +39,25 @@ impl<'de> Deserialize<'de> for GroupName {
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        Self::from_str(&s).map_err(serde::de::Error::custom)
+        struct Visitor;
+
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = GroupName;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                GroupName::from_str(v).map_err(serde::de::Error::custom)
+            }
+
+            fn visit_string<E: serde::de::Error>(self, v: String) -> Result<Self::Value, E> {
+                GroupName::from_owned(v).map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 
@@ -55,8 +70,8 @@ impl Serialize for GroupName {
     }
 }
 
-impl Display for GroupName {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for GroupName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
     }
 }

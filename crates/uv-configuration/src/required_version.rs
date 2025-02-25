@@ -1,3 +1,4 @@
+use std::fmt::Formatter;
 use std::str::FromStr;
 
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers, VersionSpecifiersParseError};
@@ -49,8 +50,21 @@ impl schemars::JsonSchema for RequiredVersion {
 
 impl<'de> serde::Deserialize<'de> for RequiredVersion {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(deserializer)?;
-        Self::from_str(&s).map_err(serde::de::Error::custom)
+        struct Visitor;
+
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = RequiredVersion;
+
+            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                RequiredVersion::from_str(v).map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 

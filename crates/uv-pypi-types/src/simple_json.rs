@@ -65,13 +65,37 @@ fn deserialize_version_specifiers_lenient<'de, D>(
 where
     D: Deserializer<'de>,
 {
-    let maybe_string: Option<String> = Option::deserialize(deserializer)?;
-    let Some(string) = maybe_string else {
-        return Ok(None);
-    };
-    Ok(Some(
-        LenientVersionSpecifiers::from_str(&string).map(VersionSpecifiers::from),
-    ))
+    struct Visitor;
+
+    impl<'de> serde::de::Visitor<'de> for Visitor {
+        type Value = Option<Result<VersionSpecifiers, VersionSpecifiersParseError>>;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("a string representing a version specifier")
+        }
+
+        fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            Ok(Some(
+                LenientVersionSpecifiers::from_str(v).map(VersionSpecifiers::from),
+            ))
+        }
+
+        fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            deserializer.deserialize_str(Visitor)
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(None)
+        }
+    }
+
+    deserializer.deserialize_option(Visitor)
 }
 
 #[derive(Debug, Clone)]
