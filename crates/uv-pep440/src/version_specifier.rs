@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::fmt::Formatter;
 use std::ops::Bound;
 use std::str::FromStr;
 
@@ -161,8 +162,21 @@ impl<'de> Deserialize<'de> for VersionSpecifiers {
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        Self::from_str(&s).map_err(de::Error::custom)
+        struct Visitor;
+
+        impl de::Visitor<'_> for Visitor {
+            type Value = VersionSpecifiers;
+
+            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                VersionSpecifiers::from_str(v).map_err(de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 
@@ -172,7 +186,7 @@ impl Serialize for VersionSpecifiers {
     where
         S: Serializer,
     {
-        serializer.collect_str(
+        serializer.serialize_str(
             &self
                 .iter()
                 .map(ToString::to_string)
@@ -256,14 +270,26 @@ pub struct VersionSpecifier {
     pub(crate) version: Version,
 }
 
-/// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
 impl<'de> Deserialize<'de> for VersionSpecifier {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        FromStr::from_str(&s).map_err(de::Error::custom)
+        struct Visitor;
+
+        impl de::Visitor<'_> for Visitor {
+            type Value = VersionSpecifier;
+
+            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                VersionSpecifier::from_str(v).map_err(de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 

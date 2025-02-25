@@ -1,4 +1,5 @@
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use std::fmt::Formatter;
 use std::num::NonZero;
 use std::ops::Deref;
 use std::sync::LazyLock;
@@ -725,14 +726,26 @@ impl Version {
     }
 }
 
-/// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
 impl<'de> Deserialize<'de> for Version {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        FromStr::from_str(&s).map_err(de::Error::custom)
+        struct Visitor;
+
+        impl de::Visitor<'_> for Visitor {
+            type Value = Version;
+
+            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                Version::from_str(v).map_err(de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 

@@ -407,8 +407,21 @@ impl<'de> Deserialize<'de> for StringVersion {
     where
         D: Deserializer<'de>,
     {
-        let string = String::deserialize(deserializer)?;
-        Self::from_str(&string).map_err(de::Error::custom)
+        struct Visitor;
+
+        impl de::Visitor<'_> for Visitor {
+            type Value = StringVersion;
+
+            fn expecting(&self, f: &mut Formatter) -> fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                StringVersion::from_str(v).map_err(de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 
@@ -651,8 +664,21 @@ impl<'de> Deserialize<'de> for MarkerTree {
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        FromStr::from_str(&s).map_err(de::Error::custom)
+        struct Visitor;
+
+        impl de::Visitor<'_> for Visitor {
+            type Value = MarkerTree;
+
+            fn expecting(&self, f: &mut Formatter) -> fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                MarkerTree::from_str(v).map_err(de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 

@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::Infallible;
 use std::error::Error;
-use std::fmt::{Debug, Display};
+use std::fmt::{Debug, Display, Formatter};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -4361,12 +4361,25 @@ impl Display for Hash {
 }
 
 impl<'de> serde::Deserialize<'de> for Hash {
-    fn deserialize<D>(d: D) -> Result<Hash, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Hash, D::Error>
     where
         D: serde::de::Deserializer<'de>,
     {
-        let string = String::deserialize(d)?;
-        string.parse().map_err(serde::de::Error::custom)
+        struct Visitor;
+
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = Hash;
+
+            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                Hash::from_str(v).map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 
