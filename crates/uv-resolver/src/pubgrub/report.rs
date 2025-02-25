@@ -1657,16 +1657,29 @@ impl std::fmt::Display for PubGrubHint {
                 tags,
             } => {
                 let s = if tags.len() == 1 { "" } else { "s" };
+                let macos_env_hint = tags
+                    .iter()
+                    .any(|tag| matches!(*tag, PlatformTag::Macos { .. }))
+                    .then_some(format!(
+                        "\n\n{}{} Use `{}` to set the deployment target on macos platform",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        "MACOSX_DEPLOYMENT_TARGET".cyan(),
+                    ))
+                    .unwrap_or(String::from(""));
+                let formatted_tags = tags
+                    .iter()
+                    .map(|tag| format!("`{}`", tag.cyan()))
+                    .join(", ");
                 write!(
                     f,
-                    "{}{} Wheels are available for `{}` ({}) on the following platform{s}: {}",
+                    "{}{} Wheels are available for `{}` ({}) on the following platform{s}: {}{}",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.cyan(),
                     format!("v{version}").cyan(),
-                    tags.iter()
-                        .map(|tag| format!("`{}`", tag.cyan()))
-                        .join(", "),
+                    formatted_tags,
+                    macos_env_hint,
                 )
             }
         }
