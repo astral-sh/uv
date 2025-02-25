@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::ops::Bound;
 use std::str::FromStr;
@@ -469,15 +470,15 @@ impl VersionSpecifier {
         // "Except where specifically noted below, local version identifiers MUST NOT be permitted
         // in version specifiers, and local version labels MUST be ignored entirely when checking
         // if candidate versions match a given version specifier."
-        let (this, other) = if self.version.local().is_empty() {
-            // self is already without local
-            (self.version.clone(), version.clone().without_local())
+        let this = self.version();
+        let other = if this.local().is_empty() && !version.local().is_empty() {
+            Cow::Owned(version.clone().without_local())
         } else {
-            (self.version.clone(), version.clone())
+            Cow::Borrowed(version)
         };
 
         match self.operator {
-            Operator::Equal => other == this,
+            Operator::Equal => other.as_ref() == this,
             Operator::EqualStar => {
                 this.epoch() == other.epoch()
                     && self
@@ -495,7 +496,7 @@ impl VersionSpecifier {
                 }
                 self.version.to_string() == version.to_string()
             }
-            Operator::NotEqual => other != this,
+            Operator::NotEqual => this != other.as_ref(),
             Operator::NotEqualStar => {
                 this.epoch() != other.epoch()
                     || !this
@@ -524,17 +525,19 @@ impl VersionSpecifier {
 
                 // According to PEP 440, this ignores the pre-release special rules
                 // pypa/packaging disagrees: https://github.com/pypa/packaging/issues/617
-                other >= this
+                other.as_ref() >= this
             }
-            Operator::GreaterThan => Self::greater_than(&this, &other),
-            Operator::GreaterThanEqual => Self::greater_than(&this, &other) || other >= this,
+            Operator::GreaterThan => Self::greater_than(this, &other),
+            Operator::GreaterThanEqual => {
+                Self::greater_than(this, &other) || other.as_ref() >= this
+            }
             Operator::LessThan => {
-                Self::less_than(&this, &other)
+                Self::less_than(this, &other)
                     && !(version::compare_release(&this.release(), &other.release())
                         == Ordering::Equal
                         && other.any_prerelease())
             }
-            Operator::LessThanEqual => Self::less_than(&this, &other) || other <= this,
+            Operator::LessThanEqual => Self::less_than(this, &other) || other.as_ref() <= this,
         }
     }
 
