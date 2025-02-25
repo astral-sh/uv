@@ -23692,9 +23692,10 @@ fn lock_script_path() -> Result<()> {
     Ok(())
 }
 
+/// `uv lock --script` should add a PEP 723 tag, if it doesn't exist already.
 #[test]
-fn lock_script_error() -> Result<()> {
-    let context = TestContext::new("3.12");
+fn lock_script_initialize() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_missing_file_error();
 
     uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @r"
     success: false
@@ -23708,19 +23709,35 @@ fn lock_script_error() -> Result<()> {
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! { r"
-        import anyio
+        print('Hello, world!')
        "
     })?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @r"
-    success: false
-    exit_code: 2
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @r###"
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: `script.py` does not contain a PEP 723 metadata tag; run `uv init --script script.py` to initialize the script
-    See [UV_LOG_DIR]/lock.log for detailed logs
-    ");
+    Resolved in [TIME]
+    "###);
+
+    let lock = context.read("script.py.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        revision = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "###
+        );
+    });
 
     Ok(())
 }

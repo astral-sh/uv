@@ -177,7 +177,7 @@ impl<'dist> RequirementsTxtDist<'dist> {
         Self {
             dist: &annotated.dist,
             version: &annotated.version,
-            hashes: &annotated.hashes,
+            hashes: annotated.hashes.as_slice(),
             // OK because we've asserted above that this dist
             // does not have a non-trivial conflicting marker
             // that we would otherwise need to care about.

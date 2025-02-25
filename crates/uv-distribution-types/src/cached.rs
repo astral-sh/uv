@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
 use uv_normalize::PackageName;
-use uv_pypi_types::{HashDigest, VerbatimParsedUrl};
+use uv_pypi_types::{HashDigest, HashDigests, VerbatimParsedUrl};
 
 use crate::{
     BuiltDist, Dist, DistributionMetadata, Hashed, InstalledMetadata, InstalledVersion, Name,
@@ -23,7 +23,7 @@ pub enum CachedDist {
 pub struct CachedRegistryDist {
     pub filename: WheelFilename,
     pub path: PathBuf,
-    pub hashes: Vec<HashDigest>,
+    pub hashes: HashDigests,
     pub cache_info: CacheInfo,
 }
 
@@ -32,7 +32,7 @@ pub struct CachedDirectUrlDist {
     pub filename: WheelFilename,
     pub url: VerbatimParsedUrl,
     pub path: PathBuf,
-    pub hashes: Vec<HashDigest>,
+    pub hashes: HashDigests,
     pub cache_info: CacheInfo,
 }
 
@@ -41,7 +41,7 @@ impl CachedDist {
     pub fn from_remote(
         remote: Dist,
         filename: WheelFilename,
-        hashes: Vec<HashDigest>,
+        hashes: HashDigests,
         cache_info: CacheInfo,
         path: PathBuf,
     ) -> Self {
@@ -156,7 +156,7 @@ impl CachedDist {
 
 impl Hashed for CachedRegistryDist {
     fn hashes(&self) -> &[HashDigest] {
-        &self.hashes
+        self.hashes.as_slice()
     }
 }
 
