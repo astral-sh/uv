@@ -174,11 +174,10 @@ impl PyProjectTomlMut {
             .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let name = req.name.clone();
         let edit = add_dependency(req, dependencies, source.is_some())?;
 
         if let Some(source) = source {
-            self.add_source(&name, source)?;
+            self.add_source(&req.name, source)?;
         }
 
         Ok(edit)
@@ -208,11 +207,10 @@ impl PyProjectTomlMut {
             .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let name = req.name.clone();
         let edit = add_dependency(req, dev_dependencies, source.is_some())?;
 
         if let Some(source) = source {
-            self.add_source(&name, source)?;
+            self.add_source(&req.name, source)?;
         }
 
         Ok(edit)
@@ -411,7 +409,6 @@ impl PyProjectTomlMut {
             .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let name = req.name.clone();
         let added = add_dependency(req, group, source.is_some())?;
 
         // If `project.optional-dependencies` is an inline table, reformat it.
@@ -427,7 +424,7 @@ impl PyProjectTomlMut {
         }
 
         if let Some(source) = source {
-            self.add_source(&name, source)?;
+            self.add_source(&req.name, source)?;
         }
 
         Ok(added)
@@ -463,7 +460,6 @@ impl PyProjectTomlMut {
             .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let name = req.name.clone();
         let added = add_dependency(req, group, source.is_some())?;
 
         // To avoid churn in pyproject.toml, we only sort new group keys if the
@@ -485,7 +481,7 @@ impl PyProjectTomlMut {
         }
 
         if let Some(source) = source {
-            self.add_source(&name, source)?;
+            self.add_source(&req.name, source)?;
         }
 
         Ok(added)
