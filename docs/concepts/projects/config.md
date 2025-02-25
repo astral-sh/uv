@@ -220,7 +220,7 @@ Intel macOS:
 ```toml title="pyproject.toml"
 [tool.uv]
 required-environments = [
-    "sys_platform == 'darwin' and platform.machine() == 'x86_64'",
+    "sys_platform == 'darwin' and platform_machine == 'x86_64'",
 ]
 ```
 

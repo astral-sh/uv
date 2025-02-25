@@ -20,7 +20,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind};
 use uv_pypi_types::{
-    Conflicts, HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked,
+    Conflicts, HashDigests, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked,
 };
 
 use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
@@ -414,7 +414,7 @@ impl ResolverOutput {
         preferences: &Preferences,
         in_memory: &InMemoryIndex,
         git: &GitResolver,
-    ) -> Result<(ResolvedDist, Vec<HashDigest>, Option<Metadata>), ResolveError> {
+    ) -> Result<(ResolvedDist, HashDigests, Option<Metadata>), ResolveError> {
         Ok(if let Some(url) = url {
             // Create the distribution.
             let dist = Dist::from_url(name.clone(), url_to_precise(url.clone(), git))?;
@@ -476,7 +476,7 @@ impl ResolverOutput {
                 Some(Yanked::Reason(reason)) => {
                     diagnostics.push(ResolutionDiagnostic::YankedVersion {
                         dist: dist.clone(),
-                        reason: Some(reason.clone()),
+                        reason: Some(reason.to_string()),
                     });
                 }
             }
@@ -520,11 +520,11 @@ impl ResolverOutput {
         version: &Version,
         preferences: &Preferences,
         in_memory: &InMemoryIndex,
-    ) -> Vec<HashDigest> {
+    ) -> HashDigests {
         // 1. Look for hashes from the lockfile.
         if let Some(digests) = preferences.match_hashes(name, version) {
             if !digests.is_empty() {
-                return digests.to_vec();
+                return HashDigests::from(digests);
             }
         }
 
@@ -552,7 +552,8 @@ impl ResolverOutput {
                     if let Some(digests) = version_maps
                         .iter()
                         .find_map(|version_map| version_map.hashes(version))
-                        .map(|mut digests| {
+                        .map(|digests| {
+                            let mut digests = HashDigests::from(digests);
                             digests.sort_unstable();
                             digests
                         })
@@ -565,7 +566,7 @@ impl ResolverOutput {
             }
         }
 
-        vec![]
+        HashDigests::empty()
     }
 
     /// Returns an iterator over the distinct packages in the graph.
