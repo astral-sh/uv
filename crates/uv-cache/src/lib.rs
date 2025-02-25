@@ -389,7 +389,10 @@ impl Cache {
                         if bucket == CacheBucket::Wheels {
                             // In `wheels` bucket hash is used for the directory name so we can't rely on stem pattern.
                             // Instead we skip if it contains an extension (example: .whl, .http, .rev and .msgpack files).
-                            if std::path::Path::new(filename).extension().is_some() {
+                            if filename
+                                .rsplit_once('-') // strip version/tags, might contain a dot ('.')
+                                .is_none_or(|(_, suffix)| suffix.contains('.'))
+                            {
                                 continue;
                             }
                         } else if WheelFilename::from_stem(filename).is_err() {
@@ -442,7 +445,10 @@ impl Cache {
                         if bucket == CacheBucket::Wheels {
                             // In `wheels` bucket hash is used for the directory name so we can't rely on stem pattern.
                             // Instead we skip if it contains an extension (example: .whl, .http, .rev and .msgpack files).
-                            if std::path::Path::new(filename).extension().is_some() {
+                            if filename
+                                .rsplit_once('-') // strip version/tags, might contain a dot ('.')
+                                .is_none_or(|(_, suffix)| suffix.contains('.'))
+                            {
                                 continue;
                             }
                         } else if WheelFilename::from_stem(filename).is_err() {
@@ -607,7 +613,10 @@ impl Cache {
                     if bucket == CacheBucket::Wheels {
                         // In `wheels` bucket hash is used for the directory name so we can't rely on stem pattern.
                         // Instead we skip if it contains an extension (example: .whl, .http, .rev and .msgpack files).
-                        if std::path::Path::new(filename).extension().is_some() {
+                        if filename
+                            .rsplit_once('-') // strip version/tags, might contain a dot ('.')
+                            .is_none_or(|(_, suffix)| suffix.contains('.'))
+                        {
                             continue;
                         }
                     } else if WheelFilename::from_stem(filename).is_err() {
