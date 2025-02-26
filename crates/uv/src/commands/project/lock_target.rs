@@ -5,7 +5,7 @@ use itertools::Either;
 
 use uv_configuration::SourceStrategy;
 use uv_distribution::LoweredRequirement;
-use uv_distribution_types::{Index, IndexLocations, ProxyWithCanonicalUrl};
+use uv_distribution_types::{Index, IndexLocations};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{Conflicts, Requirement, SupportedEnvironments, VerbatimParsedUrl};
@@ -256,10 +256,7 @@ impl<'lock> LockTarget<'lock> {
     /// Read the lockfile from the workspace.
     ///
     /// Returns `Ok(None)` if the lockfile does not exist.
-    pub(crate) async fn read(
-        self,
-        proxies: Option<&[ProxyWithCanonicalUrl]>,
-    ) -> Result<Option<Lock>, ProjectError> {
+    pub(crate) async fn read(self) -> Result<Option<Lock>, ProjectError> {
         match fs_err::tokio::read_to_string(self.lock_path()).await {
             Ok(encoded) => {
                 match toml::from_str::<Lock>(&encoded) {
@@ -271,7 +268,6 @@ impl<'lock> LockTarget<'lock> {
                                 lock.version(),
                             ));
                         }
-                        let lock = lock.with_proxy_urls(proxies)?;
                         Ok(Some(lock))
                     }
                     Err(err) => {

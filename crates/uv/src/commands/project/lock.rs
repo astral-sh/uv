@@ -270,17 +270,19 @@ pub(super) async fn do_safe_lock(
         LockMode::Frozen => {
             // Read the existing lockfile, but don't attempt to lock the project.
             let existing = target
-                .read(settings.index_proxies.as_deref())
+                .read()
                 .await?
-                .ok_or_else(|| ProjectError::MissingLockfile)?;
+                .ok_or_else(|| ProjectError::MissingLockfile)?
+                .with_proxy_urls(settings.index_proxies.as_deref())?;
             Ok(LockResult::Unchanged(existing))
         }
         LockMode::Locked(interpreter) => {
             // Read the existing lockfile.
             let existing = target
-                .read(settings.index_proxies.as_deref())
+                .read()
                 .await?
-                .ok_or_else(|| ProjectError::MissingLockfile)?;
+                .ok_or_else(|| ProjectError::MissingLockfile)?
+                .with_proxy_urls(settings.index_proxies.as_deref())?;
 
             // Perform the lock operation, but don't write the lockfile to disk.
             let result = do_lock(
@@ -309,8 +311,10 @@ pub(super) async fn do_safe_lock(
         }
         LockMode::Write(interpreter) | LockMode::DryRun(interpreter) => {
             // Read the existing lockfile.
-            let existing = match target.read(settings.index_proxies.as_deref()).await {
-                Ok(Some(existing)) => Some(existing),
+            let existing = match target.read().await {
+                Ok(Some(existing)) => {
+                    Some(existing.with_proxy_urls(settings.index_proxies.as_deref())?)
+                }
                 Ok(None) => None,
                 Err(ProjectError::Lock(err)) => {
                     warn_user!(

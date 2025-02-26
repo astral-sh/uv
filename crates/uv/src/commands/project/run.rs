@@ -641,10 +641,12 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // in any `--with` requirements.
                 if !isolated && !requirements.is_empty() {
                     lock = LockTarget::from(project.workspace())
-                        .read(settings.index_proxies.as_deref())
+                        .read()
                         .await
                         .ok()
                         .flatten()
+                        .map(|lock| lock.with_proxy_urls(settings.index_proxies.as_deref()))
+                        .transpose()?
                         .map(|lock| (lock, project.workspace().install_path().to_owned()));
                 }
             } else {
