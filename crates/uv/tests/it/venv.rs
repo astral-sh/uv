@@ -640,7 +640,7 @@ fn create_venv_unknown_python_minor() {
         .env_remove(EnvVars::UV_TEST_PYTHON_PATH);
 
     if cfg!(windows) {
-        uv_snapshot!(&mut command, @r###"
+        uv_snapshot!(context.filters(), &mut command, @r###"
         success: false
         exit_code: 1
         ----- stdout -----
@@ -680,7 +680,7 @@ fn create_venv_unknown_python_patch() {
         .env_remove(EnvVars::UV_TEST_PYTHON_PATH);
 
     if cfg!(windows) {
-        uv_snapshot!(&mut command, @r###"
+        uv_snapshot!(context.filters(), &mut command, @r###"
         success: false
         exit_code: 1
         ----- stdout -----
