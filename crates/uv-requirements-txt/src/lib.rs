@@ -40,7 +40,6 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use r_shquote::unquote;
 use tracing::instrument;
 use unscanny::{Pattern, Scanner};
 use url::Url;
@@ -56,8 +55,10 @@ use uv_pypi_types::{Requirement, VerbatimParsedUrl};
 
 use crate::requirement::EditableError;
 pub use crate::requirement::RequirementsTxtRequirement;
+use crate::shquote::unquote;
 
 mod requirement;
+mod shquote;
 
 /// We emit one of those for each `requirements.txt` entry.
 enum RequirementsTxtStatement {
