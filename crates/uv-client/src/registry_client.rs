@@ -618,7 +618,7 @@ impl RegistryClient {
             let cache_entry = self.cache.entry(
                 CacheBucket::Wheels,
                 WheelCache::Index(index).wheel_dir(filename.name.as_ref()),
-                format!("{}.msgpack", filename.stem_identifier()),
+                format!("{}.msgpack", filename.compatibility_identifier()),
             );
             let cache_control = match self.connectivity {
                 Connectivity::Online => CacheControl::from(
@@ -688,7 +688,7 @@ impl RegistryClient {
         let cache_entry = self.cache.entry(
             CacheBucket::Wheels,
             cache_shard.wheel_dir(filename.name.as_ref()),
-            format!("{}.msgpack", filename.stem_identifier()),
+            format!("{}.msgpack", filename.compatibility_identifier()),
         );
         let cache_control = match self.connectivity {
             Connectivity::Online => CacheControl::from(

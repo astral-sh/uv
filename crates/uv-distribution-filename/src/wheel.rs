@@ -19,7 +19,7 @@ use crate::splitter::MemchrSplitter;
 use crate::wheel_tag::{WheelTag, WheelTagLarge, WheelTagSmall};
 use crate::{BuildTag, BuildTagError};
 
-const TRIMMED_STEM_LENGTH: usize = 30;
+const COMPATIBILITY_IDENTIFIER_MAX_LEN: usize = 36;
 
 #[derive(
     Debug,
@@ -108,12 +108,15 @@ impl WheelFilename {
         )
     }
 
-    /// Returns a consistent identifier useful where full stem might be too long.
-    /// format: `{truncated(version-tags)}-{digest}`
-    pub fn stem_identifier(&self) -> String {
-        let mut prefix = format!("{}-{}", self.version, self.tags);
-        prefix.truncate(TRIMMED_STEM_LENGTH);
-        format!("{}-{}", prefix, cache_digest(&self))
+    /// Returns a consistent compatibility identifier where max length is capped by [`COMPATIBILITY_IDENTIFIER_MAX_LEN`]
+    /// format: `{version-tags}` or `{truncated(version-tags)}-{digest}`
+    pub fn compatibility_identifier(&self) -> String {
+        let full = format!("{}-{}", self.version, self.tags);
+        if full.len() <= COMPATIBILITY_IDENTIFIER_MAX_LEN {
+            return full;
+        }
+        let prefix_width = COMPATIBILITY_IDENTIFIER_MAX_LEN - 1 /* dash */ - 16 /* digest */;
+        format!("{:.prefix_width$}-{}", self.version, cache_digest(&self))
     }
 
     /// Return the wheel's Python tags.
@@ -468,6 +471,20 @@ mod tests {
                 WheelFilename::from_str(wheel_name).unwrap().to_string(),
                 *wheel_name
             );
+        }
+    }
+
+    #[test]
+    fn compatibility_identifier_truncation() {
+        let wheel_names = &[
+            "django_allauth-0.51.0-py3-none-any.whl",
+            "osm2geojson-0.2.4-py3-none-any.whl",
+            "numpy-1.26.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+        ];
+        for wheel_name in wheel_names {
+            let filename = WheelFilename::from_str(wheel_name).unwrap();
+            assert!(filename.compatibility_identifier().len() <= COMPATIBILITY_IDENTIFIER_MAX_LEN);
+            insta::assert_snapshot!(filename.compatibility_identifier());
         }
     }
 }
