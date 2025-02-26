@@ -2228,8 +2228,7 @@ fn install_git_private_https_interactive() {
       ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
       ╰─▶ process didn't exit successfully: `/usr/bin/git fetch --force --update-head-ok 'https://github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
           --- stderr
-          remote: Repository not found.
-          fatal: repository 'https://github.com/astral-test/uv-private-pypackage/' not found
+          fatal: could not read Username for 'https://github.com': terminal prompts disabled
 
     See [UV_LOG_DIR]/pip_install.log for detailed logs
     ");
