@@ -179,7 +179,7 @@ environment.
 
 ## Exporting the lockfile
 
-If you need to integrate uv with other tools or workflows, you can export `uv.lock` to
+If you need to integrate uv with other tools or workflows, you can export `uv.lock` to the
 `requirements.txt` format with `uv export --format requirements-txt`. The generated
 `requirements.txt` file can then be installed via `uv pip install`, or with other tools like `pip`.
 
