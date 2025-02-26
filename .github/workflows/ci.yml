@@ -427,6 +427,11 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: "Build - with self-update feature"
+        run: |
+          cargo build --features self-update
+          mv ./target/debug/uv ./target/debug/uv-with-self-update-feature
+
       - name: "Build"
         run: cargo build
 
@@ -437,6 +442,7 @@ jobs:
           path: |
             ./target/debug/uv
             ./target/debug/uvx
+            ./target/debug/uv-with-self-update-feature
           retention-days: 1
 
   build-binary-linux-musl:
@@ -505,6 +511,12 @@ jobs:
       - uses: rui314/setup-mold@v1
 
       - uses: Swatinem/rust-cache@v2
+
+      - name: "Build - with self-update feature"
+        run: |
+          cargo build --features self-update --bin uv
+          mv ./target/debug/uv ./target/debug/uv-with-self-update-feature
+
       - name: "Build"
         run: cargo build --bin uv --bin uvx
 
@@ -515,6 +527,7 @@ jobs:
           path: |
             ./target/debug/uv
             ./target/debug/uvx
+            ./target/debug/uv-with-self-update-feature
           retention-days: 1
 
   build-binary-windows-x86_64:
@@ -538,6 +551,12 @@ jobs:
         with:
           workspaces: ${{ env.UV_WORKSPACE }}
 
+      - name: "Build - with self-update feature"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
+          cargo build --bin uv
+          Move-Item ${{ env.UV_WORKSPACE }}/target/debug/uv.exe ${{ env.UV_WORKSPACE }}/target/debug/uv-with-self-update-feature.exe
+
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: cargo build --bin uv --bin uvx
@@ -549,6 +568,7 @@ jobs:
           path: |
             ${{ env.UV_WORKSPACE }}/target/debug/uv.exe
             ${{ env.UV_WORKSPACE }}/target/debug/uvx.exe
+            ${{ env.UV_WORKSPACE }}/target/debug/uv-with-self-update-feature.exe
           retention-days: 1
 
   build-binary-windows-aarch64:
@@ -576,6 +596,12 @@ jobs:
       - name: "Install cross target"
         run: rustup target add aarch64-pc-windows-msvc
 
+      - name: "Build - with self-update feature"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
+          cargo build --target aarch64-pc-windows-msvc --features self-update
+          Move-Item ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/debug/uv.exe ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/debug/uv-with-self-update-feature.exe
+
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: cargo build --target aarch64-pc-windows-msvc
@@ -587,6 +613,7 @@ jobs:
           path: |
             ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/debug/uv.exe
             ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/debug/uvx.exe
+            ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/debug/uv-with-self-update-feature.exe
           retention-days: 1
 
   cargo-build-msrv:
@@ -723,6 +750,7 @@ jobs:
         run: |
           chmod +x ./uv
           chmod +x ./uvx
+          chmod +x ./uv-with-self-update-feature
 
       - name: "Smoke test"
         run: |
@@ -731,7 +759,9 @@ jobs:
           ./uvx -v ruff --version
           eval "$(./uv generate-shell-completion bash)"
           eval "$(./uvx --generate-shell-completion bash)"
-          ./uv self uninstall --remove-data
+
+      - name: "Smoke test - with self-update feature"
+        run: ./uv-with-self-update-feature self uninstall --remove-data
 
   smoke-test-macos:
     timeout-minutes: 10
@@ -748,6 +778,7 @@ jobs:
         run: |
           chmod +x ./uv
           chmod +x ./uvx
+          chmod +x ./uv-with-self-update-feature
 
       - name: "Smoke test"
         run: |
@@ -756,7 +787,9 @@ jobs:
           ./uvx -v ruff --version
           eval "$(./uv generate-shell-completion bash)"
           eval "$(./uvx --generate-shell-completion bash)"
-          ./uv self uninstall --remove-data
+
+      - name: "Smoke test - with self-update feature"
+        run: ./uv-with-self-update-feature self uninstall --remove-data
 
   smoke-test-windows-x86_64:
     timeout-minutes: 10
@@ -777,7 +810,9 @@ jobs:
           ./uvx -v ruff --version
           (& ./uv generate-shell-completion powershell) | Out-String | Invoke-Expression
           (& ./uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
-          ./uv self uninstall --remove-data
+
+      - name: "Smoke test - with self-update feature"
+        run: ./uv-with-self-update-feature self uninstall --remove-data
 
   smoke-test-windows-aarch64:
     timeout-minutes: 10
@@ -801,7 +836,9 @@ jobs:
           ./uvx -v ruff --version
           (& ./uv generate-shell-completion powershell) | Out-String | Invoke-Expression
           (& ./uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
-          ./uv self uninstall --remove-data
+
+      - name: "Smoke test - with self-update feature"
+        run: ./uv-with-self-update-feature self uninstall --remove-data
 
   integration-test-conda:
     timeout-minutes: 10
