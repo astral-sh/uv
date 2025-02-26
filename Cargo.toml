@@ -180,7 +180,7 @@ url = { version = "2.5.2", features = ["serde"] }
 version-ranges = { git = "https://github.com/astral-sh/pubgrub", rev = "b70cf707aa43f21b32f3a61b8a0889b15032d5c4" }
 walkdir = { version = "2.5.0" }
 which = { version = "7.0.0", features = ["regex"] }
-windows-registry = { version = "0.4.0" }
+windows-registry = { version = "0.5.0" }
 windows-result = { version = "0.3.0" }
 windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Ioctl", "Win32_System_IO"] }
 winreg = { version = "0.53.0" }
