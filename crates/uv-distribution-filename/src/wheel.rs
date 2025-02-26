@@ -121,8 +121,13 @@ impl WheelFilename {
         // Create a digest of the tag string (instead of its individual fields) to retain
         // compatibility across platforms, Rust versions, etc.
         let digest = cache_digest(&format!("{}", self.tags));
+
+        // Truncate the version, but avoid trailing dots, plus signs, etc. to avoid ambiguity.
         let version_width = CACHE_KEY_MAX_LEN - 1 /* dash */ - 16 /* digest */;
-        format!("{:.version_width$}-{}", self.version.to_string(), digest)
+        let version = format!("{:.version_width$}", self.version);
+        let version = version.trim_end_matches(['.', '+']);
+
+        format!("{version}-{digest}")
     }
 
     /// Return the wheel's Python tags.
