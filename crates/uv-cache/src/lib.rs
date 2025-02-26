@@ -360,54 +360,7 @@ impl Cache {
     /// Returns the number of entries removed from the cache.
     pub fn remove(&self, name: &PackageName) -> Result<Removal, io::Error> {
         // Collect the set of referenced archives.
-        let before = {
-            let mut references = FxHashSet::default();
-            for bucket in CacheBucket::iter() {
-                let bucket_path = self.bucket(bucket);
-                if bucket_path.is_dir() {
-                    for entry in walkdir::WalkDir::new(bucket_path) {
-                        let entry = entry?;
-
-                        // Ignore any `.lock` files.
-                        if entry
-                            .path()
-                            .extension()
-                            .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
-                        {
-                            continue;
-                        }
-
-                        // Identify entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
-                        let Some(filename) = entry
-                            .path()
-                            .file_name()
-                            .and_then(|file_name| file_name.to_str())
-                        else {
-                            continue;
-                        };
-
-                        if bucket == CacheBucket::Wheels {
-                            // In `wheels` bucket hash is used for the directory name so we can't rely on stem pattern.
-                            // Instead we skip if it contains an extension (example: .whl, .http, .rev and .msgpack files).
-                            if filename
-                                .rsplit_once('-') // strip version/tags, might contain a dot ('.')
-                                .is_none_or(|(_, suffix)| suffix.contains('.'))
-                            {
-                                continue;
-                            }
-                        } else if WheelFilename::from_stem(filename).is_err() {
-                            // For other buckets only include entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
-                            continue;
-                        }
-
-                        if let Ok(target) = self.resolve_link(entry.path()) {
-                            references.insert(target);
-                        }
-                    }
-                }
-            }
-            references
-        };
+        let before = self.find_references_to_archive()?;
 
         // Remove any entries for the package from the cache.
         let mut summary = Removal::default();
@@ -416,54 +369,7 @@ impl Cache {
         }
 
         // Collect the set of referenced archives after the removal.
-        let after = {
-            let mut references = FxHashSet::default();
-            for bucket in CacheBucket::iter() {
-                let bucket_path = self.bucket(bucket);
-                if bucket_path.is_dir() {
-                    for entry in walkdir::WalkDir::new(bucket_path) {
-                        let entry = entry?;
-
-                        // Ignore any `.lock` files.
-                        if entry
-                            .path()
-                            .extension()
-                            .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
-                        {
-                            continue;
-                        }
-
-                        // Identify entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
-                        let Some(filename) = entry
-                            .path()
-                            .file_name()
-                            .and_then(|file_name| file_name.to_str())
-                        else {
-                            continue;
-                        };
-
-                        if bucket == CacheBucket::Wheels {
-                            // In `wheels` bucket hash is used for the directory name so we can't rely on stem pattern.
-                            // Instead we skip if it contains an extension (example: .whl, .http, .rev and .msgpack files).
-                            if filename
-                                .rsplit_once('-') // strip version/tags, might contain a dot ('.')
-                                .is_none_or(|(_, suffix)| suffix.contains('.'))
-                            {
-                                continue;
-                            }
-                        } else if WheelFilename::from_stem(filename).is_err() {
-                            // For other buckets only include entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
-                            continue;
-                        }
-
-                        if let Ok(target) = self.resolve_link(entry.path()) {
-                            references.insert(target);
-                        }
-                    }
-                }
-            }
-            references
-        };
+        let after = self.find_references_to_archive()?;
 
         if before != after {
             // Remove any archives that are no longer referenced.
@@ -585,8 +491,28 @@ impl Cache {
         }
 
         // Fourth, remove any unused archives (by searching for archives that are not symlinked).
-        let mut references = FxHashSet::default();
+        let references = self.find_references_to_archive()?;
 
+        match fs_err::read_dir(self.bucket(CacheBucket::Archive)) {
+            Ok(entries) => {
+                for entry in entries {
+                    let entry = entry?;
+                    let path = fs_err::canonicalize(entry.path())?;
+                    if !references.contains(&path) {
+                        debug!("Removing dangling cache archive: {}", path.display());
+                        summary += rm_rf(path)?;
+                    }
+                }
+            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+            Err(err) => return Err(err),
+        }
+
+        Ok(summary)
+    }
+
+    fn find_references_to_archive(&self) -> Result<FxHashSet<PathBuf>, io::Error> {
+        let mut references = FxHashSet::default();
         for bucket in CacheBucket::iter() {
             let bucket_path = self.bucket(bucket);
             if bucket_path.is_dir() {
@@ -630,23 +556,7 @@ impl Cache {
                 }
             }
         }
-
-        match fs_err::read_dir(self.bucket(CacheBucket::Archive)) {
-            Ok(entries) => {
-                for entry in entries {
-                    let entry = entry?;
-                    let path = fs_err::canonicalize(entry.path())?;
-                    if !references.contains(&path) {
-                        debug!("Removing dangling cache archive: {}", path.display());
-                        summary += rm_rf(path)?;
-                    }
-                }
-            }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
-            Err(err) => return Err(err),
-        }
-
-        Ok(summary)
+        Ok(references)
     }
 
     /// Create a link to a directory in the archive bucket.
