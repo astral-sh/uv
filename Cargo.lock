@@ -5674,7 +5674,9 @@ dependencies = [
  "tracing",
  "uv-fs",
  "uv-static",
- "winreg",
+ "windows-registry 0.5.0",
+ "windows-result 0.3.1",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6505,16 +6507,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7e49d2d35d3fad69b39b94139037ecfb4f359f08958b9c11e7315ce770462419"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "winreg"
-version = "0.53.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89a47b489f8fc5b949477e89dca4d1617f162c6c53fbcbefde553ab17b342ff9"
-dependencies = [
- "cfg-if",
- "windows-sys 0.48.0",
 ]
 
 [[package]]

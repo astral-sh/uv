@@ -183,7 +183,6 @@ which = { version = "7.0.0", features = ["regex"] }
 windows-registry = { version = "0.5.0" }
 windows-result = { version = "0.3.0" }
 windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Ioctl", "Win32_System_IO"] }
-winreg = { version = "0.53.0" }
 winsafe = { version = "0.0.22", features = ["kernel"] }
 wiremock = { version = "0.6.2" }
 xz2 = { version = "0.1.7" }
