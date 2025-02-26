@@ -26,7 +26,6 @@ uv-pypi-types = { workspace = true }
 uv-warnings = { workspace = true }
 
 fs-err = { workspace = true }
-r-shquote = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, optional = true }
 reqwest-middleware = { workspace = true, optional = true }

@@ -2845,12 +2845,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "640c9bd8497b02465aeef5375144c26062e0dcd5939dfcbb0f5db76cb8c17c73"
 
 [[package]]
-name = "r-shquote"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d76b7a332c240b0b30ad8b52cc9aecf8ec96878ccb927ce1d2feb03920e0f711"
-
-[[package]]
 name = "rancor"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5537,7 +5531,6 @@ dependencies = [
  "indoc",
  "insta",
  "itertools 0.14.0",
- "r-shquote",
  "regex",
  "reqwest",
  "reqwest-middleware",
