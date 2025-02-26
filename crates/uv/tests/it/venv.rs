@@ -679,7 +679,7 @@ fn create_venv_unknown_python_patch() {
         // Unset this variable to force what the user would see
         .env_remove(EnvVars::UV_TEST_PYTHON_PATH);
 
-    // Applying filters for the "UV_LOG_DIR" however that does filter the the python patch which might make the test less reliable 
+    // Applying filters for the "UV_LOG_DIR" however that does filter the the python patch which might make the test less reliable
     if cfg!(windows) {
         uv_snapshot!(context.filters(), &mut command, @r###"
         success: false
