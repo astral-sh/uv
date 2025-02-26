@@ -5033,6 +5033,7 @@ dependencies = [
  "smallvec",
  "thiserror 2.0.11",
  "url",
+ "uv-cache-key",
  "uv-normalize",
  "uv-pep440",
  "uv-platform-tags",
