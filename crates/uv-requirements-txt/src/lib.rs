@@ -523,7 +523,10 @@ fn parse_entry(
     let start = s.cursor();
     Ok(Some(if s.eat_if("-r") || s.eat_if("--requirement") {
         let filename = parse_value(content, s, |c: char| !is_terminal(c))?;
-        let filename = unquote(filename).unwrap_or_else(|_| filename.to_string());
+        let filename = unquote(filename)
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| filename.to_string());
         let end = s.cursor();
         RequirementsTxtStatement::Requirements {
             filename,
@@ -532,7 +535,10 @@ fn parse_entry(
         }
     } else if s.eat_if("-c") || s.eat_if("--constraint") {
         let filename = parse_value(content, s, |c: char| !is_terminal(c))?;
-        let filename = unquote(filename).unwrap_or_else(|_| filename.to_string());
+        let filename = unquote(filename)
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| filename.to_string());
         let end = s.cursor();
         RequirementsTxtStatement::Constraint {
             filename,
@@ -577,6 +583,8 @@ fn parse_entry(
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
         let given = parse_value(content, s, |c: char| !is_terminal(c))?;
         let given = unquote(given)
+            .ok()
+            .flatten()
             .map(Cow::Owned)
             .unwrap_or(Cow::Borrowed(given));
         let expanded = expand_env_vars(given.as_ref());
@@ -606,6 +614,8 @@ fn parse_entry(
     } else if s.eat_if("--extra-index-url") {
         let given = parse_value(content, s, |c: char| !is_terminal(c))?;
         let given = unquote(given)
+            .ok()
+            .flatten()
             .map(Cow::Owned)
             .unwrap_or(Cow::Borrowed(given));
         let expanded = expand_env_vars(given.as_ref());
@@ -637,6 +647,8 @@ fn parse_entry(
     } else if s.eat_if("--find-links") || s.eat_if("-f") {
         let given = parse_value(content, s, |c: char| !is_terminal(c))?;
         let given = unquote(given)
+            .ok()
+            .flatten()
             .map(Cow::Owned)
             .unwrap_or(Cow::Borrowed(given));
         let expanded = expand_env_vars(given.as_ref());
@@ -666,6 +678,8 @@ fn parse_entry(
     } else if s.eat_if("--no-binary") {
         let given = parse_value(content, s, |c: char| !is_terminal(c))?;
         let given = unquote(given)
+            .ok()
+            .flatten()
             .map(Cow::Owned)
             .unwrap_or(Cow::Borrowed(given));
         let specifier = PackageNameSpecifier::from_str(given.as_ref()).map_err(|err| {
@@ -680,6 +694,8 @@ fn parse_entry(
     } else if s.eat_if("--only-binary") {
         let given = parse_value(content, s, |c: char| !is_terminal(c))?;
         let given = unquote(given)
+            .ok()
+            .flatten()
             .map(Cow::Owned)
             .unwrap_or(Cow::Borrowed(given));
         let specifier = PackageNameSpecifier::from_str(given.as_ref()).map_err(|err| {
