@@ -258,7 +258,7 @@ impl<'lock> LockTarget<'lock> {
     /// Returns `Ok(None)` if the lockfile does not exist.
     pub(crate) async fn read(
         self,
-        proxies: Option<&Vec<ProxyWithCanonicalUrl>>,
+        proxies: Option<&[ProxyWithCanonicalUrl]>,
     ) -> Result<Option<Lock>, ProjectError> {
         match fs_err::tokio::read_to_string(self.lock_path()).await {
             Ok(encoded) => {
@@ -305,12 +305,8 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Write the lockfile to disk.
-    pub(crate) async fn commit(
-        self,
-        lock: &Lock,
-        proxies: Option<&Vec<ProxyWithCanonicalUrl>>,
-    ) -> Result<(), ProjectError> {
-        let encoded = lock.to_toml(proxies)?;
+    pub(crate) async fn commit(self, lock: &Lock) -> Result<(), ProjectError> {
+        let encoded = lock.to_toml()?;
         fs_err::tokio::write(self.lock_path(), encoded).await?;
         Ok(())
     }

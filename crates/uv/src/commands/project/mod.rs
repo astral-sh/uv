@@ -197,7 +197,7 @@ pub(crate) enum ProjectError {
     #[error("Attempted to drop a temporary virtual environment while still in-use")]
     DroppedEnvironment,
 
-    #[error("Failed to substitute proxy urls: {0}")]
+    #[error("Failed to substitute proxy URLs: {0}")]
     ProxyUrl(#[from] url::ParseError),
 
     #[error(transparent)]

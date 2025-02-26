@@ -189,7 +189,9 @@ pub(crate) async fn export(
     )
     .await
     {
-        Ok(result) => result.into_lock(),
+        Ok(result) => result
+            .into_lock()
+            .with_proxy_urls(settings.index_proxies.as_deref())?,
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(native_tls)
                 .report(err)

@@ -29,7 +29,7 @@ use uv_configuration::{
     VersionControlSystem,
 };
 use uv_distribution_types::{
-    DependencyMetadata, Index, IndexLocations, IndexUrl, Origin, ProxyWithCanonicalUrl,
+    DependencyMetadata, Index, IndexLocations, IndexUrl, Origin, ProxyUrl, ProxyWithCanonicalUrl,
 };
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
@@ -2447,25 +2447,7 @@ impl From<ResolverOptions> for ResolverSettings {
             .chain(value.index_url.into_iter().map(Index::from))
             .collect();
 
-        // FIXME Break out
-        let mut index_proxies = Vec::new();
-        for index in &mut indexes {
-            if let Some(proxy) = value.proxy_urls.as_ref().and_then(|proxies| {
-                proxies
-                    .iter()
-                    .find(|proxy| index.name.as_ref() == Some(&proxy.name))
-            }) {
-                let proxy_url = IndexUrl::from_str(&proxy.url).expect("FIXME");
-                index.proxy_url = Some(proxy_url.clone());
-                index.origin = Some(Origin::Cli);
-                index_proxies.push(ProxyWithCanonicalUrl::new(proxy_url, index.url.clone()));
-            }
-        }
-        let index_proxies = if index_proxies.is_empty() {
-            None
-        } else {
-            Some(index_proxies)
-        };
+        let index_proxies = update_indexes_with_proxies(&mut indexes, value.proxy_urls.as_ref());
 
         let index_locations = IndexLocations::new(
             indexes,
@@ -2612,25 +2594,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
             .chain(value.index_url.into_iter().map(Index::from))
             .collect();
 
-        // FIXME Break out
-        let mut index_proxies = Vec::new();
-        for index in &mut indexes {
-            if let Some(proxy) = value.proxy_urls.as_ref().and_then(|proxies| {
-                proxies
-                    .iter()
-                    .find(|proxy| index.name.as_ref() == Some(&proxy.name))
-            }) {
-                let proxy_url = IndexUrl::from_str(&proxy.url).expect("FIXME");
-                index.proxy_url = Some(proxy_url.clone());
-                index.origin = Some(Origin::Cli);
-                index_proxies.push(ProxyWithCanonicalUrl::new(proxy_url, index.url.clone()));
-            }
-        }
-        let index_proxies = if index_proxies.is_empty() {
-            None
-        } else {
-            Some(index_proxies)
-        };
+        let index_proxies = update_indexes_with_proxies(&mut indexes, value.proxy_urls.as_ref());
 
         let index_locations = IndexLocations::new(
             indexes,
@@ -3163,6 +3127,32 @@ impl PublishSettings {
                 false,
             ),
         }
+    }
+}
+
+fn update_indexes_with_proxies(
+    indexes: &mut [Index],
+    proxy_urls: Option<&Vec<ProxyUrl>>,
+) -> Option<Vec<ProxyWithCanonicalUrl>> {
+    let mut index_proxies = Vec::new();
+    for index in indexes.iter_mut() {
+        if let Some(proxy) = proxy_urls.and_then(|proxies| {
+            proxies
+                .iter()
+                .find(|proxy| index.name.as_ref() == Some(&proxy.name))
+        }) {
+            index.proxy_url = Some(proxy.url.clone());
+            index.origin = Some(Origin::Cli);
+            index_proxies.push(ProxyWithCanonicalUrl::new(
+                proxy.url.clone(),
+                index.url.clone(),
+            ));
+        }
+    }
+    if index_proxies.is_empty() {
+        None
+    } else {
+        Some(index_proxies)
     }
 }
 

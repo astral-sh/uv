@@ -263,7 +263,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             )
             .await
             {
-                Ok(result) => result.into_lock(),
+                Ok(result) => result
+                    .into_lock()
+                    .with_proxy_urls(settings.index_proxies.as_deref())?,
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::native_tls(native_tls)
                         .with_context("script")
@@ -639,7 +641,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // in any `--with` requirements.
                 if !isolated && !requirements.is_empty() {
                     lock = LockTarget::from(project.workspace())
-                        .read(settings.index_proxies.as_ref())
+                        .read(settings.index_proxies.as_deref())
                         .await
                         .ok()
                         .flatten()
@@ -778,7 +780,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 }
 
                 lock = Some((
-                    result.into_lock(),
+                    result
+                        .into_lock()
+                        .with_proxy_urls(settings.index_proxies.as_deref())?,
                     project.workspace().install_path().to_owned(),
                 ));
             }

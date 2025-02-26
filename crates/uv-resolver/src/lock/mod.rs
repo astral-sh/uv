@@ -717,10 +717,7 @@ impl Lock {
     }
 
     /// Returns the TOML representation of this lockfile.
-    pub fn to_toml(
-        &self,
-        proxies: Option<&Vec<ProxyWithCanonicalUrl>>,
-    ) -> Result<String, toml_edit::ser::Error> {
+    pub fn to_toml(&self) -> Result<String, toml_edit::ser::Error> {
         // We construct a TOML document manually instead of going through Serde to enable
         // the use of inline tables.
         let mut doc = toml_edit::DocumentMut::new();
@@ -968,15 +965,6 @@ impl Lock {
 
         let mut packages = ArrayOfTables::new();
         for dist in &self.packages {
-            let dist = match proxies.as_ref().and_then(|proxies| {
-                proxies.iter().find(|p| {
-                    dist.registry_source_index_url()
-                        .is_ok_and(|url| url.is_some_and(|url| url == p.url))
-                })
-            }) {
-                Some(proxy) => &dist.with_canonical_urls(proxy).expect("FIXME"),
-                None => dist,
-            };
             packages.push(dist.to_toml(&self.requires_python, &dist_count_by_name)?);
         }
 
@@ -987,8 +975,34 @@ impl Lock {
     /// FIXME Document
     pub fn with_proxy_urls(
         mut self,
-        proxies: Option<&Vec<ProxyWithCanonicalUrl>>,
+        proxies: Option<&[ProxyWithCanonicalUrl]>,
     ) -> Result<Self, url::ParseError> {
+        if proxies.is_none() {
+            return Ok(self);
+        }
+        for package in &mut self.packages {
+            if let Some(proxy) = proxies.as_ref().and_then(|proxies| {
+                proxies.iter().find(|p| {
+                    package
+                        .registry_source_index_url()
+                        .is_ok_and(|url| url.is_some_and(|url| url == p.canonical_url))
+                })
+            }) {
+                package.set_proxy_urls(proxy);
+            };
+        }
+        Ok(self)
+    }
+
+    /// FIXME Document
+    pub fn substitute_canonical_urls(
+        &mut self,
+        proxies: Option<&[ProxyWithCanonicalUrl]>,
+    ) -> Result<(), url::ParseError> {
+        if proxies.is_none() {
+            return Ok(());
+        }
+
         for package in &mut self.packages {
             if let Some(proxy) = proxies.as_ref().and_then(|proxies| {
                 proxies.iter().find(|p| {
@@ -997,10 +1011,10 @@ impl Lock {
                         .is_ok_and(|url| url.is_some_and(|url| url == p.url))
                 })
             }) {
-                package.set_proxy_urls(proxy)?;
+                package.set_canonical_urls(proxy);
             };
         }
-        Ok(self)
+        Ok(())
     }
 
     /// Returns the package with the given name. If there are multiple
@@ -1943,36 +1957,25 @@ pub struct Package {
 
 impl Package {
     /// FIXME Document
-    pub fn with_canonical_urls(
-        &self,
-        proxy: &ProxyWithCanonicalUrl,
-    ) -> Result<Self, url::ParseError> {
-        let mut package = self.clone();
-        package.id = package.id.with_replaced_url(&proxy.raw_canonical_url);
-        package.sdist = package
-            .sdist
-            .map(|sdist| sdist.with_replaced_url(&proxy.url_base, &proxy.raw_canonical_url));
-        package.wheels = package
-            .wheels
-            .iter()
-            .map(|w| w.with_canonical_url(proxy))
-            .collect();
-        Ok(package)
+    pub fn set_canonical_urls(&mut self, proxy: &ProxyWithCanonicalUrl) {
+        self.id.replace_url(proxy.canonical_url_as_str());
+        if let Some(sdist) = &mut self.sdist {
+            sdist.replace_url(proxy.url_base.as_str(), proxy.canonical_url_as_str());
+        }
+        for wheel in &mut self.wheels {
+            wheel.replace_url(proxy.url_base.as_str(), proxy.canonical_url_as_str());
+        }
     }
 
     /// FIXME Document
-    pub fn set_proxy_urls(&mut self, proxy: &ProxyWithCanonicalUrl) -> Result<(), url::ParseError> {
-        self.id = self.id.with_replaced_url(&proxy.url_base);
-        self.sdist = self
-            .sdist
-            .as_ref()
-            .map(|sdist| sdist.with_replaced_url(&proxy.raw_canonical_url, &proxy.url_base));
-        self.wheels = self
-            .wheels
-            .iter()
-            .map(|w| w.with_canonical_url(proxy))
-            .collect();
-        Ok(())
+    pub fn set_proxy_urls(&mut self, proxy: &ProxyWithCanonicalUrl) {
+        self.id.replace_url(proxy.url_base.as_str());
+        if let Some(sdist) = &mut self.sdist {
+            sdist.replace_url(proxy.canonical_url_as_str(), proxy.url_base.as_str());
+        }
+        for wheel in &mut self.wheels {
+            wheel.replace_url(proxy.canonical_url_as_str(), proxy.url_base.as_str());
+        }
     }
 
     fn from_annotated_dist(
@@ -2991,13 +2994,11 @@ impl PackageId {
     }
 
     /// FIXME Document
-    fn with_replaced_url(&self, new_url: &str) -> Self {
-        let mut id = self.clone();
-        if let Source::Registry(RegistrySource::Url(..)) = id.source {
+    fn replace_url(&mut self, new_url: &str) {
+        if let Source::Registry(RegistrySource::Url(..)) = self.source {
             let new_url = UrlString::new(SmallString::from(new_url));
-            id.source = Source::Registry(RegistrySource::Url(new_url));
+            self.source = Source::Registry(RegistrySource::Url(new_url));
         };
-        id
     }
 }
 
@@ -3665,17 +3666,9 @@ impl SourceDist {
     }
 
     /// FIXME Document
-    fn with_replaced_url(&self, old_url: &str, new_url: &str) -> Self {
-        let dist = self.clone();
-        match self {
-            Self::Url { url, metadata } => {
-                let url = UrlString::new(url.base_str().replace(old_url, new_url).into());
-                Self::Url {
-                    url,
-                    metadata: metadata.clone(),
-                }
-            }
-            _ => dist,
+    fn replace_url(&mut self, old_url: &str, new_url: &str) {
+        if let Self::Url { url, .. } = self {
+            *url = UrlString::new(url.base_str().replace(old_url, new_url).into());
         }
     }
 }
@@ -4185,21 +4178,11 @@ impl Wheel {
     }
 
     /// FIXME Document
-    fn with_canonical_url(&self, proxy: &ProxyWithCanonicalUrl) -> Self {
-        let dist = self.clone();
-        match &self.url {
-            WheelWireSource::Url { url } => {
-                let url = UrlString::new(
-                    url.base_str()
-                        .replace(&proxy.url_base, &proxy.raw_canonical_url)
-                        .into(),
-                );
-                Self {
-                    url: WheelWireSource::Url { url },
-                    ..dist
-                }
-            }
-            _ => dist,
+    fn replace_url(&mut self, old: &str, new: &str) {
+        if let WheelWireSource::Url { url } = &self.url {
+            self.url = WheelWireSource::Url {
+                url: UrlString::new(url.base_str().replace(old, new).into()),
+            };
         }
     }
 }

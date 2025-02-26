@@ -10213,7 +10213,7 @@ fn add_with_proxy_url() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), context.add()
         .arg("anyio>=4.3.0")
         .arg("--index-proxy-url")
-        .arg("alpha=https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r"
+        .arg("alpha=https://pypi.org/simple/"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10256,9 +10256,8 @@ fn add_with_proxy_url() -> anyhow::Result<()> {
         );
     });
 
-    fs_err::remove_dir_all(context.temp_dir.join(".venv"))?;
-
     uv_snapshot!(context.filters(), context.sync()
+        .arg("--reinstall")
         .arg("--index-proxy-url")
         .arg("alpha=https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r"
     success: true
@@ -10266,15 +10265,14 @@ fn add_with_proxy_url() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: .venv
     Resolved 4 packages in [TIME]
-    Prepared 3 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Uninstalled 4 packages in [TIME]
     Installed 4 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
-     + sniffio==1.3.1
+     ~ anyio==4.3.0
+     ~ idna==3.6
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ sniffio==1.3.1
     "
     );
 

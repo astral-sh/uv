@@ -264,22 +264,23 @@ pub enum IndexSourceError {
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ProxyWithCanonicalUrl {
     pub url: IndexUrl,
-    pub url_base: String,
+    pub url_base: Url,
     pub canonical_url: IndexUrl,
-    pub raw_canonical_url: String,
 }
 
 impl ProxyWithCanonicalUrl {
     pub fn new(url: IndexUrl, canonical_url: IndexUrl) -> Self {
-        let mut raw_url = url.url().clone();
-        raw_url.set_path("");
-        let raw_canonical_url = canonical_url.url().to_string();
+        let mut url_base = url.url().clone();
+        url_base.set_path("");
         Self {
             url,
-            url_base: raw_url.to_string(),
+            url_base,
             canonical_url,
-            raw_canonical_url,
         }
+    }
+
+    pub fn canonical_url_as_str(&self) -> &str {
+        self.canonical_url.url().as_str()
     }
 }
 
@@ -288,7 +289,7 @@ impl ProxyWithCanonicalUrl {
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ProxyUrl {
     pub name: IndexName,
-    pub url: String,
+    pub url: IndexUrl,
 }
 
 impl FromStr for ProxyUrl {
@@ -296,10 +297,9 @@ impl FromStr for ProxyUrl {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Some((name, url)) = s.split_once('=') {
-            let name = IndexName::from_str(name)?;
             Ok(Self {
-                name,
-                url: url.to_string(),
+                name: IndexName::from_str(name)?,
+                url: IndexUrl::from_str(url)?,
             })
         } else {
             Err(ProxyIndexSourceError::MissingName)
@@ -312,8 +312,8 @@ impl FromStr for ProxyUrl {
 pub enum ProxyIndexSourceError {
     #[error(transparent)]
     IndexName(#[from] IndexNameError),
+    #[error(transparent)]
+    IndexUrl(#[from] IndexUrlError),
     #[error("Proxy index requires a name, but the name was empty")]
     MissingName,
-    // #[error(transparent)]
-    // UrlParse(#[from] url::ParseError),
 }
