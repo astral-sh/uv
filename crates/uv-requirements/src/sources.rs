@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use anyhow::Result;
 use console::Term;
 
 use uv_fs::Simplified;
@@ -85,7 +86,7 @@ impl RequirementsSource {
     ///
     /// If the user provided a value that appears to be a `requirements.txt` file or a local
     /// directory, prompt them to correct it (if the terminal is interactive).
-    pub fn from_package(name: String) -> Self {
+    pub fn from_package(name: String) -> Result<Self> {
         // If the user provided a `requirements.txt` file without `-r` (as in
         // `uv pip install requirements.txt`), prompt them to correct it.
         #[allow(clippy::case_sensitive_file_extension_comparisons)]
@@ -95,9 +96,9 @@ impl RequirementsSource {
                 let prompt = format!(
                     "`{name}` looks like a local requirements file but was passed as a package name. Did you mean `-r {name}`?"
                 );
-                let confirmation = uv_console::confirm(&prompt, &term, true).unwrap();
+                let confirmation = uv_console::confirm(&prompt, &term, true)?;
                 if confirmation {
-                    return Self::from_requirements_file(name.into());
+                    return Ok(Self::from_requirements_file(name.into()));
                 }
             }
         }
@@ -112,14 +113,14 @@ impl RequirementsSource {
                 let prompt = format!(
                     "`{name}` looks like a local metadata file but was passed as a package name. Did you mean `-r {name}`?"
                 );
-                let confirmation = uv_console::confirm(&prompt, &term, true).unwrap();
+                let confirmation = uv_console::confirm(&prompt, &term, true)?;
                 if confirmation {
-                    return Self::from_requirements_file(name.into());
+                    return Ok(Self::from_requirements_file(name.into()));
                 }
             }
         }
 
-        Self::Package(name)
+        Ok(Self::Package(name))
     }
 
     /// Parse a [`RequirementsSource`] from a user-provided string, assumed to be a `--with`
@@ -127,7 +128,7 @@ impl RequirementsSource {
     ///
     /// If the user provided a value that appears to be a `requirements.txt` file or a local
     /// directory, prompt them to correct it (if the terminal is interactive).
-    pub fn from_with_package(name: String) -> Self {
+    pub fn from_with_package(name: String) -> Result<Self> {
         // If the user provided a `requirements.txt` file without `--with-requirements` (as in
         // `uvx --with requirements.txt ruff`), prompt them to correct it.
         #[allow(clippy::case_sensitive_file_extension_comparisons)]
@@ -137,9 +138,9 @@ impl RequirementsSource {
                 let prompt = format!(
                     "`{name}` looks like a local requirements file but was passed as a package name. Did you mean `--with-requirements {name}`?"
                 );
-                let confirmation = uv_console::confirm(&prompt, &term, true).unwrap();
+                let confirmation = uv_console::confirm(&prompt, &term, true)?;
                 if confirmation {
-                    return Self::from_requirements_file(name.into());
+                    return Ok(Self::from_requirements_file(name.into()));
                 }
             }
         }
@@ -154,14 +155,14 @@ impl RequirementsSource {
                 let prompt = format!(
                     "`{name}` looks like a local metadata file but was passed as a package name. Did you mean `--with-requirements {name}`?"
                 );
-                let confirmation = uv_console::confirm(&prompt, &term, true).unwrap();
+                let confirmation = uv_console::confirm(&prompt, &term, true)?;
                 if confirmation {
-                    return Self::from_requirements_file(name.into());
+                    return Ok(Self::from_requirements_file(name.into()));
                 }
             }
         }
 
-        Self::Package(name)
+        Ok(Self::Package(name))
     }
 
     /// Parse a [`RequirementsSource`] from a user-provided string, assumed to be a path to a source
