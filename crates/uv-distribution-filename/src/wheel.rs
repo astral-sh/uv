@@ -7,7 +7,7 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
 
-use uv_cache_key::{cache_digest, CacheKey, CacheKeyHasher};
+use uv_cache_key::cache_digest;
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::{Version, VersionParseError};
 use uv_platform_tags::{
@@ -109,14 +109,18 @@ impl WheelFilename {
     }
 
     /// Returns a consistent compatibility identifier where max length is capped by [`COMPATIBILITY_IDENTIFIER_MAX_LEN`]
-    /// format: `{version-tags}` or `{truncated(version-tags)}-{digest}`
+    /// format: `{version-tags}` or `{truncated(version)}-{digest(tags)}`
     pub fn compatibility_identifier(&self) -> String {
         let full = format!("{}-{}", self.version, self.tags);
         if full.len() <= COMPATIBILITY_IDENTIFIER_MAX_LEN {
             return full;
         }
-        let prefix_width = COMPATIBILITY_IDENTIFIER_MAX_LEN - 1 /* dash */ - 16 /* digest */;
-        format!("{:.prefix_width$}-{}", self.version, cache_digest(&self))
+
+        // Creating a digest of full tag string (instead of individual fields) makes sure
+        // digest remains consistent across internal restructurings
+        let digest = cache_digest(&format!("{}", self.tags));
+        let version_width = COMPATIBILITY_IDENTIFIER_MAX_LEN - 1 /* dash */ - 16 /* digest */;
+        format!("{:.version_width$}-{}", self.version.to_string(), digest)
     }
 
     /// Return the wheel's Python tags.
@@ -341,14 +345,6 @@ impl Serialize for WheelFilename {
     }
 }
 
-impl CacheKey for WheelFilename {
-    fn cache_key(&self, state: &mut CacheKeyHasher) {
-        self.name.hash(state);
-        self.version.hash(state);
-        self.tags.hash(state);
-    }
-}
-
 #[derive(Error, Debug)]
 pub enum WheelFilenameError {
     #[error("The wheel filename \"{0}\" is invalid: {1}")]
@@ -480,11 +476,13 @@ mod tests {
             "django_allauth-0.51.0-py3-none-any.whl",
             "osm2geojson-0.2.4-py3-none-any.whl",
             "numpy-1.26.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "example-1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
         ];
         for wheel_name in wheel_names {
             let filename = WheelFilename::from_str(wheel_name).unwrap();
-            assert!(filename.compatibility_identifier().len() <= COMPATIBILITY_IDENTIFIER_MAX_LEN);
-            insta::assert_snapshot!(filename.compatibility_identifier());
+            let identifier = filename.compatibility_identifier();
+            assert!(identifier.len() <= COMPATIBILITY_IDENTIFIER_MAX_LEN);
+            insta::assert_snapshot!(identifier);
         }
     }
 }
