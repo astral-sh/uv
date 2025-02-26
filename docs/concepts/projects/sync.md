@@ -79,7 +79,7 @@ To opt-out of this behavior, use the `--no-editable` option.
 
 !!! note
 
-    If the project is not define a build system, it will not be installed.
+    If the project does not define a build system, it will not be installed.
     See the documentation about [Build systems](./config.md#build-systems) for details.
 
 ### Retaining extraneous packages
