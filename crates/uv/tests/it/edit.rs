@@ -1,7 +1,15 @@
 #![allow(clippy::disallowed_types)]
 
+#[cfg(feature = "git")]
+mod conditional_imports {
+    pub(crate) use assert_cmd::assert::OutputAssertExt;
+    pub(crate) use crate::common::{READ_ONLY_GITHUB_TOKEN, decode_token};
+}
+
+#[cfg(feature = "git")]
+use conditional_imports::*;
+
 use anyhow::Result;
-use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
@@ -10,7 +18,7 @@ use uv_fs::Simplified;
 
 use uv_static::EnvVars;
 
-use crate::common::{self, decode_token, packse_index_url, uv_snapshot, TestContext};
+use crate::common::{packse_index_url, uv_snapshot, TestContext};
 
 /// Add a PyPI requirement.
 #[test]
@@ -322,7 +330,7 @@ fn add_git() -> Result<()> {
 #[cfg(feature = "git")]
 fn add_git_private_source() -> Result<()> {
     let context = TestContext::new("3.12");
-    let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
+    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -427,7 +435,7 @@ fn add_git_private_source() -> Result<()> {
 #[cfg(feature = "git")]
 fn add_git_private_raw() -> Result<()> {
     let context = TestContext::new("3.12");
-    let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
+    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
