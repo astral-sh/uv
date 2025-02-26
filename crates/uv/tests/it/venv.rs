@@ -647,6 +647,7 @@ fn create_venv_unknown_python_minor() {
 
         ----- stderr -----
           × No interpreter found for Python 3.100 in managed installations, search path, or registry
+        See [UV_LOG_DIR]/venv.log for detailed logs
         "###
         );
     } else {
@@ -686,6 +687,7 @@ fn create_venv_unknown_python_patch() {
 
         ----- stderr -----
           × No interpreter found for Python 3.12.100 in managed installations, search path, or registry
+        See [UV_LOG_DIR]/venv.log for detailed logs
         "###
         );
     } else {

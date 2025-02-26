@@ -20,6 +20,7 @@ fn python_find() {
 
         ----- stderr -----
         error: No interpreter found in virtual environments, managed installations, search path, or registry
+        See [UV_LOG_DIR]/python_find.log for detailed logs
         "###);
     } else {
         uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, ""), @r"

@@ -2217,7 +2217,7 @@ fn install_git_private_https_interactive() {
         .collect();
 
     uv_snapshot!(filters, context.pip_install().arg(package)
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2228,8 +2228,11 @@ fn install_git_private_https_interactive() {
       ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
       ╰─▶ process didn't exit successfully: `/usr/bin/git fetch --force --update-head-ok 'https://github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
           --- stderr
-          fatal: could not read Username for 'https://github.com': terminal prompts disabled
-    "###);
+          remote: Repository not found.
+          fatal: repository 'https://github.com/astral-test/uv-private-pypackage/' not found
+
+    See [UV_LOG_DIR]/pip_install.log for detailed logs
+    ");
 }
 
 /// Install a package without using pre-built wheels.

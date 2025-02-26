@@ -262,6 +262,7 @@ fn run_no_args() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/)
+    See [UV_LOG_DIR]/run.log for detailed logs
     "###);
 
     Ok(())

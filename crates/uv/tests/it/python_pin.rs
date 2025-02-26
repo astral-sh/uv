@@ -444,6 +444,7 @@ fn python_pin_resolve_no_python() {
 
         ----- stderr -----
         error: No interpreter found for Python 3.12 in managed installations, search path, or registry
+        See [UV_LOG_DIR]/python_pin.log for detailed logs
         "###);
     } else {
         uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("3.12"), @r"
