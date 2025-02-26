@@ -472,17 +472,21 @@ mod tests {
 
     #[test]
     fn compatibility_identifier_truncation() {
-        let wheel_names = &[
-            "django_allauth-0.51.0-py3-none-any.whl",
-            "osm2geojson-0.2.4-py3-none-any.whl",
+        // Short names should use `version-tags` format
+        let filename = WheelFilename::from_str("django_allauth-0.51.0-py3-none-any.whl").unwrap();
+        insta::assert_snapshot!(filename.compatibility_identifier(), @"0.51.0-py3-none-any");
+
+        // Larger names should use `truncated(version)-digest(tags)` format
+        let filename = WheelFilename::from_str(
             "numpy-1.26.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
-            "example-1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
-        ];
-        for wheel_name in wheel_names {
-            let filename = WheelFilename::from_str(wheel_name).unwrap();
-            let identifier = filename.compatibility_identifier();
-            assert!(identifier.len() <= COMPATIBILITY_IDENTIFIER_MAX_LEN);
-            insta::assert_snapshot!(identifier);
-        }
+        )
+        .unwrap();
+        insta::assert_snapshot!(filename.compatibility_identifier(), @"1.26.2-80bf8598e9647cf7");
+
+        // Larger versions should get truncated
+        let filename = WheelFilename::from_str(
+            "example-1.2.3.4.5.6.7.8.9.0.1.2.3.4.5.6.7.8.9.0.1.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
+        ).unwrap();
+        insta::assert_snapshot!(filename.compatibility_identifier(), @"1.2.3.4.5.6.7.8.9.0-80bf8598e9647cf7");
     }
 }

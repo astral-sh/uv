@@ -1,5 +1,0 @@
----
-source: crates/uv-distribution-filename/src/wheel.rs
-expression: filename.compatibility_identifier()
----
-0.2.4-py3-none-any
