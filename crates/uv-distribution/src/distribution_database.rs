@@ -189,7 +189,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let wheel_entry = self.build_context.cache().entry(
                     CacheBucket::Wheels,
                     WheelCache::Index(&wheel.index).wheel_dir(wheel.name().as_ref()),
-                    wheel.filename.compatibility_identifier(),
+                    wheel.filename.cache_key(),
                 );
 
                 // If the URL is a file URL, load the wheel directly.
@@ -262,7 +262,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let wheel_entry = self.build_context.cache().entry(
                     CacheBucket::Wheels,
                     WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
-                    wheel.filename.compatibility_identifier(),
+                    wheel.filename.cache_key(),
                 );
 
                 // Download and unzip.
@@ -317,7 +317,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let cache_entry = self.build_context.cache().entry(
                     CacheBucket::Wheels,
                     WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
-                    wheel.filename.compatibility_identifier(),
+                    wheel.filename.cache_key(),
                 );
 
                 self.load_wheel(
@@ -526,8 +526,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         };
 
         // Create an entry for the HTTP cache.
-        let http_entry =
-            wheel_entry.with_file(format!("{}.http", filename.compatibility_identifier()));
+        let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
 
         let download = |response: reqwest::Response| {
             async {
@@ -660,8 +659,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         };
 
         // Create an entry for the HTTP cache.
-        let http_entry =
-            wheel_entry.with_file(format!("{}.http", filename.compatibility_identifier()));
+        let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
 
         let download = |response: reqwest::Response| {
             async {
@@ -826,8 +824,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let modified = Timestamp::from_path(path).map_err(Error::CacheRead)?;
 
         // Attempt to read the archive pointer from the cache.
-        let pointer_entry =
-            wheel_entry.with_file(format!("{}.rev", filename.compatibility_identifier()));
+        let pointer_entry = wheel_entry.with_file(format!("{}.rev", filename.cache_key()));
         let pointer = LocalArchivePointer::read_from(&pointer_entry)?;
 
         // Extract the archive from the pointer.

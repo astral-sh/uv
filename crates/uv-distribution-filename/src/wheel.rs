@@ -19,8 +19,6 @@ use crate::splitter::MemchrSplitter;
 use crate::wheel_tag::{WheelTag, WheelTagLarge, WheelTagSmall};
 use crate::{BuildTag, BuildTagError};
 
-const COMPATIBILITY_IDENTIFIER_MAX_LEN: usize = 36;
-
 #[derive(
     Debug,
     Clone,
@@ -108,18 +106,22 @@ impl WheelFilename {
         )
     }
 
-    /// Returns a consistent compatibility identifier where max length is capped by [`COMPATIBILITY_IDENTIFIER_MAX_LEN`]
-    /// format: `{version-tags}` or `{truncated(version)}-{digest(tags)}`
-    pub fn compatibility_identifier(&self) -> String {
+    /// Returns a consistent cache key with a maximum length of 64 characters.
+    ///
+    /// Prefers `{version}-{tags}` if such an identifier fits within the maximum allowed length;
+    /// otherwise, uses a truncated version of the version and a digest of the tags.
+    pub fn cache_key(&self) -> String {
+        const CACHE_KEY_MAX_LEN: usize = 64;
+
         let full = format!("{}-{}", self.version, self.tags);
-        if full.len() <= COMPATIBILITY_IDENTIFIER_MAX_LEN {
+        if full.len() <= CACHE_KEY_MAX_LEN {
             return full;
         }
 
-        // Creating a digest of full tag string (instead of individual fields) makes sure
-        // digest remains consistent across internal restructurings
+        // Create a digest of the tag string (instead of its individual fields) to retain
+        // compatibility across platforms, Rust versions, etc.
         let digest = cache_digest(&format!("{}", self.tags));
-        let version_width = COMPATIBILITY_IDENTIFIER_MAX_LEN - 1 /* dash */ - 16 /* digest */;
+        let version_width = CACHE_KEY_MAX_LEN - 1 /* dash */ - 16 /* digest */;
         format!("{:.version_width$}-{}", self.version.to_string(), digest)
     }
 
@@ -471,22 +473,29 @@ mod tests {
     }
 
     #[test]
-    fn compatibility_identifier_truncation() {
-        // Short names should use `version-tags` format
+    fn cache_key() {
+        // Short names should use `version-tags` format.
         let filename = WheelFilename::from_str("django_allauth-0.51.0-py3-none-any.whl").unwrap();
-        insta::assert_snapshot!(filename.compatibility_identifier(), @"0.51.0-py3-none-any");
+        insta::assert_snapshot!(filename.cache_key(), @"0.51.0-py3-none-any");
 
-        // Larger names should use `truncated(version)-digest(tags)` format
+        // Common `manylinux` names should use still use the `version-tags` format.
         let filename = WheelFilename::from_str(
             "numpy-1.26.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
         )
         .unwrap();
-        insta::assert_snapshot!(filename.compatibility_identifier(), @"1.26.2-80bf8598e9647cf7");
+        insta::assert_snapshot!(filename.cache_key(), @"1.26.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64");
 
-        // Larger versions should get truncated
+        // But larger names should use the `truncated(version)-digest(tags)` format.
+        let filename = WheelFilename::from_str(
+            "numpy-1.26.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.musllinux_1_2.whl",
+        )
+        .unwrap();
+        insta::assert_snapshot!(filename.cache_key(), @"1.26.2-5a2adc379b2dc214");
+
+        // Larger versions should get truncated.
         let filename = WheelFilename::from_str(
             "example-1.2.3.4.5.6.7.8.9.0.1.2.3.4.5.6.7.8.9.0.1.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
         ).unwrap();
-        insta::assert_snapshot!(filename.compatibility_identifier(), @"1.2.3.4.5.6.7.8.9.0-80bf8598e9647cf7");
+        insta::assert_snapshot!(filename.cache_key(), @"1.2.3.4.5.6.7.8.9.0.1.2.3.4.5.6.7.8.9.0.1.2-80bf8598e9647cf7");
     }
 }

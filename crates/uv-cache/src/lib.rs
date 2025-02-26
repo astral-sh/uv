@@ -360,7 +360,7 @@ impl Cache {
     /// Returns the number of entries removed from the cache.
     pub fn remove(&self, name: &PackageName) -> Result<Removal, io::Error> {
         // Collect the set of referenced archives.
-        let before = self.find_references_to_archive()?;
+        let before = self.find_archive_references()?;
 
         // Remove any entries for the package from the cache.
         let mut summary = Removal::default();
@@ -369,7 +369,7 @@ impl Cache {
         }
 
         // Collect the set of referenced archives after the removal.
-        let after = self.find_references_to_archive()?;
+        let after = self.find_archive_references()?;
 
         if before != after {
             // Remove any archives that are no longer referenced.
@@ -491,7 +491,7 @@ impl Cache {
         }
 
         // Fourth, remove any unused archives (by searching for archives that are not symlinked).
-        let references = self.find_references_to_archive()?;
+        let references = self.find_archive_references()?;
 
         match fs_err::read_dir(self.bucket(CacheBucket::Archive)) {
             Ok(entries) => {
@@ -511,7 +511,11 @@ impl Cache {
         Ok(summary)
     }
 
-    fn find_references_to_archive(&self) -> Result<FxHashSet<PathBuf>, io::Error> {
+    /// Find all references to entries in the archive bucket.
+    ///
+    /// Archive entries are often referenced by symlinks in other cache buckets. This method
+    /// searches for all such references.
+    fn find_archive_references(&self) -> Result<FxHashSet<PathBuf>, io::Error> {
         let mut references = FxHashSet::default();
         for bucket in CacheBucket::iter() {
             let bucket_path = self.bucket(bucket);
@@ -537,17 +541,22 @@ impl Cache {
                     };
 
                     if bucket == CacheBucket::Wheels {
-                        // In `wheels` bucket hash is used for the directory name so we can't rely on stem pattern.
-                        // Instead we skip if it contains an extension (example: .whl, .http, .rev and .msgpack files).
+                        // In the `wheels` bucket, we often use a hash of the filename as the
+                        // directory name, so we can't rely on the stem.
+                        //
+                        // Instead, we skip if it contains an extension (e.g., `.whl`, `.http`,
+                        // `.rev`, and `.msgpack` files).
                         if filename
                             .rsplit_once('-') // strip version/tags, might contain a dot ('.')
                             .is_none_or(|(_, suffix)| suffix.contains('.'))
                         {
                             continue;
                         }
-                    } else if WheelFilename::from_stem(filename).is_err() {
+                    } else {
                         // For other buckets only include entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
-                        continue;
+                        if WheelFilename::from_stem(filename).is_err() {
+                            continue;
+                        }
                     }
 
                     if let Ok(target) = self.resolve_link(entry.path()) {
