@@ -124,12 +124,11 @@ impl TestContext {
         let mut new = Self::new_with_versions(&[python_version]);
         new.extra_env.push((
             EnvVars::UV_LOG.into(),
-            Location::caller()
-                .file()
+            Path::new(Location::caller().file())
+                .file_name()
+                .and_then(|os_str| os_str.to_str())
+                .unwrap_or("unknown")
                 .to_string()
-                .rsplit('/')
-                .next()
-                .unwrap()
                 .into(),
         ));
         new.create_venv();
@@ -569,12 +568,11 @@ impl TestContext {
             extra_env: vec![
                 (
                     EnvVars::UV_LOG.into(),
-                    Location::caller()
-                        .file()
+                    Path::new(Location::caller().file())
+                        .file_name()
+                        .and_then(|os_str| os_str.to_str())
+                        .unwrap_or("unknown")
                         .to_string()
-                        .rsplit('/')
-                        .next()
-                        .unwrap()
                         .into(),
                 ),
                 // Sets `UV_LOG_DIR` to the log directory in project for testing.

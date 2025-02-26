@@ -378,7 +378,7 @@ fn python_patch_override_no_patch() -> Result<()> {
     // Since the resolver is asked to solve with 3.8, the minimum compatible Python requirement is treated as 3.8.0.
     let output = uv_snapshot!(filters, command(&context, python_versions)
         .arg("--python-version=3.8")
-        , @r###"
+        , @r"
                  success: false
                  exit_code: 1
                  ----- stdout -----
@@ -389,7 +389,8 @@ fn python_patch_override_no_patch() -> Result<()> {
                        And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
 
                        hint: The `--python-version` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., package-a==1.0.0 only supports >=3.8.4). Consider using a higher `--python-version` value.
-                 "###
+                 See [UV_LOG_DIR]/pip_compile_scenarios.log for detailed logs
+                 "
     );
 
     output.assert().failure();

@@ -3877,7 +3877,7 @@ fn python_greater_than_current_patch() {
 
     uv_snapshot!(filters, command(&context)
         .arg("python-greater-than-current-patch-a==1.0.0")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3886,7 +3886,8 @@ fn python_greater_than_current_patch() {
       × No solution found when resolving dependencies:
       ╰─▶ Because the current Python version (3.8.12) does not satisfy Python>=3.8.14 and package-a==1.0.0 depends on Python>=3.8.14, we can conclude that package-a==1.0.0 cannot be used.
           And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
