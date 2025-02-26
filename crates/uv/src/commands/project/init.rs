@@ -1219,7 +1219,11 @@ fn init_vcs(path: &Path, vcs: Option<VersionControlSystem>) -> Result<()> {
         (Some(vcs), None) => vcs,
         // If a version control system was specified, but a VCS was detected, then the user is
         // asking for a specific vcs, so we use it
-        (Some(vcs), Some(_existing)) => vcs,
+        (Some(vcs), Some(existing)) => {
+            debug!("Requested version control system ({vcs}) conflicts with existing version system ({existing})");
+            debug!("Initializing requested version control system: {vcs}");
+            vcs
+        }
     };
 
     // Attempt to initialize the VCS.
