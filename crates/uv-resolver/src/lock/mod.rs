@@ -988,7 +988,7 @@ impl Lock {
                         .is_ok_and(|url| url.is_some_and(|url| url == p.canonical_url))
                 })
             }) {
-                package.set_proxy_urls(proxy);
+                package.replace_urls(proxy.canonical_url_as_str(), proxy.url_base.as_str());
             };
         }
         Ok(self)
@@ -1011,7 +1011,7 @@ impl Lock {
                         .is_ok_and(|url| url.is_some_and(|url| url == p.url))
                 })
             }) {
-                package.set_canonical_urls(proxy);
+                package.replace_urls(proxy.url_base.as_str(), proxy.canonical_url_as_str());
             };
         }
         Ok(())
@@ -1957,24 +1957,13 @@ pub struct Package {
 
 impl Package {
     /// FIXME Document
-    pub fn set_canonical_urls(&mut self, proxy: &ProxyWithCanonicalUrl) {
-        self.id.replace_url(proxy.canonical_url_as_str());
+    pub fn replace_urls(&mut self, old: &str, new: &str) {
+        self.id.replace_url(new);
         if let Some(sdist) = &mut self.sdist {
-            sdist.replace_url(proxy.url_base.as_str(), proxy.canonical_url_as_str());
+            sdist.replace_url(old, new);
         }
         for wheel in &mut self.wheels {
-            wheel.replace_url(proxy.url_base.as_str(), proxy.canonical_url_as_str());
-        }
-    }
-
-    /// FIXME Document
-    pub fn set_proxy_urls(&mut self, proxy: &ProxyWithCanonicalUrl) {
-        self.id.replace_url(proxy.url_base.as_str());
-        if let Some(sdist) = &mut self.sdist {
-            sdist.replace_url(proxy.canonical_url_as_str(), proxy.url_base.as_str());
-        }
-        for wheel in &mut self.wheels {
-            wheel.replace_url(proxy.canonical_url_as_str(), proxy.url_base.as_str());
+            wheel.replace_url(old, new);
         }
     }
 

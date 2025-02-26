@@ -3130,6 +3130,7 @@ impl PublishSettings {
     }
 }
 
+/// FIXME: Document
 fn update_indexes_with_proxies(
     indexes: &mut [Index],
     proxy_urls: Option<&Vec<ProxyUrl>>,
