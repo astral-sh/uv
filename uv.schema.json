@@ -1382,7 +1382,7 @@
           "$ref": "#/definitions/IndexName"
         },
         "url": {
-          "type": "string"
+          "$ref": "#/definitions/IndexUrl"
         }
       }
     },
