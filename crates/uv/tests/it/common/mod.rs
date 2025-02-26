@@ -332,6 +332,9 @@ impl TestContext {
 
         let root = tempfile::TempDir::new_in(bucket).expect("Failed to create test root directory");
 
+        fs_err::create_dir_all(root.path().join(".git"))
+            .expect("Failed to create `.git` placeholder in test root directory");
+
         let temp_dir = ChildPath::new(root.path()).child("temp");
         fs_err::create_dir_all(&temp_dir).expect("Failed to create test working directory");
 
