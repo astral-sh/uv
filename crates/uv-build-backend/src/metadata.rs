@@ -222,9 +222,9 @@ impl PyProjectToml {
         if !bounded {
             warnings.push(format!(
                 "`build_system.requires = [\"{}\"]` is missing an \
-                upper bound on the uv_build version such as `<{next_breaking}`. \
-                Without bounding the uv_build version, the source distribution will break \
-                when a future, breaking version of uv_build is released.",
+                upper bound on the `uv_build` version such as `<{next_breaking}`. \
+                Without bounding the `uv_build` version, the source distribution will break \
+                when a future, breaking version of `uv_build` is released.",
                 // Use an underscore consistently, to avoid confusing users between a package name with dash and a
                 // module name with underscore
                 uv_requirement.to_string().replace("uv-build", "uv_build")
