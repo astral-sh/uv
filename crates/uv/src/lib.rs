@@ -532,13 +532,19 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .package
                 .into_iter()
                 .map(RequirementsSource::from_package)
-                .chain(args.editables.into_iter().map(RequirementsSource::Editable))
+                .chain(
+                    args.editables
+                        .into_iter()
+                        .map(RequirementsSource::Editable)
+                        .map(Result::Ok),
+                )
                 .chain(
                     args.requirements
                         .into_iter()
-                        .map(RequirementsSource::from_requirements_file),
+                        .map(RequirementsSource::from_requirements_file)
+                        .map(Result::Ok),
                 )
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>>>()?;
             let constraints = args
                 .constraints
                 .into_iter()
@@ -622,9 +628,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .chain(
                     args.requirements
                         .into_iter()
-                        .map(RequirementsSource::from_requirements_txt),
+                        .map(RequirementsSource::from_requirements_txt)
+                        .map(Result::Ok),
                 )
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>>>()?;
             commands::pip_uninstall(
                 &sources,
                 args.settings.python,
@@ -983,14 +990,16 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .chain(
                     args.with_editable
                         .into_iter()
-                        .map(RequirementsSource::Editable),
+                        .map(RequirementsSource::Editable)
+                        .map(Result::Ok),
                 )
                 .chain(
                     args.with_requirements
                         .into_iter()
-                        .map(RequirementsSource::from_requirements_file),
+                        .map(RequirementsSource::from_requirements_file)
+                        .map(Result::Ok),
                 )
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>>>()?;
 
             Box::pin(commands::tool_run(
                 args.command,
@@ -1036,14 +1045,16 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .chain(
                     args.with_editable
                         .into_iter()
-                        .map(RequirementsSource::Editable),
+                        .map(RequirementsSource::Editable)
+                        .map(Result::Ok),
                 )
                 .chain(
                     args.with_requirements
                         .into_iter()
-                        .map(RequirementsSource::from_requirements_file),
+                        .map(RequirementsSource::from_requirements_file)
+                        .map(Result::Ok),
                 )
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>>>()?;
             let constraints = args
                 .constraints
                 .into_iter()
@@ -1466,14 +1477,16 @@ async fn run_project(
                 .chain(
                     args.with_editable
                         .into_iter()
-                        .map(RequirementsSource::Editable),
+                        .map(RequirementsSource::Editable)
+                        .map(Result::Ok),
                 )
                 .chain(
                     args.with_requirements
                         .into_iter()
-                        .map(RequirementsSource::from_requirements_file),
+                        .map(RequirementsSource::from_requirements_file)
+                        .map(Result::Ok),
                 )
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>>>()?;
 
             Box::pin(commands::run(
                 project_dir,
