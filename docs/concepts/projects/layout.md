@@ -41,7 +41,7 @@ be activated as normal for a virtual environment.
 
 When `uv run` is invoked, it will create the project environment if it does not exist yet or ensure
 it is up-to-date if it exists. The project environment can also be explicitly created with
-`uv sync`. See the [Locking and syncing](./sync.md) documentation for details.
+`uv sync`. See the [locking and syncing](./sync.md) documentation for details.
 
 It is _not_ recommended to modify the project environment manually, e.g., with `uv pip install`. For
 project dependencies, use `uv add` to add a package to the environment. For one-off requirements,

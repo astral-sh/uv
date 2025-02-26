@@ -25,7 +25,7 @@ To use the lockfile without checking if it is up-to-date, use the `--frozen` opt
 $ uv run --frozen ...
 ```
 
-Similarly, to run a command without checking if the environment is up to date, use the `--no-sync`
+Similarly, to run a command without checking if the environment is up-to-date, use the `--no-sync`
 option:
 
 ```console
@@ -35,7 +35,10 @@ $ uv run --no-sync ...
 ## Checking if the lockfile is up-to-date
 
 When considering if the lockfile is up-to-date, uv will check if it matches the project metadata.
-For example, if you add a dependency to your `pyproject.toml`, the `uv.lock` will be outdated.
+For example, if you add a dependency to your `pyproject.toml`, the lockfile will be outdated.
+Similarly, if you change the version constraints for a dependency such that the locked version is
+excluded, the lockfile will be outdated. However, if you change the version constraints such that
+the existing locked version is still included, the lockfile will still be considered up-to-date.
 
 You can check if the lockfile is up-to-date by passing the `--check` flag to `uv lock`:
 
@@ -45,9 +48,11 @@ $ uv lock --check
 
 This is equivalent to the `--locked` flag for other commands.
 
-uv will not consider lockfiles outdated when new versions of packages are released — the lockfile
-needs to be explicitly updated if you want to upgrade dependencies. See the documentation on
-[upgrading locked package versions](#upgrading-locked-package-versions) for details.
+!!! important
+
+    uv will not consider lockfiles outdated when new versions of packages are released — the lockfile
+    needs to be explicitly updated if you want to upgrade dependencies. See the documentation on
+    [upgrading locked package versions](#upgrading-locked-package-versions) for details.
 
 ## Creating the lockfile
 
@@ -81,7 +86,7 @@ To opt-out of this behavior, use the `--no-editable` option.
 !!! note
 
     If the project does not define a build system, it will not be installed.
-    See the documentation about [Build systems](./config.md#build-systems) for details.
+    See the [build systems](./config.md#build-systems) documentation for details.
 
 ### Retaining extraneous packages
 
@@ -107,7 +112,7 @@ $ uv sync --extra foo
 
 To quickly enable all extras, use the `--all-extras` option.
 
-See the [Optional dependencies](./dependencies.md#optional-dependencies) documentation for details
+See the [optional dependencies](./dependencies.md#optional-dependencies) documentation for details
 on how to manage optional dependencies.
 
 ### Syncing development dependencies
@@ -116,7 +121,7 @@ uv reads development dependencies from the `[dependency-groups]` table (as defin
 [PEP 735](https://peps.python.org/pep-0735/)).
 
 The `dev` group is special-cased and synced by default. See the
-[Default groups](./dependencies.md#default-groups) documentation for details on changing the
+[default groups](./dependencies.md#default-groups) documentation for details on changing the
 defaults.
 
 The `--no-dev` flag can be used to exclude the `dev` group.
@@ -137,7 +142,7 @@ $ uv sync --no-group foo --group foo
 
 The `foo` group would not be installed.
 
-See the [Development dependencies](./dependencies.md#development-dependencies) documentation for
+See the [development dependencies](./dependencies.md#development-dependencies) documentation for
 details on how to manage development dependencies.
 
 ## Upgrading locked package versions
