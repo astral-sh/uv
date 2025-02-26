@@ -17,7 +17,7 @@ To disable automatic locking, use the `--locked` option:
 $ uv run --locked ...
 ```
 
-If the lockfile is not up-to-date, an error will be raised instead of updating the lockfile.
+If the lockfile is not up-to-date, uv will raise an error instead of updating the lockfile.
 
 To use the lockfile without checking if it is up-to-date, use the `--frozen` option:
 
@@ -35,10 +35,11 @@ $ uv run --no-sync ...
 ## Checking if the lockfile is up-to-date
 
 When considering if the lockfile is up-to-date, uv will check if it matches the project metadata.
-For example, if you add a dependency to your `pyproject.toml`, the lockfile will be outdated.
-Similarly, if you change the version constraints for a dependency such that the locked version is
-excluded, the lockfile will be outdated. However, if you change the version constraints such that
-the existing locked version is still included, the lockfile will still be considered up-to-date.
+For example, if you add a dependency to your `pyproject.toml`, the lockfile will be considered
+outdated. Similarly, if you change the version constraints for a dependency such that the locked
+version is excluded, the lockfile will be considered outdated. However, if you change the version
+constraints such that the existing locked version is still included, the lockfile will still be
+considered up-to-date.
 
 You can check if the lockfile is up-to-date by passing the `--check` flag to `uv lock`:
 
@@ -78,7 +79,7 @@ versions of dependencies.
 ### Editable installation
 
 When the environment is synced, uv will install the project (and other workspace members) as
-_editable_ packages. This means a re-sync is not necessary for changes to be reflected in the
+_editable_ packages, such that re-syncing is not necessary for changes to be reflected in the
 environment.
 
 To opt-out of this behavior, use the `--no-editable` option.
