@@ -4855,6 +4855,7 @@ dependencies = [
  "uv-pep508",
  "uv-platform-tags",
  "uv-pypi-types",
+ "uv-small-str",
  "uv-static",
  "uv-version",
  "uv-warnings",
@@ -5075,6 +5076,7 @@ dependencies = [
  "uv-pep508",
  "uv-platform-tags",
  "uv-pypi-types",
+ "uv-small-str",
  "version-ranges",
 ]
 
@@ -5605,6 +5607,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-requirements-txt",
+ "uv-small-str",
  "uv-static",
  "uv-types",
  "uv-warnings",

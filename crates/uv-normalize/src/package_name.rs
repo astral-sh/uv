@@ -6,7 +6,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use uv_small_str::SmallString;
 
-use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNameError};
+use crate::{validate_and_normalize_ref, InvalidNameError};
 
 /// The normalized name of a package.
 ///
@@ -33,8 +33,11 @@ pub struct PackageName(SmallString);
 
 impl PackageName {
     /// Create a validated, normalized package name.
-    pub fn new(name: String) -> Result<Self, InvalidNameError> {
-        validate_and_normalize_owned(name).map(Self)
+    ///
+    /// At present, this is no more efficient than calling [`PackageName::from_str`].
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn from_owned(name: String) -> Result<Self, InvalidNameError> {
+        validate_and_normalize_ref(&name).map(Self)
     }
 
     /// Escape this name with underscores (`_`) instead of dashes (`-`)
@@ -88,8 +91,25 @@ impl<'de> Deserialize<'de> for PackageName {
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        Self::from_str(&s).map_err(serde::de::Error::custom)
+        struct Visitor;
+
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = PackageName;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                PackageName::from_str(v).map_err(serde::de::Error::custom)
+            }
+
+            fn visit_string<E: serde::de::Error>(self, v: String) -> Result<Self::Value, E> {
+                PackageName::from_owned(v).map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 

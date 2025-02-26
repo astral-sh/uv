@@ -2199,6 +2199,39 @@ fn install_github_artifact_private_https_multiple_pat() {
     context.assert_installed("uv_private_pypackage", "0.1.0");
 }
 
+/// Fail to a package from a private GitHub repository using interactive authentication
+/// It should fail gracefully, instead of silently hanging forever
+/// Regression test for <https://github.com/astral-sh/uv/issues/5107>
+#[test]
+#[cfg(feature = "git")]
+fn install_git_private_https_interactive() {
+    let context = TestContext::new("3.8");
+
+    let package = "uv-private-pypackage@ git+https://github.com/astral-test/uv-private-pypackage";
+
+    // The path to a git binary may be arbitrary, filter and replace
+    // The trailing space is load bearing, as to not match on false positives
+    let filters: Vec<_> = [("\\/([[:alnum:]]*\\/)*git ", "/usr/bin/git ")]
+        .into_iter()
+        .chain(context.filters())
+        .collect();
+
+    uv_snapshot!(filters, context.pip_install().arg(package)
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `uv-private-pypackage @ git+https://github.com/astral-test/uv-private-pypackage`
+      ├─▶ Git operation failed
+      ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
+      ╰─▶ process didn't exit successfully: `/usr/bin/git fetch --force --update-head-ok 'https://github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+          --- stderr
+          fatal: could not read Username for 'https://github.com': terminal prompts disabled
+    "###);
+}
+
 /// Install a package without using pre-built wheels.
 #[test]
 fn reinstall_no_binary() {
