@@ -640,24 +640,26 @@ fn create_venv_unknown_python_minor() {
         .env_remove(EnvVars::UV_TEST_PYTHON_PATH);
 
     if cfg!(windows) {
-        uv_snapshot!(&mut command, @r###"
+        uv_snapshot!(context.filters(), &mut command, @r###"
         success: false
         exit_code: 1
         ----- stdout -----
 
         ----- stderr -----
           × No interpreter found for Python 3.100 in managed installations, search path, or registry
+        See [UV_LOG_DIR]/venv.log for detailed logs
         "###
         );
     } else {
-        uv_snapshot!(&mut command, @r###"
+        uv_snapshot!(context.filters(), &mut command, @r"
         success: false
         exit_code: 1
         ----- stdout -----
 
         ----- stderr -----
           × No interpreter found for Python 3.100 in managed installations or search path
-        "###
+        See [UV_LOG_DIR]/venv.log for detailed logs
+        "
         );
     }
 
@@ -677,25 +679,28 @@ fn create_venv_unknown_python_patch() {
         // Unset this variable to force what the user would see
         .env_remove(EnvVars::UV_TEST_PYTHON_PATH);
 
+    // Applying filters for the "UV_LOG_DIR" however that does filter the the python patch which might make the test less reliable
     if cfg!(windows) {
-        uv_snapshot!(&mut command, @r###"
+        uv_snapshot!(context.filters(), &mut command, @r###"
         success: false
         exit_code: 1
         ----- stdout -----
 
         ----- stderr -----
-          × No interpreter found for Python 3.12.100 in managed installations, search path, or registry
+          × No interpreter found for Python 3.12.[X] in managed installations, search path, or registry
+        See [UV_LOG_DIR]/venv.log for detailed logs
         "###
         );
     } else {
-        uv_snapshot!(&mut command, @r###"
+        uv_snapshot!(context.filters(), &mut command, @r"
         success: false
         exit_code: 1
         ----- stdout -----
 
         ----- stderr -----
-          × No interpreter found for Python 3.12.100 in managed installations or search path
-        "###
+          × No interpreter found for Python 3.12.[X] in managed installations or search path
+        See [UV_LOG_DIR]/venv.log for detailed logs
+        "
         );
     }
 
@@ -735,7 +740,7 @@ fn file_exists() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -747,7 +752,8 @@ fn file_exists() -> Result<()> {
 
       × Failed to create virtualenv
       ╰─▶ File exists at `.venv`
-    "###
+    See [UV_LOG_DIR]/venv.log for detailed logs
+    "
     );
 
     Ok(())
@@ -790,7 +796,7 @@ fn non_empty_dir_exists() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -802,7 +808,8 @@ fn non_empty_dir_exists() -> Result<()> {
 
       × Failed to create virtualenv
       ╰─▶ The directory `.venv` exists, but it's not a virtual environment
-    "###
+    See [UV_LOG_DIR]/venv.log for detailed logs
+    "
     );
 
     Ok(())
@@ -820,7 +827,7 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -832,7 +839,8 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
 
       × Failed to create virtualenv
       ╰─▶ The directory `.venv` exists, but it's not a virtual environment
-    "###
+    See [UV_LOG_DIR]/venv.log for detailed logs
+    "
     );
 
     uv_snapshot!(context.filters(), context.venv()

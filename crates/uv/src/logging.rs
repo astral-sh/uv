@@ -1,5 +1,6 @@
-use std::fmt;
+use std::path::PathBuf;
 use std::str::FromStr;
+use std::{env, fmt};
 
 use anyhow::Context;
 use jiff::Timestamp;
@@ -34,6 +35,20 @@ pub(crate) enum Level {
     ExtraVerbose,
 }
 
+/// Enum to set the log level for the file logs
+// Discuss if we need to separate trace or debug and the hierarchical layer or not into different args (based on what the use cases are)
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FileLogLevel {
+    /// Write debug messages to the log file.
+    #[default]
+    Verbose,
+    /// Write messages in a hierarchical span tree to the log file, debug or lower messages are written.
+    ExtraVerbose,
+    /// Write trace level logs to the log file.
+    TraceVerbose,
+    /// Write messages in a hierarchical span tree to the log file, trace messages are written.
+    TraceExtraVerbose,
+}
 struct UvFormat {
     display_timestamp: bool,
     display_level: bool,
@@ -119,6 +134,8 @@ pub(crate) fn setup_logging(
     level: Level,
     durations: impl Layer<Registry> + Send + Sync,
     color: ColorChoice,
+    log_path: Option<&PathBuf>,
+    file_log_level: FileLogLevel,
 ) -> anyhow::Result<()> {
     let default_directive = match level {
         Level::Default => {
@@ -136,6 +153,11 @@ pub(crate) fn setup_logging(
         tracing_subscriber::filter::Targets::new()
             .with_target("", tracing::level_filters::LevelFilter::INFO),
     );
+
+    let subscriber = tracing_subscriber::registry().with(durations_layer);
+
+    // Building the layers for logging sort of like a builder pattern
+    let mut layers = Vec::new();
 
     let filter = EnvFilter::builder()
         .with_default_directive(default_directive)
@@ -169,32 +191,101 @@ pub(crate) fn setup_logging(
                 show_spans: false,
             };
 
-            tracing_subscriber::registry()
-                .with(durations_layer)
-                .with(
-                    tracing_subscriber::fmt::layer()
-                        .event_format(format)
-                        .with_writer(writer)
-                        .with_ansi(ansi)
-                        .with_filter(filter),
-                )
-                .init();
+            layers.push(
+                tracing_subscriber::fmt::layer()
+                    .event_format(format)
+                    .with_writer(writer)
+                    .with_ansi(ansi)
+                    .with_filter(filter)
+                    .boxed(),
+            );
         }
         Level::ExtraVerbose => {
             // Regardless of the tracing level, include the uptime and target for each message.
-            tracing_subscriber::registry()
-                .with(durations_layer)
-                .with(
-                    HierarchicalLayer::default()
-                        .with_targets(true)
-                        .with_timer(Uptime::default())
-                        .with_writer(writer)
-                        .with_ansi(ansi)
-                        .with_filter(filter),
-                )
-                .init();
+            layers.push(
+                HierarchicalLayer::default()
+                    .with_targets(true)
+                    .with_timer(Uptime::default())
+                    .with_writer(writer)
+                    .with_ansi(ansi)
+                    .with_filter(filter)
+                    .boxed(),
+            );
         }
     }
+
+    let original_dir = env::current_dir().expect("Failed to get current directory");
+
+    // If log path is provided the setup for persistent file logging is done
+    // Should there be a case where logging is done if UV_LOG_DIR is set but no --log flag is provided?
+    if let Some(path) = log_path {
+        // file_filter sets the level of logs by default debug logs are written to the file
+        let file_filter_str = match file_log_level {
+            FileLogLevel::Verbose | FileLogLevel::ExtraVerbose => "uv=debug",
+            FileLogLevel::TraceVerbose | FileLogLevel::TraceExtraVerbose => "trace",
+        };
+
+        let file_filter =
+            EnvFilter::try_new(file_filter_str).unwrap_or_else(|_| EnvFilter::new("uv=debug"));
+        let file_format = UvFormat {
+            // Setting timestamp display as false as to mimic the behavior of the console logs
+            // however wanted to discuss:                                                                                                           the case where user might want to know when they wrote the logs
+            display_timestamp: false,
+            display_level: true,
+            show_spans: false,
+        };
+
+        let mut new_path = path.clone();
+        new_path.set_extension("log");
+
+        if let Ok(log_dir) = env::var(uv_static::EnvVars::UV_LOG_DIR) {
+            env::set_current_dir(&log_dir)
+                .with_context(|| format!("{} {}", uv_static::LOG_DIR_ERROR, log_dir))?;
+        }
+        // Discuss if previous content should be overwritten or appended.
+        // Should it panic or gracefully exit just without logging in case of failure to open or create the file.
+        let log_file = fs_err::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(&new_path)
+            .with_context(|| format!("{} {}", uv_static::LOG_FILE_ERROR, new_path.display()))?;
+
+        // Forcing no anstream in file logs, I don't like the idea of using the same env variable NO_COLOR or cli flag to control both console and file logs
+        // If there is a case to introduce color for file logs we can introduce a new env variable or cli flag for it.
+        // fs_err doesn't implement RawStream so we Box it and then cast it to the trait std::io::Write, and Send is needed to be explicitly specified as Mutex needs to be shared between threads.
+
+        let file_writer = std::sync::Mutex::new(anstream::AutoStream::new(
+            Box::new(log_file) as Box<dyn std::io::Write + Send>,
+            anstream::ColorChoice::Never,
+        ));
+
+        // Depending on the log level, different layers are added to the subscriber.
+        // An equivalent of `RUST_LOG` for file logs might be needed to be implemented.
+        match file_log_level {
+            FileLogLevel::Verbose | FileLogLevel::TraceVerbose => {
+                layers.push(
+                    tracing_subscriber::fmt::layer()
+                        .event_format(file_format)
+                        .with_writer(file_writer)
+                        .with_filter(file_filter)
+                        .boxed(),
+                );
+            }
+            FileLogLevel::ExtraVerbose | FileLogLevel::TraceExtraVerbose => {
+                layers.push(
+                    HierarchicalLayer::default()
+                        .with_targets(true)
+                        .with_writer(file_writer)
+                        .with_timer(Uptime::default())
+                        .with_filter(file_filter)
+                        .boxed(),
+                );
+            }
+        }
+        env::set_current_dir(&original_dir)
+            .expect("Failed to set current directory back to original");
+    };
+    subscriber.with(layers).init();
 
     Ok(())
 }

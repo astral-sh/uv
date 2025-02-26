@@ -292,6 +292,14 @@ pub struct GlobalArgs {
     /// This setting has no effect when used in the `uv pip` interface.
     #[arg(global = true, long)]
     pub project: Option<PathBuf>,
+
+    /// Path to log file.
+    #[arg(global = true, long, value_name = "PATH", env = EnvVars::UV_LOG, help = "Path to a verbose appending log.")]
+    pub log: Option<PathBuf>,
+
+    /// Determines the verbosity of the file logs.
+    #[arg(global = true, action = clap::ArgAction::Count, long, short, requires = "log")]
+    pub log_verbose: u8,
 }
 
 #[derive(Debug, Copy, Clone, clap::ValueEnum)]

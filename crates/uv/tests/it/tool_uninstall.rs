@@ -121,14 +121,15 @@ fn tool_uninstall_not_installed() {
 
     uv_snapshot!(context.filters(), context.tool_uninstall().arg("black")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: `black` is not installed
-    "###);
+    See [UV_LOG_DIR]/tool_uninstall.log for detailed logs
+    ");
 }
 
 #[test]

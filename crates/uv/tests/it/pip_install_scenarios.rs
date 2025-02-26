@@ -77,7 +77,7 @@ fn requires_exact_version_does_not_exist() {
 
     uv_snapshot!(filters, command(&context)
         .arg("requires-exact-version-does-not-exist-a==2.0.0")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -85,7 +85,8 @@ fn requires_exact_version_does_not_exist() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there is no version of package-a==2.0.0 and you require package-a==2.0.0, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -117,7 +118,7 @@ fn requires_greater_version_does_not_exist() {
 
     uv_snapshot!(filters, command(&context)
         .arg("requires-greater-version-does-not-exist-a>1.0.0")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -125,7 +126,8 @@ fn requires_greater_version_does_not_exist() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only package-a<=1.0.0 is available and you require package-a>1.0.0, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -158,7 +160,7 @@ fn requires_less_version_does_not_exist() {
 
     uv_snapshot!(filters, command(&context)
         .arg("requires-less-version-does-not-exist-a<2.0.0")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -166,7 +168,8 @@ fn requires_less_version_does_not_exist() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only package-a>=2.0.0 is available and you require package-a<2.0.0, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -195,7 +198,7 @@ fn requires_package_does_not_exist() {
 
     uv_snapshot!(filters, command(&context)
         .arg("requires-package-does-not-exist-a")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -203,7 +206,8 @@ fn requires_package_does_not_exist() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because package-a was not found in the package registry and you require package-a, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -236,7 +240,7 @@ fn transitive_requires_package_does_not_exist() {
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-requires-package-does-not-exist-a")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -245,7 +249,8 @@ fn transitive_requires_package_does_not_exist() {
       × No solution found when resolving dependencies:
       ╰─▶ Because package-b was not found in the package registry and package-a==1.0.0 depends on package-b, we can conclude that package-a==1.0.0 cannot be used.
           And because only package-a==1.0.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -327,7 +332,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
         .arg("dependency-excludes-non-contiguous-range-of-compatible-versions-a")
                 .arg("dependency-excludes-non-contiguous-range-of-compatible-versions-b<3.0.0,>=2.0.0")
                 .arg("dependency-excludes-non-contiguous-range-of-compatible-versions-c")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -354,7 +359,8 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
               package-b>=3.0.0
 
           And because you require package-b>=2.0.0,<3.0.0 and package-c, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     // Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0` require incompatible versions of `b`, but all available versions of `c` exclude that range of `a` so resolution fails.
     assert_not_installed(
@@ -439,7 +445,7 @@ fn dependency_excludes_range_of_compatible_versions() {
         .arg("dependency-excludes-range-of-compatible-versions-a")
                 .arg("dependency-excludes-range-of-compatible-versions-b<3.0.0,>=2.0.0")
                 .arg("dependency-excludes-range-of-compatible-versions-c")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -466,7 +472,8 @@ fn dependency_excludes_range_of_compatible_versions() {
               package-b>=3.0.0
 
           And because you require package-b>=2.0.0,<3.0.0 and package-c, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     // Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0` require incompatible versions of `b`, but all available versions of `c` exclude that range of `a` so resolution fails.
     assert_not_installed(
@@ -524,7 +531,7 @@ fn excluded_only_compatible_version() {
     uv_snapshot!(filters, command(&context)
         .arg("excluded-only-compatible-version-a!=2.0.0")
                 .arg("excluded-only-compatible-version-b<3.0.0,>=2.0.0")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -547,7 +554,8 @@ fn excluded_only_compatible_version() {
               package-a<2.0.0
               package-a>2.0.0
           and package-b>=2.0.0,<3.0.0, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     // Only `a==1.2.0` is available since `a==1.0.0` and `a==3.0.0` require incompatible versions of `b`. The user has excluded that version of `a` so resolution fails.
     assert_not_installed(
@@ -584,7 +592,7 @@ fn excluded_only_version() {
 
     uv_snapshot!(filters, command(&context)
         .arg("excluded-only-version-a!=1.0.0")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -595,7 +603,8 @@ fn excluded_only_version() {
               package-a<1.0.0
               package-a>1.0.0
           we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     // Only `a==1.0.0` is available but the user excluded it.
     assert_not_installed(&context.venv, "excluded_only_version_a", &context.temp_dir);
@@ -829,7 +838,7 @@ fn extra_incompatible_with_extra() {
 
     uv_snapshot!(filters, command(&context)
         .arg("extra-incompatible-with-extra-a[extra_b,extra_c]")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -839,7 +848,8 @@ fn extra_incompatible_with_extra() {
       ╰─▶ Because only package-a[extra-b]==1.0.0 is available and package-a[extra-b]==1.0.0 depends on package-b==1.0.0, we can conclude that all versions of package-a[extra-b] depend on package-b==1.0.0.
           And because package-a[extra-c]==1.0.0 depends on package-b==2.0.0 and only package-a[extra-c]==1.0.0 is available, we can conclude that all versions of package-a[extra-b] and all versions of package-a[extra-c] are incompatible.
           And because you require package-a[extra-b] and package-a[extra-c], we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     // Because both `extra_b` and `extra_c` are requested and they require incompatible versions of `b`, `a` cannot be installed.
     assert_not_installed(
@@ -881,7 +891,7 @@ fn extra_incompatible_with_root() {
     uv_snapshot!(filters, command(&context)
         .arg("extra-incompatible-with-root-a[extra]")
                 .arg("extra-incompatible-with-root-b==2.0.0")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -890,7 +900,8 @@ fn extra_incompatible_with_root() {
       × No solution found when resolving dependencies:
       ╰─▶ Because only package-a[extra]==1.0.0 is available and package-a[extra]==1.0.0 depends on package-b==1.0.0, we can conclude that all versions of package-a[extra] depend on package-b==1.0.0.
           And because you require package-a[extra] and package-b==2.0.0, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     // Because the user requested `b==2.0.0` but the requested extra requires `b==1.0.0`, the dependencies cannot be satisfied.
     assert_not_installed(
@@ -1093,7 +1104,7 @@ fn direct_incompatible_versions() {
     uv_snapshot!(filters, command(&context)
         .arg("direct-incompatible-versions-a==1.0.0")
                 .arg("direct-incompatible-versions-a==2.0.0")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1101,7 +1112,8 @@ fn direct_incompatible_versions() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because you require package-a==1.0.0 and package-a==2.0.0, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -1141,7 +1153,7 @@ fn transitive_incompatible_versions() {
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-incompatible-versions-a==1.0.0")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1150,7 +1162,8 @@ fn transitive_incompatible_versions() {
       × No solution found when resolving dependencies:
       ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and package-b==2.0.0, we can conclude that package-a==1.0.0 cannot be used.
           And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -1189,7 +1202,7 @@ fn transitive_incompatible_with_root_version() {
     uv_snapshot!(filters, command(&context)
         .arg("transitive-incompatible-with-root-version-a")
                 .arg("transitive-incompatible-with-root-version-b==1.0.0")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1198,7 +1211,8 @@ fn transitive_incompatible_with_root_version() {
       × No solution found when resolving dependencies:
       ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b==2.0.0, we can conclude that all versions of package-a depend on package-b==2.0.0.
           And because you require package-a and package-b==1.0.0, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -1246,7 +1260,7 @@ fn transitive_incompatible_with_transitive() {
     uv_snapshot!(filters, command(&context)
         .arg("transitive-incompatible-with-transitive-a")
                 .arg("transitive-incompatible-with-transitive-b")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1256,7 +1270,8 @@ fn transitive_incompatible_with_transitive() {
       ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-c==1.0.0, we can conclude that all versions of package-a depend on package-c==1.0.0.
           And because package-b==1.0.0 depends on package-c==2.0.0 and only package-b==1.0.0 is available, we can conclude that all versions of package-a and all versions of package-b are incompatible.
           And because you require package-a and package-b, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -1337,7 +1352,7 @@ fn local_greater_than() {
 
     uv_snapshot!(filters, command(&context)
         .arg("local-greater-than-a>1.2.3")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1345,7 +1360,8 @@ fn local_greater_than() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only package-a==1.2.3+foo is available and you require package-a>1.2.3, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(&context.venv, "local_greater_than_a", &context.temp_dir);
 }
@@ -1417,7 +1433,7 @@ fn local_less_than() {
 
     uv_snapshot!(filters, command(&context)
         .arg("local-less-than-a<1.2.3")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1425,7 +1441,8 @@ fn local_less_than() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only package-a==1.2.3+foo is available and you require package-a<1.2.3, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(&context.venv, "local_less_than_a", &context.temp_dir);
 }
@@ -1659,7 +1676,7 @@ fn local_transitive_conflicting() {
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-conflicting-a")
                 .arg("local-transitive-conflicting-b==2.0.0+foo")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1668,7 +1685,8 @@ fn local_transitive_conflicting() {
       × No solution found when resolving dependencies:
       ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b==2.0.0+bar, we can conclude that all versions of package-a depend on package-b==2.0.0+bar.
           And because you require package-a and package-b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -1829,7 +1847,7 @@ fn local_transitive_greater_than() {
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-greater-than-a")
                 .arg("local-transitive-greater-than-b==2.0.0+foo")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1838,7 +1856,8 @@ fn local_transitive_greater_than() {
       × No solution found when resolving dependencies:
       ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b>2.0.0, we can conclude that all versions of package-a depend on package-b>2.0.0.
           And because you require package-a and package-b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -1941,7 +1960,7 @@ fn local_transitive_less_than() {
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-less-than-a")
                 .arg("local-transitive-less-than-b==2.0.0+foo")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1950,7 +1969,8 @@ fn local_transitive_less_than() {
       × No solution found when resolving dependencies:
       ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b<2.0.0, we can conclude that all versions of package-a depend on package-b<2.0.0.
           And because you require package-a and package-b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -2135,7 +2155,7 @@ fn post_equal_not_available() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-equal-not-available-a==1.2.3.post0")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2143,7 +2163,8 @@ fn post_equal_not_available() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there is no version of package-a==1.2.3.post0 and you require package-a==1.2.3.post0, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -2264,7 +2285,7 @@ fn post_greater_than_post_not_available() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-greater-than-post-not-available-a>1.2.3.post2")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2272,7 +2293,8 @@ fn post_greater_than_post_not_available() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only package-a<=1.2.3.post1 is available and you require package-a>=1.2.3.post3, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -2347,7 +2369,7 @@ fn post_greater_than() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-greater-than-a>1.2.3")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2355,7 +2377,8 @@ fn post_greater_than() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only package-a==1.2.3.post1 is available and you require package-a>1.2.3, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(&context.venv, "post_greater_than_a", &context.temp_dir);
 }
@@ -2382,7 +2405,7 @@ fn post_less_than_or_equal() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-less-than-or-equal-a<=1.2.3")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2390,7 +2413,8 @@ fn post_less_than_or_equal() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only package-a==1.2.3.post1 is available and you require package-a<=1.2.3, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -2421,7 +2445,7 @@ fn post_less_than() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-less-than-a<1.2.3")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2429,7 +2453,8 @@ fn post_less_than() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only package-a==1.2.3.post1 is available and you require package-a<1.2.3, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(&context.venv, "post_less_than_a", &context.temp_dir);
 }
@@ -2457,7 +2482,7 @@ fn post_local_greater_than_post() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-local-greater-than-post-a>1.2.3.post1")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2465,7 +2490,8 @@ fn post_local_greater_than_post() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only package-a<=1.2.3.post1+local is available and you require package-a>=1.2.3.post2, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -2497,7 +2523,7 @@ fn post_local_greater_than() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-local-greater-than-a>1.2.3")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2505,7 +2531,8 @@ fn post_local_greater_than() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only package-a<=1.2.3.post1+local is available and you require package-a>1.2.3, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -2536,7 +2563,7 @@ fn post_simple() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-simple-a==1.2.3")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2544,7 +2571,8 @@ fn post_simple() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there is no version of package-a==1.2.3 and you require package-a==1.2.3, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(&context.venv, "post_simple_a", &context.temp_dir);
 }
@@ -2711,7 +2739,7 @@ fn package_only_prereleases_in_range() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-only-prereleases-in-range-a>0.1.0")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2721,7 +2749,8 @@ fn package_only_prereleases_in_range() {
       ╰─▶ Because only package-a<0.1.0 is available and you require package-a>0.1.0, we can conclude that your requirements are unsatisfiable.
 
           hint: Pre-releases are available for `package-a` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     // Since there are stable versions of `a` available, prerelease versions should not be selected without explicit opt-in.
     assert_not_installed(
@@ -3244,7 +3273,7 @@ fn transitive_package_only_prereleases_in_range() {
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-package-only-prereleases-in-range-a")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3255,7 +3284,8 @@ fn transitive_package_only_prereleases_in_range() {
           And because only package-a==0.1.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
 
           hint: Pre-releases are available for `package-b` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     // Since there are stable versions of `b` available, the prerelease version should not be selected without explicit opt-in. The available version is excluded by the range requested by the user.
     assert_not_installed(
@@ -3381,7 +3411,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
     uv_snapshot!(filters, command(&context)
         .arg("transitive-prerelease-and-stable-dependency-many-versions-holes-a")
                 .arg("transitive-prerelease-and-stable-dependency-many-versions-holes-b")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3405,7 +3435,8 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
               package-c>2.0.0a7,<2.0.0b1
               package-c>2.0.0b1,<2.0.0b5
           ), but pre-releases weren't enabled (try: `--prerelease=allow`)
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
     assert_not_installed(
@@ -3482,7 +3513,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
     uv_snapshot!(filters, command(&context)
         .arg("transitive-prerelease-and-stable-dependency-many-versions-a")
                 .arg("transitive-prerelease-and-stable-dependency-many-versions-b")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3495,7 +3526,8 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
           And because you require package-a and package-b, we can conclude that your requirements are unsatisfiable.
 
           hint: `package-c` was requested with a pre-release marker (e.g., package-c>=2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
     assert_not_installed(
@@ -3620,7 +3652,7 @@ fn transitive_prerelease_and_stable_dependency() {
     uv_snapshot!(filters, command(&context)
         .arg("transitive-prerelease-and-stable-dependency-a")
                 .arg("transitive-prerelease-and-stable-dependency-b")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3631,7 +3663,8 @@ fn transitive_prerelease_and_stable_dependency() {
           And because only package-a==1.0.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
 
           hint: `package-c` was requested with a pre-release marker (e.g., package-c==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
     assert_not_installed(
@@ -3727,7 +3760,7 @@ fn python_greater_than_current_excluded() {
 
     uv_snapshot!(filters, command(&context)
         .arg("python-greater-than-current-excluded-a>=2.0.0")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3747,7 +3780,8 @@ fn python_greater_than_current_excluded() {
           Because the current Python version (3.9.[X]) does not satisfy Python>=3.12 and package-a==4.0.0 depends on Python>=3.12, we can conclude that package-a==4.0.0 cannot be used.
           And because we know from (2) that package-a>=2.0.0,<4.0.0 cannot be used, we can conclude that package-a>=2.0.0 cannot be used.
           And because you require package-a>=2.0.0, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -3801,7 +3835,7 @@ fn python_greater_than_current_many() {
 
     uv_snapshot!(filters, command(&context)
         .arg("python-greater-than-current-many-a==1.0.0")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3809,7 +3843,8 @@ fn python_greater_than_current_many() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there is no version of package-a==1.0.0 and you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -3842,7 +3877,7 @@ fn python_greater_than_current_patch() {
 
     uv_snapshot!(filters, command(&context)
         .arg("python-greater-than-current-patch-a==1.0.0")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3851,7 +3886,8 @@ fn python_greater_than_current_patch() {
       × No solution found when resolving dependencies:
       ╰─▶ Because the current Python version (3.8.12) does not satisfy Python>=3.8.14 and package-a==1.0.0 depends on Python>=3.8.14, we can conclude that package-a==1.0.0 cannot be used.
           And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -3883,7 +3919,7 @@ fn python_greater_than_current() {
 
     uv_snapshot!(filters, command(&context)
         .arg("python-greater-than-current-a==1.0.0")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3892,7 +3928,8 @@ fn python_greater_than_current() {
       × No solution found when resolving dependencies:
       ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
           And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -3962,7 +3999,7 @@ fn python_version_does_not_exist() {
 
     uv_snapshot!(filters, command(&context)
         .arg("python-version-does-not-exist-a==1.0.0")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3971,7 +4008,8 @@ fn python_version_does_not_exist() {
       × No solution found when resolving dependencies:
       ╰─▶ Because the current Python version (3.8.[X]) does not satisfy Python>=3.30 and package-a==1.0.0 depends on Python>=3.30, we can conclude that package-a==1.0.0 cannot be used.
           And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -4081,7 +4119,7 @@ fn no_sdist_no_wheels_with_matching_abi() {
     uv_snapshot!(filters, command(&context)
         .arg("--python-platform=x86_64-manylinux2014")
         .arg("no-sdist-no-wheels-with-matching-abi-a")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4092,7 +4130,8 @@ fn no_sdist_no_wheels_with_matching_abi() {
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
 
           hint: You require CPython 3.8 (`cp38`), but we only found wheels for `package-a` (v1.0.0) with the following Python ABI tag: `graalpy310_graalpy240_310_native`
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -4124,7 +4163,7 @@ fn no_sdist_no_wheels_with_matching_platform() {
     uv_snapshot!(filters, command(&context)
         .arg("--python-platform=x86_64-manylinux2014")
         .arg("no-sdist-no-wheels-with-matching-platform-a")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4135,7 +4174,8 @@ fn no_sdist_no_wheels_with_matching_platform() {
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
 
           hint: Wheels are available for `package-a` (v1.0.0) on the following platform: `macosx_10_0_ppc64`
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -4167,7 +4207,7 @@ fn no_sdist_no_wheels_with_matching_python() {
     uv_snapshot!(filters, command(&context)
         .arg("--python-platform=x86_64-manylinux2014")
         .arg("no-sdist-no-wheels-with-matching-python-a")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4178,7 +4218,8 @@ fn no_sdist_no_wheels_with_matching_python() {
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
 
           hint: You require CPython 3.8 (`cp38`), but we only found wheels for `package-a` (v1.0.0) with the following Python implementation tag: `graalpy310`
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(
         &context.venv,
@@ -4211,7 +4252,7 @@ fn no_wheels_no_build() {
         .arg("--only-binary")
         .arg("no-wheels-no-build-a")
         .arg("no-wheels-no-build-a")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4222,7 +4263,8 @@ fn no_wheels_no_build() {
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
 
           hint: Wheels are required for `package-a` because building from source is disabled for `package-a` (i.e., with `--no-build-package package-a`)
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(&context.venv, "no_wheels_no_build_a", &context.temp_dir);
 }
@@ -4321,7 +4363,7 @@ fn only_wheels_no_binary() {
         .arg("--no-binary")
         .arg("only-wheels-no-binary-a")
         .arg("only-wheels-no-binary-a")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4332,7 +4374,8 @@ fn only_wheels_no_binary() {
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
 
           hint: A source distribution is required for `package-a` because using pre-built wheels is disabled for `package-a` (i.e., with `--no-binary-package package-a`)
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     assert_not_installed(&context.venv, "only_wheels_no_binary_a", &context.temp_dir);
 }
@@ -4430,7 +4473,7 @@ fn package_only_yanked_in_range() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-only-yanked-in-range-a>0.1.0")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4442,7 +4485,8 @@ fn package_only_yanked_in_range() {
               package-a==1.0.0
           and package-a==1.0.0 was yanked (reason: Yanked for testing), we can conclude that package-a>0.1.0 cannot be used.
           And because you require package-a>0.1.0, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     // Since there are other versions of `a` available, yanked versions should not be selected without explicit opt-in.
     assert_not_installed(
@@ -4474,7 +4518,7 @@ fn package_only_yanked() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-only-yanked-a")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4483,7 +4527,8 @@ fn package_only_yanked() {
       × No solution found when resolving dependencies:
       ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 was yanked (reason: Yanked for testing), we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     // Yanked versions should not be installed, even if they are the only one available.
     assert_not_installed(&context.venv, "package_only_yanked_a", &context.temp_dir);
@@ -4669,7 +4714,7 @@ fn transitive_package_only_yanked_in_range() {
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-package-only-yanked-in-range-a")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4682,7 +4727,8 @@ fn transitive_package_only_yanked_in_range() {
           and package-b==1.0.0 was yanked (reason: Yanked for testing), we can conclude that package-b>0.1 cannot be used.
           And because package-a==0.1.0 depends on package-b>0.1, we can conclude that package-a==0.1.0 cannot be used.
           And because only package-a==0.1.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     // Yanked versions should not be installed, even if they are the only valid version in a range.
     assert_not_installed(
@@ -4718,7 +4764,7 @@ fn transitive_package_only_yanked() {
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-package-only-yanked-a")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4728,7 +4774,8 @@ fn transitive_package_only_yanked() {
       ╰─▶ Because only package-b==1.0.0 is available and package-b==1.0.0 was yanked (reason: Yanked for testing), we can conclude that all versions of package-b cannot be used.
           And because package-a==0.1.0 depends on package-b, we can conclude that package-a==0.1.0 cannot be used.
           And because only package-a==0.1.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     // Yanked versions should not be installed, even if they are the only one available.
     assert_not_installed(
@@ -4848,7 +4895,7 @@ fn transitive_yanked_and_unyanked_dependency() {
     uv_snapshot!(filters, command(&context)
         .arg("transitive-yanked-and-unyanked-dependency-a")
                 .arg("transitive-yanked-and-unyanked-dependency-b")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4857,7 +4904,8 @@ fn transitive_yanked_and_unyanked_dependency() {
       × No solution found when resolving dependencies:
       ╰─▶ Because package-c==2.0.0 was yanked (reason: Yanked for testing) and package-a==1.0.0 depends on package-c==2.0.0, we can conclude that package-a==1.0.0 cannot be used.
           And because only package-a==1.0.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
-    "###);
+    See [UV_LOG_DIR]/pip_install_scenarios.log for detailed logs
+    ");
 
     // Since the user did not explicitly select the yanked version, it cannot be used.
     assert_not_installed(
