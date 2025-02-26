@@ -473,6 +473,11 @@ impl EnvVars {
     #[attr_hidden]
     pub const GIT_SSL_NO_VERIFY: &'static str = "GIT_SSL_NO_VERIFY";
 
+    /// Disable interactive git prompts in terminals, e.g., for credentials. Does not disable
+    /// GUI prompts.
+    #[attr_hidden]
+    pub const GIT_TERMINAL_PROMPT: &'static str = "GIT_TERMINAL_PROMPT";
+
     /// Used in tests for better git isolation.
     ///
     /// For example, we run some tests in ~/.local/share/uv/tests.
