@@ -68,8 +68,8 @@ pub enum PublishError {
     HashMismatch {
         filename: Box<DistFilename>,
         hash_algorithm: HashAlgorithm,
-        local: Box<str>,
-        remote: Box<str>,
+        local: String,
+        remote: String,
     },
     #[error("Hash is missing in index for {0}")]
     MissingHash(Box<DistFilename>),
@@ -547,8 +547,8 @@ pub async fn check_url(
             Err(PublishError::HashMismatch {
                 filename: Box::new(filename.clone()),
                 hash_algorithm: remote_hash.algorithm,
-                local: local_hash.digest,
-                remote: remote_hash.digest.clone(),
+                local: local_hash.digest.to_string(),
+                remote: remote_hash.digest.to_string(),
             })
         }
     } else {

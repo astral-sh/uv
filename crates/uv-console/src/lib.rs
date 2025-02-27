@@ -10,6 +10,7 @@ pub fn confirm(message: &str, term: &Term, default: bool) -> std::io::Result<boo
     let result = ctrlc::set_handler(move || {
         let term = Term::stderr();
         term.show_cursor().ok();
+        term.write_str("\n").ok();
         term.flush().ok();
 
         #[allow(clippy::exit, clippy::cast_possible_wrap)]

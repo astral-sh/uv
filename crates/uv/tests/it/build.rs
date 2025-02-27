@@ -1411,7 +1411,7 @@ fn build_non_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Workspace does contain any buildable packages. For example, to build `member` with `setuptools`, add a `build-system` to `packages/member/pyproject.toml`:
+    error: Workspace does not contain any buildable packages. For example, to build `member` with `setuptools`, add a `build-system` to `packages/member/pyproject.toml`:
     ```toml
     [build-system]
     requires = ["setuptools"]

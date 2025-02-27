@@ -161,9 +161,9 @@ fn write_registry_entry(
     );
     tag.set_string("DisplayName", &display_name)?;
     tag.set_string("SupportUrl", "https://github.com/astral-sh/uv")?;
-    tag.set_string("Version", &installation.key().version().to_string())?;
-    tag.set_string("SysVersion", &installation.key().sys_version())?;
-    tag.set_string("SysArchitecture", &format!("{pointer_width}bit"))?;
+    tag.set_string("Version", installation.key().version().to_string())?;
+    tag.set_string("SysVersion", installation.key().sys_version())?;
+    tag.set_string("SysArchitecture", format!("{pointer_width}bit"))?;
     // Store `python-build-standalone` release
     if let Some(url) = installation.url() {
         tag.set_string("DownloadUrl", url)?;

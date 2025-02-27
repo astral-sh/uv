@@ -99,7 +99,7 @@ pub(crate) fn parse_marker_value<T: Pep508Url>(
         // ... or it can be a keyword
         Some(_) => {
             let (start, len) = cursor.take_while(|char| {
-                !char.is_whitespace() && !['>', '=', '<', '!', '~', ')'].contains(&char)
+                !char.is_whitespace() && !matches!(char, '>' | '=' | '<' | '!' | '~' | ')')
             });
             let key = cursor.slice(start, len);
             MarkerValue::from_str(key)

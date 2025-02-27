@@ -130,12 +130,10 @@ path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
 percent-encoding = { version = "2.3.1" }
 petgraph = { version = "0.7.1" }
-platform-info = { version = "2.0.3" }
 proc-macro2 = { version = "1.0.86" }
 procfs = { version = "0.17.0", default-features = false, features = ["flate2"] }
 pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "b70cf707aa43f21b32f3a61b8a0889b15032d5c4" }
 quote = { version = "1.0.37" }
-r-shquote = { version = "0.1.1" }
 rayon = { version = "1.10.0" }
 reflink-copy = { version = "0.1.19" }
 regex = { version = "1.10.6" }
@@ -181,10 +179,9 @@ url = { version = "2.5.2", features = ["serde"] }
 version-ranges = { git = "https://github.com/astral-sh/pubgrub", rev = "b70cf707aa43f21b32f3a61b8a0889b15032d5c4" }
 walkdir = { version = "2.5.0" }
 which = { version = "7.0.0", features = ["regex"] }
-windows-registry = { version = "0.4.0" }
+windows-registry = { version = "0.5.0" }
 windows-result = { version = "0.3.0" }
 windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Ioctl", "Win32_System_IO"] }
-winreg = { version = "0.53.0" }
 winsafe = { version = "0.0.22", features = ["kernel"] }
 wiremock = { version = "0.6.2" }
 xz2 = { version = "0.1.7" }

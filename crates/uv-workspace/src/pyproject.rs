@@ -7,6 +7,7 @@
 //! Then lowers them into a dependency specification.
 
 use std::collections::BTreeMap;
+use std::fmt::Formatter;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -713,8 +714,39 @@ pub struct ToolUvWorkspace {
 }
 
 /// (De)serialize globs as strings.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-pub struct SerdePattern(#[serde(with = "serde_from_and_to_string")] pub Pattern);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SerdePattern(Pattern);
+
+impl serde::ser::Serialize for SerdePattern {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        self.0.as_str().serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for SerdePattern {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = SerdePattern;
+
+            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                Pattern::from_str(v)
+                    .map(SerdePattern)
+                    .map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
+    }
+}
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for SerdePattern {
@@ -1584,31 +1616,4 @@ pub enum DependencyType {
     Optional(ExtraName),
     /// A dependency in `dependency-groups.{0}`.
     Group(GroupName),
-}
-
-/// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
-mod serde_from_and_to_string {
-    use std::fmt::Display;
-    use std::str::FromStr;
-
-    use serde::{de, Deserialize, Deserializer, Serializer};
-
-    pub(super) fn serialize<T, S>(value: &T, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        T: Display,
-        S: Serializer,
-    {
-        serializer.collect_str(value)
-    }
-
-    pub(super) fn deserialize<'de, T, D>(deserializer: D) -> Result<T, D::Error>
-    where
-        T: FromStr,
-        T::Err: Display,
-        D: Deserializer<'de>,
-    {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(de::Error::custom)
-    }
 }

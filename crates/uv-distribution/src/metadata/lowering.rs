@@ -356,7 +356,7 @@ impl LoweredRequirement {
         let source = source
             .iter()
             .filter(|source| {
-                source.extra().map_or(true, |target| {
+                source.extra().is_none_or(|target| {
                     requirement
                         .marker
                         .top_level_extra_name()
@@ -613,7 +613,7 @@ fn url_source(
     let verbatim_url = VerbatimUrl::from_url(verbatim_url);
     Ok(RequirementSource::Url {
         location: url,
-        subdirectory: subdirectory.map(PathBuf::from),
+        subdirectory,
         ext,
         url: verbatim_url,
     })

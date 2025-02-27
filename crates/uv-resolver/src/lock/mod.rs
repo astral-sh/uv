@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::Infallible;
 use std::error::Error;
-use std::fmt::{Debug, Display};
+use std::fmt::{Debug, Display, Formatter};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -20,7 +20,7 @@ use url::Url;
 
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::BuildOptions;
-use uv_distribution::{DistributionDatabase, FlatRequiresDist, RequiresDist};
+use uv_distribution::{DistributionDatabase, FlatRequiresDist};
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
@@ -40,9 +40,10 @@ use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
 use uv_pypi_types::{
-    redact_credentials, ConflictPackage, Conflicts, HashDigest, ParsedArchiveUrl, ParsedGitUrl,
-    Requirement, RequirementSource,
+    redact_credentials, ConflictPackage, Conflicts, HashDigest, HashDigests, ParsedArchiveUrl,
+    ParsedGitUrl, Requirement, RequirementSource,
 };
+use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::WorkspaceMember;
 
@@ -580,6 +581,12 @@ impl Lock {
         self
     }
 
+    /// Returns `true` if this [`Lock`] includes `provides-extra` metadata.
+    pub fn supports_provides_extra(&self) -> bool {
+        // `provides-extra` was added in Version 1 Revision 1.
+        (self.version(), self.revision()) >= (1, 1)
+    }
+
     /// Returns the lockfile version.
     pub fn version(&self) -> u32 {
         self.version
@@ -1020,30 +1027,55 @@ impl Lock {
         dist
     }
 
-    /// Return a [`SatisfiesResult`] if the given [`RequiresDist`] does not match the [`Package`].
+    /// Return a [`SatisfiesResult`] if the given extras do not match the [`Package`] metadata.
+    fn satisfies_provides_extra<'lock>(
+        &self,
+        provides_extra: Vec<ExtraName>,
+        package: &'lock Package,
+    ) -> SatisfiesResult<'lock> {
+        if !self.supports_provides_extra() {
+            return SatisfiesResult::Satisfied;
+        }
+
+        let expected: BTreeSet<_> = provides_extra.iter().collect();
+        let actual: BTreeSet<_> = package.metadata.provides_extras.iter().collect();
+
+        if expected != actual {
+            let expected = provides_extra.into_iter().collect();
+            return SatisfiesResult::MismatchedPackageProvidesExtra(
+                &package.id.name,
+                package.id.version.as_ref(),
+                expected,
+                actual,
+            );
+        }
+
+        SatisfiesResult::Satisfied
+    }
+
+    /// Return a [`SatisfiesResult`] if the given requirements do not match the [`Package`] metadata.
+    #[allow(clippy::unused_self)]
     fn satisfies_requires_dist<'lock>(
-        metadata: RequiresDist,
+        &self,
+        requires_dist: Vec<Requirement>,
+        dependency_groups: BTreeMap<GroupName, Vec<Requirement>>,
         package: &'lock Package,
         root: &Path,
     ) -> Result<SatisfiesResult<'lock>, LockError> {
         // Special-case: if the version is dynamic, compare the flattened requirements.
         let flattened = if package.is_dynamic() {
             Some(
-                FlatRequiresDist::from_requirements(
-                    metadata.requires_dist.clone(),
-                    &package.id.name,
-                )
-                .into_iter()
-                .map(|requirement| normalize_requirement(requirement, root))
-                .collect::<Result<BTreeSet<_>, _>>()?,
+                FlatRequiresDist::from_requirements(requires_dist.clone(), &package.id.name)
+                    .into_iter()
+                    .map(|requirement| normalize_requirement(requirement, root))
+                    .collect::<Result<BTreeSet<_>, _>>()?,
             )
         } else {
             None
         };
 
         // Validate the `requires-dist` metadata.
-        let expected: BTreeSet<_> = metadata
-            .requires_dist
+        let expected: BTreeSet<_> = requires_dist
             .into_iter()
             .map(|requirement| normalize_requirement(requirement, root))
             .collect::<Result<_, _>>()?;
@@ -1065,8 +1097,7 @@ impl Lock {
         }
 
         // Validate the `dependency-groups` metadata.
-        let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = metadata
-            .dependency_groups
+        let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = dependency_groups
             .into_iter()
             .filter(|(_, requirements)| !requirements.is_empty())
             .map(|(group, requirements)| {
@@ -1402,8 +1433,19 @@ impl Lock {
                     ));
                 }
 
+                // Validate the `provides-extras` metadata.
+                match self.satisfies_provides_extra(metadata.provides_extras, package) {
+                    SatisfiesResult::Satisfied => {}
+                    result => return Ok(result),
+                }
+
                 // Validate that the requirements are unchanged.
-                match Self::satisfies_requires_dist(RequiresDist::from(metadata), package, root)? {
+                match self.satisfies_requires_dist(
+                    metadata.requires_dist,
+                    metadata.dependency_groups,
+                    package,
+                    root,
+                )? {
                     SatisfiesResult::Satisfied => {}
                     result => return Ok(result),
                 }
@@ -1432,21 +1474,30 @@ impl Lock {
                         return false;
                     }
 
+                    // Validate that the extras are unchanged.
+                    if let SatisfiesResult::Satisfied = self.satisfies_provides_extra(metadata.provides_extras, package, ) {
+                        debug!("Static `provides-extra` for `{}` is up-to-date", package.id);
+                    } else {
+                        debug!("Static `provides-extra` for `{}` is out-of-date; falling back to distribution database", package.id);
+                        return false;
+                    }
+
                     // Validate that the requirements are unchanged.
-                    match Self::satisfies_requires_dist(metadata, package, root) {
+                    match self.satisfies_requires_dist(metadata.requires_dist, metadata.dependency_groups, package, root) {
                         Ok(SatisfiesResult::Satisfied) => {
                             debug!("Static `requires-dist` for `{}` is up-to-date", package.id);
-                            true
                         },
                         Ok(..) => {
                             debug!("Static `requires-dist` for `{}` is out-of-date; falling back to distribution database", package.id);
-                            false
+                            return false;
                         },
                         Err(..) => {
                             debug!("Static `requires-dist` for `{}` is invalid; falling back to distribution database", package.id);
-                            false
+                            return false;
                         },
                     }
+
+                    true
                 });
 
                 // If the `requires-dist` metadata matches the requirements, we're done; otherwise,
@@ -1504,9 +1555,16 @@ impl Lock {
                         return Ok(SatisfiesResult::MismatchedDynamic(&package.id.name, true));
                     }
 
+                    // Validate that the extras are unchanged.
+                    match self.satisfies_provides_extra(metadata.provides_extras, package) {
+                        SatisfiesResult::Satisfied => {}
+                        result => return Ok(result),
+                    }
+
                     // Validate that the requirements are unchanged.
-                    match Self::satisfies_requires_dist(
-                        RequiresDist::from(metadata),
+                    match self.satisfies_requires_dist(
+                        metadata.requires_dist,
+                        metadata.dependency_groups,
                         package,
                         root,
                     )? {
@@ -1519,8 +1577,6 @@ impl Lock {
             }
 
             // Recurse.
-            // TODO(charlie): Do we care about extras here, or any other fields on the `Dependency`?
-            // Should we instead recurse on `requires_dist`?
             for dep in &package.dependencies {
                 if seen.insert(&dep.package_id) {
                     let dep_dist = self.find_by_id(&dep.package_id);
@@ -1607,6 +1663,13 @@ pub enum SatisfiesResult<'lock> {
         Option<&'lock Version>,
         BTreeSet<Requirement>,
         BTreeSet<Requirement>,
+    ),
+    /// A package in the lockfile contains different `provides-extra` metadata than expected.
+    MismatchedPackageProvidesExtra(
+        &'lock PackageName,
+        Option<&'lock Version>,
+        BTreeSet<ExtraName>,
+        BTreeSet<&'lock ExtraName>,
     ),
     /// A package in the lockfile contains different `dependency-groups` metadata than expected.
     MismatchedPackageDependencyGroups(
@@ -2333,11 +2396,10 @@ impl Package {
                 let ext = SourceDistExtension::from_path(filename.as_ref())?;
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
-                    filename: filename.to_string(),
-                    hashes: sdist
-                        .hash()
-                        .map(|hash| vec![hash.0.clone()])
-                        .unwrap_or_default(),
+                    filename: SmallString::from(filename),
+                    hashes: sdist.hash().map_or(HashDigests::empty(), |hash| {
+                        HashDigests::from(hash.0.clone())
+                    }),
                     requires_python: None,
                     size: sdist.size(),
                     upload_time_utc_ms: None,
@@ -2385,11 +2447,10 @@ impl Package {
                 let ext = SourceDistExtension::from_path(filename.as_ref())?;
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
-                    filename: filename.to_string(),
-                    hashes: sdist
-                        .hash()
-                        .map(|hash| vec![hash.0.clone()])
-                        .unwrap_or_default(),
+                    filename: SmallString::from(filename),
+                    hashes: sdist.hash().map_or(HashDigests::empty(), |hash| {
+                        HashDigests::from(hash.0.clone())
+                    }),
                     requires_python: None,
                     size: sdist.size(),
                     upload_time_utc_ms: None,
@@ -2663,8 +2724,15 @@ impl Package {
     }
 
     /// Returns all the hashes associated with this [`Package`].
-    fn hashes(&self) -> Vec<HashDigest> {
-        let mut hashes = Vec::new();
+    fn hashes(&self) -> HashDigests {
+        let mut hashes = Vec::with_capacity(
+            usize::from(self.sdist.as_ref().and_then(|sdist| sdist.hash()).is_some())
+                + self
+                    .wheels
+                    .iter()
+                    .map(|wheel| usize::from(wheel.hash.is_some()))
+                    .sum::<usize>(),
+        );
         if let Some(ref sdist) = self.sdist {
             if let Some(hash) = sdist.hash() {
                 hashes.push(hash.0.clone());
@@ -2673,7 +2741,7 @@ impl Package {
         for wheel in &self.wheels {
             hashes.extend(wheel.hash.as_ref().map(|h| h.0.clone()));
         }
-        hashes
+        HashDigests::from(hashes)
     }
 
     /// Returns the [`ResolvedRepositoryReference`] for the package, if it is a Git source.
@@ -3517,9 +3585,12 @@ impl SourceDist {
         match annotated_dist.dist {
             // We pass empty installed packages for locking.
             ResolvedDist::Installed { .. } => unreachable!(),
-            ResolvedDist::Installable { ref dist, .. } => {
-                SourceDist::from_dist(id, dist, &annotated_dist.hashes, annotated_dist.index())
-            }
+            ResolvedDist::Installable { ref dist, .. } => SourceDist::from_dist(
+                id,
+                dist,
+                annotated_dist.hashes.as_slice(),
+                annotated_dist.index(),
+            ),
         }
     }
 
@@ -3815,9 +3886,11 @@ impl Wheel {
         match annotated_dist.dist {
             // We pass empty installed packages for locking.
             ResolvedDist::Installed { .. } => unreachable!(),
-            ResolvedDist::Installable { ref dist, .. } => {
-                Wheel::from_dist(dist, &annotated_dist.hashes, annotated_dist.index())
-            }
+            ResolvedDist::Installable { ref dist, .. } => Wheel::from_dist(
+                dist,
+                annotated_dist.hashes.as_slice(),
+                annotated_dist.index(),
+            ),
         }
     }
 
@@ -3955,7 +4028,7 @@ impl Wheel {
                 };
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
-                    filename: filename.to_string(),
+                    filename: SmallString::from(filename.to_string()),
                     hashes: self.hash.iter().map(|h| h.0.clone()).collect(),
                     requires_python: None,
                     size: self.size,
@@ -3987,7 +4060,7 @@ impl Wheel {
                     .map_err(|()| LockErrorKind::PathToUrl)?;
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
-                    filename: filename.to_string(),
+                    filename: SmallString::from(filename.to_string()),
                     hashes: self.hash.iter().map(|h| h.0.clone()).collect(),
                     requires_python: None,
                     size: self.size,
@@ -4288,12 +4361,25 @@ impl Display for Hash {
 }
 
 impl<'de> serde::Deserialize<'de> for Hash {
-    fn deserialize<D>(d: D) -> Result<Hash, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Hash, D::Error>
     where
         D: serde::de::Deserializer<'de>,
     {
-        let string = String::deserialize(d)?;
-        string.parse().map_err(serde::de::Error::custom)
+        struct Visitor;
+
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = Hash;
+
+            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                Hash::from_str(v).map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 

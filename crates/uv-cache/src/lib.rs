@@ -247,7 +247,7 @@ impl Cache {
             Refresh::None(_) => return Ok(Freshness::Fresh),
             Refresh::All(timestamp) => timestamp,
             Refresh::Packages(packages, timestamp) => {
-                if package.map_or(true, |package| packages.contains(package)) {
+                if package.is_none_or(|package| packages.contains(package)) {
                     timestamp
                 } else {
                     return Ok(Freshness::Fresh);
@@ -360,43 +360,7 @@ impl Cache {
     /// Returns the number of entries removed from the cache.
     pub fn remove(&self, name: &PackageName) -> Result<Removal, io::Error> {
         // Collect the set of referenced archives.
-        let before = {
-            let mut references = FxHashSet::default();
-            for bucket in CacheBucket::iter() {
-                let bucket = self.bucket(bucket);
-                if bucket.is_dir() {
-                    for entry in walkdir::WalkDir::new(bucket) {
-                        let entry = entry?;
-
-                        // Ignore any `.lock` files.
-                        if entry
-                            .path()
-                            .extension()
-                            .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
-                        {
-                            continue;
-                        }
-
-                        // Identify entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
-                        let Some(filename) = entry
-                            .path()
-                            .file_name()
-                            .and_then(|file_name| file_name.to_str())
-                        else {
-                            continue;
-                        };
-
-                        if WheelFilename::from_stem(filename).is_err() {
-                            continue;
-                        }
-                        if let Ok(target) = self.resolve_link(entry.path()) {
-                            references.insert(target);
-                        }
-                    }
-                }
-            }
-            references
-        };
+        let before = self.find_archive_references()?;
 
         // Remove any entries for the package from the cache.
         let mut summary = Removal::default();
@@ -405,42 +369,7 @@ impl Cache {
         }
 
         // Collect the set of referenced archives after the removal.
-        let after = {
-            let mut references = FxHashSet::default();
-            for bucket in CacheBucket::iter() {
-                let bucket = self.bucket(bucket);
-                if bucket.is_dir() {
-                    for entry in walkdir::WalkDir::new(bucket) {
-                        let entry = entry?;
-
-                        // Ignore any `.lock` files.
-                        if entry
-                            .path()
-                            .extension()
-                            .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
-                        {
-                            continue;
-                        }
-
-                        // Identify entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
-                        let Some(filename) = entry
-                            .path()
-                            .file_name()
-                            .and_then(|file_name| file_name.to_str())
-                        else {
-                            continue;
-                        };
-                        if WheelFilename::from_stem(filename).is_err() {
-                            continue;
-                        }
-                        if let Ok(target) = self.resolve_link(entry.path()) {
-                            references.insert(target);
-                        }
-                    }
-                }
-            }
-            references
-        };
+        let after = self.find_archive_references()?;
 
         if before != after {
             // Remove any archives that are no longer referenced.
@@ -562,40 +491,7 @@ impl Cache {
         }
 
         // Fourth, remove any unused archives (by searching for archives that are not symlinked).
-        let mut references = FxHashSet::default();
-
-        for bucket in CacheBucket::iter() {
-            let bucket = self.bucket(bucket);
-            if bucket.is_dir() {
-                for entry in walkdir::WalkDir::new(bucket) {
-                    let entry = entry?;
-
-                    // Ignore any `.lock` files.
-                    if entry
-                        .path()
-                        .extension()
-                        .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
-                    {
-                        continue;
-                    }
-
-                    // Identify entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
-                    let Some(filename) = entry
-                        .path()
-                        .file_name()
-                        .and_then(|file_name| file_name.to_str())
-                    else {
-                        continue;
-                    };
-                    if WheelFilename::from_stem(filename).is_err() {
-                        continue;
-                    }
-                    if let Ok(target) = self.resolve_link(entry.path()) {
-                        references.insert(target);
-                    }
-                }
-            }
-        }
+        let references = self.find_archive_references()?;
 
         match fs_err::read_dir(self.bucket(CacheBucket::Archive)) {
             Ok(entries) => {
@@ -613,6 +509,63 @@ impl Cache {
         }
 
         Ok(summary)
+    }
+
+    /// Find all references to entries in the archive bucket.
+    ///
+    /// Archive entries are often referenced by symlinks in other cache buckets. This method
+    /// searches for all such references.
+    fn find_archive_references(&self) -> Result<FxHashSet<PathBuf>, io::Error> {
+        let mut references = FxHashSet::default();
+        for bucket in CacheBucket::iter() {
+            let bucket_path = self.bucket(bucket);
+            if bucket_path.is_dir() {
+                for entry in walkdir::WalkDir::new(bucket_path) {
+                    let entry = entry?;
+
+                    // Ignore any `.lock` files.
+                    if entry
+                        .path()
+                        .extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
+                    {
+                        continue;
+                    }
+
+                    let Some(filename) = entry
+                        .path()
+                        .file_name()
+                        .and_then(|file_name| file_name.to_str())
+                    else {
+                        continue;
+                    };
+
+                    if bucket == CacheBucket::Wheels {
+                        // In the `wheels` bucket, we often use a hash of the filename as the
+                        // directory name, so we can't rely on the stem.
+                        //
+                        // Instead, we skip if it contains an extension (e.g., `.whl`, `.http`,
+                        // `.rev`, and `.msgpack` files).
+                        if filename
+                            .rsplit_once('-') // strip version/tags, might contain a dot ('.')
+                            .is_none_or(|(_, suffix)| suffix.contains('.'))
+                        {
+                            continue;
+                        }
+                    } else {
+                        // For other buckets only include entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
+                        if WheelFilename::from_stem(filename).is_err() {
+                            continue;
+                        }
+                    }
+
+                    if let Ok(target) = self.resolve_link(entry.path()) {
+                        references.insert(target);
+                    }
+                }
+            }
+        }
+        Ok(references)
     }
 
     /// Create a link to a directory in the archive bucket.
@@ -1040,7 +993,7 @@ impl CacheBucket {
             Self::Simple => "simple-v15",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/it/cache_prune.rs`.
-            Self::Wheels => "wheels-v4",
+            Self::Wheels => "wheels-v5",
             // Note that when bumping this, you'll also need to bump
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
             Self::Archive => "archive-v0",

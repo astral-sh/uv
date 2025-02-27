@@ -184,7 +184,7 @@ impl SimpleHtml {
         let yanked = if let Some(yanked) = link.attributes().get("data-yanked").flatten() {
             let yanked = std::str::from_utf8(yanked.as_bytes())?;
             let yanked = html_escape::decode_html_entities(yanked);
-            Some(Yanked::Reason(yanked.to_string()))
+            Some(Box::new(Yanked::Reason(yanked.into())))
         } else {
             None
         };
@@ -218,8 +218,8 @@ impl SimpleHtml {
             yanked,
             requires_python,
             hashes,
-            filename: filename.to_string(),
-            url: decoded.to_string(),
+            filename: filename.into(),
+            url: decoded.into(),
             size,
             upload_time,
         }))

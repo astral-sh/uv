@@ -41,19 +41,19 @@ impl From<Hasher> for HashDigest {
         match hasher {
             Hasher::Md5(hasher) => HashDigest {
                 algorithm: HashAlgorithm::Md5,
-                digest: format!("{:x}", hasher.finalize()).into_boxed_str(),
+                digest: format!("{:x}", hasher.finalize()).into(),
             },
             Hasher::Sha256(hasher) => HashDigest {
                 algorithm: HashAlgorithm::Sha256,
-                digest: format!("{:x}", hasher.finalize()).into_boxed_str(),
+                digest: format!("{:x}", hasher.finalize()).into(),
             },
             Hasher::Sha384(hasher) => HashDigest {
                 algorithm: HashAlgorithm::Sha384,
-                digest: format!("{:x}", hasher.finalize()).into_boxed_str(),
+                digest: format!("{:x}", hasher.finalize()).into(),
             },
             Hasher::Sha512(hasher) => HashDigest {
                 algorithm: HashAlgorithm::Sha512,
-                digest: format!("{:x}", hasher.finalize()).into_boxed_str(),
+                digest: format!("{:x}", hasher.finalize()).into(),
             },
         }
     }
