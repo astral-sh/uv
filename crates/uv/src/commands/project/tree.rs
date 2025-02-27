@@ -183,6 +183,7 @@ pub(crate) async fn tree(
                 index_locations: _,
                 index_strategy: _,
                 keyring_provider,
+                url_auth_policies,
                 resolution: _,
                 prerelease: _,
                 fork_strategy: _,
@@ -205,8 +206,9 @@ pub(crate) async fn tree(
             )
             .native_tls(network_settings.native_tls)
             .connectivity(network_settings.connectivity)
-            .keyring(*keyring_provider)
             .allow_insecure_host(network_settings.allow_insecure_host.clone())
+            .url_auth_policies(url_auth_policies.clone())
+            .keyring(*keyring_provider)
             .build();
             let download_concurrency = Semaphore::new(concurrency.downloads);
 

@@ -197,6 +197,7 @@ async fn build_impl(
     let ResolverSettingsRef {
         index_locations,
         index_strategy,
+        url_auth_policies: _,
         keyring_provider,
         resolution: _,
         prerelease: _,
@@ -520,10 +521,11 @@ async fn build_package(
     let client = RegistryClientBuilder::new(cache.clone())
         .native_tls(network_settings.native_tls)
         .connectivity(network_settings.connectivity)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone())
+        .url_auth_policies((index_locations).into())
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();

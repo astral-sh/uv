@@ -82,6 +82,44 @@ pub struct Index {
     /// publish-url = "https://upload.pypi.org/legacy/"
     /// ```
     pub publish_url: Option<Url>,
+    /// The authentication policy for the index.
+    ///
+    /// All requests made to URLs with this index url as a prefix will follow
+    /// the policy corresponding to this authentication policy.
+    ///
+    /// ```toml
+    /// [[tool.uv.index]]
+    /// name = "my-index"
+    /// url = "https://<omitted>/simple"
+    /// auth_policy = "always"
+    /// ```
+    #[serde(default)]
+    pub auth_policy: AuthPolicy,
+}
+
+#[derive(
+    Copy, Clone, Debug, Default, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub enum AuthPolicy {
+    /// Authenticate only when necessary.
+    #[default]
+    Auto,
+    /// Always authenticate.
+    Always,
+    /// Never authenticate.
+    Never,
+}
+
+impl From<AuthPolicy> for uv_auth::AuthPolicy {
+    fn from(item: AuthPolicy) -> Self {
+        match item {
+            AuthPolicy::Always => uv_auth::AuthPolicy::Always,
+            AuthPolicy::Auto => uv_auth::AuthPolicy::Auto,
+            AuthPolicy::Never => uv_auth::AuthPolicy::Never,
+        }
+    }
 }
 
 // #[derive(
@@ -106,6 +144,7 @@ impl Index {
             default: true,
             origin: None,
             publish_url: None,
+            auth_policy: AuthPolicy::Auto,
         }
     }
 
@@ -118,6 +157,7 @@ impl Index {
             default: false,
             origin: None,
             publish_url: None,
+            auth_policy: AuthPolicy::Auto,
         }
     }
 
@@ -130,6 +170,7 @@ impl Index {
             default: false,
             origin: None,
             publish_url: None,
+            auth_policy: AuthPolicy::Auto,
         }
     }
 
@@ -216,6 +257,7 @@ impl FromStr for Index {
                     default: false,
                     origin: None,
                     publish_url: None,
+                    auth_policy: AuthPolicy::Auto,
                 });
             }
         }
@@ -229,6 +271,7 @@ impl FromStr for Index {
             default: false,
             origin: None,
             publish_url: None,
+            auth_policy: AuthPolicy::Auto,
         })
     }
 }

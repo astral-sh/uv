@@ -95,9 +95,9 @@ pub(crate) async fn publish(
         let registry_client_builder = RegistryClientBuilder::new(cache.clone())
             .native_tls(network_settings.native_tls)
             .connectivity(network_settings.connectivity)
+            .allow_insecure_host(network_settings.allow_insecure_host.clone())
             .index_urls(index_urls)
-            .keyring(keyring_provider)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
+            .keyring(keyring_provider);
         Some(CheckUrlClient {
             index_url: index_url.clone(),
             registry_client_builder,

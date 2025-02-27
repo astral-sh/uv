@@ -10,6 +10,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
 use url::{ParseError, Url};
 
+use uv_auth::UrlAuthPolicies;
 use uv_pep508::{split_scheme, Scheme, VerbatimUrl, VerbatimUrlError};
 
 use crate::{Index, Verbatim};
@@ -386,6 +387,17 @@ impl<'a> IndexLocations {
             indexes.reverse();
             indexes
         }
+    }
+}
+
+impl From<&IndexLocations> for UrlAuthPolicies {
+    fn from(index_locations: &IndexLocations) -> UrlAuthPolicies {
+        UrlAuthPolicies::from_tuples(
+            &(index_locations
+                .indexes()
+                .map(|index| (index.url().url().clone(), index.auth_policy.into()))
+                .collect::<Vec<_>>()),
+        )
     }
 }
 

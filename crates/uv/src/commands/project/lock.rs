@@ -357,6 +357,7 @@ async fn do_lock(
     let ResolverSettingsRef {
         index_locations,
         index_strategy,
+        url_auth_policies,
         keyring_provider,
         resolution,
         prerelease,
@@ -546,10 +547,11 @@ async fn do_lock(
     let client = RegistryClientBuilder::new(cache.clone())
         .native_tls(network_settings.native_tls)
         .connectivity(network_settings.connectivity)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone())
+        .url_auth_policies(url_auth_policies.clone())
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();

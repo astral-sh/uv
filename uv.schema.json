@@ -557,6 +557,31 @@
         }
       ]
     },
+    "AuthPolicy": {
+      "oneOf": [
+        {
+          "description": "Authenticate only when necessary.",
+          "type": "string",
+          "enum": [
+            "auto"
+          ]
+        },
+        {
+          "description": "Always authenticate.",
+          "type": "string",
+          "enum": [
+            "always"
+          ]
+        },
+        {
+          "description": "Never authenticate.",
+          "type": "string",
+          "enum": [
+            "never"
+          ]
+        }
+      ]
+    },
     "CacheKey": {
       "anyOf": [
         {
@@ -709,6 +734,15 @@
         "url"
       ],
       "properties": {
+        "auth-policy": {
+          "description": "The authentication policy for the index.\n\nAll requests made to URLs with this index url as a prefix will follow the policy corresponding to this authentication policy.\n\n```toml [[tool.uv.index]] name = \"my-index\" url = \"https://<omitted>/simple\" auth_policy = \"always\" ```",
+          "default": "auto",
+          "allOf": [
+            {
+              "$ref": "#/definitions/AuthPolicy"
+            }
+          ]
+        },
         "default": {
           "description": "Mark the index as the default index.\n\nBy default, uv uses PyPI as the default index, such that even if additional indexes are defined via `[[tool.uv.index]]`, PyPI will still be used as a fallback for packages that aren't found elsewhere. To disable the PyPI default, set `default = true` on at least one other index.\n\nMarking an index as default will move it to the front of the list of indexes, such that it is given the highest priority when resolving packages.",
           "default": false,

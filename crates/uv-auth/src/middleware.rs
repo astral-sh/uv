@@ -1,6 +1,7 @@
 use std::sync::{Arc, LazyLock};
 
 use http::{Extensions, StatusCode};
+use rustc_hash::FxHashMap;
 use url::Url;
 
 use crate::{
@@ -48,6 +49,54 @@ impl NetrcMode {
     }
 }
 
+#[derive(Copy, Clone, Debug, Default, Hash, Eq, PartialEq)]
+pub enum AuthPolicy {
+    /// Attempt to authenticate if needed.
+    #[default]
+    Auto,
+    /// Always attempt to authenticate.
+    Always,
+    /// Never attempt to authenticate.
+    Never,
+}
+
+#[derive(Debug, Default, Clone, Eq, PartialEq)]
+pub struct UrlAuthPolicies(FxHashMap<Url, AuthPolicy>);
+
+impl UrlAuthPolicies {
+    pub fn new() -> Self {
+        Self(FxHashMap::default())
+    }
+
+    /// Create a new `UrlAuthPolicies` from a list of URL and `AuthPolicy`
+    /// tuples.
+    pub fn from_tuples(tuples: &[(Url, AuthPolicy)]) -> Self {
+        let mut auth_policies = UrlAuthPolicies::new();
+        for (url, auth_policy) in tuples {
+            auth_policies.add_policy(url.clone(), *auth_policy);
+        }
+        auth_policies
+    }
+
+    /// An an `AuthPolicy` for a URL.
+    pub fn add_policy(&mut self, url: Url, auth_policy: AuthPolicy) {
+        self.0.insert(url, auth_policy);
+    }
+
+    /// Get the `AuthPolicy` for a URL.
+    pub fn policy_for(&self, url: &Url) -> AuthPolicy {
+        // TODO: There are probably not many URLs to iterate through,
+        // but we could use a trie instead of a HashMap here for more
+        // efficient search.
+        for (auth_url, auth_policy) in &self.0 {
+            if url.as_str().starts_with(auth_url.as_str()) {
+                return *auth_policy;
+            }
+        }
+        AuthPolicy::Auto
+    }
+}
+
 /// A middleware that adds basic authentication to requests.
 ///
 /// Uses a cache to propagate credentials from previously seen requests and
@@ -56,8 +105,10 @@ pub struct AuthMiddleware {
     netrc: NetrcMode,
     keyring: Option<KeyringProvider>,
     cache: Option<CredentialsCache>,
-    /// We know that the endpoint needs authentication, so we don't try to send an unauthenticated
-    /// request, avoiding cloning an uncloneable request.
+    /// Auth policies for specific URLs.
+    url_auth_policies: UrlAuthPolicies,
+    /// Set all endpoints as needing authentication. We never try to send an
+    /// unauthenticated request, avoiding cloning an uncloneable request.
     only_authenticated: bool,
 }
 
@@ -67,6 +118,7 @@ impl AuthMiddleware {
             netrc: NetrcMode::default(),
             keyring: None,
             cache: None,
+            url_auth_policies: UrlAuthPolicies::new(),
             only_authenticated: false,
         }
     }
@@ -98,8 +150,15 @@ impl AuthMiddleware {
         self
     }
 
-    /// We know that the endpoint needs authentication, so we don't try to send an unauthenticated
-    /// request, avoiding cloning an uncloneable request.
+    /// Configure the [`AuthPolicy`]s to use for URLs.
+    #[must_use]
+    pub fn with_url_auth_policies(mut self, auth_policies: UrlAuthPolicies) -> Self {
+        self.url_auth_policies = auth_policies;
+        self
+    }
+
+    /// Set all endpoints as needing authentication. We never try to send an
+    /// unauthenticated request, avoiding cloning an uncloneable request.
     #[must_use]
     pub fn with_only_authenticated(mut self, only_authenticated: bool) -> Self {
         self.only_authenticated = only_authenticated;
@@ -218,31 +277,33 @@ impl Middleware for AuthMiddleware {
         // We have no credentials
         trace!("Request for {url} is unauthenticated, checking cache");
 
-        // Check the cache for a URL match first, this can save us from making a failing request
-        let credentials = self.cache().get_url(request.url(), &Username::none());
-        if let Some(credentials) = credentials.as_ref() {
-            request = credentials.authenticate(request);
+        let auth_policy = self.url_auth_policies.policy_for(request.url());
+        let mut credentials: Option<Arc<Credentials>> = None;
+        if !matches!(auth_policy, AuthPolicy::Never) {
+            // Check the cache for a URL match first. This can save us from
+            // making a failing request
+            credentials = self.cache().get_url(request.url(), &Username::none());
+            if let Some(credentials) = credentials.as_ref() {
+                request = credentials.authenticate(request);
 
-            // If it's fully authenticated, finish the request
-            if credentials.password().is_some() {
-                trace!("Request for {url} is fully authenticated");
-                return self.complete_request(None, request, extensions, next).await;
+                // If it's fully authenticated, finish the request
+                if credentials.password().is_some() {
+                    trace!("Request for {url} is fully authenticated");
+                    return self.complete_request(None, request, extensions, next).await;
+                }
+
+                // If we just found a username, we'll make the request then look for password elsewhere
+                // if it fails
+                trace!("Found username for {url} in cache, attempting request");
             }
-
-            // If we just found a username, we'll make the request then look for password elsewhere
-            // if it fails
-            trace!("Found username for {url} in cache, attempting request");
         }
         let attempt_has_username = credentials
             .as_ref()
             .is_some_and(|credentials| credentials.username().is_some());
 
-        let (mut retry_request, response) = if self.only_authenticated {
-            // For endpoints where we require the user to provide credentials, we don't try the
-            // unauthenticated request first.
-            trace!("Checking for credentials for {url}");
-            (request, None)
-        } else {
+        let retry_unauthenticated =
+            !self.only_authenticated && !matches!(auth_policy, AuthPolicy::Always);
+        let (mut retry_request, response) = if retry_unauthenticated {
             let url = tracing_url(&request, credentials.as_deref());
             if credentials.is_none() {
                 trace!("Attempting unauthenticated request for {url}");
@@ -261,11 +322,13 @@ impl Middleware for AuthMiddleware {
 
             let response = next.clone().run(request, extensions).await?;
 
-            // If we don't fail with authorization related codes, return the response
+            // If we don't fail with authorization related codes or
+            // authentication policy is Never, return the response.
             if !matches!(
                 response.status(),
                 StatusCode::FORBIDDEN | StatusCode::NOT_FOUND | StatusCode::UNAUTHORIZED
-            ) {
+            ) || matches!(auth_policy, AuthPolicy::Never)
+            {
                 return Ok(response);
             }
 
@@ -276,6 +339,11 @@ impl Middleware for AuthMiddleware {
             );
 
             (retry_request, Some(response))
+        } else {
+            // For endpoints where we require the user to provide credentials, we don't try the
+            // unauthenticated request first.
+            trace!("Checking for credentials for {url}");
+            (request, None)
         };
 
         // Check if there are credentials in the realm-level cache
