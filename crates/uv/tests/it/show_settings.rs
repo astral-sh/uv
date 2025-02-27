@@ -400,7 +400,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--resolution=highest")
-        .arg("--no-generate-hashes"), @r###"
+        .arg("--no-generate-hashes"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -409,14 +409,16 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -565,7 +567,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     Ok(())
@@ -781,7 +783,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     // Resolution should use the highest version, and omit hashes.
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -790,14 +792,16 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -916,7 +920,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     // Add configuration to the `pyproject.toml` file.
@@ -934,7 +938,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     // Resolution should use the lowest direct version, and generate hashes.
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -943,14 +947,16 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -1099,7 +1105,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     Ok(())
@@ -1336,7 +1342,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--extra-index-url")
-        .arg("https://test.pypi.org/simple"), @r###"
+        .arg("https://test.pypi.org/simple"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1345,14 +1351,16 @@ fn resolve_index_url() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -1561,7 +1569,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     Ok(())
@@ -1952,7 +1960,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
 
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1961,14 +1969,16 @@ fn resolve_top_level() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2146,14 +2156,14 @@ fn resolve_top_level() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     // But the command-line should take precedence over both.
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in")
-        .arg("--resolution=lowest-direct"), @r###"
+        .arg("--resolution=lowest-direct"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2162,14 +2172,16 @@ fn resolve_top_level() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2347,7 +2359,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     Ok(())
@@ -2529,7 +2541,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in")
-        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2538,14 +2550,16 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2664,7 +2678,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     // Add a local configuration to override the user configuration.
@@ -2678,7 +2692,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in")
-        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2687,14 +2701,16 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2813,7 +2829,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     // However, the user-level `tool.uv.pip` settings override the project-level `tool.uv` settings.
@@ -2829,7 +2845,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in")
-        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2838,14 +2854,16 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2964,7 +2982,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     Ok(())
@@ -4065,7 +4083,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in")
-        .current_dir(&child), @r###"
+        .current_dir(&child), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4074,14 +4092,16 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -4200,7 +4220,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     Ok(())
@@ -4817,7 +4837,7 @@ fn index_priority() -> anyhow::Result<()> {
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--default-index")
-        .arg("https://cli.pypi.org/simple"), @r###"
+        .arg("https://cli.pypi.org/simple"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4826,14 +4846,16 @@ fn index_priority() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -5013,7 +5035,7 @@ fn index_priority() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     // Prefer the `--index` from the CLI, but treat the index from the file as the default.
@@ -5021,7 +5043,7 @@ fn index_priority() -> anyhow::Result<()> {
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--index")
-        .arg("https://cli.pypi.org/simple"), @r###"
+        .arg("https://cli.pypi.org/simple"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5030,14 +5052,16 @@ fn index_priority() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -5217,7 +5241,7 @@ fn index_priority() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     let config = context.temp_dir.child("uv.toml");
@@ -5232,7 +5256,7 @@ fn index_priority() -> anyhow::Result<()> {
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--index-url")
-        .arg("https://cli.pypi.org/simple"), @r###"
+        .arg("https://cli.pypi.org/simple"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5241,14 +5265,16 @@ fn index_priority() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -5428,7 +5454,7 @@ fn index_priority() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     // Prefer the `--extra-index-url` from the CLI, but not as the default.
@@ -5436,7 +5462,7 @@ fn index_priority() -> anyhow::Result<()> {
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--extra-index-url")
-        .arg("https://cli.pypi.org/simple"), @r###"
+        .arg("https://cli.pypi.org/simple"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5445,14 +5471,16 @@ fn index_priority() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -5632,7 +5660,7 @@ fn index_priority() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     Ok(())
@@ -5798,7 +5826,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         .arg("-r")
         .arg("requirements.in")
         .arg("--no-verify-hashes")
-        .arg("--show-settings"), @r###"
+        .arg("--show-settings"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5807,14 +5835,16 @@ fn verify_hashes() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -5932,14 +5962,14 @@ fn verify_hashes() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     uv_snapshot!(context.filters(), add_shared_args(context.pip_install(), context.temp_dir.path())
         .arg("-r")
         .arg("requirements.in")
         .arg("--require-hashes")
-        .arg("--show-settings"), @r###"
+        .arg("--show-settings"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5948,14 +5978,16 @@ fn verify_hashes() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -6075,14 +6107,14 @@ fn verify_hashes() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     uv_snapshot!(context.filters(), add_shared_args(context.pip_install(), context.temp_dir.path())
         .arg("-r")
         .arg("requirements.in")
         .arg("--no-require-hashes")
-        .arg("--show-settings"), @r###"
+        .arg("--show-settings"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6091,14 +6123,16 @@ fn verify_hashes() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -6216,14 +6250,14 @@ fn verify_hashes() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     uv_snapshot!(context.filters(), add_shared_args(context.pip_install(), context.temp_dir.path())
         .arg("-r")
         .arg("requirements.in")
         .env(EnvVars::UV_NO_VERIFY_HASHES, "1")
-        .arg("--show-settings"), @r###"
+        .arg("--show-settings"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6232,14 +6266,16 @@ fn verify_hashes() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -6357,7 +6393,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     uv_snapshot!(context.filters(), add_shared_args(context.pip_install(), context.temp_dir.path())
@@ -6365,7 +6401,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         .arg("requirements.in")
         .arg("--verify-hashes")
         .arg("--no-require-hashes")
-        .arg("--show-settings"), @r###"
+        .arg("--show-settings"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6374,14 +6410,16 @@ fn verify_hashes() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -6501,7 +6539,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     Ok(())
