@@ -124,7 +124,10 @@ impl WheelFilename {
 
         // Truncate the version, but avoid trailing dots, plus signs, etc. to avoid ambiguity.
         let version_width = CACHE_KEY_MAX_LEN - 1 /* dash */ - 16 /* digest */;
-        let version = format!("{:.version_width$}", self.version);
+        let mut version = self.version.to_string();
+
+        // PANIC SAFETY: version strings can only contain ASCII characters.
+        version.truncate(version_width);
         let version = version.trim_end_matches(['.', '+']);
 
         format!("{version}-{digest}")
@@ -499,8 +502,8 @@ mod tests {
 
         // Larger versions should get truncated.
         let filename = WheelFilename::from_str(
-            "example-1.2.3.4.5.6.7.8.9.0.1.2.3.4.5.6.7.8.9.0.1.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
+            "example-1.2.3.4.5.6.7.8.9.0.1.2.3.4.5.6.7.8.9.0.1.2.1.2.3.4.5.6.7.8.9.0.1.1.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
         ).unwrap();
-        insta::assert_snapshot!(filename.cache_key(), @"1.2.3.4.5.6.7.8.9.0.1.2.3.4.5.6.7.8.9.0.1.2-80bf8598e9647cf7");
+        insta::assert_snapshot!(filename.cache_key(), @"1.2.3.4.5.6.7.8.9.0.1.2.3.4.5.6.7.8.9.0.1.2.1.2-80bf8598e9647cf7");
     }
 }
