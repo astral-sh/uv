@@ -537,17 +537,18 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
-            let requirements = args
-                .package
-                .into_iter()
-                .map(RequirementsSource::from_package)
-                .chain(args.editables.into_iter().map(RequirementsSource::Editable))
-                .chain(
-                    args.requirements
-                        .into_iter()
-                        .map(RequirementsSource::from_requirements_file),
-                )
-                .collect::<Vec<_>>();
+            let mut requirements = Vec::with_capacity(
+                args.package.len() + args.editables.len() + args.requirements.len(),
+            );
+            for package in args.package {
+                requirements.push(RequirementsSource::from_package(package)?);
+            }
+            requirements.extend(args.editables.into_iter().map(RequirementsSource::Editable));
+            requirements.extend(
+                args.requirements
+                    .into_iter()
+                    .map(RequirementsSource::from_requirements_file),
+            );
             let constraints = args
                 .constraints
                 .into_iter()
@@ -624,16 +625,15 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache.init()?;
 
-            let sources = args
-                .package
-                .into_iter()
-                .map(RequirementsSource::from_package)
-                .chain(
-                    args.requirements
-                        .into_iter()
-                        .map(RequirementsSource::from_requirements_txt),
-                )
-                .collect::<Vec<_>>();
+            let mut sources = Vec::with_capacity(args.package.len() + args.requirements.len());
+            for package in args.package {
+                sources.push(RequirementsSource::from_package(package)?);
+            }
+            sources.extend(
+                args.requirements
+                    .into_iter()
+                    .map(RequirementsSource::from_requirements_file),
+            );
             commands::pip_uninstall(
                 &sources,
                 args.settings.python,
@@ -985,21 +985,22 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
-            let requirements = args
-                .with
-                .into_iter()
-                .map(RequirementsSource::from_with_package)
-                .chain(
-                    args.with_editable
-                        .into_iter()
-                        .map(RequirementsSource::Editable),
-                )
-                .chain(
-                    args.with_requirements
-                        .into_iter()
-                        .map(RequirementsSource::from_requirements_file),
-                )
-                .collect::<Vec<_>>();
+            let mut requirements = Vec::with_capacity(
+                args.with.len() + args.with_editable.len() + args.with_requirements.len(),
+            );
+            for package in args.with {
+                requirements.push(RequirementsSource::from_with_package(package)?);
+            }
+            requirements.extend(
+                args.with_editable
+                    .into_iter()
+                    .map(RequirementsSource::Editable),
+            );
+            requirements.extend(
+                args.with_requirements
+                    .into_iter()
+                    .map(RequirementsSource::from_requirements_file),
+            );
 
             Box::pin(commands::tool_run(
                 args.command,
@@ -1038,21 +1039,23 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
-            let requirements = args
-                .with
-                .into_iter()
-                .map(RequirementsSource::from_with_package)
-                .chain(
-                    args.with_editable
-                        .into_iter()
-                        .map(RequirementsSource::Editable),
-                )
-                .chain(
-                    args.with_requirements
-                        .into_iter()
-                        .map(RequirementsSource::from_requirements_file),
-                )
-                .collect::<Vec<_>>();
+            let mut requirements = Vec::with_capacity(
+                args.with.len() + args.with_editable.len() + args.with_requirements.len(),
+            );
+            for package in args.with {
+                requirements.push(RequirementsSource::from_with_package(package)?);
+            }
+            requirements.extend(
+                args.with_editable
+                    .into_iter()
+                    .map(RequirementsSource::Editable),
+            );
+            requirements.extend(
+                args.with_requirements
+                    .into_iter()
+                    .map(RequirementsSource::from_requirements_file),
+            );
+
             let constraints = args
                 .constraints
                 .into_iter()
@@ -1468,21 +1471,22 @@ async fn run_project(
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
-            let requirements = args
-                .with
-                .into_iter()
-                .map(RequirementsSource::from_with_package)
-                .chain(
-                    args.with_editable
-                        .into_iter()
-                        .map(RequirementsSource::Editable),
-                )
-                .chain(
-                    args.with_requirements
-                        .into_iter()
-                        .map(RequirementsSource::from_requirements_file),
-                )
-                .collect::<Vec<_>>();
+            let mut requirements = Vec::with_capacity(
+                args.with.len() + args.with_editable.len() + args.with_requirements.len(),
+            );
+            for package in args.with {
+                requirements.push(RequirementsSource::from_with_package(package)?);
+            }
+            requirements.extend(
+                args.with_editable
+                    .into_iter()
+                    .map(RequirementsSource::Editable),
+            );
+            requirements.extend(
+                args.with_requirements
+                    .into_iter()
+                    .map(RequirementsSource::from_requirements_file),
+            );
 
             Box::pin(commands::run(
                 project_dir,

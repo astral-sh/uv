@@ -2845,12 +2845,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "640c9bd8497b02465aeef5375144c26062e0dcd5939dfcbb0f5db76cb8c17c73"
 
 [[package]]
-name = "r-shquote"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d76b7a332c240b0b30ad8b52cc9aecf8ec96878ccb927ce1d2feb03920e0f711"
-
-[[package]]
 name = "rancor"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4855,6 +4849,7 @@ dependencies = [
  "uv-pep508",
  "uv-platform-tags",
  "uv-pypi-types",
+ "uv-small-str",
  "uv-static",
  "uv-version",
  "uv-warnings",
@@ -5038,6 +5033,7 @@ dependencies = [
  "smallvec",
  "thiserror 2.0.11",
  "url",
+ "uv-cache-key",
  "uv-normalize",
  "uv-pep440",
  "uv-platform-tags",
@@ -5075,6 +5071,7 @@ dependencies = [
  "uv-pep508",
  "uv-platform-tags",
  "uv-pypi-types",
+ "uv-small-str",
  "version-ranges",
 ]
 
@@ -5486,8 +5483,8 @@ dependencies = [
  "uv-trampoline-builder",
  "uv-warnings",
  "which",
- "windows-registry 0.4.0",
- "windows-result 0.3.0",
+ "windows-registry 0.5.0",
+ "windows-result 0.3.1",
  "windows-sys 0.59.0",
 ]
 
@@ -5535,7 +5532,7 @@ dependencies = [
  "indoc",
  "insta",
  "itertools 0.14.0",
- "r-shquote",
+ "memchr",
  "regex",
  "reqwest",
  "reqwest-middleware",
@@ -5605,6 +5602,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-requirements-txt",
+ "uv-small-str",
  "uv-static",
  "uv-types",
  "uv-warnings",
@@ -5671,7 +5669,9 @@ dependencies = [
  "tracing",
  "uv-fs",
  "uv-static",
- "winreg",
+ "windows-registry 0.5.0",
+ "windows-result 0.3.1",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6138,8 +6138,8 @@ checksum = "810ce18ed2112484b0d4e15d022e5f598113e220c53e373fb31e67e21670c1ce"
 dependencies = [
  "windows-implement 0.59.0",
  "windows-interface 0.59.0",
- "windows-result 0.3.0",
- "windows-strings 0.3.0",
+ "windows-result 0.3.1",
+ "windows-strings 0.3.1",
  "windows-targets 0.53.0",
 ]
 
@@ -6210,6 +6210,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "windows-link"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6dccfd733ce2b1753b03b6d3c65edf020262ea35e20ccdf3e288043e6dd620e3"
+
+[[package]]
 name = "windows-registry"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6222,13 +6228,13 @@ dependencies = [
 
 [[package]]
 name = "windows-registry"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4286ad90ddb45071efd1a66dfa43eb02dd0dfbae1545ad6cc3c51cf34d7e8ba3"
+checksum = "6c44a98275e31bfd112bb06ba96c8ab13c03383a3753fdddd715406a1824c7e0"
 dependencies = [
- "windows-result 0.3.0",
- "windows-strings 0.3.0",
- "windows-targets 0.53.0",
+ "windows-link",
+ "windows-result 0.3.1",
+ "windows-strings 0.3.1",
 ]
 
 [[package]]
@@ -6251,11 +6257,11 @@ dependencies = [
 
 [[package]]
 name = "windows-result"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d08106ce80268c4067c0571ca55a9b4e9516518eaa1a1fe9b37ca403ae1d1a34"
+checksum = "06374efe858fab7e4f881500e6e86ec8bc28f9462c47e5a9941a0142ad86b189"
 dependencies = [
- "windows-targets 0.53.0",
+ "windows-link",
 ]
 
 [[package]]
@@ -6270,11 +6276,11 @@ dependencies = [
 
 [[package]]
 name = "windows-strings"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b888f919960b42ea4e11c2f408fadb55f78a9f236d5eef084103c8ce52893491"
+checksum = "87fa48cc5d406560701792be122a10132491cff9d0aeb23583cc2dcafc847319"
 dependencies = [
- "windows-targets 0.53.0",
+ "windows-link",
 ]
 
 [[package]]
@@ -6496,16 +6502,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7e49d2d35d3fad69b39b94139037ecfb4f359f08958b9c11e7315ce770462419"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "winreg"
-version = "0.53.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89a47b489f8fc5b949477e89dca4d1617f162c6c53fbcbefde553ab17b342ff9"
-dependencies = [
- "cfg-if",
- "windows-sys 0.48.0",
 ]
 
 [[package]]

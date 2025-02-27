@@ -541,27 +541,48 @@ impl ResolverOutput {
 
         // 3. Look for hashes from the registry, which are served at the package level.
         if url.is_none() {
-            let versions_response = if let Some(index) = index {
-                in_memory.explicit().get(&(name.clone(), index.clone()))
-            } else {
-                in_memory.implicit().get(name)
-            };
+            // Query the implicit and explicit indexes (lazily) for the hashes.
+            let implicit_response = in_memory.implicit().get(name);
+            let mut explicit_response = None;
 
-            if let Some(versions_response) = versions_response {
-                if let VersionsResponse::Found(ref version_maps) = *versions_response {
-                    if let Some(digests) = version_maps
-                        .iter()
-                        .find_map(|version_map| version_map.hashes(version))
-                        .map(|digests| {
-                            let mut digests = HashDigests::from(digests);
-                            digests.sort_unstable();
-                            digests
-                        })
-                    {
-                        if !digests.is_empty() {
-                            return digests;
-                        }
+            // Search in the implicit indexes.
+            let hashes = implicit_response
+                .as_ref()
+                .and_then(|response| {
+                    if let VersionsResponse::Found(version_maps) = &**response {
+                        Some(version_maps)
+                    } else {
+                        None
                     }
+                })
+                .into_iter()
+                .flatten()
+                .filter(|version_map| version_map.index() == index)
+                .find_map(|version_map| version_map.hashes(version))
+                .or_else(|| {
+                    // Search in the explicit indexes.
+                    explicit_response = index
+                        .and_then(|index| in_memory.explicit().get(&(name.clone(), index.clone())));
+                    explicit_response
+                        .as_ref()
+                        .and_then(|response| {
+                            if let VersionsResponse::Found(version_maps) = &**response {
+                                Some(version_maps)
+                            } else {
+                                None
+                            }
+                        })
+                        .into_iter()
+                        .flatten()
+                        .filter(|version_map| version_map.index() == index)
+                        .find_map(|version_map| version_map.hashes(version))
+                });
+
+            if let Some(hashes) = hashes {
+                let mut digests = HashDigests::from(hashes);
+                digests.sort_unstable();
+                if !digests.is_empty() {
+                    return digests;
                 }
             }
         }

@@ -186,8 +186,24 @@ impl<'de, T: Pep508Url> Deserialize<'de> for Requirement<T> {
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        FromStr::from_str(&s).map_err(de::Error::custom)
+        struct RequirementVisitor<T>(std::marker::PhantomData<T>);
+
+        impl<T: Pep508Url> serde::de::Visitor<'_> for RequirementVisitor<T> {
+            type Value = Requirement<T>;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a string containing a PEP 508 requirement")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                FromStr::from_str(v).map_err(de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(RequirementVisitor(std::marker::PhantomData))
     }
 }
 
@@ -625,7 +641,8 @@ fn parse_extras_cursor<T: Pep508Url>(
 
         // Add the parsed extra
         extras.push(
-            ExtraName::new(buffer).expect("`ExtraName` validation should match PEP 508 parsing"),
+            ExtraName::from_str(&buffer)
+                .expect("`ExtraName` validation should match PEP 508 parsing"),
         );
         is_first_iteration = false;
     }
