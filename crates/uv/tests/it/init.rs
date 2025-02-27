@@ -2571,7 +2571,7 @@ fn init_inside_git_repo() {
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
-    child.child(".gitignore").assert(predicate::path::missing());
+    child.child(".gitignore").assert(predicate::path::is_file());
 
     let child = context.temp_dir.child("bar");
     uv_snapshot!(context.filters(), context.init().arg(child.as_ref()), @r###"
@@ -2583,7 +2583,7 @@ fn init_inside_git_repo() {
     Initialized project `bar` at `[TEMP_DIR]/bar`
     "###);
 
-    child.child(".gitignore").assert(predicate::path::missing());
+    child.child(".gitignore").assert(predicate::path::is_file());
 }
 
 #[test]
