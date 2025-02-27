@@ -15328,11 +15328,7 @@ fn lock_named_index_cli() -> Result<()> {
     Ok(())
 }
 
-/// If a name is reused, the higher-priority index should "overwrite" the lower-priority index.
-/// In other words, the lower-priority index should be ignored entirely during implicit resolution.
-///
-/// In this test, we should use PyPI (the default index) and ignore `https://example.com` entirely.
-/// (Querying `https://example.com` would fail with a 500.)
+/// If a name is reused, within a single file, we should raise an error.
 #[test]
 fn lock_repeat_named_index() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -15352,6 +15348,46 @@ fn lock_repeat_named_index() -> Result<()> {
 
         [[tool.uv.index]]
         name = "pytorch"
+        url = "https://example.com"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 8, column 9
+      |
+    8 |         [[tool.uv.index]]
+      |         ^^^^^^^^^^^^^^^^^
+    duplicate index name `pytorch`
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn lock_unique_named_index() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [[tool.uv.index]]
+        name = "pytorch"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu121"
+
+        [[tool.uv.index]]
+        name = "example"
         url = "https://example.com"
         "#,
     )?;
