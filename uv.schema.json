@@ -393,7 +393,7 @@
       ]
     },
     "proxy-urls": {
-      "description": "FIXME Document",
+      "description": "The optional URL of the index proxy. If it exists, it will be used instead of the canonical index URL for resolution and installation. The canonical URL will still be written to the lockfile.",
       "type": [
         "array",
         "null"
@@ -740,7 +740,7 @@
           ]
         },
         "proxy-url": {
-          "description": "FIXME Document",
+          "description": "The optional URL of the index proxy. If provided, it will be used instead of `Index.url` for resolution and installation. `Index.url` will still be written to the lockfile.\n\nExpects to receive a URL (e.g., `https://pypi.org/simple`) or a local path.",
           "anyOf": [
             {
               "$ref": "#/definitions/IndexUrl"
@@ -1371,7 +1371,6 @@
       ]
     },
     "ProxyUrl": {
-      "description": "FIXME Document",
       "type": "object",
       "required": [
         "name",
