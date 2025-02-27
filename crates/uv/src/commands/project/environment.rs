@@ -2,8 +2,7 @@ use tracing::debug;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, hash_digest};
-use uv_client::Connectivity;
-use uv_configuration::{Concurrency, PreviewMode, TrustedHost};
+use uv_configuration::{Concurrency, PreviewMode};
 use uv_distribution_types::{Name, Resolution};
 use uv_python::{Interpreter, PythonEnvironment};
 
@@ -13,7 +12,7 @@ use crate::commands::project::{
     resolve_environment, sync_environment, EnvironmentSpecification, PlatformState, ProjectError,
 };
 use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
+use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 
 /// A [`PythonEnvironment`] stored in the cache.
 #[derive(Debug)]
@@ -31,14 +30,12 @@ impl CachedEnvironment {
         spec: EnvironmentSpecification<'_>,
         interpreter: &Interpreter,
         settings: &ResolverInstallerSettings,
+        network_settings: &NetworkSettings,
         state: &PlatformState,
         resolve: Box<dyn ResolveLogger>,
         install: Box<dyn InstallLogger>,
         installer_metadata: bool,
-        connectivity: Connectivity,
         concurrency: Concurrency,
-        native_tls: bool,
-        allow_insecure_host: &[TrustedHost],
         cache: &Cache,
         printer: Printer,
         preview: PreviewMode,
@@ -51,12 +48,10 @@ impl CachedEnvironment {
                 spec,
                 &interpreter,
                 settings.as_ref().into(),
+                network_settings,
                 state,
                 resolve,
-                connectivity,
                 concurrency,
-                native_tls,
-                allow_insecure_host,
                 cache,
                 printer,
                 preview,
@@ -105,13 +100,11 @@ impl CachedEnvironment {
             &resolution,
             Modifications::Exact,
             settings.as_ref().into(),
+            network_settings,
             state,
             install,
             installer_metadata,
-            connectivity,
             concurrency,
-            native_tls,
-            allow_insecure_host,
             cache,
             printer,
             preview,

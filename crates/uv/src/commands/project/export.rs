@@ -7,10 +7,9 @@ use std::path::{Path, PathBuf};
 use uv_settings::PythonInstallMirrors;
 
 use uv_cache::Cache;
-use uv_client::Connectivity;
 use uv_configuration::{
     Concurrency, DevGroupsSpecification, EditableMode, ExportFormat, ExtrasSpecification,
-    InstallOptions, PreviewMode, TrustedHost,
+    InstallOptions, PreviewMode,
 };
 use uv_normalize::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
@@ -28,7 +27,7 @@ use crate::commands::project::{
 };
 use crate::commands::{diagnostics, ExitStatus, OutputWriter};
 use crate::printer::Printer;
-use crate::settings::ResolverSettings;
+use crate::settings::{NetworkSettings, ResolverSettings};
 
 #[derive(Debug, Clone)]
 enum ExportTarget {
@@ -69,12 +68,10 @@ pub(crate) async fn export(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
+    network_settings: NetworkSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    connectivity: Connectivity,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     no_config: bool,
     quiet: bool,
     cache: &Cache,
@@ -122,11 +119,9 @@ pub(crate) async fn export(
             ExportTarget::Script(script) => ScriptInterpreter::discover(
                 Pep723ItemRef::Script(script),
                 python.as_deref().map(PythonRequest::parse),
+                &network_settings,
                 python_preference,
                 python_downloads,
-                connectivity,
-                native_tls,
-                allow_insecure_host,
                 &install_mirrors,
                 no_config,
                 Some(false),
@@ -139,11 +134,9 @@ pub(crate) async fn export(
                 project.workspace(),
                 project_dir,
                 python.as_deref().map(PythonRequest::parse),
+                &network_settings,
                 python_preference,
                 python_downloads,
-                connectivity,
-                native_tls,
-                allow_insecure_host,
                 &install_mirrors,
                 no_config,
                 Some(false),
@@ -177,12 +170,10 @@ pub(crate) async fn export(
         mode,
         (&target).into(),
         settings.as_ref(),
+        &network_settings,
         &state,
         Box::new(DefaultResolveLogger),
-        connectivity,
         concurrency,
-        native_tls,
-        allow_insecure_host,
         cache,
         printer,
         preview,
@@ -191,7 +182,7 @@ pub(crate) async fn export(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
