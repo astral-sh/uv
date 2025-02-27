@@ -2583,7 +2583,7 @@ fn init_inside_git_repo() {
     Initialized project `bar` at `[TEMP_DIR]/bar`
     "###);
 
-    child.child(".gitignore").assert(predicate::path::is_file());
+    child.child(".gitignore").assert(predicate::path::missing());
 }
 
 #[test]
