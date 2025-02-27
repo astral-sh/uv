@@ -3321,7 +3321,7 @@ fn resolve_both() -> anyhow::Result<()> {
     // Resolution should succeed, but warn that the `pip` section in `pyproject.toml` is ignored.
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3330,14 +3330,16 @@ fn resolve_both() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -3487,7 +3489,7 @@ fn resolve_both() -> anyhow::Result<()> {
 
     ----- stderr -----
     warning: Found both a `uv.toml` file and a `[tool.uv]` section in an adjacent `pyproject.toml`. The `[tool.uv]` section will be ignored in favor of the `uv.toml` file.
-    "###
+    "#
     );
 
     Ok(())
@@ -3616,7 +3618,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("--config-file")
         .arg(config.path())
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3625,14 +3627,16 @@ fn resolve_config_file() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -3781,7 +3785,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     // Write in `pyproject.toml` schema.
@@ -4201,7 +4205,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
 
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4210,25 +4214,27 @@ fn allow_insecure_host() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [
+                Host {
+                    scheme: None,
+                    host: "google.com",
+                    port: None,
+                },
+                Host {
+                    scheme: None,
+                    host: "example.com",
+                    port: None,
+                },
+            ],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [
-            Host {
-                scheme: None,
-                host: "google.com",
-                port: None,
-            },
-            Host {
-                scheme: None,
-                host: "example.com",
-                port: None,
-            },
-        ],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -4347,7 +4353,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     Ok(())
@@ -4375,7 +4381,7 @@ fn index_priority() -> anyhow::Result<()> {
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--index-url")
-        .arg("https://cli.pypi.org/simple"), @r###"
+        .arg("https://cli.pypi.org/simple"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4384,14 +4390,16 @@ fn index_priority() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -4571,7 +4579,7 @@ fn index_priority() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
