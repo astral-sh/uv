@@ -11,9 +11,11 @@ use indoc::indoc;
 use predicates::prelude::predicate;
 use url::Url;
 
+#[cfg(feature = "git")]
+use crate::common::{self, decode_token};
+
 use crate::common::{
-    self, build_vendor_links_url, decode_token, get_bin, uv_snapshot, venv_bin_path,
-    venv_to_interpreter, TestContext,
+    build_vendor_links_url, get_bin, uv_snapshot, venv_bin_path, venv_to_interpreter, TestContext,
 };
 use uv_fs::Simplified;
 use uv_static::EnvVars;
