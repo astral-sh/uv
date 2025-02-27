@@ -728,6 +728,13 @@ impl Workspace {
                 let member_root = std::path::absolute(&member_root)
                     .map_err(WorkspaceError::Normalize)?
                     .clone();
+                if !fs_err::metadata(&member_root)?.is_dir() {
+                    warn!(
+                        "Ignoring non-directory workspace member: `{}`",
+                        member_root.simplified_display()
+                    );
+                    continue;
+                }
 
                 // If the directory is explicitly ignored, skip it.
                 let skip = match &options.members {
@@ -780,14 +787,6 @@ impl Workspace {
                             member_root,
                             member_glob.to_string(),
                         ));
-                    }
-                    Err(err) if err.kind() == std::io::ErrorKind::NotADirectory => {
-                        warn!(
-                            "Ignoring non-directory workspace member: `{}`",
-                            member_root.simplified_display()
-                        );
-
-                        continue;
                     }
                     Err(err) => return Err(err.into()),
                 };
