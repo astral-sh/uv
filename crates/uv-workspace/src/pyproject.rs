@@ -14,6 +14,7 @@ use std::str::FromStr;
 
 use glob::Pattern;
 use owo_colors::OwoColorize;
+use rustc_hash::{FxBuildHasher, FxHashSet};
 use serde::{de::IntoDeserializer, de::SeqAccess, Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use url::Url;
@@ -288,16 +289,12 @@ fn deserialize_index_vec<'de, D>(deserializer: D) -> Result<Option<Vec<Index>>, 
 where
     D: Deserializer<'de>,
 {
-    // First deserialize as normal
-    let indices_opt = Option::<Vec<Index>>::deserialize(deserializer)?;
-
-    // Only check for duplicates if indices are present
-    if let Some(indices) = &indices_opt {
-        let mut seen_names = std::collections::HashSet::new();
-
-        for index in indices {
-            if let Some(name) = &index.name {
-                if !seen_names.insert(name.clone()) {
+    let indexes = Option::<Vec<Index>>::deserialize(deserializer)?;
+    if let Some(indexes) = indexes.as_ref() {
+        let mut seen_names = FxHashSet::with_capacity_and_hasher(indexes.len(), FxBuildHasher);
+        for index in indexes {
+            if let Some(name) = index.name.as_ref() {
+                if !seen_names.insert(name) {
                     return Err(serde::de::Error::custom(format!(
                         "duplicate index name `{name}`"
                     )));
@@ -305,8 +302,7 @@ where
             }
         }
     }
-
-    Ok(indices_opt)
+    Ok(indexes)
 }
 
 // NOTE(charlie): When adding fields to this struct, mark them as ignored on `Options` in

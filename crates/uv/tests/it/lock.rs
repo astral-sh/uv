@@ -15328,12 +15328,7 @@ fn lock_named_index_cli() -> Result<()> {
     Ok(())
 }
 
-/// If a name is reused, the higher-priority index should "overwrite" the lower-priority index.
-/// In other words, the lower-priority index should be ignored entirely during implicit resolution.
-///
-/// In this test, we should use PyPI (the default index) and ignore `https://example.com` entirely.
-/// (Querying `https://example.com` would fail with a 500.)
-/// Test to verify that duplicate index names result in an error
+/// If a name is reused, within a single file, we should raise an error.
 #[test]
 fn lock_repeat_named_index() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -15357,7 +15352,6 @@ fn lock_repeat_named_index() -> Result<()> {
         "#,
     )?;
 
-    // Duplicate index names should result in an error
     uv_snapshot!(context.filters(), context.lock(), @r###"
     success: false
     exit_code: 2
@@ -15375,8 +15369,6 @@ fn lock_repeat_named_index() -> Result<()> {
     Ok(())
 }
 
-/// Test to verify index priority and proper lock file generation
-/// Uses unique index names to ensure successful lock file generation
 #[test]
 fn lock_unique_named_index() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -15395,7 +15387,7 @@ fn lock_unique_named_index() -> Result<()> {
         url = "https://astral-sh.github.io/pytorch-mirror/whl/cu121"
 
         [[tool.uv.index]]
-        name = "example"  # Changed to a unique index name
+        name = "example"
         url = "https://example.com"
         "#,
     )?;
