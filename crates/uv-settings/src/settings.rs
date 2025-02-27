@@ -443,7 +443,9 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub extra_index_url: Option<Vec<PipExtraIndex>>,
-    /// FIXME Document
+    /// The optional URL of the index proxy. If it exists, it will be used instead
+    /// of the canonical index URL for resolution and installation. The canonical
+    /// URL will still be written to the lockfile.
     pub proxy_urls: Option<Vec<ProxyUrl>>,
     /// Ignore all registry indexes (e.g., PyPI), instead relying on direct URL dependencies and
     /// those provided via `--find-links`.

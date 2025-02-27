@@ -972,7 +972,7 @@ impl Lock {
         Ok(doc.to_string())
     }
 
-    /// FIXME Document
+    /// Sets all `Package` URLs to be proxy URLs instead of canonical URLs.
     pub fn with_proxy_urls(
         mut self,
         proxies: Option<&[ProxyWithCanonicalUrl]>,
@@ -994,7 +994,7 @@ impl Lock {
         Ok(self)
     }
 
-    /// FIXME Document
+    /// Replaces all proxy URLs found in `Package`s with canonical URLs.
     pub fn substitute_canonical_urls(
         &mut self,
         proxies: Option<&[ProxyWithCanonicalUrl]>,
@@ -1956,7 +1956,7 @@ pub struct Package {
 }
 
 impl Package {
-    /// FIXME Document
+    /// Replaces pattern `old` with `new` in all URLs.
     pub fn replace_urls(&mut self, old: &str, new: &str) {
         self.id.replace_url(new);
         if let Some(sdist) = &mut self.sdist {
@@ -2982,7 +2982,8 @@ impl PackageId {
         }
     }
 
-    /// FIXME Document
+    /// Replaces the URL with `new_url` if `Source::Registry` is a
+    /// `RegistrySource::Url`.
     fn replace_url(&mut self, new_url: &str) {
         if let Source::Registry(RegistrySource::Url(..)) = self.source {
             let new_url = UrlString::new(SmallString::from(new_url));
@@ -3654,7 +3655,7 @@ impl SourceDist {
         }
     }
 
-    /// FIXME Document
+    /// Replaces pattern `old_url` with `new_url`.
     fn replace_url(&mut self, old_url: &str, new_url: &str) {
         if let Self::Url { url, .. } = self {
             *url = UrlString::new(url.base_str().replace(old_url, new_url).into());
@@ -4166,7 +4167,7 @@ impl Wheel {
         }
     }
 
-    /// FIXME Document
+    /// Replaces pattern `old_url` with `new_url` if it's a `WheelWireSource::Url`.
     fn replace_url(&mut self, old: &str, new: &str) {
         if let WheelWireSource::Url { url } = &self.url {
             self.url = WheelWireSource::Url {

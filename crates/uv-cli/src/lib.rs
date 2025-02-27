@@ -4753,7 +4753,12 @@ pub struct IndexArgs {
     #[arg(long, env = EnvVars::UV_EXTRA_INDEX_URL, value_delimiter = ' ', value_parser = parse_extra_index_url, help_heading = "Index options")]
     pub extra_index_url: Option<Vec<Maybe<PipExtraIndex>>>,
 
-    /// FIXME Document
+    /// A proxy URL for an index replaces the canonical index URL specified in
+    /// configuration. It will be used for dependency resolution and installation,
+    /// but the canonical URL will be written to the lockfile.
+    ///
+    /// Accepts either a repository compliant with PEP 503 (the simple repository API), or a local
+    /// directory laid out in the same format.
     #[arg(long, env = EnvVars::UV_INDEX_PROXY_URL, value_delimiter = ' ', value_parser = parse_index_proxy_url, help_heading = "Index options")]
     pub index_proxy_url: Option<Vec<Maybe<ProxyUrl>>>,
 

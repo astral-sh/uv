@@ -82,7 +82,11 @@ pub struct Index {
     /// publish-url = "https://upload.pypi.org/legacy/"
     /// ```
     pub publish_url: Option<Url>,
-    /// FIXME Document
+    /// The optional URL of the index proxy. If provided, it will be used instead
+    /// of `Index.url` for resolution and installation. `Index.url` will still be
+    /// written to the lockfile.
+    ///
+    /// Expects to receive a URL (e.g., `https://pypi.org/simple`) or a local path.
     pub proxy_url: Option<IndexUrl>,
 }
 
@@ -263,8 +267,12 @@ pub enum IndexSourceError {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ProxyWithCanonicalUrl {
+    /// The full index proxy URL, e.g., `http://localhost:3141/a/b/`.
     pub url: IndexUrl,
+    /// The index proxy base URL, e.g., `http://localhost:3141/`.
     pub url_base: Url,
+    /// The canonical index URL, written to the lockfile but replaced by the
+    /// proxy URL during resolution and installation.
     pub canonical_url: IndexUrl,
 }
 
@@ -284,7 +292,6 @@ impl ProxyWithCanonicalUrl {
     }
 }
 
-/// FIXME Document
 #[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ProxyUrl {

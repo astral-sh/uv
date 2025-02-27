@@ -3130,7 +3130,8 @@ impl PublishSettings {
     }
 }
 
-/// FIXME: Document
+/// Adds proxy urls to any matching indexes and returns `ProxyWithCanonicalUrl`s for
+/// any matches found.
 fn update_indexes_with_proxies(
     indexes: &mut [Index],
     proxy_urls: Option<&Vec<ProxyUrl>>,
