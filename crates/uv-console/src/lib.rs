@@ -6,30 +6,6 @@ use std::{cmp::Ordering, iter};
 /// This is a slimmed-down version of `dialoguer::Confirm`, with the post-confirmation report
 /// enabled.
 pub fn confirm(message: &str, term: &Term, default: bool) -> std::io::Result<bool> {
-    // Set the Ctrl-C handler to exit the process.
-    let result = ctrlc::set_handler(move || {
-        let term = Term::stderr();
-        term.show_cursor().ok();
-        term.write_str("\n").ok();
-        term.flush().ok();
-
-        #[allow(clippy::exit, clippy::cast_possible_wrap)]
-        std::process::exit(if cfg!(windows) {
-            0xC000_013A_u32 as i32
-        } else {
-            130
-        });
-    });
-
-    match result {
-        Ok(()) => {}
-        Err(ctrlc::Error::MultipleHandlers) => {
-            // If multiple handlers were set, we assume that the existing handler is our
-            // confirmation handler, and continue.
-        }
-        Err(err) => return Err(std::io::Error::new(std::io::ErrorKind::Other, err)),
-    }
-
     let prompt = format!(
         "{} {} {} {} {}",
         style("?".to_string()).for_stderr().yellow(),
@@ -48,11 +24,24 @@ pub fn confirm(message: &str, term: &Term, default: bool) -> std::io::Result<boo
     // Match continuously on every keystroke, and do not wait for user to hit the
     // `Enter` key.
     let response = loop {
-        let input = term.read_key()?;
+        let input = term.read_key_raw()?;
         match input {
             Key::Char('y' | 'Y') => break true,
             Key::Char('n' | 'N') => break false,
             Key::Enter => break default,
+            Key::CtrlC => {
+                let term = Term::stderr();
+                term.show_cursor()?;
+                term.write_str("\n")?;
+                term.flush()?;
+
+                #[allow(clippy::exit, clippy::cast_possible_wrap)]
+                std::process::exit(if cfg!(windows) {
+                    0xC000_013A_u32 as i32
+                } else {
+                    130
+                });
+            }
             _ => {}
         };
     };

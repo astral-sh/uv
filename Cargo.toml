@@ -90,7 +90,7 @@ cargo-util = { version = "0.2.14" }
 clap = { version = "4.5.17", features = ["derive", "env", "string", "wrap_help"] }
 clap_complete_command = { version = "0.6.1" }
 configparser = { version = "3.1.0" }
-console = { version = "0.15.8", default-features = false }
+console = { version = "0.15.11", default-features = false }
 csv = { version = "1.3.0" }
 ctrlc = { version = "3.4.5" }
 dashmap = { version = "6.1.0" }
