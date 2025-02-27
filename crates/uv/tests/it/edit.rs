@@ -2,8 +2,8 @@
 
 #[cfg(feature = "git")]
 mod conditional_imports {
+    pub(crate) use crate::common::{decode_token, READ_ONLY_GITHUB_TOKEN};
     pub(crate) use assert_cmd::assert::OutputAssertExt;
-    pub(crate) use crate::common::{READ_ONLY_GITHUB_TOKEN, decode_token};
 }
 
 #[cfg(feature = "git")]
