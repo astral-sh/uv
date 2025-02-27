@@ -182,10 +182,6 @@ impl Lock {
                 continue;
             }
 
-            if dist.name == PackageName::from_str("torchvision").unwrap() {
-                println!("Locking {:#?}", dist);
-            }
-
             // If there are multiple distributions for the same package, include the markers of all
             // forks that included the current distribution.
             let fork_markers = if duplicates.contains(dist.name()) {
@@ -214,7 +210,6 @@ impl Lock {
 
             let id = package.id.clone();
             if let Some(locked_dist) = packages.insert(id, package) {
-                println!("Duplicate locked_dist ID: {}", locked_dist.id);
                 return Err(LockErrorKind::DuplicatePackage {
                     id: locked_dist.id.clone(),
                 }
@@ -438,7 +433,6 @@ impl Lock {
         let mut by_id = FxHashMap::default();
         for (i, dist) in packages.iter().enumerate() {
             if by_id.insert(dist.id.clone(), i).is_some() {
-                println!("Duplicate package ID: {}", dist.id);
                 return Err(LockErrorKind::DuplicatePackage {
                     id: dist.id.clone(),
                 }
