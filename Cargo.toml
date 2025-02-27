@@ -278,11 +278,13 @@ inherits = "dev"
 debug = 0
 strip = "debuginfo"
 
-# Profile for uv-build
+# Profile to build a minimally sized binary for uv-build
 [profile.minimal-size]
 inherits = "release"
 opt-level = "z"
+# This will still show a panic message, we only skip the unwind
 panic = "abort"
+codegen-units = 1
 
 # The profile that 'cargo dist' will build with.
 [profile.dist]

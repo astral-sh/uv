@@ -80,6 +80,8 @@ version_files = [
   "README.md",
   "crates/uv/Cargo.toml",
   "crates/uv-version/Cargo.toml",
+  "crates/uv-build/Cargo.toml",
+  "crates/uv-build/pyproject.toml",
   "docs/getting-started/installation.md",
   "docs/guides/integration/docker.md",
   "docs/guides/integration/pre-commit.md",
