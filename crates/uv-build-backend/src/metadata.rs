@@ -19,6 +19,7 @@ use uv_pep508::{
 };
 use uv_pypi_types::{Metadata23, VerbatimParsedUrl};
 
+use crate::serde_verbatim::SerdeVerbatim;
 use crate::Error;
 
 /// By default, we ignore generated python files.
@@ -227,7 +228,7 @@ impl PyProjectToml {
                 when a future, breaking version of `uv_build` is released.",
                 // Use an underscore consistently, to avoid confusing users between a package name with dash and a
                 // module name with underscore
-                uv_requirement.to_string().replace("uv-build", "uv_build")
+                uv_requirement.verbatim()
             ));
         }
 
@@ -771,7 +772,7 @@ pub(crate) enum Contact {
 #[serde(rename_all = "kebab-case")]
 struct BuildSystem {
     /// PEP 508 dependencies required to execute the build system.
-    requires: Vec<Requirement<VerbatimParsedUrl>>,
+    requires: Vec<SerdeVerbatim<Requirement<VerbatimParsedUrl>>>,
     /// A string naming a Python object that will be used to perform the build.
     build_backend: Option<String>,
     /// <https://peps.python.org/pep-0517/#in-tree-build-backends>
@@ -1240,7 +1241,7 @@ mod tests {
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
-            @r###"`build_system.requires = ["uv_build"]` is missing an upper bound on the uv_build version such as `<0.5`. Without bounding the uv_build version, the source distribution will break when a future, breaking version of uv_build is released."###
+            @r###"`build_system.requires = ["uv_build"]` is missing an upper bound on the `uv_build` version such as `<0.5`. Without bounding the `uv_build` version, the source distribution will break when a future, breaking version of `uv_build` is released."###
         );
     }
 

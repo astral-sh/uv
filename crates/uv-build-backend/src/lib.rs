@@ -1,4 +1,5 @@
 mod metadata;
+mod serde_verbatim;
 mod source_dist;
 mod wheel;
 

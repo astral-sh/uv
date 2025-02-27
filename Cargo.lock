@@ -4639,7 +4639,7 @@ dependencies = [
 
 [[package]]
 name = "uv-build"
-version = "0.5.31"
+version = "0.6.3"
 dependencies = [
  "anyhow",
  "uv-build-backend",
