@@ -9427,9 +9427,9 @@ fn lock_warn_missing_transitive_lower_bounds() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    warning: The transitive dependency `colorama` is unpinned. Consider setting a lower bound with a constraint when using `--resolution lowest` to avoid using outdated versions.
     warning: The transitive dependency `packaging` is unpinned. Consider setting a lower bound with a constraint when using `--resolution lowest` to avoid using outdated versions.
     warning: The transitive dependency `iniconfig` is unpinned. Consider setting a lower bound with a constraint when using `--resolution lowest` to avoid using outdated versions.
+    warning: The transitive dependency `colorama` is unpinned. Consider setting a lower bound with a constraint when using `--resolution lowest` to avoid using outdated versions.
     "###);
 
     Ok(())
@@ -15571,6 +15571,88 @@ fn lock_repeat_named_index_cli() -> Result<()> {
     Ok(())
 }
 
+/// Use a non-explicit named index on specific platforms, with implicit fallback to that same
+/// index on other platforms.
+///
+/// See: <https://github.com/astral-sh/uv/issues/11776>
+#[test]
+fn lock_named_index_overlap() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = { index = "test", marker = "sys_platform == 'linux'" }
+
+        [[tool.uv.index]]
+        name = "test"
+        url = "https://test.pypi.org/simple"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        revision = 1
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'linux'",
+            "sys_platform != 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://test.pypi.org/simple" }
+        sdist = { url = "https://test-files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://test-files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "iniconfig", marker = "sys_platform != 'linux'" },
+            { name = "iniconfig", marker = "sys_platform == 'linux'", index = "https://test.pypi.org/simple" },
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
 /// Lock a project with `package = false`, making it a virtual project.
 #[test]
 fn lock_explicit_virtual_project() -> Result<()> {
@@ -18317,13 +18399,76 @@ fn lock_multiple_sources_index_non_total() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
-    error: Found duplicate package `jinja2==3.1.3 @ registry+https://astral-sh.github.io/pytorch-mirror/whl/cu118`
+    Resolved 3 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        revision = 1
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'win32'",
+            "sys_platform != 'win32'",
+        ]
+
+        [options]
+        exclude-newer = "2025-01-30T00:00:00Z"
+
+        [[package]]
+        name = "jinja2"
+        version = "3.1.3"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }
+        dependencies = [
+            { name = "markupsafe" },
+        ]
+        wheels = [
+            { url = "https://download.pytorch.org/whl/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa" },
+        ]
+
+        [[package]]
+        name = "markupsafe"
+        version = "3.0.2"
+        source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }
+        wheels = [
+            { url = "https://download.pytorch.org/whl/MarkupSafe-3.0.2-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:15ab75ef81add55874e7ab7055e9c397312385bd9ced94920f2802310c930396" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "jinja2" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "jinja2", marker = "sys_platform != 'win32'", specifier = ">=3,<3.1.4" },
+            { name = "jinja2", marker = "sys_platform == 'win32'", specifier = ">=3,<3.1.4", index = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
     "###);
 
     Ok(())
