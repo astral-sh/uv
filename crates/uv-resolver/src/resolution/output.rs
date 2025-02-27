@@ -344,6 +344,9 @@ impl ResolverOutput {
             url,
             index,
         } = &package;
+
+        println!("name: {:?}", name);
+        println!("index: {:?}", index);
         // Map the package to a distribution.
         let (dist, hashes, metadata) = Self::parse_dist(
             name,

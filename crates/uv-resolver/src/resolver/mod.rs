@@ -2866,9 +2866,11 @@ impl ForkState {
                     _ => continue,
                 };
                 let self_url = self_name.as_ref().and_then(|name| self.fork_urls.get(name));
-                let self_index = self_name
-                    .as_ref()
-                    .and_then(|name| self.fork_indexes.get(name));
+                let self_index = self_name.as_ref().and_then(|self_name| self_url.is_none().then(||  self.pins
+                    .get(self_name, self_version)
+                    .expect("Every package should be pinned")
+                    .index())
+                ).flatten();
 
                 match **dependency_package {
                     PubGrubPackageInner::Package {
@@ -2895,7 +2897,11 @@ impl ForkState {
                         }
 
                         let to_url = self.fork_urls.get(dependency_name);
-                        let to_index = self.fork_indexes.get(dependency_name);
+                        let to_index = to_url.is_none().then(|| self.pins
+                            .get(dependency_name, dependency_version)
+                            .expect("Every package should be pinned")
+                            .index()).flatten();
+
                         let edge = ResolutionDependencyEdge {
                             from: self_name.cloned(),
                             from_version: self_version.clone(),
@@ -2927,7 +2933,10 @@ impl ForkState {
                         }
 
                         let to_url = self.fork_urls.get(dependency_name);
-                        let to_index = self.fork_indexes.get(dependency_name);
+                         let to_index = to_url.is_none().then(|| self.pins
+                            .get(dependency_name, dependency_version)
+                            .expect("Every package should be pinned")
+                            .index()).flatten();
                         let edge = ResolutionDependencyEdge {
                             from: self_name.cloned(),
                             from_version: self_version.clone(),
@@ -2960,7 +2969,10 @@ impl ForkState {
 
                         // Insert an edge from the dependent package to the extra package.
                         let to_url = self.fork_urls.get(dependency_name);
-                        let to_index = self.fork_indexes.get(dependency_name);
+                                     let to_index = to_url.is_none().then(|| self.pins
+                            .get(dependency_name, dependency_version)
+                            .expect("Every package should be pinned")
+                            .index()).flatten();
                         let edge = ResolutionDependencyEdge {
                             from: self_name.cloned(),
                             from_version: self_version.clone(),
@@ -2980,7 +2992,10 @@ impl ForkState {
 
                         // Insert an edge from the dependent package to the base package.
                         let to_url = self.fork_urls.get(dependency_name);
-                        let to_index = self.fork_indexes.get(dependency_name);
+                         let to_index = to_url.is_none().then(|| self.pins
+                            .get(dependency_name, dependency_version)
+                            .expect("Every package should be pinned")
+                            .index()).flatten();
                         let edge = ResolutionDependencyEdge {
                             from: self_name.cloned(),
                             from_version: self_version.clone(),
@@ -3012,7 +3027,10 @@ impl ForkState {
                         // Add an edge from the dependent package to the dev package, but _not_ the
                         // base package.
                         let to_url = self.fork_urls.get(dependency_name);
-                        let to_index = self.fork_indexes.get(dependency_name);
+                                     let to_index = to_url.is_none().then(|| self.pins
+                            .get(dependency_name, dependency_version)
+                            .expect("Every package should be pinned")
+                            .index()).flatten();
                         let edge = ResolutionDependencyEdge {
                             from: self_name.cloned(),
                             from_version: self_version.clone(),
@@ -3046,13 +3064,19 @@ impl ForkState {
                     marker: MarkerTree::TRUE,
                 } = &*self.pubgrub.package_store[package]
                 {
+                    let url = self.fork_urls.get(name).cloned();
+                    let index = url.is_none().then(|| self.pins
+                        .get(name, &version)
+                        .expect("Every package should be pinned")
+                        .index()).flatten().cloned();
+
                     Some((
                         ResolutionPackage {
                             name: name.clone(),
                             extra: extra.clone(),
                             dev: dev.clone(),
-                            url: self.fork_urls.get(name).cloned(),
-                            index: self.fork_indexes.get(name).cloned(),
+                            url,
+                            index,
                         },
                         version,
                     ))
