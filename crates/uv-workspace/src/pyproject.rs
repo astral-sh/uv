@@ -280,6 +280,35 @@ pub struct Tool {
     pub uv: Option<ToolUv>,
 }
 
+/// Validates that index names in the `tool.uv.index` field are unique.
+///
+/// This custom deserializer function checks for duplicate index names
+/// and returns an error if any duplicates are found.
+fn deserialize_index_vec<'de, D>(deserializer: D) -> Result<Option<Vec<Index>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    // First deserialize as normal
+    let indices_opt = Option::<Vec<Index>>::deserialize(deserializer)?;
+
+    // Only check for duplicates if indices are present
+    if let Some(indices) = &indices_opt {
+        let mut seen_names = std::collections::HashSet::new();
+
+        for index in indices {
+            if let Some(name) = &index.name {
+                if !seen_names.insert(name.clone()) {
+                    return Err(serde::de::Error::custom(format!(
+                        "duplicate index name `{name}`"
+                    )));
+                }
+            }
+        }
+    }
+
+    Ok(indices_opt)
+}
+
 // NOTE(charlie): When adding fields to this struct, mark them as ignored on `Options` in
 // `crates/uv-settings/src/settings.rs`.
 #[derive(Deserialize, OptionsMetadata, Debug, Clone, PartialEq, Eq)]
@@ -342,6 +371,7 @@ pub struct ToolUv {
             url = "https://download.pytorch.org/whl/cu121"
         "#
     )]
+    #[serde(deserialize_with = "deserialize_index_vec", default)]
     pub index: Option<Vec<Index>>,
 
     /// The workspace definition for the project, if any.
