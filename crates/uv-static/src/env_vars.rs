@@ -553,6 +553,11 @@ impl EnvVars {
     /// for more.
     pub const RUST_LOG: &'static str = "RUST_LOG";
 
+    /// Add additional context and structure to log messages.
+    ///
+    /// If logging is not enabled, e.g., with `RUST_LOG` or `-v`, this has no effect.
+    pub const UV_LOG_CONTEXT: &'static str = "UV_LOG_CONTEXT";
+
     /// Use to set the stack size used by uv.
     ///
     /// The value is in bytes, and the default is typically 2MB (2097152).
