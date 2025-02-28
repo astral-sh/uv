@@ -1,2 +1,0 @@
--c constraints-b.txt
-django-debug-toolbar<2.2
