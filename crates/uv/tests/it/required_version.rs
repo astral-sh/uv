@@ -1,5 +1,6 @@
 use anyhow::Result;
 use assert_cmd::Command;
+use fs_err::write;
 use predicates::prelude::*;
 use tempfile::tempdir;
 
@@ -11,7 +12,7 @@ fn auto_exec_with_compatible_version() -> Result<()> {
     // Create a pyproject.toml with a required-version that doesn't match the current version
     // We need to use a valid range that will include the version we can find with `uv tool run`
     let pyproject_path = project_dir.join("pyproject.toml");
-    std::fs::write(
+    write(
         &pyproject_path,
         r#"[build-system]
 requires = ["hatchling"]
@@ -67,11 +68,10 @@ version = "0.1.0"
 requires-python = ">=3.8"
 
 [tool.uv]
-required-version = "=={}"
-"#,
-        current_version
+required-version = "=={current_version}"
+"#
     );
-    std::fs::write(&pyproject_path, pyproject_content)?;
+    write(&pyproject_path, pyproject_content)?;
 
     // Run a simple command that should not trigger auto-exec since the version matches
     let mut cmd = Command::cargo_bin("uv")?;
