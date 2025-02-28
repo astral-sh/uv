@@ -175,7 +175,9 @@ Equivalent to the `--locked` command-line argument. If set, uv will assert that 
 
 ### `UV_LOG_CONTEXT`
 
-Give log messages more detailed context
+Add additional context and structure to log messages.
+
+If logging is not enabled, e.g., with `RUST_LOG` or `-v`, this has no effect.
 
 ### `UV_NATIVE_TLS`
 

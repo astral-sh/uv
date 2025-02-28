@@ -548,7 +548,9 @@ impl EnvVars {
     /// for more.
     pub const RUST_LOG: &'static str = "RUST_LOG";
 
-    /// Give log messages more detailed context
+    /// Add additional context and structure to log messages.
+    ///
+    /// If logging is not enabled, e.g., with `RUST_LOG` or `-v`, this has no effect.
     pub const UV_LOG_CONTEXT: &'static str = "UV_LOG_CONTEXT";
 
     /// Use to set the stack size used by uv.
