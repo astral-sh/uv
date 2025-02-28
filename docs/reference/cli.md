@@ -9557,372 +9557,9 @@ uv index [OPTIONS] <COMMAND>
 
 <h3 class="cli-reference">Commands</h3>
 
-<dl class="cli-reference"><dt><a href="#uv-index-set"><code>uv index set</code></a></dt><dd><p>Set a new index. This will be added to your pyproject.toml</p>
-</dd>
-<dt><a href="#uv-index-list"><code>uv index list</code></a></dt><dd><p>List all indexes set in your pyproject.toml</p>
-</dd>
-<dt><a href="#uv-index-unset"><code>uv index unset</code></a></dt><dd><p>Unset an existing index. This will be removed from your pyproject.toml</p>
-</dd>
-<dt><a href="#uv-index-credentials"><code>uv index credentials</code></a></dt><dd><p>Manage credentials for the indexes configured in your pyproject.toml</p>
+<dl class="cli-reference"><dt><a href="#uv-index-credentials"><code>uv index credentials</code></a></dt><dd><p>Manage credentials for the indexes configured in your pyproject.toml</p>
 </dd>
 </dl>
-
-### uv index set
-
-Set a new index. This will be added to your pyproject.toml
-
-<h3 class="cli-reference">Usage</h3>
-
-```
-uv index set [OPTIONS] --name <NAME>
-```
-
-<h3 class="cli-reference">Options</h3>
-
-<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
-
-<p>Can be provided multiple times.</p>
-
-<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
-
-<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
-
-<p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p>
-</dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
-
-<p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
-
-<p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
-
-<p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
-
-<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
-
-<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
-
-<li><code>never</code>:  Disables colored output</li>
-</ul>
-</dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
-
-<p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
-
-<p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
-</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
-
-<p>Relative paths are resolved with the given directory as the base.</p>
-
-<p>See <code>--project</code> to only change the project root directory.</p>
-
-</dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
-
-</dd><dt><code>--name</code> <i>name</i></dt><dd><p>The name of the index</p>
-
-</dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
-
-<p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
-
-<p>However, in some cases, you may want to use the platform&#8217;s native certificate store, especially if you&#8217;re relying on a corporate trust root (e.g., for a mandatory proxy) that&#8217;s included in your system&#8217;s certificate store.</p>
-
-<p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p>
-</dd><dt><code>--no-cache</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
-
-<p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
-</dd><dt><code>--no-config</code></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
-
-<p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
-
-<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
-</dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>
-
-<p>For example, spinners or progress bars.</p>
-
-<p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
-
-</dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
-
-<p>When disabled, uv will only use locally cached data and locally available files.</p>
-
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
-</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
-
-<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
-
-<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
-
-<p>See <code>--directory</code> to change the working directory entirely.</p>
-
-<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
-
-</dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
-
-<p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
-
-<p>May also be set with the <code>UV_PYTHON_PREFERENCE</code> environment variable.</p>
-<p>Possible values:</p>
-
-<ul>
-<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
-
-<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
-
-<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
-
-<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
-</ul>
-</dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
-
-</dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
-
-<p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
-</dd></dl>
-
-### uv index list
-
-List all indexes set in your pyproject.toml
-
-<h3 class="cli-reference">Usage</h3>
-
-```
-uv index list [OPTIONS] --name <NAME>
-```
-
-<h3 class="cli-reference">Options</h3>
-
-<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
-
-<p>Can be provided multiple times.</p>
-
-<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
-
-<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
-
-<p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p>
-</dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
-
-<p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
-
-<p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
-
-<p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
-
-<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
-
-<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
-
-<li><code>never</code>:  Disables colored output</li>
-</ul>
-</dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
-
-<p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
-
-<p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
-</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
-
-<p>Relative paths are resolved with the given directory as the base.</p>
-
-<p>See <code>--project</code> to only change the project root directory.</p>
-
-</dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
-
-</dd><dt><code>--name</code> <i>name</i></dt><dd><p>The name of the index</p>
-
-</dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
-
-<p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
-
-<p>However, in some cases, you may want to use the platform&#8217;s native certificate store, especially if you&#8217;re relying on a corporate trust root (e.g., for a mandatory proxy) that&#8217;s included in your system&#8217;s certificate store.</p>
-
-<p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p>
-</dd><dt><code>--no-cache</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
-
-<p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
-</dd><dt><code>--no-config</code></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
-
-<p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
-
-<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
-</dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>
-
-<p>For example, spinners or progress bars.</p>
-
-<p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
-
-</dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
-
-<p>When disabled, uv will only use locally cached data and locally available files.</p>
-
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
-</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
-
-<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
-
-<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
-
-<p>See <code>--directory</code> to change the working directory entirely.</p>
-
-<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
-
-</dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
-
-<p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
-
-<p>May also be set with the <code>UV_PYTHON_PREFERENCE</code> environment variable.</p>
-<p>Possible values:</p>
-
-<ul>
-<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
-
-<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
-
-<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
-
-<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
-</ul>
-</dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
-
-</dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
-
-<p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
-</dd></dl>
-
-### uv index unset
-
-Unset an existing index. This will be removed from your pyproject.toml
-
-<h3 class="cli-reference">Usage</h3>
-
-```
-uv index unset [OPTIONS] --name <NAME>
-```
-
-<h3 class="cli-reference">Options</h3>
-
-<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
-
-<p>Can be provided multiple times.</p>
-
-<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
-
-<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
-
-<p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p>
-</dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
-
-<p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
-
-<p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
-
-<p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
-
-<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
-
-<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
-
-<li><code>never</code>:  Disables colored output</li>
-</ul>
-</dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
-
-<p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
-
-<p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
-</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
-
-<p>Relative paths are resolved with the given directory as the base.</p>
-
-<p>See <code>--project</code> to only change the project root directory.</p>
-
-</dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
-
-</dd><dt><code>--name</code> <i>name</i></dt><dd><p>The name of the index</p>
-
-</dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
-
-<p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
-
-<p>However, in some cases, you may want to use the platform&#8217;s native certificate store, especially if you&#8217;re relying on a corporate trust root (e.g., for a mandatory proxy) that&#8217;s included in your system&#8217;s certificate store.</p>
-
-<p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p>
-</dd><dt><code>--no-cache</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
-
-<p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
-</dd><dt><code>--no-config</code></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
-
-<p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
-
-<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
-</dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>
-
-<p>For example, spinners or progress bars.</p>
-
-<p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
-
-</dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
-
-<p>When disabled, uv will only use locally cached data and locally available files.</p>
-
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
-</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
-
-<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
-
-<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
-
-<p>See <code>--directory</code> to change the working directory entirely.</p>
-
-<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
-
-</dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
-
-<p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
-
-<p>May also be set with the <code>UV_PYTHON_PREFERENCE</code> environment variable.</p>
-<p>Possible values:</p>
-
-<ul>
-<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
-
-<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
-
-<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
-
-<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
-</ul>
-</dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
-
-</dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
-
-<p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
-</dd></dl>
 
 ### uv index credentials
 
@@ -9956,7 +9593,7 @@ uv index credentials set [OPTIONS] --name <NAME>
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+<dl class="cli-reference"><dt id="uv-index-credentials-set--allow-insecure-host"><a href="#uv-index-credentials-set--allow-insecure-host"><code>--allow-insecure-host</code></a> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 
 <p>Can be provided multiple times.</p>
 
@@ -9965,14 +9602,14 @@ uv index credentials set [OPTIONS] --name <NAME>
 <p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
 
 <p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p>
-</dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
+</dd><dt id="uv-index-credentials-set--cache-dir"><a href="#uv-index-credentials-set--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
 
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
+</dd><dt id="uv-index-credentials-set--color"><a href="#uv-index-credentials-set--color"><code>--color</code></a> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
 <p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
 
@@ -9985,20 +9622,20 @@ uv index credentials set [OPTIONS] --name <NAME>
 
 <li><code>never</code>:  Disables colored output</li>
 </ul>
-</dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
+</dd><dt id="uv-index-credentials-set--config-file"><a href="#uv-index-credentials-set--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
 
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
-</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+</dd><dt id="uv-index-credentials-set--directory"><a href="#uv-index-credentials-set--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
 <p>Relative paths are resolved with the given directory as the base.</p>
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
-</dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="uv-index-credentials-set--help"><a href="#uv-index-credentials-set--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
-</dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for remote requirements files.</p>
+</dd><dt id="uv-index-credentials-set--keyring-provider"><a href="#uv-index-credentials-set--keyring-provider"><code>--keyring-provider</code></a> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for remote requirements files.</p>
 
 <p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
 
@@ -10012,38 +9649,38 @@ uv index credentials set [OPTIONS] --name <NAME>
 
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul>
-</dd><dt><code>--name</code> <i>name</i></dt><dd><p>The name of the index</p>
+</dd><dt id="uv-index-credentials-set--name"><a href="#uv-index-credentials-set--name"><code>--name</code></a> <i>name</i></dt><dd><p>The name of the index</p>
 
-</dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
+</dd><dt id="uv-index-credentials-set--native-tls"><a href="#uv-index-credentials-set--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
 
 <p>However, in some cases, you may want to use the platform&#8217;s native certificate store, especially if you&#8217;re relying on a corporate trust root (e.g., for a mandatory proxy) that&#8217;s included in your system&#8217;s certificate store.</p>
 
 <p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p>
-</dd><dt><code>--no-cache</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
+</dd><dt id="uv-index-credentials-set--no-cache"><a href="#uv-index-credentials-set--no-cache"><code>--no-cache</code></a>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
-</dd><dt><code>--no-config</code></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
+</dd><dt id="uv-index-credentials-set--no-config"><a href="#uv-index-credentials-set--no-config"><code>--no-config</code></a></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
 
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
-</dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>
+</dd><dt id="uv-index-credentials-set--no-progress"><a href="#uv-index-credentials-set--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
 
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
+</dd><dt id="uv-index-credentials-set--no-python-downloads"><a href="#uv-index-credentials-set--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
+</dd><dt id="uv-index-credentials-set--offline"><a href="#uv-index-credentials-set--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
-</dd><dt><code>--password</code> <i>password</i></dt><dd><p>The password that should be user for the index</p>
+</dd><dt id="uv-index-credentials-set--password"><a href="#uv-index-credentials-set--password"><code>--password</code></a> <i>password</i></dt><dd><p>The password that should be user for the index</p>
 
-</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+</dd><dt id="uv-index-credentials-set--project"><a href="#uv-index-credentials-set--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
@@ -10053,7 +9690,7 @@ uv index credentials set [OPTIONS] --name <NAME>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
+</dd><dt id="uv-index-credentials-set--python-preference"><a href="#uv-index-credentials-set--python-preference"><code>--python-preference</code></a> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
 
@@ -10069,15 +9706,15 @@ uv index credentials set [OPTIONS] --name <NAME>
 
 <li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
 </ul>
-</dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-index-credentials-set--quiet"><a href="#uv-index-credentials-set--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
-</dd><dt><code>--username</code> <i>username</i></dt><dd><p>The username that should be used for the index</p>
+</dd><dt id="uv-index-credentials-set--username"><a href="#uv-index-credentials-set--username"><code>--username</code></a> <i>username</i></dt><dd><p>The username that should be used for the index</p>
 
-</dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+</dd><dt id="uv-index-credentials-set--verbose"><a href="#uv-index-credentials-set--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
+</dd><dt id="uv-index-credentials-set--version"><a href="#uv-index-credentials-set--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -10093,7 +9730,7 @@ uv index credentials list [OPTIONS]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+<dl class="cli-reference"><dt id="uv-index-credentials-list--allow-insecure-host"><a href="#uv-index-credentials-list--allow-insecure-host"><code>--allow-insecure-host</code></a> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 
 <p>Can be provided multiple times.</p>
 
@@ -10102,14 +9739,14 @@ uv index credentials list [OPTIONS]
 <p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
 
 <p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p>
-</dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
+</dd><dt id="uv-index-credentials-list--cache-dir"><a href="#uv-index-credentials-list--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
 
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
+</dd><dt id="uv-index-credentials-list--color"><a href="#uv-index-credentials-list--color"><code>--color</code></a> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
 <p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
 
@@ -10122,20 +9759,20 @@ uv index credentials list [OPTIONS]
 
 <li><code>never</code>:  Disables colored output</li>
 </ul>
-</dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
+</dd><dt id="uv-index-credentials-list--config-file"><a href="#uv-index-credentials-list--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
 
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
-</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+</dd><dt id="uv-index-credentials-list--directory"><a href="#uv-index-credentials-list--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
 <p>Relative paths are resolved with the given directory as the base.</p>
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
-</dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="uv-index-credentials-list--help"><a href="#uv-index-credentials-list--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
-</dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for remote requirements files.</p>
+</dd><dt id="uv-index-credentials-list--keyring-provider"><a href="#uv-index-credentials-list--keyring-provider"><code>--keyring-provider</code></a> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for remote requirements files.</p>
 
 <p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
 
@@ -10149,34 +9786,34 @@ uv index credentials list [OPTIONS]
 
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul>
-</dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
+</dd><dt id="uv-index-credentials-list--native-tls"><a href="#uv-index-credentials-list--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
 
 <p>However, in some cases, you may want to use the platform&#8217;s native certificate store, especially if you&#8217;re relying on a corporate trust root (e.g., for a mandatory proxy) that&#8217;s included in your system&#8217;s certificate store.</p>
 
 <p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p>
-</dd><dt><code>--no-cache</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
+</dd><dt id="uv-index-credentials-list--no-cache"><a href="#uv-index-credentials-list--no-cache"><code>--no-cache</code></a>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
-</dd><dt><code>--no-config</code></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
+</dd><dt id="uv-index-credentials-list--no-config"><a href="#uv-index-credentials-list--no-config"><code>--no-config</code></a></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
 
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
-</dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>
+</dd><dt id="uv-index-credentials-list--no-progress"><a href="#uv-index-credentials-list--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
 
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
+</dd><dt id="uv-index-credentials-list--no-python-downloads"><a href="#uv-index-credentials-list--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
+</dd><dt id="uv-index-credentials-list--offline"><a href="#uv-index-credentials-list--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
-</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+</dd><dt id="uv-index-credentials-list--project"><a href="#uv-index-credentials-list--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
@@ -10186,7 +9823,7 @@ uv index credentials list [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
+</dd><dt id="uv-index-credentials-list--python-preference"><a href="#uv-index-credentials-list--python-preference"><code>--python-preference</code></a> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
 
@@ -10202,13 +9839,13 @@ uv index credentials list [OPTIONS]
 
 <li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
 </ul>
-</dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-index-credentials-list--quiet"><a href="#uv-index-credentials-list--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
-</dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+</dd><dt id="uv-index-credentials-list--verbose"><a href="#uv-index-credentials-list--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
+</dd><dt id="uv-index-credentials-list--version"><a href="#uv-index-credentials-list--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -10224,7 +9861,7 @@ uv index credentials unset [OPTIONS] --name <NAME>
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+<dl class="cli-reference"><dt id="uv-index-credentials-unset--allow-insecure-host"><a href="#uv-index-credentials-unset--allow-insecure-host"><code>--allow-insecure-host</code></a> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 
 <p>Can be provided multiple times.</p>
 
@@ -10233,14 +9870,14 @@ uv index credentials unset [OPTIONS] --name <NAME>
 <p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
 
 <p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p>
-</dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
+</dd><dt id="uv-index-credentials-unset--cache-dir"><a href="#uv-index-credentials-unset--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
 
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
+</dd><dt id="uv-index-credentials-unset--color"><a href="#uv-index-credentials-unset--color"><code>--color</code></a> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
 <p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
 
@@ -10253,20 +9890,20 @@ uv index credentials unset [OPTIONS] --name <NAME>
 
 <li><code>never</code>:  Disables colored output</li>
 </ul>
-</dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
+</dd><dt id="uv-index-credentials-unset--config-file"><a href="#uv-index-credentials-unset--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
 
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
-</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+</dd><dt id="uv-index-credentials-unset--directory"><a href="#uv-index-credentials-unset--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
 <p>Relative paths are resolved with the given directory as the base.</p>
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
-</dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="uv-index-credentials-unset--help"><a href="#uv-index-credentials-unset--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
-</dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for remote requirements files.</p>
+</dd><dt id="uv-index-credentials-unset--keyring-provider"><a href="#uv-index-credentials-unset--keyring-provider"><code>--keyring-provider</code></a> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for remote requirements files.</p>
 
 <p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
 
@@ -10280,36 +9917,36 @@ uv index credentials unset [OPTIONS] --name <NAME>
 
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul>
-</dd><dt><code>--name</code> <i>name</i></dt><dd><p>The name of the index</p>
+</dd><dt id="uv-index-credentials-unset--name"><a href="#uv-index-credentials-unset--name"><code>--name</code></a> <i>name</i></dt><dd><p>The name of the index</p>
 
-</dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
+</dd><dt id="uv-index-credentials-unset--native-tls"><a href="#uv-index-credentials-unset--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
 
 <p>However, in some cases, you may want to use the platform&#8217;s native certificate store, especially if you&#8217;re relying on a corporate trust root (e.g., for a mandatory proxy) that&#8217;s included in your system&#8217;s certificate store.</p>
 
 <p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p>
-</dd><dt><code>--no-cache</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
+</dd><dt id="uv-index-credentials-unset--no-cache"><a href="#uv-index-credentials-unset--no-cache"><code>--no-cache</code></a>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
-</dd><dt><code>--no-config</code></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
+</dd><dt id="uv-index-credentials-unset--no-config"><a href="#uv-index-credentials-unset--no-config"><code>--no-config</code></a></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
 
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
-</dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>
+</dd><dt id="uv-index-credentials-unset--no-progress"><a href="#uv-index-credentials-unset--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
 
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
+</dd><dt id="uv-index-credentials-unset--no-python-downloads"><a href="#uv-index-credentials-unset--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
+</dd><dt id="uv-index-credentials-unset--offline"><a href="#uv-index-credentials-unset--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
-</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+</dd><dt id="uv-index-credentials-unset--project"><a href="#uv-index-credentials-unset--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
@@ -10319,7 +9956,7 @@ uv index credentials unset [OPTIONS] --name <NAME>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
+</dd><dt id="uv-index-credentials-unset--python-preference"><a href="#uv-index-credentials-unset--python-preference"><code>--python-preference</code></a> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
 
@@ -10335,15 +9972,15 @@ uv index credentials unset [OPTIONS] --name <NAME>
 
 <li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
 </ul>
-</dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-index-credentials-unset--quiet"><a href="#uv-index-credentials-unset--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
-</dd><dt><code>--username</code> <i>username</i></dt><dd><p>The username that should be used for the index</p>
+</dd><dt id="uv-index-credentials-unset--username"><a href="#uv-index-credentials-unset--username"><code>--username</code></a> <i>username</i></dt><dd><p>The username that should be used for the index</p>
 
-</dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+</dd><dt id="uv-index-credentials-unset--verbose"><a href="#uv-index-credentials-unset--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
+</dd><dt id="uv-index-credentials-unset--version"><a href="#uv-index-credentials-unset--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
