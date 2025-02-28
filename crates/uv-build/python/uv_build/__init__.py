@@ -38,10 +38,8 @@ def call(
     import sys
 
     warn_config_settings(config_settings)
-    # Handles both `uv` and `uv-build`
-    uv_binary = sys.modules[__name__].__name__.replace("_", "-")
     # Unlike `find_uv_bin`, this mechanism must work according to PEP 517
-    uv_bin = shutil.which(uv_binary)
+    uv_bin = shutil.which("uv-build")
     if uv_bin is None:
         raise RuntimeError("uv was not properly installed")
     # Forward stderr, capture stdout for the filename
