@@ -728,13 +728,6 @@ impl Workspace {
                 let member_root = std::path::absolute(&member_root)
                     .map_err(WorkspaceError::Normalize)?
                     .clone();
-                if !fs_err::metadata(&member_root)?.is_dir() {
-                    warn!(
-                        "Ignoring non-directory workspace member: `{}`",
-                        member_root.simplified_display()
-                    );
-                    continue;
-                }
 
                 // If the directory is explicitly ignored, skip it.
                 let skip = match &options.members {
@@ -769,26 +762,38 @@ impl Workspace {
                 let pyproject_path = member_root.join("pyproject.toml");
                 let contents = match fs_err::tokio::read_to_string(&pyproject_path).await {
                     Ok(contents) => contents,
-                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                        // If the directory is hidden, skip it.
-                        if member_root
-                            .file_name()
-                            .map(|name| name.as_encoded_bytes().starts_with(b"."))
-                            .unwrap_or(false)
-                        {
-                            debug!(
-                                "Ignoring hidden workspace member: `{}`",
+                    Err(err) => {
+                        if !fs_err::metadata(&member_root)?.is_dir() {
+                            warn!(
+                                "Ignoring non-directory workspace member: `{}`",
                                 member_root.simplified_display()
                             );
                             continue;
                         }
 
-                        return Err(WorkspaceError::MissingPyprojectTomlMember(
-                            member_root,
-                            member_glob.to_string(),
-                        ));
+                        // A directory exists, but it doesn't contain a `pyproject.toml`.
+                        if err.kind() == std::io::ErrorKind::NotFound {
+                            // If the directory is hidden, skip it.
+                            if member_root
+                                .file_name()
+                                .map(|name| name.as_encoded_bytes().starts_with(b"."))
+                                .unwrap_or(false)
+                            {
+                                debug!(
+                                    "Ignoring hidden workspace member: `{}`",
+                                    member_root.simplified_display()
+                                );
+                                continue;
+                            }
+
+                            return Err(WorkspaceError::MissingPyprojectTomlMember(
+                                member_root,
+                                member_glob.to_string(),
+                            ));
+                        }
+
+                        return Err(err.into());
                     }
-                    Err(err) => return Err(err.into()),
                 };
                 let pyproject_toml = PyProjectToml::from_string(contents)
                     .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
