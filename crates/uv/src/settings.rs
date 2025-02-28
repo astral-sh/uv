@@ -72,40 +72,7 @@ pub(crate) struct GlobalSettings {
 impl GlobalSettings {
     /// Resolve the [`GlobalSettings`] from the CLI and filesystem configuration.
     pub(crate) fn resolve(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
-        let connectivity = if flag(args.offline, args.no_offline)
-            .combine(workspace.and_then(|workspace| workspace.globals.offline))
-            .unwrap_or(false)
-        {
-            Connectivity::Offline
-        } else {
-            Connectivity::Online
-        };
-        let native_tls = flag(args.native_tls, args.no_native_tls)
-            .combine(workspace.and_then(|workspace| workspace.globals.native_tls))
-            .unwrap_or(false);
-        let allow_insecure_host = args
-            .allow_insecure_host
-            .as_ref()
-            .map(|allow_insecure_host| {
-                allow_insecure_host
-                    .iter()
-                    .filter_map(|value| value.clone().into_option())
-            })
-            .into_iter()
-            .flatten()
-            .chain(
-                workspace
-                    .and_then(|workspace| workspace.globals.allow_insecure_host.clone())
-                    .into_iter()
-                    .flatten(),
-            )
-            .collect();
-        let network_settings = NetworkSettings {
-            connectivity,
-            native_tls,
-            allow_insecure_host,
-        };
-
+        let network_settings = NetworkSettings::resolve(args, workspace);
         Self {
             required_version: workspace
                 .and_then(|workspace| workspace.globals.required_version.clone()),
@@ -176,6 +143,44 @@ pub(crate) struct NetworkSettings {
     pub(crate) connectivity: Connectivity,
     pub(crate) native_tls: bool,
     pub(crate) allow_insecure_host: Vec<TrustedHost>,
+}
+
+impl NetworkSettings {
+    pub(crate) fn resolve(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
+        let connectivity = if flag(args.offline, args.no_offline)
+            .combine(workspace.and_then(|workspace| workspace.globals.offline))
+            .unwrap_or(false)
+        {
+            Connectivity::Offline
+        } else {
+            Connectivity::Online
+        };
+        let native_tls = flag(args.native_tls, args.no_native_tls)
+            .combine(workspace.and_then(|workspace| workspace.globals.native_tls))
+            .unwrap_or(false);
+        let allow_insecure_host = args
+            .allow_insecure_host
+            .as_ref()
+            .map(|allow_insecure_host| {
+                allow_insecure_host
+                    .iter()
+                    .filter_map(|value| value.clone().into_option())
+            })
+            .into_iter()
+            .flatten()
+            .chain(
+                workspace
+                    .and_then(|workspace| workspace.globals.allow_insecure_host.clone())
+                    .into_iter()
+                    .flatten(),
+            )
+            .collect();
+        Self {
+            connectivity,
+            native_tls,
+            allow_insecure_host,
+        }
+    }
 }
 
 /// The resolved cache settings to use for any invocation of the CLI.
