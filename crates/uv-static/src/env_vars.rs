@@ -654,4 +654,7 @@ impl EnvVars {
     ///
     /// This is a quasi-standard variable, described e.g. in `ncurses(3x)`.
     pub const COLUMNS: &'static str = "COLUMNS";
+
+    /// Path to log file that uv would write to
+    pub const UV_LOG: &'static str = "UV_LOG";
 }
