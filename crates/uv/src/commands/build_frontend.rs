@@ -16,13 +16,13 @@ use crate::commands::project::{find_requires_python, ProjectError};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
-use crate::settings::{ResolverSettings, ResolverSettingsRef};
+use crate::settings::{NetworkSettings, ResolverSettings, ResolverSettingsRef};
 use uv_build_backend::check_direct_build;
 use uv_cache::{Cache, CacheBucket};
-use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildKind, BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints,
-    HashCheckingMode, IndexStrategy, KeyringProviderType, PreviewMode, SourceStrategy, TrustedHost,
+    HashCheckingMode, IndexStrategy, KeyringProviderType, PreviewMode, SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_filename::{
@@ -107,13 +107,11 @@ pub(crate) async fn build_frontend(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
+    network_settings: &NetworkSettings,
     no_config: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    connectivity: Connectivity,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
     preview: PreviewMode,
@@ -134,13 +132,11 @@ pub(crate) async fn build_frontend(
         python.as_deref(),
         install_mirrors,
         settings.as_ref(),
+        network_settings,
         no_config,
         python_preference,
         python_downloads,
-        connectivity,
         concurrency,
-        native_tls,
-        allow_insecure_host,
         cache,
         printer,
         preview,
@@ -179,13 +175,11 @@ async fn build_impl(
     python_request: Option<&str>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettingsRef<'_>,
+    network_settings: &NetworkSettings,
     no_config: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    connectivity: Connectivity,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
     preview: PreviewMode,
@@ -219,9 +213,9 @@ async fn build_impl(
     } = settings;
 
     let client_builder = BaseClientBuilder::default()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Determine the source to build.
     let src = if let Some(src) = src {
@@ -339,11 +333,9 @@ async fn build_impl(
             build_constraints,
             no_build_isolation,
             no_build_isolation_package,
-            native_tls,
-            connectivity,
+            network_settings,
             index_strategy,
             keyring_provider,
-            allow_insecure_host,
             exclude_newer,
             sources,
             concurrency,
@@ -419,11 +411,9 @@ async fn build_package(
     build_constraints: &[RequirementsSource],
     no_build_isolation: bool,
     no_build_isolation_package: &[PackageName],
-    native_tls: bool,
-    connectivity: Connectivity,
+    network_settings: &NetworkSettings,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
-    allow_insecure_host: &[TrustedHost],
     exclude_newer: Option<ExcludeNewer>,
     sources: SourceStrategy,
     concurrency: Concurrency,
@@ -528,12 +518,12 @@ async fn build_package(
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
-        .native_tls(native_tls)
-        .connectivity(connectivity)
+        .native_tls(network_settings.native_tls)
+        .connectivity(network_settings.connectivity)
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
-        .allow_insecure_host(allow_insecure_host.to_vec())
+        .allow_insecure_host(network_settings.allow_insecure_host.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();

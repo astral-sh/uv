@@ -59,10 +59,8 @@ pub(crate) struct GlobalSettings {
     pub(crate) quiet: bool,
     pub(crate) verbose: u8,
     pub(crate) color: ColorChoice,
-    pub(crate) native_tls: bool,
+    pub(crate) network_settings: NetworkSettings,
     pub(crate) concurrency: Concurrency,
-    pub(crate) connectivity: Connectivity,
-    pub(crate) allow_insecure_host: Vec<TrustedHost>,
     pub(crate) show_settings: bool,
     pub(crate) preview: PreviewMode,
     pub(crate) python_preference: PythonPreference,
@@ -74,6 +72,7 @@ pub(crate) struct GlobalSettings {
 impl GlobalSettings {
     /// Resolve the [`GlobalSettings`] from the CLI and filesystem configuration.
     pub(crate) fn resolve(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
+        let network_settings = NetworkSettings::resolve(args, workspace);
         Self {
             required_version: workspace
                 .and_then(|workspace| workspace.globals.required_version.clone()),
@@ -100,9 +99,7 @@ impl GlobalSettings {
             } else {
                 ColorChoice::Auto
             },
-            native_tls: flag(args.native_tls, args.no_native_tls)
-                .combine(workspace.and_then(|workspace| workspace.globals.native_tls))
-                .unwrap_or(false),
+            network_settings,
             concurrency: Concurrency {
                 downloads: env(env::CONCURRENT_DOWNLOADS)
                     .combine(workspace.and_then(|workspace| workspace.globals.concurrent_downloads))
@@ -117,31 +114,6 @@ impl GlobalSettings {
                     .map(NonZeroUsize::get)
                     .unwrap_or_else(Concurrency::threads),
             },
-            connectivity: if flag(args.offline, args.no_offline)
-                .combine(workspace.and_then(|workspace| workspace.globals.offline))
-                .unwrap_or(false)
-            {
-                Connectivity::Offline
-            } else {
-                Connectivity::Online
-            },
-            allow_insecure_host: args
-                .allow_insecure_host
-                .as_ref()
-                .map(|allow_insecure_host| {
-                    allow_insecure_host
-                        .iter()
-                        .filter_map(|value| value.clone().into_option())
-                })
-                .into_iter()
-                .flatten()
-                .chain(
-                    workspace
-                        .and_then(|workspace| workspace.globals.allow_insecure_host.clone())
-                        .into_iter()
-                        .flatten(),
-                )
-                .collect(),
             show_settings: args.show_settings,
             preview: PreviewMode::from(
                 flag(args.preview, args.no_preview)
@@ -161,6 +133,52 @@ impl GlobalSettings {
             // with log messages.
             no_progress: args.no_progress || std::env::var_os(EnvVars::RUST_LOG).is_some(),
             installer_metadata: !args.no_installer_metadata,
+        }
+    }
+}
+
+/// The resolved network settings to use for any invocation of the CLI.
+#[derive(Debug, Clone)]
+pub(crate) struct NetworkSettings {
+    pub(crate) connectivity: Connectivity,
+    pub(crate) native_tls: bool,
+    pub(crate) allow_insecure_host: Vec<TrustedHost>,
+}
+
+impl NetworkSettings {
+    pub(crate) fn resolve(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
+        let connectivity = if flag(args.offline, args.no_offline)
+            .combine(workspace.and_then(|workspace| workspace.globals.offline))
+            .unwrap_or(false)
+        {
+            Connectivity::Offline
+        } else {
+            Connectivity::Online
+        };
+        let native_tls = flag(args.native_tls, args.no_native_tls)
+            .combine(workspace.and_then(|workspace| workspace.globals.native_tls))
+            .unwrap_or(false);
+        let allow_insecure_host = args
+            .allow_insecure_host
+            .as_ref()
+            .map(|allow_insecure_host| {
+                allow_insecure_host
+                    .iter()
+                    .filter_map(|value| value.clone().into_option())
+            })
+            .into_iter()
+            .flatten()
+            .chain(
+                workspace
+                    .and_then(|workspace| workspace.globals.allow_insecure_host.clone())
+                    .into_iter()
+                    .flatten(),
+            )
+            .collect();
+        Self {
+            connectivity,
+            native_tls,
+            allow_insecure_host,
         }
     }
 }

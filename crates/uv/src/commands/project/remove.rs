@@ -8,10 +8,9 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_client::Connectivity;
 use uv_configuration::{
     Concurrency, DevGroupsSpecification, DryRun, EditableMode, ExtrasSpecification, InstallOptions,
-    PreviewMode, TrustedHost,
+    PreviewMode,
 };
 use uv_fs::Simplified;
 use uv_normalize::DEV_DEPENDENCIES;
@@ -36,7 +35,7 @@ use crate::commands::project::{
 };
 use crate::commands::{diagnostics, project, ExitStatus};
 use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
+use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 
 /// Remove one or more packages from the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -52,14 +51,12 @@ pub(crate) async fn remove(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
+    network_settings: NetworkSettings,
     script: Option<Pep723Script>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
-    connectivity: Connectivity,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     no_config: bool,
     cache: &Cache,
     printer: Printer,
@@ -204,11 +201,9 @@ pub(crate) async fn remove(
                     project.workspace(),
                     project_dir,
                     python.as_deref().map(PythonRequest::parse),
+                    &network_settings,
                     python_preference,
                     python_downloads,
-                    connectivity,
-                    native_tls,
-                    allow_insecure_host,
                     &install_mirrors,
                     no_config,
                     active,
@@ -225,11 +220,9 @@ pub(crate) async fn remove(
                     project.workspace(),
                     python.as_deref().map(PythonRequest::parse),
                     &install_mirrors,
+                    &network_settings,
                     python_preference,
                     python_downloads,
-                    connectivity,
-                    native_tls,
-                    allow_insecure_host,
                     no_config,
                     active,
                     cache,
@@ -246,11 +239,9 @@ pub(crate) async fn remove(
             let interpreter = ScriptInterpreter::discover(
                 Pep723ItemRef::Script(&script),
                 python.as_deref().map(PythonRequest::parse),
+                &network_settings,
                 python_preference,
                 python_downloads,
-                connectivity,
-                native_tls,
-                allow_insecure_host,
                 &install_mirrors,
                 no_config,
                 active,
@@ -279,12 +270,10 @@ pub(crate) async fn remove(
         mode,
         (&target).into(),
         settings.as_ref().into(),
+        &network_settings,
         &state,
         Box::new(DefaultResolveLogger),
-        connectivity,
         concurrency,
-        native_tls,
-        allow_insecure_host,
         cache,
         printer,
         preview,
@@ -293,7 +282,7 @@ pub(crate) async fn remove(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
@@ -342,13 +331,11 @@ pub(crate) async fn remove(
         install_options,
         Modifications::Exact,
         settings.as_ref().into(),
+        &network_settings,
         &state,
         Box::new(DefaultInstallLogger),
         installer_metadata,
-        connectivity,
         concurrency,
-        native_tls,
-        allow_insecure_host,
         cache,
         DryRun::Disabled,
         printer,
@@ -358,7 +345,7 @@ pub(crate) async fn remove(
     {
         Ok(()) => {}
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
