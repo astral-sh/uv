@@ -1,11 +1,11 @@
 use anyhow::{Context, Ok, Result};
 use console::Term;
+use owo_colors::OwoColorize;
+use std::fmt::Write;
 use tracing::{debug, warn};
 use uv_auth::{AuthConfig, ConfigFile};
 use uv_configuration::KeyringProviderType;
 use uv_distribution_types::Index;
-use std::fmt::Write;
-use owo_colors::OwoColorize;
 
 use crate::printer::Printer;
 
@@ -70,7 +70,7 @@ pub(crate) async fn set_credentials(
 pub(crate) async fn list_credentials(
     keyring_provider_type: KeyringProviderType,
     indexes: Vec<Index>,
-    printer: Printer
+    printer: Printer,
 ) -> Result<()> {
     let auth_config =
         AuthConfig::load().inspect_err(|err| warn!("Could not load auth config due to: {err}"))?;
@@ -123,8 +123,10 @@ pub(crate) async fn unset_credentials(
             .unwrap_or(false)
     });
 
-    let Some(index) = index else {panic!("No index found with the name '{name}'")};
-    
+    let Some(index) = index else {
+        panic!("No index found with the name '{name}'")
+    };
+
     let username = match username {
         Some(n) => n,
         None => match prompt_username_input()? {

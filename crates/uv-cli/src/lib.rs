@@ -5599,7 +5599,6 @@ pub enum IndexCommand {
     //     after_long_help = ""
     // )]
     // Unset(IndexSourceArgs),
-
     /// Manage credentials for the indexes configured in your pyproject.toml
     #[command(subcommand)]
     Credentials(IndexCredentialsCommand),
