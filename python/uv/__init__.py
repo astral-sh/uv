@@ -21,3 +21,4 @@ def __getattr__(attr_name: str) -> object:
             f"Did you mean to use `uv_build` as your build system?"
         )
         raise AttributeError(err)
+    raise AttributeError(f"module `{__name__}` has no attribute `{attr_name}`")
