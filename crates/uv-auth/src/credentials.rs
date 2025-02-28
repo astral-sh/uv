@@ -332,7 +332,7 @@ mod tests {
         auth_config.add_entry(url, username.to_string());
         auth_config.store().unwrap();
 
-        let credentials = Credentials::from_url(&url).unwrap();
+        let credentials = Credentials::from_url(url).unwrap();
         assert_eq!(credentials.username(), Some(username));
         assert_eq!(credentials.password(), None);
 

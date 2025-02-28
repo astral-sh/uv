@@ -4,6 +4,10 @@ use tracing::{debug, warn};
 use uv_auth::{AuthConfig, ConfigFile};
 use uv_configuration::KeyringProviderType;
 use uv_distribution_types::Index;
+use std::fmt::Write;
+use owo_colors::OwoColorize;
+
+use crate::printer::Printer;
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -66,6 +70,7 @@ pub(crate) async fn set_credentials(
 pub(crate) async fn list_credentials(
     keyring_provider_type: KeyringProviderType,
     indexes: Vec<Index>,
+    printer: Printer
 ) -> Result<()> {
     let auth_config =
         AuthConfig::load().inspect_err(|err| warn!("Could not load auth config due to: {err}"))?;
@@ -84,13 +89,19 @@ pub(crate) async fn list_credentials(
             let password = keyring_provider.fetch(&index.url, &username).await;
 
             let index_name = index.name.expect("Index should have a name").to_string();
-            match password {
-                Some(_) => println!(
-                    "Index: '{}' authenticates with username '{}'.",
-                    index_name, username
+            let _ = match password {
+                Some(_) => writeln!(
+                    printer.stderr(),
+                    "{} authenticates with username {}",
+                    format!("Index: {index_name}").bold(),
+                    username,
                 ),
-                None => println!("Index: '{}' has no credentials.", index_name),
-            }
+                None => writeln!(
+                    printer.stderr(),
+                    "{} has no credentials.",
+                    format!("Index: {index_name}").bold()
+                ),
+            };
         } else {
             debug!("Could not find the index with url {index_url} in auth config");
         }
@@ -112,11 +123,8 @@ pub(crate) async fn unset_credentials(
             .unwrap_or(false)
     });
 
-    let index = match index {
-        Some(obj) => obj,
-        None => panic!("No index found with the name '{}'", name),
-    };
-
+    let Some(index) = index else {panic!("No index found with the name '{name}'")};
+    
     let username = match username {
         Some(n) => n,
         None => match prompt_username_input()? {

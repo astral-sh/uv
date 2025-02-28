@@ -5430,24 +5430,24 @@ pub struct IndexNamespace {
 
 #[derive(Subcommand)]
 pub enum IndexCommand {
-    /// Set a new index. This will be added to your pyproject.toml
-    #[command(
-        after_help = "Use `uv help index add` for more details.",
-        after_long_help = ""
-    )]
-    Set(IndexSourceArgs),
-    /// List all indexes set in your pyproject.toml
-    #[command(
-        after_help = "Use `uv help index list` for more details.",
-        after_long_help = ""
-    )]
-    List(IndexSourceArgs),
-    /// Unset an existing index. This will be removed from your pyproject.toml
-    #[command(
-        after_help = "Use `uv help index delete` for more details.",
-        after_long_help = ""
-    )]
-    Unset(IndexSourceArgs),
+    // /// Set a new index. This will be added to your pyproject.toml
+    // #[command(
+    //     after_help = "Use `uv help index add` for more details.",
+    //     after_long_help = ""
+    // )]
+    // Set(IndexSourceArgs),
+    // /// List all indexes set in your pyproject.toml
+    // #[command(
+    //     after_help = "Use `uv help index list` for more details.",
+    //     after_long_help = ""
+    // )]
+    // List(IndexSourceArgs),
+    // /// Unset an existing index. This will be removed from your pyproject.toml
+    // #[command(
+    //     after_help = "Use `uv help index delete` for more details.",
+    //     after_long_help = ""
+    // )]
+    // Unset(IndexSourceArgs),
 
     /// Manage credentials for the indexes configured in your pyproject.toml
     #[command(subcommand)]

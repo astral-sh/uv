@@ -1387,27 +1387,27 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         })
         .await
         .expect("tokio threadpool exited unexpectedly"),
-        Commands::Index(IndexNamespace {
-            command: IndexCommand::Set(args),
-        }) => {
-            println!("This is not implemented yet!");
-            println!("Set an index with name {}", args.name);
-            return Ok(ExitStatus::Success);
-        }
-        Commands::Index(IndexNamespace {
-            command: IndexCommand::List(_),
-        }) => {
-            println!("This is not implemented yet!");
-            println!("List all indexes");
-            return Ok(ExitStatus::Success);
-        }
-        Commands::Index(IndexNamespace {
-            command: IndexCommand::Unset(args),
-        }) => {
-            println!("This is not implemented yet!");
-            println!("Unset index {}", args.name);
-            return Ok(ExitStatus::Success);
-        }
+        // Commands::Index(IndexNamespace {
+        //     command: IndexCommand::Set(args),
+        // }) => {
+        //     println!("This is not implemented yet!");
+        //     println!("Set an index with name {}", args.name);
+        //     return Ok(ExitStatus::Success);
+        // }
+        // Commands::Index(IndexNamespace {
+        //     command: IndexCommand::List(_),
+        // }) => {
+        //     println!("This is not implemented yet!");
+        //     println!("List all indexes");
+        //     return Ok(ExitStatus::Success);
+        // }
+        // Commands::Index(IndexNamespace {
+        //     command: IndexCommand::Unset(args),
+        // }) => {
+        //     println!("This is not implemented yet!");
+        //     println!("Unset index {}", args.name);
+        //     return Ok(ExitStatus::Success);
+        // }
         Commands::Index(IndexNamespace {
             command: IndexCommand::Credentials(IndexCredentialsCommand::Set(args)),
         }) => {
@@ -1428,9 +1428,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let IndexListCredentialsSettings {
                 keyring_provider,
                 index,
-            } = IndexListCredentialsSettings::resolve(args, filesystem);
+            } = IndexListCredentialsSettings::resolve(&args, filesystem);
 
-            let _ = list_credentials(keyring_provider, index).await;
+            let _ = list_credentials(keyring_provider, index, printer).await;
             return Ok(ExitStatus::Success);
         }
         Commands::Index(IndexNamespace {

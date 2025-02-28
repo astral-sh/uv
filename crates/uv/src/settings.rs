@@ -3087,7 +3087,7 @@ pub(crate) struct IndexListCredentialsSettings {
 impl IndexListCredentialsSettings {
     /// Resolve the [`IndexSettings`] from the CLI and filesystem configuration.
     pub(crate) fn resolve(
-        args: IndexListCredentialsArgs,
+        args: &IndexListCredentialsArgs,
         filesystem: Option<FilesystemOptions>,
     ) -> Self {
         let Options { top_level, .. } = filesystem
