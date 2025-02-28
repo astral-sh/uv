@@ -9,6 +9,7 @@ use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime};
 
 use futures::TryStreamExt;
+use itertools::Itertools;
 use once_cell::sync::OnceCell;
 use owo_colors::OwoColorize;
 use reqwest_retry::RetryPolicy;
@@ -609,6 +610,7 @@ impl ManagedPythonDownload {
                         sha256,
                     })
                 })
+                .sorted_by(|a, b| Ord::cmp(&b.key, &a.key))
                 .collect();
             Ok(Cow::Owned(result))
         })?;
