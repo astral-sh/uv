@@ -712,20 +712,11 @@ fn warn_if_not_on_path(bin: &Path) {
     if !Shell::contains_path(bin) {
         if let Some(shell) = Shell::from_env() {
             if let Some(command) = shell.prepend_path(bin) {
-                if shell.configuration_files().is_empty() {
-                    warn_user!(
-                        "`{}` is not on your PATH. To use the installed Python executable, run `{}`.",
-                        bin.simplified_display().cyan(),
-                        command.green()
-                    );
-                } else {
-                    // TODO(zanieb): Update when we add `uv python update-shell` to match `uv tool`
-                    warn_user!(
-                        "`{}` is not on your PATH. To use the installed Python executable, run `{}`.",
-                        bin.simplified_display().cyan(),
-                        command.green(),
-                    );
-                }
+                warn_user!(
+                    "`{}` is not on your PATH. To use the installed Python executable, run `{}`.",
+                    bin.simplified_display().cyan(),
+                    command.green(),
+                );
             } else {
                 warn_user!(
                     "`{}` is not on your PATH. To use the installed Python executable, add the directory to your PATH.",
