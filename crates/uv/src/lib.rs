@@ -265,9 +265,41 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     if let Some(required_version) = globals.required_version.as_ref() {
         let package_version = uv_pep440::Version::from_str(uv_version::version())?;
         if !required_version.contains(&package_version) {
-            return Err(anyhow::anyhow!(
-                "Required uv version `{required_version}` does not match the running version `{package_version}`",
-            ));
+            // Instead of erroring, try to auto-execute with a compatible version
+            debug!("Required uv version `{required_version}` does not match the running version `{package_version}`. Attempting to run with a compatible version.");
+
+            // Get the original command line arguments
+            let args: Vec<OsString> = std::env::args_os().skip(1).collect();
+
+            // Reconstruct the command to execute: uv tool run --with 'uv{required_version}' uv ...args
+            let mut command = std::process::Command::new(std::env::current_exe()?);
+            command.arg("tool");
+            command.arg("run");
+            command.arg("--with");
+
+            // Format the requirement string
+            let req_string = format!("uv{required_version}");
+            command.arg(req_string);
+
+            // Add uv as the command to run
+            command.arg("uv");
+
+            // Add all the original arguments
+            command.args(&args);
+
+            debug!("Executing: {:?}", command);
+
+            // Execute the command and exit with its status
+            match command.status() {
+                #[allow(clippy::exit)]
+                Ok(status) => std::process::exit(status.code().unwrap_or(1)),
+                Err(e) => {
+                    return Err(anyhow::anyhow!(
+                        "Failed to execute compatible uv version: {}. Original error: Required uv version `{required_version}` does not match the running version `{package_version}`",
+                        e
+                    ));
+                }
+            }
         }
     }
 
