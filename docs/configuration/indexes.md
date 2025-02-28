@@ -57,6 +57,9 @@ For example, to ensure that `torch` is _always_ installed from the `pytorch` ind
 following to your `pyproject.toml`:
 
 ```toml
+[project]
+dependencies = ["torch"]
+
 [tool.uv.sources]
 torch = { index = "pytorch" }
 
@@ -74,8 +77,8 @@ dependencies = ["torch"]
 
 [tool.uv.sources]
 torch = [
-  { index = "pytorch-cu118", marker = "sys_platform == 'darwin'"},
-  { index = "pytorch-cu124", marker = "sys_platform != 'darwin'"},
+  { index = "pytorch-cu118", marker = "sys_platform == 'darwin'" },
+  { index = "pytorch-cu124", marker = "sys_platform != 'darwin'" },
 ]
 
 [[tool.uv.index]]
@@ -103,7 +106,7 @@ explicit = true
 
 Named indexes referenced via `tool.uv.sources` must be defined within the project's `pyproject.toml`
 file; indexes provided via the command-line, environment variables, or user-level configuration will
-not be recognized.
+not be recognized. The dependencies using the explicit index must be defined in a `pyproject.toml`.
 
 If an index is marked as both `default = true` and `explicit = true`, it will be treated as an
 explicit index (i.e., only usable via `tool.uv.sources`) while also removing PyPI as the default
