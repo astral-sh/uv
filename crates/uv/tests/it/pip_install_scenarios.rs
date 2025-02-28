@@ -50,7 +50,7 @@ fn command(context: &TestContext) -> Command {
         .arg(packse_index_url())
         .arg("--find-links")
         .arg(build_vendor_links_url());
-    context.add_shared_args(&mut command, true);
+    context.add_shared_options(&mut command, true);
     command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     command
 }
@@ -531,17 +531,17 @@ fn excluded_only_compatible_version() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
+      ╰─▶ Because only the following versions of package-a are available:
               package-a==1.0.0
               package-a==2.0.0
               package-a==3.0.0
-          we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
+          and package-a==1.0.0 depends on package-b==1.0.0, we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
           And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that all of:
               package-a<2.0.0
               package-a>2.0.0
           depend on one of:
-              package-b<=1.0.0
-              package-b>=3.0.0
+              package-b==1.0.0
+              package-b==3.0.0
 
           And because you require one of:
               package-a<2.0.0

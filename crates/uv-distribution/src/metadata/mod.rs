@@ -3,17 +3,17 @@ use std::path::Path;
 
 use thiserror::Error;
 
-use uv_configuration::{LowerBound, SourceStrategy};
+use uv_configuration::SourceStrategy;
 use uv_distribution_types::{GitSourceUrl, IndexLocations};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pypi_types::{HashDigest, ResolutionMetadata};
+use uv_pypi_types::{HashDigests, ResolutionMetadata};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::WorkspaceError;
 
 pub use crate::metadata::build_requires::BuildRequires;
 pub use crate::metadata::lowering::LoweredRequirement;
-use crate::metadata::lowering::LoweringError;
+pub use crate::metadata::lowering::LoweringError;
 pub use crate::metadata::requires_dist::{FlatRequiresDist, RequiresDist};
 
 mod build_requires;
@@ -80,7 +80,6 @@ impl Metadata {
         git_source: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         sources: SourceStrategy,
-        bounds: LowerBound,
     ) -> Result<Self, MetadataError> {
         // Lower the requirements.
         let requires_dist = uv_pypi_types::RequiresDist {
@@ -101,7 +100,6 @@ impl Metadata {
             git_source,
             locations,
             sources,
-            bounds,
         )
         .await?;
 
@@ -124,7 +122,7 @@ pub struct ArchiveMetadata {
     /// The [`Metadata`] for the underlying distribution.
     pub metadata: Metadata,
     /// The hashes of the source or built archive.
-    pub hashes: Vec<HashDigest>,
+    pub hashes: HashDigests,
 }
 
 impl ArchiveMetadata {
@@ -133,12 +131,12 @@ impl ArchiveMetadata {
     pub fn from_metadata23(metadata: ResolutionMetadata) -> Self {
         Self {
             metadata: Metadata::from_metadata23(metadata),
-            hashes: vec![],
+            hashes: HashDigests::empty(),
         }
     }
 
     /// Create an [`ArchiveMetadata`] with the given metadata and hashes.
-    pub fn with_hashes(metadata: Metadata, hashes: Vec<HashDigest>) -> Self {
+    pub fn with_hashes(metadata: Metadata, hashes: HashDigests) -> Self {
         Self { metadata, hashes }
     }
 }
@@ -147,7 +145,7 @@ impl From<Metadata> for ArchiveMetadata {
     fn from(metadata: Metadata) -> Self {
         Self {
             metadata,
-            hashes: vec![],
+            hashes: HashDigests::empty(),
         }
     }
 }

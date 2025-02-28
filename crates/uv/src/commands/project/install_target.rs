@@ -3,6 +3,9 @@ use std::path::Path;
 use std::str::FromStr;
 
 use itertools::Either;
+use rustc_hash::FxHashSet;
+
+use uv_configuration::{DevGroupsManifest, ExtrasSpecification};
 use uv_distribution_types::Index;
 use uv_normalize::PackageName;
 use uv_pypi_types::{LenientRequirement, VerbatimParsedUrl};
@@ -10,6 +13,8 @@ use uv_resolver::{Installable, Lock, Package};
 use uv_scripts::Pep723Script;
 use uv_workspace::pyproject::{DependencyGroupSpecifier, Source, Sources, ToolUvSources};
 use uv_workspace::Workspace;
+
+use crate::commands::project::ProjectError;
 
 /// A target that can be installed from a lockfile.
 #[derive(Debug, Copy, Clone)]
@@ -229,5 +234,128 @@ impl<'lock> InstallTarget<'lock> {
                     .map(Cow::Borrowed),
             ),
         }
+    }
+
+    /// Validate the extras requested by the [`ExtrasSpecification`].
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn validate_extras(self, extras: &ExtrasSpecification) -> Result<(), ProjectError> {
+        let extras = match extras {
+            ExtrasSpecification::Some(extras) => {
+                if extras.is_empty() {
+                    return Ok(());
+                }
+                Either::Left(extras.iter())
+            }
+            ExtrasSpecification::Exclude(extras) => {
+                if extras.is_empty() {
+                    return Ok(());
+                }
+                Either::Right(extras.iter())
+            }
+            _ => return Ok(()),
+        };
+
+        match self {
+            Self::Project { lock, .. }
+            | Self::Workspace { lock, .. }
+            | Self::NonProjectWorkspace { lock, .. } => {
+                if !lock.supports_provides_extra() {
+                    return Ok(());
+                }
+
+                let roots = self.roots().collect::<FxHashSet<_>>();
+                let member_packages: Vec<&Package> = lock
+                    .packages()
+                    .iter()
+                    .filter(|package| roots.contains(package.name()))
+                    .collect();
+
+                // Collect all known extras from the member packages.
+                let known_extras = member_packages
+                    .iter()
+                    .flat_map(|package| package.provides_extras().iter())
+                    .collect::<FxHashSet<_>>();
+
+                for extra in extras {
+                    if !known_extras.contains(extra) {
+                        return match self {
+                            Self::Project { .. } => {
+                                Err(ProjectError::MissingExtraProject(extra.clone()))
+                            }
+                            _ => Err(ProjectError::MissingExtraWorkspace(extra.clone())),
+                        };
+                    }
+                }
+            }
+            Self::Script { .. } => {
+                // We shouldn't get here if the list is empty so we can assume it isn't
+                let extra = extras.into_iter().next().expect("non-empty extras").clone();
+                return Err(ProjectError::MissingExtraScript(extra));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate the dependency groups requested by the [`DependencyGroupSpecifier`].
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn validate_groups(self, groups: &DevGroupsManifest) -> Result<(), ProjectError> {
+        // If no groups were specified, short-circuit.
+        if groups.explicit_names().next().is_none() {
+            return Ok(());
+        }
+
+        match self {
+            Self::Workspace { lock, workspace } | Self::NonProjectWorkspace { lock, workspace } => {
+                let roots = self.roots().collect::<FxHashSet<_>>();
+                let member_packages: Vec<&Package> = lock
+                    .packages()
+                    .iter()
+                    .filter(|package| roots.contains(package.name()))
+                    .collect();
+
+                // Extract the dependency groups that are exclusive to the workspace root.
+                let known_groups = member_packages
+                    .iter()
+                    .flat_map(|package| package.dependency_groups().keys().map(Cow::Borrowed))
+                    .chain(workspace.dependency_groups().ok().into_iter().flat_map(
+                        |dependency_groups| dependency_groups.into_keys().map(Cow::Owned),
+                    ))
+                    .collect::<FxHashSet<_>>();
+
+                for group in groups.explicit_names() {
+                    if !known_groups.contains(group) {
+                        return Err(ProjectError::MissingGroupWorkspace(group.clone()));
+                    }
+                }
+            }
+            Self::Project { lock, .. } => {
+                let roots = self.roots().collect::<FxHashSet<_>>();
+                let member_packages: Vec<&Package> = lock
+                    .packages()
+                    .iter()
+                    .filter(|package| roots.contains(package.name()))
+                    .collect();
+
+                // Extract the dependency groups defined in the relevant member.
+                let known_groups = member_packages
+                    .iter()
+                    .flat_map(|package| package.dependency_groups().keys())
+                    .collect::<FxHashSet<_>>();
+
+                for group in groups.explicit_names() {
+                    if !known_groups.contains(group) {
+                        return Err(ProjectError::MissingGroupProject(group.clone()));
+                    }
+                }
+            }
+            Self::Script { .. } => {
+                if let Some(group) = groups.explicit_names().next() {
+                    return Err(ProjectError::MissingGroupScript(group.clone()));
+                }
+            }
+        }
+
+        Ok(())
     }
 }

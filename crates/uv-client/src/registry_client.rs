@@ -10,9 +10,16 @@ use http::HeaderMap;
 use itertools::Either;
 use reqwest::{Client, Response, StatusCode};
 use reqwest_middleware::ClientWithMiddleware;
+use tokio::sync::Semaphore;
 use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
+use crate::base_client::{BaseClientBuilder, ExtraMiddleware};
+use crate::cached_client::CacheControl;
+use crate::html::SimpleHtml;
+use crate::remote_metadata::wheel_metadata_from_remote_zip;
+use crate::rkyvutil::OwnedArchive;
+use crate::{BaseClient, CachedClient, CachedClientError, Error, ErrorKind};
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
@@ -26,13 +33,7 @@ use uv_pep440::Version;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
 use uv_pypi_types::{ResolutionMetadata, SimpleJson};
-
-use crate::base_client::{BaseClientBuilder, ExtraMiddleware};
-use crate::cached_client::CacheControl;
-use crate::html::SimpleHtml;
-use crate::remote_metadata::wheel_metadata_from_remote_zip;
-use crate::rkyvutil::OwnedArchive;
-use crate::{BaseClient, CachedClient, CachedClientError, Error, ErrorKind};
+use uv_small_str::SmallString;
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -214,6 +215,11 @@ impl RegistryClient {
         self.client.uncached().for_host(url)
     }
 
+    /// Returns `true` if SSL verification is disabled for the given URL.
+    pub fn disable_ssl(&self, url: &Url) -> bool {
+        self.client.uncached().disable_ssl(url)
+    }
+
     /// Return the [`Connectivity`] mode used by this client.
     pub fn connectivity(&self) -> Connectivity {
         self.connectivity
@@ -235,6 +241,7 @@ impl RegistryClient {
         package_name: &PackageName,
         index: Option<&'index IndexUrl>,
         capabilities: &IndexCapabilities,
+        download_concurrency: &Semaphore,
     ) -> Result<Vec<(&'index IndexUrl, OwnedArchive<SimpleMetadata>)>, Error> {
         let indexes = if let Some(index) = index {
             Either::Left(std::iter::once(index))
@@ -253,6 +260,7 @@ impl RegistryClient {
             // If we're searching for the first index that contains the package, fetch serially.
             IndexStrategy::FirstIndex => {
                 for index in it {
+                    let _permit = download_concurrency.acquire().await;
                     if let Some(metadata) = self
                         .simple_single_index(package_name, index, capabilities)
                         .await?
@@ -265,9 +273,9 @@ impl RegistryClient {
 
             // Otherwise, fetch concurrently.
             IndexStrategy::UnsafeBestMatch | IndexStrategy::UnsafeFirstMatch => {
-                // TODO(charlie): Respect concurrency limits.
                 results = futures::stream::iter(it)
                     .map(|index| async move {
+                        let _permit = download_concurrency.acquire().await;
                         let metadata = self
                             .simple_single_index(package_name, index, capabilities)
                             .await?;
@@ -610,7 +618,7 @@ impl RegistryClient {
             let cache_entry = self.cache.entry(
                 CacheBucket::Wheels,
                 WheelCache::Index(index).wheel_dir(filename.name.as_ref()),
-                format!("{}.msgpack", filename.stem()),
+                format!("{}.msgpack", filename.cache_key()),
             );
             let cache_control = match self.connectivity {
                 Connectivity::Online => CacheControl::from(
@@ -680,7 +688,7 @@ impl RegistryClient {
         let cache_entry = self.cache.entry(
             CacheBucket::Wheels,
             cache_shard.wheel_dir(filename.name.as_ref()),
-            format!("{}.msgpack", filename.stem()),
+            format!("{}.msgpack", filename.cache_key()),
         );
         let cache_control = match self.connectivity {
             Connectivity::Online => CacheControl::from(
@@ -699,7 +707,7 @@ impl RegistryClient {
         };
 
         // Attempt to fetch via a range request.
-        if index.map_or(true, |index| capabilities.supports_range_requests(index)) {
+        if index.is_none_or(|index| capabilities.supports_range_requests(index)) {
             let req = self
                 .uncached_client(url)
                 .head(url.clone())
@@ -886,10 +894,12 @@ impl SimpleMetadata {
     fn from_files(files: Vec<uv_pypi_types::File>, package_name: &PackageName, base: &Url) -> Self {
         let mut map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
 
+        // Convert to a reference-counted string.
+        let base = SmallString::from(base.as_str());
+
         // Group the distributions by version and kind
         for file in files {
-            let Some(filename) =
-                DistFilename::try_from_filename(file.filename.as_str(), package_name)
+            let Some(filename) = DistFilename::try_from_filename(&file.filename, package_name)
             else {
                 warn!("Skipping file for {package_name}: {}", file.filename);
                 continue;
@@ -898,7 +908,7 @@ impl SimpleMetadata {
                 DistFilename::SourceDistFilename(ref inner) => &inner.version,
                 DistFilename::WheelFilename(ref inner) => &inner.version,
             };
-            let file = match File::try_from(file, base) {
+            let file = match File::try_from(file, &base) {
                 Ok(file) => file,
                 Err(err) => {
                     // Ignore files with unparsable version specifiers.

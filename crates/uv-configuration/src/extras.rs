@@ -95,7 +95,7 @@ mod tests {
             Vec::new()
         );
         ($($x:expr),+ $(,)?) => (
-            vec![$(ExtraName::new($x.into()).unwrap()),+]
+            vec![$(ExtraName::from_owned($x.into()).unwrap()),+]
         )
     }
 

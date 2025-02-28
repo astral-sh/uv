@@ -3,6 +3,7 @@ source: crates/uv/tests/it/ecosystem.rs
 expression: lock
 ---
 version = 1
+revision = 1
 requires-python = ">=3.12.[X]"
 
 [options]

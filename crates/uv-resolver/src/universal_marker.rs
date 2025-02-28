@@ -1,10 +1,17 @@
 use std::borrow::Borrow;
+use std::str::FromStr;
 
 use itertools::Itertools;
+use rustc_hash::FxHashMap;
 
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder, MarkerTree};
+use uv_pep508::{
+    ExtraOperator, MarkerEnvironment, MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator,
+    MarkerTree,
+};
 use uv_pypi_types::{ConflictItem, ConflictPackage, Conflicts};
+
+use crate::ResolveError;
 
 /// A representation of a marker for use in universal resolution.
 ///
@@ -245,20 +252,18 @@ impl UniversalMarker {
     pub(crate) fn evaluate<P, E, G>(
         self,
         env: &MarkerEnvironment,
-        extras: &[(P, E)],
-        groups: &[(P, G)],
+        extras: impl Iterator<Item = (P, E)>,
+        groups: impl Iterator<Item = (P, G)>,
     ) -> bool
     where
         P: Borrow<PackageName>,
         E: Borrow<ExtraName>,
         G: Borrow<GroupName>,
     {
-        let extras = extras
-            .iter()
-            .map(|(package, extra)| encode_package_extra(package.borrow(), extra.borrow()));
-        let groups = groups
-            .iter()
-            .map(|(package, group)| encode_package_group(package.borrow(), group.borrow()));
+        let extras =
+            extras.map(|(package, extra)| encode_package_extra(package.borrow(), extra.borrow()));
+        let groups =
+            groups.map(|(package, group)| encode_package_group(package.borrow(), group.borrow()));
         self.marker
             .evaluate(env, &extras.chain(groups).collect::<Vec<ExtraName>>())
     }
@@ -421,11 +426,12 @@ impl ConflictMarker {
 
     /// Returns true if this conflict marker is satisfied by the given
     /// list of activated extras and groups.
-    pub(crate) fn evaluate(
-        self,
-        extras: &[(PackageName, ExtraName)],
-        groups: &[(PackageName, GroupName)],
-    ) -> bool {
+    pub(crate) fn evaluate<P, E, G>(self, extras: &[(P, E)], groups: &[(P, G)]) -> bool
+    where
+        P: Borrow<PackageName>,
+        E: Borrow<ExtraName>,
+        G: Borrow<GroupName>,
+    {
         static DUMMY: std::sync::LazyLock<MarkerEnvironment> = std::sync::LazyLock::new(|| {
             MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
                 implementation_name: "",
@@ -444,12 +450,40 @@ impl ConflictMarker {
         });
         let extras = extras
             .iter()
-            .map(|(package, extra)| encode_package_extra(package, extra));
+            .map(|(package, extra)| encode_package_extra(package.borrow(), extra.borrow()));
         let groups = groups
             .iter()
-            .map(|(package, group)| encode_package_group(package, group));
+            .map(|(package, group)| encode_package_group(package.borrow(), group.borrow()));
         self.marker
             .evaluate(&DUMMY, &extras.chain(groups).collect::<Vec<ExtraName>>())
+    }
+
+    /// Returns inclusion and exclusion (respectively) conflict items parsed
+    /// from this conflict marker.
+    ///
+    /// This returns an error if any `extra` could not be parsed as a valid
+    /// encoded conflict extra.
+    pub(crate) fn filter_rules(
+        self,
+    ) -> Result<(Vec<ConflictItem>, Vec<ConflictItem>), ResolveError> {
+        let (mut raw_include, mut raw_exclude) = (vec![], vec![]);
+        self.marker.visit_extras(|op, extra| {
+            match op {
+                MarkerOperator::Equal => raw_include.push(extra.to_owned()),
+                MarkerOperator::NotEqual => raw_exclude.push(extra.to_owned()),
+                // OK by the contract of `MarkerTree::visit_extras`.
+                _ => unreachable!(),
+            }
+        });
+        let include = raw_include
+            .into_iter()
+            .map(|extra| ParsedRawExtra::parse(&extra).and_then(|parsed| parsed.to_conflict_item()))
+            .collect::<Result<Vec<_>, _>>()?;
+        let exclude = raw_exclude
+            .into_iter()
+            .map(|extra| ParsedRawExtra::parse(&extra).and_then(|parsed| parsed.to_conflict_item()))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((include, exclude))
     }
 }
 
@@ -474,7 +508,7 @@ fn encode_package_extra(package: &PackageName, extra: &ExtraName) -> ExtraName {
     // character in `package` or `extra` values. But if we know the length of
     // the package name, we can always parse each field unambiguously.
     let package_len = package.as_str().len();
-    ExtraName::new(format!("extra-{package_len}-{package}-{extra}")).unwrap()
+    ExtraName::from_owned(format!("extra-{package_len}-{package}-{extra}")).unwrap()
 }
 
 /// Encodes the given package name and its corresponding group into a valid
@@ -482,7 +516,213 @@ fn encode_package_extra(package: &PackageName, extra: &ExtraName) -> ExtraName {
 fn encode_package_group(package: &PackageName, group: &GroupName) -> ExtraName {
     // See `encode_package_extra`, the same considerations apply here.
     let package_len = package.as_str().len();
-    ExtraName::new(format!("group-{package_len}-{package}-{group}")).unwrap()
+    ExtraName::from_owned(format!("group-{package_len}-{package}-{group}")).unwrap()
+}
+
+#[derive(Debug)]
+enum ParsedRawExtra<'a> {
+    Extra { package: &'a str, extra: &'a str },
+    Group { package: &'a str, group: &'a str },
+}
+
+impl<'a> ParsedRawExtra<'a> {
+    fn parse(raw_extra: &'a ExtraName) -> Result<ParsedRawExtra<'a>, ResolveError> {
+        fn mkerr(raw_extra: &ExtraName, reason: impl Into<String>) -> ResolveError {
+            let raw_extra = raw_extra.to_owned();
+            let reason = reason.into();
+            ResolveError::InvalidExtraInConflictMarker { reason, raw_extra }
+        }
+
+        let raw = raw_extra.as_str();
+        let Some((kind, tail)) = raw.split_once('-') else {
+            return Err(mkerr(
+                raw_extra,
+                "expected to find leading `extra-` or `group-`",
+            ));
+        };
+        let Some((len, tail)) = tail.split_once('-') else {
+            return Err(mkerr(
+                raw_extra,
+                "expected to find `{number}-` after leading `extra-` or `group-`",
+            ));
+        };
+        let len = len.parse::<usize>().map_err(|_| {
+            mkerr(
+                raw_extra,
+                format!("found package length number `{len}`, but could not parse into integer"),
+            )
+        })?;
+        let Some((package, tail)) = tail.split_at_checked(len) else {
+            return Err(mkerr(
+                raw_extra,
+                format!(
+                    "expected at least {len} bytes for package name, but found {found}",
+                    found = tail.len()
+                ),
+            ));
+        };
+        if !tail.starts_with('-') {
+            return Err(mkerr(
+                raw_extra,
+                format!("expected `-` after package name `{package}`"),
+            ));
+        }
+        let tail = &tail[1..];
+        match kind {
+            "extra" => Ok(ParsedRawExtra::Extra {
+                package,
+                extra: tail,
+            }),
+            "group" => Ok(ParsedRawExtra::Group {
+                package,
+                group: tail,
+            }),
+            _ => Err(mkerr(
+                raw_extra,
+                format!("unrecognized kind `{kind}` (must be `extra` or `group`)"),
+            )),
+        }
+    }
+
+    fn to_conflict_item(&self) -> Result<ConflictItem, ResolveError> {
+        let package = PackageName::from_str(self.package()).map_err(|name_error| {
+            ResolveError::InvalidValueInConflictMarker {
+                kind: "package",
+                name_error,
+            }
+        })?;
+        match *self {
+            ParsedRawExtra::Extra { extra, .. } => {
+                let extra = ExtraName::from_str(extra).map_err(|name_error| {
+                    ResolveError::InvalidValueInConflictMarker {
+                        kind: "extra",
+                        name_error,
+                    }
+                })?;
+                Ok(ConflictItem::from((package, extra)))
+            }
+            ParsedRawExtra::Group { group, .. } => {
+                let group = GroupName::from_str(group).map_err(|name_error| {
+                    ResolveError::InvalidValueInConflictMarker {
+                        kind: "group",
+                        name_error,
+                    }
+                })?;
+                Ok(ConflictItem::from((package, group)))
+            }
+        }
+    }
+
+    fn package(&self) -> &'a str {
+        match *self {
+            ParsedRawExtra::Extra { package, .. } => package,
+            ParsedRawExtra::Group { package, .. } => package,
+        }
+    }
+}
+
+/// Resolve the conflict markers in a [`MarkerTree`] based on the conditions under which each
+/// conflict item is known to be true.
+///
+/// For example, if the `cpu` extra is known to be enabled when `sys_platform == 'darwin'`, then
+/// given the combined marker `python_version >= '3.8' and extra == 'extra-7-project-cpu'`, this
+/// method would return `python_version >= '3.8' and sys_platform == 'darwin'`.
+///
+/// If a conflict item isn't present in the map of known conflicts, it's assumed to be false in all
+/// environments.
+pub(crate) fn resolve_conflicts(
+    marker: MarkerTree,
+    known_conflicts: &FxHashMap<ConflictItem, MarkerTree>,
+) -> MarkerTree {
+    if marker.is_true() || marker.is_false() {
+        return marker;
+    }
+
+    let mut transformed = MarkerTree::FALSE;
+
+    // Convert the marker to DNF, then re-build it.
+    for dnf in marker.to_dnf() {
+        let mut or = MarkerTree::TRUE;
+
+        for marker in dnf {
+            let MarkerExpression::Extra {
+                ref operator,
+                ref name,
+            } = marker
+            else {
+                or.and(MarkerTree::expression(marker));
+                continue;
+            };
+
+            let Some(name) = name.as_extra() else {
+                or.and(MarkerTree::expression(marker));
+                continue;
+            };
+
+            // Given an extra marker (like `extra == 'extra-7-project-cpu'`), search for the
+            // corresponding conflict; once found, inline the marker of conditions under which the
+            // conflict is known to be true.
+            let mut found = false;
+            for (conflict_item, conflict_marker) in known_conflicts {
+                // Search for the conflict item as an extra.
+                if let Some(extra) = conflict_item.extra() {
+                    let package = conflict_item.package();
+                    let encoded = encode_package_extra(package, extra);
+                    if encoded == *name {
+                        match operator {
+                            ExtraOperator::Equal => {
+                                or.and(*conflict_marker);
+                                found = true;
+                                break;
+                            }
+                            ExtraOperator::NotEqual => {
+                                or.and(conflict_marker.negate());
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Search for the conflict item as a group.
+                if let Some(group) = conflict_item.group() {
+                    let package = conflict_item.package();
+                    let encoded = encode_package_group(package, group);
+                    if encoded == *name {
+                        match operator {
+                            ExtraOperator::Equal => {
+                                or.and(*conflict_marker);
+                                found = true;
+                                break;
+                            }
+                            ExtraOperator::NotEqual => {
+                                or.and(conflict_marker.negate());
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // If we didn't find the marker in the list of known conflicts, assume it's always
+            // false.
+            if !found {
+                match operator {
+                    ExtraOperator::Equal => {
+                        or.and(MarkerTree::FALSE);
+                    }
+                    ExtraOperator::NotEqual => {
+                        or.and(MarkerTree::TRUE);
+                    }
+                }
+            }
+        }
+
+        transformed.or(or);
+    }
+
+    transformed
 }
 
 #[cfg(test)]
@@ -522,12 +762,31 @@ mod tests {
 
     /// Shortcut for creating an extra name.
     fn create_extra(name: &str) -> ExtraName {
-        ExtraName::new(name.to_string()).unwrap()
+        ExtraName::from_str(name).unwrap()
     }
 
     /// Shortcut for creating a conflict marker from an extra name.
     fn create_extra_marker(name: &str) -> ConflictMarker {
         ConflictMarker::extra(&create_package("pkg"), &create_extra(name))
+    }
+
+    /// Shortcut for creating a conflict item from an extra name.
+    fn create_extra_item(name: &str) -> ConflictItem {
+        ConflictItem::from((create_package("pkg"), create_extra(name)))
+    }
+
+    /// Shortcut for creating a conflict map.
+    fn create_known_conflicts<'a>(
+        it: impl IntoIterator<Item = (&'a str, &'a str)>,
+    ) -> FxHashMap<ConflictItem, MarkerTree> {
+        it.into_iter()
+            .map(|(extra, marker)| {
+                (
+                    create_extra_item(extra),
+                    MarkerTree::from_str(marker).unwrap(),
+                )
+            })
+            .collect()
     }
 
     /// Returns a string representation of the given conflict marker.
@@ -597,9 +856,10 @@ mod tests {
                 .iter()
                 .copied()
                 .map(|name| (create_package("pkg"), create_extra(name)))
-                .collect::<Vec<_>>();
+                .collect::<Vec<(PackageName, ExtraName)>>();
+            let groups = Vec::<(PackageName, GroupName)>::new();
             assert!(
-                !cm.evaluate(&extras, &[]),
+                !cm.evaluate(&extras, &groups),
                 "expected `{extra_names:?}` to evaluate to `false` in `{cm:?}`"
             );
         }
@@ -619,9 +879,10 @@ mod tests {
                 .iter()
                 .copied()
                 .map(|name| (create_package("pkg"), create_extra(name)))
-                .collect::<Vec<_>>();
+                .collect::<Vec<(PackageName, ExtraName)>>();
+            let groups = Vec::<(PackageName, GroupName)>::new();
             assert!(
-                cm.evaluate(&extras, &[]),
+                cm.evaluate(&extras, &groups),
                 "expected `{extra_names:?}` to evaluate to `true` in `{cm:?}`"
             );
         }
@@ -647,5 +908,29 @@ mod tests {
         );
         dep_conflict_marker.imbibe(conflicts_marker);
         assert_eq!(format!("{dep_conflict_marker:?}"), "true");
+    }
+
+    #[test]
+    fn resolve() {
+        let known_conflicts = create_known_conflicts([("foo", "sys_platform == 'darwin'")]);
+        let cm = MarkerTree::from_str("(python_version >= '3.10' and extra == 'extra-3-pkg-foo') or (python_version < '3.10' and extra != 'extra-3-pkg-foo')").unwrap();
+        let cm = resolve_conflicts(cm, &known_conflicts);
+        assert_eq!(
+            cm.try_to_string().as_deref(),
+            Some("(python_full_version < '3.10' and sys_platform != 'darwin') or (python_full_version >= '3.10' and sys_platform == 'darwin')")
+        );
+
+        let cm = MarkerTree::from_str("python_version >= '3.10' and extra == 'extra-3-pkg-foo'")
+            .unwrap();
+        let cm = resolve_conflicts(cm, &known_conflicts);
+        assert_eq!(
+            cm.try_to_string().as_deref(),
+            Some("python_full_version >= '3.10' and sys_platform == 'darwin'")
+        );
+
+        let cm = MarkerTree::from_str("python_version >= '3.10' and extra == 'extra-3-pkg-bar'")
+            .unwrap();
+        let cm = resolve_conflicts(cm, &known_conflicts);
+        assert!(cm.is_false());
     }
 }

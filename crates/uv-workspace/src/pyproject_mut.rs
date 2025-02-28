@@ -174,11 +174,10 @@ impl PyProjectTomlMut {
             .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let name = req.name.clone();
         let edit = add_dependency(req, dependencies, source.is_some())?;
 
         if let Some(source) = source {
-            self.add_source(&name, source)?;
+            self.add_source(&req.name, source)?;
         }
 
         Ok(edit)
@@ -208,11 +207,10 @@ impl PyProjectTomlMut {
             .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let name = req.name.clone();
         let edit = add_dependency(req, dev_dependencies, source.is_some())?;
 
         if let Some(source) = source {
-            self.add_source(&name, source)?;
+            self.add_source(&req.name, source)?;
         }
 
         Ok(edit)
@@ -411,7 +409,6 @@ impl PyProjectTomlMut {
             .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let name = req.name.clone();
         let added = add_dependency(req, group, source.is_some())?;
 
         // If `project.optional-dependencies` is an inline table, reformat it.
@@ -427,7 +424,7 @@ impl PyProjectTomlMut {
         }
 
         if let Some(source) = source {
-            self.add_source(&name, source)?;
+            self.add_source(&req.name, source)?;
         }
 
         Ok(added)
@@ -450,14 +447,26 @@ impl PyProjectTomlMut {
             .as_table_like_mut()
             .ok_or(Error::MalformedDependencies)?;
 
+        let was_sorted = dependency_groups
+            .get_values()
+            .iter()
+            .filter_map(|(dotted_ks, _)| dotted_ks.first())
+            .map(|k| k.get())
+            .is_sorted();
+
         let group = dependency_groups
             .entry(group.as_ref())
             .or_insert(Item::Value(Value::Array(Array::new())))
             .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let name = req.name.clone();
         let added = add_dependency(req, group, source.is_some())?;
+
+        // To avoid churn in pyproject.toml, we only sort new group keys if the
+        // existing keys were sorted.
+        if was_sorted {
+            dependency_groups.sort_values();
+        }
 
         // If `dependency-groups` is an inline table, reformat it.
         //
@@ -472,7 +481,7 @@ impl PyProjectTomlMut {
         }
 
         if let Some(source) = source {
-            self.add_source(&name, source)?;
+            self.add_source(&req.name, source)?;
         }
 
         Ok(added)
@@ -852,7 +861,7 @@ impl PyProjectTomlMut {
                     let Some(dependencies) = dependencies.as_array() else {
                         continue;
                     };
-                    let Ok(extra) = ExtraName::new(extra.to_string()) else {
+                    let Ok(extra) = ExtraName::from_str(extra) else {
                         continue;
                     };
 
@@ -869,7 +878,7 @@ impl PyProjectTomlMut {
                 let Some(dependencies) = dependencies.as_array() else {
                     continue;
                 };
-                let Ok(group) = GroupName::new(group.to_string()) else {
+                let Ok(group) = GroupName::from_str(group) else {
                     continue;
                 };
 
@@ -1174,7 +1183,7 @@ fn find_dependencies(
     let mut to_replace = Vec::new();
     for (i, dep) in deps.iter().enumerate() {
         if let Some(req) = dep.as_str().and_then(try_parse_requirement) {
-            if marker.map_or(true, |m| *m == req.marker) && *name == req.name {
+            if marker.is_none_or(|m| *m == req.marker) && *name == req.name {
                 to_replace.push((i, req));
             }
         }

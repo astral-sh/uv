@@ -124,14 +124,12 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         // This is only a warning because *technically* we support passing in
         // multiple pyproject.tomls, but at this level of abstraction we can't see them all,
         // so hard erroring on "no pyproject.toml mentions this" is a bit difficult.
-        if let Some(groups) = self.groups.groups() {
-            for name in groups.names() {
-                if !metadata.dependency_groups.contains_key(name) {
-                    warn_user_once!(
-                        "The dependency-group '{name}' is not defined in {}",
-                        path.display()
-                    );
-                }
+        for name in self.groups.explicit_names() {
+            if !metadata.dependency_groups.contains_key(name) {
+                warn_user_once!(
+                    "The dependency-group '{name}' is not defined in {}",
+                    path.display()
+                );
             }
         }
 
@@ -199,32 +197,30 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         // Fetch the metadata for the distribution.
         let metadata = {
             let id = VersionId::from_url(source.url());
-            if let Some(archive) =
-                self.index
-                    .distributions()
-                    .get(&id)
-                    .as_deref()
-                    .and_then(|response| {
-                        if let MetadataResponse::Found(archive) = response {
-                            Some(archive)
-                        } else {
-                            None
-                        }
-                    })
-            {
-                // If the metadata is already in the index, return it.
-                archive.metadata.clone()
-            } else {
+            if self.index.distributions().register(id.clone()) {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let source = BuildableSource::Url(source);
                 let archive = self.database.build_wheel_metadata(&source, hashes).await?;
 
+                let metadata = archive.metadata.clone();
+
                 // Insert the metadata into the index.
                 self.index
                     .distributions()
-                    .done(id, Arc::new(MetadataResponse::Found(archive.clone())));
+                    .done(id, Arc::new(MetadataResponse::Found(archive)));
 
-                archive.metadata
+                metadata
+            } else {
+                let response = self
+                    .index
+                    .distributions()
+                    .wait(&id)
+                    .await
+                    .expect("missing value for registered task");
+                let MetadataResponse::Found(archive) = &*response else {
+                    panic!("Failed to find metadata for: {}", path.user_display());
+                };
+                archive.metadata.clone()
             }
         };
 

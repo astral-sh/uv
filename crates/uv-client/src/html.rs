@@ -109,9 +109,15 @@ impl SimpleHtml {
                             debug!("{err}");
                             Hashes::default()
                         }
-                        Err(err @ HashError::UnsupportedHashAlgorithm(..)) => {
-                            // If the URL references a hash, but it's unsupported, error.
-                            return Err(err.into());
+                        Err(HashError::UnsupportedHashAlgorithm(fragment)) => {
+                            if fragment == "egg" {
+                                // If the URL references an egg hash, ignore it.
+                                debug!("{}", HashError::UnsupportedHashAlgorithm(fragment));
+                                Hashes::default()
+                            } else {
+                                // If the URL references a hash, but it's unsupported, error.
+                                return Err(HashError::UnsupportedHashAlgorithm(fragment).into());
+                            }
                         }
                     }
                 },
@@ -178,7 +184,7 @@ impl SimpleHtml {
         let yanked = if let Some(yanked) = link.attributes().get("data-yanked").flatten() {
             let yanked = std::str::from_utf8(yanked.as_bytes())?;
             let yanked = html_escape::decode_html_entities(yanked);
-            Some(Yanked::Reason(yanked.to_string()))
+            Some(Box::new(Yanked::Reason(yanked.into())))
         } else {
             None
         };
@@ -212,8 +218,8 @@ impl SimpleHtml {
             yanked,
             requires_python,
             hashes,
-            filename: filename.to_string(),
-            url: decoded.to_string(),
+            filename: filename.into(),
+            url: decoded.into(),
             size,
             upload_time,
         }))
@@ -247,7 +253,7 @@ pub enum Error {
     MissingHash(String),
 
     #[error(transparent)]
-    FragmentParse(#[from] uv_pypi_types::HashError),
+    FragmentParse(#[from] HashError),
 
     #[error("Invalid `requires-python` specifier: {0}")]
     Pep440(#[source] uv_pep440::VersionSpecifiersParseError),
@@ -858,6 +864,64 @@ mod tests {
 <body>
 <h1>Links for jinja2</h1>
 <a href="/whl/Jinja2-3.1.2-py3-none-any.whl#main">Jinja2-3.1.2-py3-none-any.whl</a><br/>
+</body>
+</html>
+<!--TIMESTAMP 1703347410-->
+    "#;
+        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleHtml::parse(text, &base);
+        insta::assert_debug_snapshot!(result, @r###"
+        Ok(
+            SimpleHtml {
+                base: BaseUrl(
+                    Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "download.pytorch.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/whl/jinja2/",
+                        query: None,
+                        fragment: None,
+                    },
+                ),
+                files: [
+                    File {
+                        core_metadata: None,
+                        dist_info_metadata: None,
+                        data_dist_info_metadata: None,
+                        filename: "Jinja2-3.1.2-py3-none-any.whl",
+                        hashes: Hashes {
+                            md5: None,
+                            sha256: None,
+                            sha384: None,
+                            sha512: None,
+                        },
+                        requires_python: None,
+                        size: None,
+                        upload_time: None,
+                        url: "/whl/Jinja2-3.1.2-py3-none-any.whl#main",
+                        yanked: None,
+                    },
+                ],
+            },
+        )
+        "###);
+    }
+
+    #[test]
+    fn parse_egg_fragment() {
+        let text = r#"
+<!DOCTYPE html>
+<html>
+<body>
+<h1>Links for jinja2</h1>
+<a href="/whl/Jinja2-3.1.2-py3-none-any.whl#main">Jinja2-3.1.2-py3-none-any.whl#egg=public-hello-0.1</a><br/>
 </body>
 </html>
 <!--TIMESTAMP 1703347410-->

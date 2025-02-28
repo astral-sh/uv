@@ -4,7 +4,7 @@ use std::slice;
 
 use rustc_hash::FxHashSet;
 
-use uv_configuration::{LowerBound, SourceStrategy};
+use uv_configuration::SourceStrategy;
 use uv_distribution_types::IndexLocations;
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep508::MarkerTree;
@@ -49,7 +49,6 @@ impl RequiresDist {
         git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         sources: SourceStrategy,
-        lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
         // TODO(konsti): Cache workspace discovery.
         let discovery_options = DiscoveryOptions {
@@ -70,14 +69,7 @@ impl RequiresDist {
             return Ok(Self::from_metadata23(metadata));
         };
 
-        Self::from_project_workspace(
-            metadata,
-            &project_workspace,
-            git_member,
-            locations,
-            sources,
-            lower_bound,
-        )
+        Self::from_project_workspace(metadata, &project_workspace, git_member, locations, sources)
     }
 
     fn from_project_workspace(
@@ -86,7 +78,6 @@ impl RequiresDist {
         git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
-        lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
@@ -178,7 +169,6 @@ impl RequiresDist {
                                 Some(&group),
                                 locations,
                                 project_workspace.workspace(),
-                                lower_bound,
                                 git_member,
                             )
                             .map(
@@ -219,11 +209,10 @@ impl RequiresDist {
                         project_workspace.project_root(),
                         project_sources,
                         project_indexes,
-                        extra.as_ref(),
+                        extra.as_deref(),
                         group,
                         locations,
                         project_workspace.workspace(),
-                        lower_bound,
                         git_member,
                     )
                     .map(move |requirement| match requirement {
@@ -273,7 +262,7 @@ impl RequiresDist {
                     // If there is no such requirement with the extra, error.
                     if !metadata.requires_dist.iter().any(|requirement| {
                         requirement.name == *name
-                            && requirement.marker.top_level_extra_name().as_ref() == Some(extra)
+                            && requirement.marker.top_level_extra_name().as_deref() == Some(extra)
                     }) {
                         return Err(MetadataError::IncompleteSourceExtra(
                             name.clone(),
@@ -381,6 +370,12 @@ impl FlatRequiresDist {
             return Self(requirements);
         }
 
+        // Memoize the top level extras, in the same order as `requirements`
+        let top_level_extras: Vec<_> = requirements
+            .iter()
+            .map(|req| req.marker.top_level_extra_name())
+            .collect();
+
         // Transitively process all extras that are recursively included.
         let mut flattened = requirements.clone();
         let mut seen = FxHashSet::<(ExtraName, MarkerTree)>::default();
@@ -395,33 +390,34 @@ impl FlatRequiresDist {
             }
 
             // Find the requirements for the extra.
-            for requirement in &requirements {
-                if requirement.marker.top_level_extra_name().as_ref() == Some(&extra) {
-                    let requirement = {
-                        let mut marker = marker;
-                        marker.and(requirement.marker);
-                        uv_pypi_types::Requirement {
-                            name: requirement.name.clone(),
-                            extras: requirement.extras.clone(),
-                            groups: requirement.groups.clone(),
-                            source: requirement.source.clone(),
-                            origin: requirement.origin.clone(),
-                            marker: marker.simplify_extras(slice::from_ref(&extra)),
-                        }
-                    };
-                    if requirement.name == *name {
-                        // Add each transitively included extra.
-                        queue.extend(
-                            requirement
-                                .extras
-                                .iter()
-                                .cloned()
-                                .map(|extra| (extra, requirement.marker)),
-                        );
-                    } else {
-                        // Add the requirements for that extra.
-                        flattened.push(requirement);
+            for (requirement, top_level_extra) in requirements.iter().zip(top_level_extras.iter()) {
+                if top_level_extra.as_deref() != Some(&extra) {
+                    continue;
+                }
+                let requirement = {
+                    let mut marker = marker;
+                    marker.and(requirement.marker);
+                    uv_pypi_types::Requirement {
+                        name: requirement.name.clone(),
+                        extras: requirement.extras.clone(),
+                        groups: requirement.groups.clone(),
+                        source: requirement.source.clone(),
+                        origin: requirement.origin.clone(),
+                        marker: marker.simplify_extras(slice::from_ref(&extra)),
                     }
+                };
+                if requirement.name == *name {
+                    // Add each transitively included extra.
+                    queue.extend(
+                        requirement
+                            .extras
+                            .iter()
+                            .cloned()
+                            .map(|extra| (extra, requirement.marker)),
+                    );
+                } else {
+                    // Add the requirements for that extra.
+                    flattened.push(requirement);
                 }
             }
         }
@@ -474,7 +470,7 @@ mod test {
     use indoc::indoc;
     use insta::assert_snapshot;
 
-    use uv_configuration::{LowerBound, SourceStrategy};
+    use uv_configuration::SourceStrategy;
     use uv_distribution_types::IndexLocations;
     use uv_normalize::PackageName;
     use uv_pep508::Requirement;
@@ -507,7 +503,6 @@ mod test {
             None,
             &IndexLocations::default(),
             SourceStrategy::default(),
-            LowerBound::default(),
         )?)
     }
 

@@ -7,11 +7,11 @@ use owo_colors::OwoColorize;
 use tracing::{debug, enabled, Level};
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification,
-    ExtrasSpecification, HashCheckingMode, IndexStrategy, LowerBound, PreviewMode, Reinstall,
-    SourceStrategy, TrustedHost, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification, DryRun,
+    ExtrasSpecification, HashCheckingMode, IndexStrategy, PreviewMode, Reinstall, SourceStrategy,
+    Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -41,6 +41,7 @@ use crate::commands::pip::operations::{report_interpreter, report_target_environ
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::{diagnostics, ExitStatus};
 use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 
 /// Install packages into the current environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -51,6 +52,7 @@ pub(crate) async fn pip_install(
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
+    build_constraints_from_workspace: Vec<Requirement>,
     extras: &ExtrasSpecification,
     groups: &DevGroupsSpecification,
     resolution_mode: ResolutionMode,
@@ -61,12 +63,12 @@ pub(crate) async fn pip_install(
     index_strategy: IndexStrategy,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
+    network_settings: &NetworkSettings,
     reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
     hash_checking: Option<HashCheckingMode>,
     installer_metadata: bool,
-    connectivity: Connectivity,
     config_settings: &ConfigSettings,
     no_build_isolation: bool,
     no_build_isolation_package: Vec<PackageName>,
@@ -84,20 +86,18 @@ pub(crate) async fn pip_install(
     prefix: Option<Prefix>,
     python_preference: PythonPreference,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     cache: Cache,
-    dry_run: bool,
+    dry_run: DryRun,
     printer: Printer,
     preview: PreviewMode,
 ) -> anyhow::Result<ExitStatus> {
     let start = std::time::Instant::now();
 
     let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
         .keyring(keyring_provider)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -123,10 +123,6 @@ pub(crate) async fn pip_install(
     )
     .await?;
 
-    // Read build constraints.
-    let build_constraints =
-        operations::read_constraints(build_constraints, &client_builder).await?;
-
     let constraints: Vec<NameRequirementSpecification> = constraints
         .iter()
         .cloned()
@@ -146,6 +142,20 @@ pub(crate) async fn pip_install(
                 .map(UnresolvedRequirementSpecification::from),
         )
         .collect();
+
+    // Read build constraints.
+    let build_constraints: Vec<NameRequirementSpecification> =
+        operations::read_constraints(build_constraints, &client_builder)
+            .await?
+            .iter()
+            .cloned()
+            .chain(
+                build_constraints_from_workspace
+                    .iter()
+                    .cloned()
+                    .map(NameRequirementSpecification::from),
+            )
+            .collect();
 
     // Detect the current Python interpreter.
     let environment = if target.is_some() || prefix.is_some() {
@@ -247,7 +257,7 @@ pub(crate) async fn pip_install(
                     }
                 }
                 DefaultInstallLogger.on_audit(requirements.len(), start, printer)?;
-                if dry_run {
+                if dry_run.enabled() {
                     writeln!(printer.stderr(), "Would make no changes")?;
                 }
 
@@ -390,7 +400,6 @@ pub(crate) async fn pip_install(
         &build_options,
         &build_hasher,
         exclude_newer,
-        LowerBound::Warn,
         sources,
         concurrency,
         preview,
@@ -437,7 +446,7 @@ pub(crate) async fn pip_install(
     {
         Ok(graph) => Resolution::from(graph),
         Err(err) => {
-            return diagnostics::OperationDiagnostic::native_tls(native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
@@ -471,7 +480,7 @@ pub(crate) async fn pip_install(
     {
         Ok(_) => {}
         Err(err) => {
-            return diagnostics::OperationDiagnostic::native_tls(native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
@@ -481,7 +490,7 @@ pub(crate) async fn pip_install(
     operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
     // Notify the user of any environment diagnostics.
-    if strict && !dry_run {
+    if strict && !dry_run.enabled() {
         operations::diagnose_environment(&resolution, &environment, &marker_env, printer)?;
     }
 

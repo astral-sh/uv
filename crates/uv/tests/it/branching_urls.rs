@@ -205,6 +205,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
 
     assert_snapshot!(context.read("uv.lock"), @r###"
     version = 1
+    revision = 1
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
         "python_full_version >= '3.12'",
@@ -398,8 +399,9 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     "###
     );
 
-    assert_snapshot!(context.read("uv.lock"), @r###"
+    assert_snapshot!(context.read("uv.lock"), @r#"
     version = 1
+    revision = 1
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
         "python_full_version >= '3.12'",
@@ -523,7 +525,7 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     wheels = [
         { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
     ]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -561,6 +563,7 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
     assert_snapshot!(context.read("uv.lock"), @r###"
     version = 1
+    revision = 1
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
         "python_full_version >= '3.12'",
@@ -647,6 +650,7 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
     assert_snapshot!(context.read("uv.lock"), @r###"
     version = 1
+    revision = 1
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
         "python_full_version >= '3.12'",
@@ -775,6 +779,7 @@ fn dont_pre_visit_url_packages() -> Result<()> {
 
     assert_snapshot!(context.read("uv.lock"), @r###"
     version = 1
+    revision = 1
     requires-python = ">=3.11, <3.13"
 
     [options]

@@ -9,6 +9,8 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{File, FileLocation, IndexUrl, UrlString};
+use uv_pypi_types::HashDigests;
+use uv_small_str::SmallString;
 
 use crate::cached_client::{CacheControl, CachedClientError};
 use crate::html::SimpleHtml;
@@ -185,10 +187,13 @@ impl<'a> FlatIndexClient<'a> {
                 let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
                     .map_err(|err| Error::from_html_err(err, url.clone()))?;
 
+                // Convert to a reference-counted string.
+                let base = SmallString::from(base.as_str());
+
                 let unarchived: Vec<File> = files
                     .into_iter()
                     .filter_map(|file| {
-                        match File::try_from(file, base.as_url()) {
+                        match File::try_from(file, &base) {
                             Ok(file) => Some(file),
                             Err(err) => {
                                 // Ignore files with unparsable version specifiers.
@@ -269,10 +274,11 @@ impl<'a> FlatIndexClient<'a> {
                 }
             }
 
-            let Ok(filename) = entry.file_name().into_string() else {
+            let filename = entry.file_name();
+            let Some(filename) = filename.to_str() else {
                 warn!(
                     "Skipping non-UTF-8 filename in `--find-links` directory: {}",
-                    entry.file_name().to_string_lossy()
+                    filename.to_string_lossy()
                 );
                 continue;
             };
@@ -282,16 +288,16 @@ impl<'a> FlatIndexClient<'a> {
 
             let file = File {
                 dist_info_metadata: false,
-                filename: filename.to_string(),
-                hashes: Vec::new(),
+                filename: filename.into(),
+                hashes: HashDigests::empty(),
                 requires_python: None,
                 size: None,
                 upload_time_utc_ms: None,
-                url: FileLocation::AbsoluteUrl(UrlString::from(url)),
+                url: FileLocation::AbsoluteUrl(UrlString::from(&url)),
                 yanked: None,
             };
 
-            let Some(filename) = DistFilename::try_from_normalized_filename(&filename) else {
+            let Some(filename) = DistFilename::try_from_normalized_filename(filename) else {
                 debug!(
                     "Ignoring `--find-links` entry (expected a wheel or source distribution filename): {}",
                     entry.path().display()

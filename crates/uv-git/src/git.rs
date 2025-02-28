@@ -15,10 +15,9 @@ use tracing::{debug, warn};
 use url::Url;
 
 use uv_fs::Simplified;
+use uv_git_types::{GitHubRepository, GitOid, GitReference};
 use uv_static::EnvVars;
 use uv_version::version;
-
-use crate::{GitHubRepository, GitOid};
 
 /// A file indicates that if present, `git reset` has been done and a repo
 /// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
@@ -46,79 +45,6 @@ enum RefspecStrategy {
     All,
     /// Stop after the first successful fetch, if none succeed then the fetch will fail.
     First,
-}
-
-/// A reference to commit or commit-ish.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum GitReference {
-    /// A specific branch.
-    Branch(String),
-    /// A specific tag.
-    Tag(String),
-    /// From a reference that's ambiguously a branch or tag.
-    BranchOrTag(String),
-    /// From a reference that's ambiguously a commit, branch, or tag.
-    BranchOrTagOrCommit(String),
-    /// From a named reference, like `refs/pull/493/head`.
-    NamedRef(String),
-    /// The default branch of the repository, the reference named `HEAD`.
-    DefaultBranch,
-}
-
-impl GitReference {
-    /// Creates a [`GitReference`] from an arbitrary revision string, which could represent a
-    /// branch, tag, commit, or named ref.
-    pub fn from_rev(rev: String) -> Self {
-        if rev.starts_with("refs/") {
-            Self::NamedRef(rev)
-        } else if looks_like_commit_hash(&rev) {
-            Self::BranchOrTagOrCommit(rev)
-        } else {
-            Self::BranchOrTag(rev)
-        }
-    }
-
-    /// Converts the [`GitReference`] to a `str`.
-    pub fn as_str(&self) -> Option<&str> {
-        match self {
-            Self::Tag(rev) => Some(rev),
-            Self::Branch(rev) => Some(rev),
-            Self::BranchOrTag(rev) => Some(rev),
-            Self::BranchOrTagOrCommit(rev) => Some(rev),
-            Self::NamedRef(rev) => Some(rev),
-            Self::DefaultBranch => None,
-        }
-    }
-
-    /// Converts the [`GitReference`] to a `str` that can be used as a revision.
-    pub fn as_rev(&self) -> &str {
-        match self {
-            Self::Tag(rev) => rev,
-            Self::Branch(rev) => rev,
-            Self::BranchOrTag(rev) => rev,
-            Self::BranchOrTagOrCommit(rev) => rev,
-            Self::NamedRef(rev) => rev,
-            Self::DefaultBranch => "HEAD",
-        }
-    }
-
-    /// Returns the kind of this reference.
-    pub(crate) fn kind_str(&self) -> &str {
-        match self {
-            Self::Branch(_) => "branch",
-            Self::Tag(_) => "tag",
-            Self::BranchOrTag(_) => "branch or tag",
-            Self::BranchOrTagOrCommit(_) => "branch, tag, or commit",
-            Self::NamedRef(_) => "ref",
-            Self::DefaultBranch => "default branch",
-        }
-    }
-}
-
-impl Display for GitReference {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_str().unwrap_or("HEAD"))
-    }
 }
 
 /// A Git reference (like a tag or branch) or a specific commit.
@@ -303,6 +229,7 @@ impl GitRemote {
         reference: &GitReference,
         locked_rev: Option<GitOid>,
         client: &ClientWithMiddleware,
+        disable_ssl: bool,
     ) -> Result<(GitDatabase, GitOid)> {
         let reference = locked_rev
             .map(ReferenceOrOid::Oid)
@@ -310,7 +237,7 @@ impl GitRemote {
         let enable_lfs_fetch = env::var(EnvVars::UV_GIT_LFS).is_ok();
 
         if let Some(mut db) = db {
-            fetch(&mut db.repo, &self.url, reference, client)
+            fetch(&mut db.repo, &self.url, reference, client, disable_ssl)
                 .with_context(|| format!("failed to fetch into: {}", into.user_display()))?;
 
             let resolved_commit_hash = match locked_rev {
@@ -320,7 +247,7 @@ impl GitRemote {
 
             if let Some(rev) = resolved_commit_hash {
                 if enable_lfs_fetch {
-                    fetch_lfs(&mut db.repo, &self.url, &rev)
+                    fetch_lfs(&mut db.repo, &self.url, &rev, disable_ssl)
                         .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
                 }
                 return Ok((db, rev));
@@ -338,14 +265,14 @@ impl GitRemote {
 
         fs_err::create_dir_all(into)?;
         let mut repo = GitRepository::init(into)?;
-        fetch(&mut repo, &self.url, reference, client)
+        fetch(&mut repo, &self.url, reference, client, disable_ssl)
             .with_context(|| format!("failed to clone into: {}", into.user_display()))?;
         let rev = match locked_rev {
             Some(rev) => rev,
             None => reference.resolve(&repo)?,
         };
         if enable_lfs_fetch {
-            fetch_lfs(&mut repo, &self.url, &rev)
+            fetch_lfs(&mut repo, &self.url, &rev, disable_ssl)
                 .with_context(|| format!("failed to fetch LFS objects at {rev}"))?;
         }
 
@@ -421,7 +348,7 @@ impl GitCheckout {
         // Perform a local clone of the repository, which will attempt to use
         // hardlinks to set up the repository. This should speed up the clone operation
         // quite a bit if it works.
-        ProcessBuilder::new(GIT.as_ref()?)
+        let res = ProcessBuilder::new(GIT.as_ref()?)
             .arg("clone")
             .arg("--local")
             // Make sure to pass the local file path and not a file://... url. If given a url,
@@ -429,7 +356,18 @@ impl GitCheckout {
             // have a HEAD checked out.
             .arg(database.repo.path.simplified_display().to_string())
             .arg(into.simplified_display().to_string())
-            .exec_with_output()?;
+            .exec_with_output();
+
+        if let Err(e) = res {
+            debug!("Cloning git repo with --local failed, retrying without hardlinks: {e}");
+
+            ProcessBuilder::new(GIT.as_ref()?)
+                .arg("clone")
+                .arg("--no-hardlinks")
+                .arg(database.repo.path.simplified_display().to_string())
+                .arg(into.simplified_display().to_string())
+                .exec_with_output()?;
+        }
 
         let repo = GitRepository::open(into)?;
         let checkout = GitCheckout::new(revision, repo);
@@ -502,6 +440,7 @@ fn fetch(
     remote_url: &Url,
     reference: ReferenceOrOid<'_>,
     client: &ClientWithMiddleware,
+    disable_ssl: bool,
 ) -> Result<()> {
     let oid_to_fetch = match github_fast_path(repo, remote_url, reference, client) {
         Ok(FastPathRev::UpToDate) => return Ok(()),
@@ -577,14 +516,21 @@ fn fetch(
 
     debug!("Performing a Git fetch for: {remote_url}");
     let result = match refspec_strategy {
-        RefspecStrategy::All => fetch_with_cli(repo, remote_url, refspecs.as_slice(), tags),
+        RefspecStrategy::All => {
+            fetch_with_cli(repo, remote_url, refspecs.as_slice(), tags, disable_ssl)
+        }
         RefspecStrategy::First => {
             // Try each refspec
             let mut errors = refspecs
                 .iter()
                 .map_while(|refspec| {
-                    let fetch_result =
-                        fetch_with_cli(repo, remote_url, std::slice::from_ref(refspec), tags);
+                    let fetch_result = fetch_with_cli(
+                        repo,
+                        remote_url,
+                        std::slice::from_ref(refspec),
+                        tags,
+                        disable_ssl,
+                    );
 
                     // Stop after the first success and log failures
                     match fetch_result {
@@ -629,11 +575,21 @@ fn fetch_with_cli(
     url: &Url,
     refspecs: &[String],
     tags: bool,
+    disable_ssl: bool,
 ) -> Result<()> {
     let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+    // Disable interactive prompts in the terminal, as they'll be erased by the progress bar
+    // animation and the process will "hang". Interactive prompts via the GUI like `SSH_ASKPASS`
+    // are still usable.
+    cmd.env(EnvVars::GIT_TERMINAL_PROMPT, "0");
+
     cmd.arg("fetch");
     if tags {
         cmd.arg("--tags");
+    }
+    if disable_ssl {
+        debug!("Disabling SSL verification for Git fetch");
+        cmd.env(EnvVars::GIT_SSL_NO_VERIFY, "true");
     }
     cmd.arg("--force") // handle force pushes
         .arg("--update-head-ok") // see discussion in #2078
@@ -674,7 +630,12 @@ static GIT_LFS: LazyLock<Result<ProcessBuilder>> = LazyLock::new(|| {
 });
 
 /// Attempts to use `git-lfs` CLI to fetch required LFS objects for a given revision.
-fn fetch_lfs(repo: &mut GitRepository, url: &Url, revision: &GitOid) -> Result<()> {
+fn fetch_lfs(
+    repo: &mut GitRepository,
+    url: &Url,
+    revision: &GitOid,
+    disable_ssl: bool,
+) -> Result<()> {
     let mut cmd = if let Ok(lfs) = GIT_LFS.as_ref() {
         debug!("Fetching Git LFS objects");
         lfs.clone()
@@ -683,6 +644,11 @@ fn fetch_lfs(repo: &mut GitRepository, url: &Url, revision: &GitOid) -> Result<(
         warn!("Git LFS is not available, skipping LFS fetch");
         return Ok(());
     };
+
+    if disable_ssl {
+        debug!("Disabling SSL verification for Git LFS");
+        cmd.env(EnvVars::GIT_SSL_NO_VERIFY, "true");
+    }
 
     cmd.arg("fetch")
         .arg(url.as_str())
@@ -817,11 +783,6 @@ fn github_fast_path(
             Ok(FastPathRev::Indeterminate)
         }
     })
-}
-
-/// Whether a `rev` looks like a commit hash (ASCII hex digits).
-fn looks_like_commit_hash(rev: &str) -> bool {
-    rev.len() >= 7 && rev.chars().all(|ch| ch.is_ascii_hexdigit())
 }
 
 /// Whether `rev` is a shorter hash of `oid`.

@@ -136,23 +136,16 @@ impl RequiresPython {
         } else {
             None
         };
-        // TODO(charlie): Consider re-computing the specifiers (or removing them entirely in favor
-        // of tracking the range). After narrowing, the specifiers and range may be out of sync.
-        match (lower, upper) {
-            (Some(lower), Some(upper)) => Some(Self {
-                specifiers: self.specifiers.clone(),
-                range: RequiresPythonRange(lower.clone(), upper.clone()),
-            }),
-            (Some(lower), None) => Some(Self {
-                specifiers: self.specifiers.clone(),
-                range: RequiresPythonRange(lower.clone(), self.range.1.clone()),
-            }),
-            (None, Some(upper)) => Some(Self {
-                specifiers: self.specifiers.clone(),
-                range: RequiresPythonRange(self.range.0.clone(), upper.clone()),
-            }),
+        let range = match (lower, upper) {
+            (Some(lower), Some(upper)) => Some(RequiresPythonRange(lower.clone(), upper.clone())),
+            (Some(lower), None) => Some(RequiresPythonRange(lower.clone(), self.range.1.clone())),
+            (None, Some(upper)) => Some(RequiresPythonRange(self.range.0.clone(), upper.clone())),
             (None, None) => None,
-        }
+        }?;
+        Some(Self {
+            specifiers: range.specifiers(),
+            range,
+        })
     }
 
     /// Returns this `Requires-Python` specifier as an equivalent
@@ -565,6 +558,14 @@ impl RequiresPythonRange {
     pub fn upper(&self) -> &UpperBound {
         &self.1
     }
+
+    /// Returns the [`VersionSpecifiers`] for the range.
+    pub fn specifiers(&self) -> VersionSpecifiers {
+        [self.0.specifier(), self.1.specifier()]
+            .into_iter()
+            .flatten()
+            .collect()
+    }
 }
 
 impl Default for RequiresPythonRange {
@@ -658,6 +659,19 @@ impl LowerBound {
             Bound::Included(ref bound) => bound <= version,
             Bound::Excluded(ref bound) => bound < version,
             Bound::Unbounded => true,
+        }
+    }
+
+    /// Returns the [`VersionSpecifier`] for the lower bound.
+    pub fn specifier(&self) -> Option<VersionSpecifier> {
+        match &self.0 {
+            Bound::Included(version) => Some(VersionSpecifier::greater_than_equal_version(
+                version.clone(),
+            )),
+            Bound::Excluded(version) => {
+                Some(VersionSpecifier::greater_than_version(version.clone()))
+            }
+            Bound::Unbounded => None,
         }
     }
 }
@@ -786,6 +800,17 @@ impl UpperBound {
             Bound::Included(ref bound) => bound >= version,
             Bound::Excluded(ref bound) => bound > version,
             Bound::Unbounded => true,
+        }
+    }
+
+    /// Returns the [`VersionSpecifier`] for the upper bound.
+    pub fn specifier(&self) -> Option<VersionSpecifier> {
+        match &self.0 {
+            Bound::Included(version) => {
+                Some(VersionSpecifier::less_than_equal_version(version.clone()))
+            }
+            Bound::Excluded(version) => Some(VersionSpecifier::less_than_version(version.clone())),
+            Bound::Unbounded => None,
         }
     }
 }

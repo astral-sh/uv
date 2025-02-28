@@ -32,15 +32,13 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error("Failed to update `uv-receipt.toml` at {0}")]
-    ReceiptWrite(PathBuf, #[source] Box<toml::ser::Error>),
+    ReceiptWrite(PathBuf, #[source] Box<toml_edit::ser::Error>),
     #[error("Failed to read `uv-receipt.toml` at {0}")]
     ReceiptRead(PathBuf, #[source] Box<toml::de::Error>),
     #[error(transparent)]
     VirtualEnvError(#[from] uv_virtualenv::Error),
     #[error("Failed to read package entry points {0}")]
     EntrypointRead(#[from] uv_install_wheel::Error),
-    #[error("Failed to find dist-info directory `{0}` in environment at {1}")]
-    DistInfoMissing(String, PathBuf),
     #[error("Failed to find a directory to install executables into")]
     NoExecutableDirectory,
     #[error(transparent)]
@@ -53,8 +51,6 @@ pub enum Error {
     EnvironmentRead(PathBuf, String),
     #[error("Failed find package `{0}` in tool environment")]
     MissingToolPackage(PackageName),
-    #[error(transparent)]
-    Serialization(#[from] toml_edit::ser::Error),
 }
 
 /// A collection of uv-managed tools installed on the current system.
@@ -159,7 +155,9 @@ impl InstalledTools {
             path.user_display()
         );
 
-        let doc = tool_receipt.to_toml()?;
+        let doc = tool_receipt
+            .to_toml()
+            .map_err(|err| Error::ReceiptWrite(path.clone(), Box::new(err)))?;
 
         // Save the modified `uv-receipt.toml`.
         fs_err::write(&path, doc)?;

@@ -1,4 +1,6 @@
+use std::borrow::Cow;
 use std::cmp::Ordering;
+use std::fmt::Formatter;
 use std::ops::Bound;
 use std::str::FromStr;
 
@@ -30,7 +32,7 @@ use tracing::warn;
     derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
 )]
 #[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
-pub struct VersionSpecifiers(Vec<VersionSpecifier>);
+pub struct VersionSpecifiers(Box<[VersionSpecifier]>);
 
 impl std::ops::Deref for VersionSpecifiers {
     type Target = [VersionSpecifier];
@@ -43,7 +45,7 @@ impl std::ops::Deref for VersionSpecifiers {
 impl VersionSpecifiers {
     /// Matches all versions.
     pub fn empty() -> Self {
-        Self(Vec::new())
+        Self(Box::new([]))
     }
 
     /// Whether all specifiers match the given version.
@@ -61,7 +63,7 @@ impl VersionSpecifiers {
         // TODO(konsti): This seems better than sorting on insert and not getting the size hint,
         // but i haven't measured it.
         specifiers.sort_by(|a, b| a.version().cmp(b.version()));
-        Self(specifiers)
+        Self(specifiers.into_boxed_slice())
     }
 
     /// Returns the [`VersionSpecifiers`] whose union represents the given range.
@@ -117,7 +119,7 @@ impl IntoIterator for VersionSpecifiers {
     type IntoIter = std::vec::IntoIter<VersionSpecifier>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
+        self.0.into_vec().into_iter()
     }
 }
 
@@ -131,7 +133,7 @@ impl FromStr for VersionSpecifiers {
 
 impl From<VersionSpecifier> for VersionSpecifiers {
     fn from(specifier: VersionSpecifier) -> Self {
-        Self(vec![specifier])
+        Self(Box::new([specifier]))
     }
 }
 
@@ -161,8 +163,21 @@ impl<'de> Deserialize<'de> for VersionSpecifiers {
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        Self::from_str(&s).map_err(de::Error::custom)
+        struct Visitor;
+
+        impl de::Visitor<'_> for Visitor {
+            type Value = VersionSpecifiers;
+
+            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                VersionSpecifiers::from_str(v).map_err(de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 
@@ -172,7 +187,7 @@ impl Serialize for VersionSpecifiers {
     where
         S: Serializer,
     {
-        serializer.collect_str(
+        serializer.serialize_str(
             &self
                 .iter()
                 .map(ToString::to_string)
@@ -256,14 +271,26 @@ pub struct VersionSpecifier {
     pub(crate) version: Version,
 }
 
-/// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
 impl<'de> Deserialize<'de> for VersionSpecifier {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        FromStr::from_str(&s).map_err(de::Error::custom)
+        struct Visitor;
+
+        impl de::Visitor<'_> for Visitor {
+            type Value = VersionSpecifier;
+
+            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                VersionSpecifier::from_str(v).map_err(de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 
@@ -469,15 +496,15 @@ impl VersionSpecifier {
         // "Except where specifically noted below, local version identifiers MUST NOT be permitted
         // in version specifiers, and local version labels MUST be ignored entirely when checking
         // if candidate versions match a given version specifier."
-        let (this, other) = if self.version.local().is_empty() {
-            // self is already without local
-            (self.version.clone(), version.clone().without_local())
+        let this = self.version();
+        let other = if this.local().is_empty() && !version.local().is_empty() {
+            Cow::Owned(version.clone().without_local())
         } else {
-            (self.version.clone(), version.clone())
+            Cow::Borrowed(version)
         };
 
         match self.operator {
-            Operator::Equal => other == this,
+            Operator::Equal => other.as_ref() == this,
             Operator::EqualStar => {
                 this.epoch() == other.epoch()
                     && self
@@ -495,7 +522,7 @@ impl VersionSpecifier {
                 }
                 self.version.to_string() == version.to_string()
             }
-            Operator::NotEqual => other != this,
+            Operator::NotEqual => this != other.as_ref(),
             Operator::NotEqualStar => {
                 this.epoch() != other.epoch()
                     || !this
@@ -524,17 +551,19 @@ impl VersionSpecifier {
 
                 // According to PEP 440, this ignores the pre-release special rules
                 // pypa/packaging disagrees: https://github.com/pypa/packaging/issues/617
-                other >= this
+                other.as_ref() >= this
             }
-            Operator::GreaterThan => Self::greater_than(&this, &other),
-            Operator::GreaterThanEqual => Self::greater_than(&this, &other) || other >= this,
+            Operator::GreaterThan => Self::greater_than(this, &other),
+            Operator::GreaterThanEqual => {
+                Self::greater_than(this, &other) || other.as_ref() >= this
+            }
             Operator::LessThan => {
-                Self::less_than(&this, &other)
+                Self::less_than(this, &other)
                     && !(version::compare_release(&this.release(), &other.release())
                         == Ordering::Equal
                         && other.any_prerelease())
             }
-            Operator::LessThanEqual => Self::less_than(&this, &other) || other <= this,
+            Operator::LessThanEqual => Self::less_than(this, &other) || other.as_ref() <= this,
         }
     }
 
@@ -1285,7 +1314,7 @@ mod tests {
     fn test_parse_version_specifiers() {
         let result = VersionSpecifiers::from_str("~= 0.9, >= 1.0, != 1.3.4.*, < 2.0").unwrap();
         assert_eq!(
-            result.0,
+            result.0.as_ref(),
             [
                 VersionSpecifier {
                     operator: Operator::TildeEqual,

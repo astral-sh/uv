@@ -1,6 +1,7 @@
-use fs2::FileExt;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
+
+use fs2::FileExt;
 use tempfile::NamedTempFile;
 use tracing::{debug, error, info, trace, warn};
 
@@ -9,6 +10,38 @@ pub use crate::path::*;
 pub mod cachedir;
 mod path;
 pub mod which;
+
+/// Attempt to check if the two paths refer to the same file.
+///
+/// Returns `Some(true)` if the files are missing, but would be the same if they existed.
+pub fn is_same_file_allow_missing(left: &Path, right: &Path) -> Option<bool> {
+    // First, check an exact path comparison.
+    if left == right {
+        return Some(true);
+    }
+
+    // Second, check the files directly.
+    if let Ok(value) = same_file::is_same_file(left, right) {
+        return Some(value);
+    };
+
+    // Often, one of the directories won't exist yet so perform the comparison up a level.
+    if let (Some(left_parent), Some(right_parent), Some(left_name), Some(right_name)) = (
+        left.parent(),
+        right.parent(),
+        left.file_name(),
+        right.file_name(),
+    ) {
+        match same_file::is_same_file(left_parent, right_parent) {
+            Ok(true) => return Some(left_name == right_name),
+            Ok(false) => return Some(false),
+            _ => (),
+        }
+    };
+
+    // We couldn't determine if they're the same.
+    None
+}
 
 /// Reads data from the path and requires that it be valid UTF-8 or UTF-16.
 ///
@@ -84,8 +117,6 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
 /// Create a symlink at `dst` pointing to `src`, replacing any existing symlink if necessary.
 ///
 /// On Unix, this method creates a temporary file, then moves it into place.
-///
-/// TODO(charlie): Consider using the `rust-atomicwrites` crate.
 #[cfg(unix)]
 pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
     // Attempt to create the symlink directly.
@@ -245,10 +276,14 @@ pub async fn rename_with_retry(
     }
 }
 
-/// Rename a file, retrying (on Windows) if it fails due to transient operating system errors, in a synchronous context.
-pub fn rename_with_retry_sync(
+/// Rename or copy a file, retrying (on Windows) if it fails due to transient operating system
+/// errors, in a synchronous context.
+#[cfg_attr(not(windows), allow(unused_variables))]
+pub fn with_retry_sync(
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
+    operation_name: &str,
+    operation: impl Fn() -> Result<(), std::io::Error>,
 ) -> Result<(), std::io::Error> {
     #[cfg(windows)]
     {
@@ -260,15 +295,15 @@ pub fn rename_with_retry_sync(
         // See: <https://github.com/astral-sh/uv/issues/1491> & <https://github.com/astral-sh/uv/issues/9531>
         let from = from.as_ref();
         let to = to.as_ref();
-        let rename = || fs_err::rename(from, to);
 
-        rename
+        operation
             .retry(backoff_file_move())
             .sleep(std::thread::sleep)
             .when(|err| err.kind() == std::io::ErrorKind::PermissionDenied)
             .notify(|err, _dur| {
                 warn!(
-                    "Retrying rename from {} to {} due to transient error: {}",
+                    "Retrying {} from {} to {} due to transient error: {}",
+                    operation_name,
                     from.display(),
                     to.display(),
                     err
@@ -279,7 +314,8 @@ pub fn rename_with_retry_sync(
                 std::io::Error::new(
                     std::io::ErrorKind::Other,
                     format!(
-                        "Failed to rename {} to {}: {}",
+                        "Failed {} {} to {}: {}",
+                        operation_name,
                         from.display(),
                         to.display(),
                         err
@@ -289,7 +325,7 @@ pub fn rename_with_retry_sync(
     }
     #[cfg(not(windows))]
     {
-        fs_err::rename(from, to)
+        operation()
     }
 }
 
@@ -497,10 +533,10 @@ pub fn directories(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
         .map(|entry| entry.path())
 }
 
-/// Iterate over the symlinks in a directory.
+/// Iterate over the entries in a directory.
 ///
 /// If the directory does not exist, returns an empty iterator.
-pub fn symlinks(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
+pub fn entries(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
     path.as_ref()
         .read_dir()
         .ok()
@@ -512,11 +548,6 @@ pub fn symlinks(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
                 warn!("Failed to read entry: {}", err);
                 None
             }
-        })
-        .filter(|entry| {
-            entry
-                .file_type()
-                .is_ok_and(|file_type| file_type.is_symlink())
         })
         .map(|entry| entry.path())
 }
@@ -599,7 +630,7 @@ impl LockedFile {
         path: impl AsRef<Path>,
         resource: impl Display,
     ) -> Result<Self, std::io::Error> {
-        let file = fs_err::File::create(path.as_ref())?;
+        let file = Self::create(path)?;
         let resource = resource.to_string();
         Self::lock_file_blocking(file, &resource)
     }
@@ -610,9 +641,61 @@ impl LockedFile {
         path: impl AsRef<Path>,
         resource: impl Display,
     ) -> Result<Self, std::io::Error> {
-        let file = fs_err::File::create(path.as_ref())?;
+        let file = Self::create(path)?;
         let resource = resource.to_string();
         tokio::task::spawn_blocking(move || Self::lock_file_blocking(file, &resource)).await?
+    }
+
+    #[cfg(unix)]
+    fn create(path: impl AsRef<Path>) -> Result<fs_err::File, std::io::Error> {
+        use std::os::unix::fs::PermissionsExt;
+
+        // If path already exists, return it.
+        if let Ok(file) = fs_err::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(path.as_ref())
+        {
+            return Ok(file);
+        }
+
+        // Otherwise, create a temporary file with 777 permissions. We must set
+        // permissions _after_ creating the file, to override the `umask`.
+        let file = if let Some(parent) = path.as_ref().parent() {
+            NamedTempFile::new_in(parent)?
+        } else {
+            NamedTempFile::new()?
+        };
+        if let Err(err) = file
+            .as_file()
+            .set_permissions(std::fs::Permissions::from_mode(0o777))
+        {
+            warn!("Failed to set permissions on temporary file: {err}");
+        }
+
+        // Try to move the file to path, but if path exists now, just open path
+        match file.persist_noclobber(path.as_ref()) {
+            Ok(file) => Ok(fs_err::File::from_parts(file, path.as_ref())),
+            Err(err) => {
+                if err.error.kind() == std::io::ErrorKind::AlreadyExists {
+                    fs_err::OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .open(path.as_ref())
+                } else {
+                    Err(err.error)
+                }
+            }
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn create(path: impl AsRef<Path>) -> std::io::Result<fs_err::File> {
+        fs_err::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(path.as_ref())
     }
 }
 

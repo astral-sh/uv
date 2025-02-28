@@ -208,9 +208,6 @@ impl CandidateSelector {
                     // Prefer preferences that match the current environment.
                     let matches_env = env.included_by_marker(marker.pep508());
 
-                    // Prefer preferences that match the current index.
-                    let matches_index = index.is_none_or(|index| entry.index().matches(index));
-
                     // Prefer the latest (or earliest) version.
                     let version = if highest {
                         Either::Left(entry.pin().version())
@@ -218,7 +215,7 @@ impl CandidateSelector {
                         Either::Right(std::cmp::Reverse(entry.pin().version()))
                     };
 
-                    std::cmp::Reverse((matches_env, matches_index, version))
+                    std::cmp::Reverse((matches_env, version))
                 });
 
                 Either::Right(
@@ -301,10 +298,38 @@ impl CandidateSelector {
             }
 
             // Check for a remote distribution that matches the preferred version
-            if let Some(file) = version_maps
+            if let Some((version_map, file)) = version_maps
                 .iter()
-                .find_map(|version_map| version_map.get(version))
+                .find_map(|version_map| version_map.get(version).map(|dist| (version_map, dist)))
             {
+                // If the preferred version has a local variant, prefer that.
+                if version_map.local() {
+                    for local in version_map
+                        .versions()
+                        .rev()
+                        .take_while(|local| *local > version)
+                    {
+                        if !local.is_local() {
+                            continue;
+                        }
+                        if local.clone().without_local() != *version {
+                            continue;
+                        }
+                        if !range.contains(local) {
+                            continue;
+                        }
+                        if let Some(dist) = version_map.get(local) {
+                            debug!("Preferring local version `{package_name}` (v{local})");
+                            return Some(Candidate::new(
+                                package_name,
+                                local,
+                                dist,
+                                VersionChoiceKind::Preference,
+                            ));
+                        }
+                    }
+                }
+
                 return Some(Candidate::new(
                     package_name,
                     version,

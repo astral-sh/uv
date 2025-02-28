@@ -7,7 +7,7 @@ use uv_distribution_types::{
 };
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pypi_types::HashDigest;
+use uv_pypi_types::HashDigests;
 
 pub use crate::resolution::display::{AnnotationStyle, DisplayResolutionGraph};
 pub(crate) use crate::resolution::output::ResolutionGraphNode;
@@ -29,7 +29,7 @@ pub(crate) struct AnnotatedDist {
     pub(crate) version: Version,
     pub(crate) extra: Option<ExtraName>,
     pub(crate) dev: Option<GroupName>,
-    pub(crate) hashes: Vec<HashDigest>,
+    pub(crate) hashes: HashDigests,
     pub(crate) metadata: Option<Metadata>,
     /// The "full" marker for this distribution. It precisely describes all
     /// marker environments for which this distribution _can_ be installed.
@@ -50,7 +50,7 @@ impl AnnotatedDist {
     pub(crate) fn index(&self) -> Option<&IndexUrl> {
         match &self.dist {
             ResolvedDist::Installed { .. } => None,
-            ResolvedDist::Installable { dist, .. } => match dist {
+            ResolvedDist::Installable { dist, .. } => match dist.as_ref() {
                 Dist::Built(dist) => match dist {
                     BuiltDist::Registry(dist) => Some(&dist.best_wheel().index),
                     BuiltDist::DirectUrl(_) => None,

@@ -136,7 +136,7 @@ fn prune_cached_env() {
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
-    DEBUG Removing dangling cache environment: [CACHE_DIR]/environments-v1/[ENTRY]
+    DEBUG Removing dangling cache environment: [CACHE_DIR]/environments-v2/[ENTRY]
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
     "###);
@@ -158,7 +158,7 @@ fn prune_stale_symlink() -> Result<()> {
         .success();
 
     // Remove the wheels directory, causing the symlink to become stale.
-    let wheels = context.cache_dir.child("wheels-v3");
+    let wheels = context.cache_dir.child("wheels-v5");
     fs_err::remove_dir_all(wheels)?;
 
     let filters: Vec<_> = context
@@ -348,7 +348,7 @@ fn prune_stale_revision() -> Result<()> {
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
-    DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v7/[ENTRY]
+    DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v8/[ENTRY]
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
     "###);

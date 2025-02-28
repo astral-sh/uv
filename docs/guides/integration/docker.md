@@ -31,8 +31,8 @@ $ docker run --rm -it ghcr.io/astral-sh/uv:debian uv --help
 The following distroless images are available:
 
 - `ghcr.io/astral-sh/uv:latest`
-- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.5.26`
-- `ghcr.io/astral-sh/uv:{major}.{minor}`, e.g., `ghcr.io/astral-sh/uv:0.5` (the latest patch
+- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.6.3`
+- `ghcr.io/astral-sh/uv:{major}.{minor}`, e.g., `ghcr.io/astral-sh/uv:0.6` (the latest patch
   version)
 
 And the following derived images are available:
@@ -72,7 +72,7 @@ And the following derived images are available:
 
 As with the distroless image, each derived image is published with uv version tags as
 `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}-{base}` and
-`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.5.26-alpine`.
+`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.6.3-alpine`.
 
 For more details, see the [GitHub Container](https://github.com/astral-sh/uv/pkgs/container/uv)
 page.
@@ -110,7 +110,7 @@ Note this requires `curl` to be available.
 In either case, it is best practice to pin to a specific uv version, e.g., with:
 
 ```dockerfile
-COPY --from=ghcr.io/astral-sh/uv:0.5.26 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.6.3 /uv /uvx /bin/
 ```
 
 !!! tip
@@ -128,7 +128,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.5.26 /uv /uvx /bin/
 Or, with the installer:
 
 ```dockerfile
-ADD https://astral.sh/uv/0.5.26/install.sh /uv-installer.sh
+ADD https://astral.sh/uv/0.6.3/install.sh /uv-installer.sh
 ```
 
 ### Installing a project
@@ -500,3 +500,59 @@ RUN uv pip install -r pyproject.toml
 COPY . .
 RUN uv pip install -e .
 ```
+
+## Verifying image provenance
+
+The Docker images are signed during the build process to provide proof of their origin. These
+attestations can be used to verify that an image was produced from an official channel.
+
+For example, you can verify the attestations with the
+[GitHub CLI tool `gh`](https://cli.github.com/):
+
+```console
+$ gh attestation verify --owner astral-sh oci://ghcr.io/astral-sh/uv:latest
+Loaded digest sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx for oci://ghcr.io/astral-sh/uv:latest
+Loaded 1 attestation from GitHub API
+
+The following policy criteria will be enforced:
+- OIDC Issuer must match:................... https://token.actions.githubusercontent.com
+- Source Repository Owner URI must match:... https://github.com/astral-sh
+- Predicate type must match:................ https://slsa.dev/provenance/v1
+- Subject Alternative Name must match regex: (?i)^https://github.com/astral-sh/
+
+✓ Verification succeeded!
+
+sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx was attested by:
+REPO          PREDICATE_TYPE                  WORKFLOW
+astral-sh/uv  https://slsa.dev/provenance/v1  .github/workflows/build-docker.yml@refs/heads/main
+```
+
+This tells you that the specific Docker image was built by the official uv Github release workflow
+and hasn't been tampered with since.
+
+GitHub attestations build on the [sigstore.dev infrastructure](https://www.sigstore.dev/). As such
+you can also use the [`cosign` command](https://github.com/sigstore/cosign) to verify the
+attestation blob against the (multi-platform) manifest for `uv`:
+
+```console
+$ REPO=astral-sh/uv
+$ gh attestation download --repo $REPO oci://ghcr.io/${REPO}:latest
+Wrote attestations to file sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.jsonl.
+Any previous content has been overwritten
+
+The trusted metadata is now available at sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.jsonl
+$ docker buildx imagetools inspect ghcr.io/${REPO}:latest --format "{{json .Manifest}}" > manifest.json
+$ cosign verify-blob-attestation \
+    --new-bundle-format \
+    --bundle "$(jq -r .digest manifest.json).jsonl"  \
+    --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
+    --certificate-identity-regexp="^https://github\.com/${REPO}/.*" \
+    <(jq -j '.|del(.digest,.size)' manifest.json)
+Verified OK
+```
+
+!!! tip
+
+    These examples use `latest`, but best practice is to verify the attestation for a specific
+    version tag, e.g., `ghcr.io/astral-sh/uv:0.6.3`, or (even better) the specific image digest,
+    such as `ghcr.io/astral-sh/uv:0.5.27@sha256:5adf09a5a526f380237408032a9308000d14d5947eafa687ad6c6a2476787b4f`.

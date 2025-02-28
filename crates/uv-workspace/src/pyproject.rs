@@ -6,20 +6,22 @@
 //!
 //! Then lowers them into a dependency specification.
 
+use std::collections::BTreeMap;
+use std::fmt::Formatter;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::{collections::BTreeMap, mem};
 
 use glob::Pattern;
 use owo_colors::OwoColorize;
+use rustc_hash::{FxBuildHasher, FxHashSet};
 use serde::{de::IntoDeserializer, de::SeqAccess, Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use url::Url;
 
 use uv_distribution_types::{Index, IndexName};
 use uv_fs::{relative_to, PortablePathBuf};
-use uv_git::GitReference;
+use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
@@ -279,6 +281,30 @@ pub struct Tool {
     pub uv: Option<ToolUv>,
 }
 
+/// Validates that index names in the `tool.uv.index` field are unique.
+///
+/// This custom deserializer function checks for duplicate index names
+/// and returns an error if any duplicates are found.
+fn deserialize_index_vec<'de, D>(deserializer: D) -> Result<Option<Vec<Index>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let indexes = Option::<Vec<Index>>::deserialize(deserializer)?;
+    if let Some(indexes) = indexes.as_ref() {
+        let mut seen_names = FxHashSet::with_capacity_and_hasher(indexes.len(), FxBuildHasher);
+        for index in indexes {
+            if let Some(name) = index.name.as_ref() {
+                if !seen_names.insert(name) {
+                    return Err(serde::de::Error::custom(format!(
+                        "duplicate index name `{name}`"
+                    )));
+                }
+            }
+        }
+    }
+    Ok(indexes)
+}
+
 // NOTE(charlie): When adding fields to this struct, mark them as ignored on `Options` in
 // `crates/uv-settings/src/settings.rs`.
 #[derive(Deserialize, OptionsMetadata, Debug, Clone, PartialEq, Eq)]
@@ -341,6 +367,7 @@ pub struct ToolUv {
             url = "https://download.pytorch.org/whl/cu121"
         "#
     )]
+    #[serde(deserialize_with = "deserialize_index_vec", default)]
     pub index: Option<Vec<Index>>,
 
     /// The workspace definition for the project, if any.
@@ -479,6 +506,37 @@ pub struct ToolUv {
     )]
     pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
 
+    /// Constraints to apply when solving build dependencies.
+    ///
+    /// Build constraints are used to restrict the versions of build dependencies that are selected
+    /// when building a package during resolution or installation.
+    ///
+    /// Including a package as a constraint will _not_ trigger installation of the package during
+    /// a build; instead, the package must be requested elsewhere in the project's build dependency
+    /// graph.
+    ///
+    /// !!! note
+    ///     In `uv lock`, `uv sync`, and `uv run`, uv will only read `build-constraint-dependencies` from
+    ///     the `pyproject.toml` at the workspace root, and will ignore any declarations in other
+    ///     workspace members or `uv.toml` files.
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(
+            with = "Option<Vec<String>>",
+            description = "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`."
+        )
+    )]
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            # Ensure that the setuptools v60.0.0 is used whenever a package has a build dependency
+            # on setuptools.
+            build-constraint-dependencies = ["setuptools==60.0.0"]
+        "#
+    )]
+    pub build_constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+
     /// A list of supported environments against which to resolve dependencies.
     ///
     /// By default, uv will resolve for all possible environments during a `uv lock` operation.
@@ -503,6 +561,45 @@ pub struct ToolUv {
         "#
     )]
     pub environments: Option<SupportedEnvironments>,
+
+    /// A list of required platforms, for packages that lack source distributions.
+    ///
+    /// When a package does not have a source distribution, it's availability will be limited to
+    /// the platforms supported by its built distributions (wheels). For example, if a package only
+    /// publishes wheels for Linux, then it won't be installable on macOS or Windows.
+    ///
+    /// By default, uv requires each package to include at least one wheel that is compatible with
+    /// the designated Python version. The `required-environments` setting can be used to ensure that
+    /// the resulting resolution contains wheels for specific platforms, or fails if no such wheels
+    /// are available.
+    ///
+    /// While the `environments` setting _limits_ the set of environments that uv will consider when
+    /// resolving dependencies, `required-environments` _expands_ the set of platforms that uv _must_
+    /// support when resolving dependencies.
+    ///
+    /// For example, `environments = ["sys_platform == 'darwin'"]` would limit uv to solving for
+    /// macOS (and ignoring Linux and Windows). On the other hand, `required-environments = ["sys_platform == 'darwin'"]`
+    /// would _require_ that any package without a source distribution include a wheel for macOS in
+    /// order to be installable.
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(
+            with = "Option<Vec<String>>",
+            description = "A list of environment markers, e.g., `sys_platform == 'darwin'."
+        )
+    )]
+    #[option(
+        default = "[]",
+        value_type = "str | list[str]",
+        example = r#"
+            # Require that the package is available for macOS ARM and x86 (Intel).
+            required-environments = [
+                "sys_platform == 'darwin' and platform_machine == 'arm64'",
+                "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+            ]
+        "#
+    )]
+    pub required_environments: Option<SupportedEnvironments>,
 
     /// Declare collections of extras or dependency groups that are conflicting
     /// (i.e., mutually exclusive).
@@ -643,8 +740,39 @@ pub struct ToolUvWorkspace {
 }
 
 /// (De)serialize globs as strings.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-pub struct SerdePattern(#[serde(with = "serde_from_and_to_string")] pub Pattern);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SerdePattern(Pattern);
+
+impl serde::ser::Serialize for SerdePattern {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        self.0.as_str().serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for SerdePattern {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = SerdePattern;
+
+            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                Pattern::from_str(v)
+                    .map(SerdePattern)
+                    .map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
+    }
+}
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for SerdePattern {
@@ -1430,25 +1558,22 @@ impl Source {
                 group: None,
             },
             RequirementSource::Git {
-                repository,
-                mut reference,
-                subdirectory,
-                ..
+                git, subdirectory, ..
             } => {
                 if rev.is_none() && tag.is_none() && branch.is_none() {
-                    let rev = match reference {
-                        GitReference::Branch(ref mut rev) => Some(mem::take(rev)),
-                        GitReference::Tag(ref mut rev) => Some(mem::take(rev)),
-                        GitReference::BranchOrTag(ref mut rev) => Some(mem::take(rev)),
-                        GitReference::BranchOrTagOrCommit(ref mut rev) => Some(mem::take(rev)),
-                        GitReference::NamedRef(ref mut rev) => Some(mem::take(rev)),
+                    let rev = match git.reference() {
+                        GitReference::Branch(rev) => Some(rev),
+                        GitReference::Tag(rev) => Some(rev),
+                        GitReference::BranchOrTag(rev) => Some(rev),
+                        GitReference::BranchOrTagOrCommit(rev) => Some(rev),
+                        GitReference::NamedRef(rev) => Some(rev),
                         GitReference::DefaultBranch => None,
                     };
                     Source::Git {
-                        rev,
+                        rev: rev.cloned(),
                         tag,
                         branch,
-                        git: repository,
+                        git: git.repository().clone(),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,
                         extra: None,
@@ -1459,7 +1584,7 @@ impl Source {
                         rev,
                         tag,
                         branch,
-                        git: repository,
+                        git: git.repository().clone(),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,
                         extra: None,
@@ -1517,31 +1642,4 @@ pub enum DependencyType {
     Optional(ExtraName),
     /// A dependency in `dependency-groups.{0}`.
     Group(GroupName),
-}
-
-/// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
-mod serde_from_and_to_string {
-    use std::fmt::Display;
-    use std::str::FromStr;
-
-    use serde::{de, Deserialize, Deserializer, Serializer};
-
-    pub(super) fn serialize<T, S>(value: &T, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        T: Display,
-        S: Serializer,
-    {
-        serializer.collect_str(value)
-    }
-
-    pub(super) fn deserialize<'de, T, D>(deserializer: D) -> Result<T, D::Error>
-    where
-        T: FromStr,
-        T::Err: Display,
-        D: Deserializer<'de>,
-    {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(de::Error::custom)
-    }
 }

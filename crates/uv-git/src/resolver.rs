@@ -3,16 +3,18 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use tracing::debug;
-
-use crate::{Fetch, GitHubRepository, GitOid, GitReference, GitSource, GitUrl, Reporter};
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
 use fs_err::tokio as fs;
 use reqwest_middleware::ClientWithMiddleware;
+use tracing::debug;
+
 use uv_cache_key::{cache_digest, RepositoryUrl};
 use uv_fs::LockedFile;
+use uv_git_types::{GitHubRepository, GitOid, GitReference, GitUrl};
 use uv_version::version;
+
+use crate::{Fetch, GitSource, Reporter};
 
 #[derive(Debug, thiserror::Error)]
 pub enum GitResolverError {
@@ -106,6 +108,7 @@ impl GitResolver {
         &self,
         url: &GitUrl,
         client: ClientWithMiddleware,
+        disable_ssl: bool,
         cache: PathBuf,
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Fetch, GitResolverError> {
@@ -139,6 +142,14 @@ impl GitResolver {
         } else {
             GitSource::new(url.as_ref().clone(), client, cache)
         };
+
+        // If necessary, disable SSL.
+        let source = if disable_ssl {
+            source.dangerous()
+        } else {
+            source
+        };
+
         let fetch = tokio::task::spawn_blocking(move || source.fetch())
             .await?
             .map_err(GitResolverError::Git)?;

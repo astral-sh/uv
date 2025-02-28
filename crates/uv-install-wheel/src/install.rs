@@ -2,20 +2,23 @@
 //! reading from a zip file.
 
 use std::path::Path;
+use std::str::FromStr;
 
-use crate::linker::{LinkMode, Locks};
-use crate::script::{scripts_from_ini, Script};
-use crate::wheel::{
-    install_data, parse_wheel_file, read_record_file, write_installer_metadata,
-    write_script_entrypoints, LibKind,
-};
-use crate::{Error, Layout};
 use fs_err as fs;
 use fs_err::File;
 use tracing::{instrument, trace};
+
 use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
-use uv_pypi_types::{DirectUrl, Metadata12};
+use uv_pep440::Version;
+use uv_pypi_types::{DirectUrl, Metadata10};
+
+use crate::linker::{LinkMode, Locks};
+use crate::wheel::{
+    dist_info_metadata, find_dist_info, install_data, parse_scripts, parse_wheel_file,
+    read_record_file, write_installer_metadata, write_script_entrypoints, LibKind,
+};
+use crate::{Error, Layout};
 
 /// Install the given wheel to the given venv
 ///
@@ -39,8 +42,10 @@ pub fn install_wheel(
 ) -> Result<(), Error> {
     let dist_info_prefix = find_dist_info(&wheel)?;
     let metadata = dist_info_metadata(&dist_info_prefix, &wheel)?;
-    let Metadata12 { name, version, .. } = Metadata12::parse_metadata(&metadata)
+    let Metadata10 { name, version } = Metadata10::parse_pkg_info(&metadata)
         .map_err(|err| Error::InvalidWheel(err.to_string()))?;
+
+    let version = Version::from_str(&version)?;
 
     // Validate the wheel name and version.
     {
@@ -112,7 +117,6 @@ pub fn install_wheel(
     // 2.b Move each subtree of distribution-1.0.data/ onto its destination path. Each subdirectory of distribution-1.0.data/ is a key into a dict of destination directories, such as distribution-1.0.data/(purelib|platlib|headers|scripts|data). The initially supported paths are taken from distutils.command.install.
     let data_dir = site_packages.join(format!("{dist_info_prefix}.data"));
     if data_dir.is_dir() {
-        trace!(?name, "Installing data");
         install_data(
             layout,
             relocatable,
@@ -155,70 +159,4 @@ pub fn install_wheel(
     }
 
     Ok(())
-}
-
-/// Find the `dist-info` directory in an unzipped wheel.
-///
-/// See: <https://github.com/PyO3/python-pkginfo-rs>
-///
-/// See: <https://github.com/pypa/pip/blob/36823099a9cdd83261fdbc8c1d2a24fa2eea72ca/src/pip/_internal/utils/wheel.py#L38>
-fn find_dist_info(path: impl AsRef<Path>) -> Result<String, Error> {
-    // Iterate over `path` to find the `.dist-info` directory. It should be at the top-level.
-    let Some(dist_info) = fs::read_dir(path.as_ref())?.find_map(|entry| {
-        let entry = entry.ok()?;
-        let file_type = entry.file_type().ok()?;
-        if file_type.is_dir() {
-            let path = entry.path();
-            if path.extension().is_some_and(|ext| ext == "dist-info") {
-                Some(path)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    }) else {
-        return Err(Error::InvalidWheel(
-            "Missing .dist-info directory".to_string(),
-        ));
-    };
-
-    let Some(dist_info_prefix) = dist_info.file_stem() else {
-        return Err(Error::InvalidWheel(
-            "Missing .dist-info directory".to_string(),
-        ));
-    };
-
-    Ok(dist_info_prefix.to_string_lossy().to_string())
-}
-
-/// Read the `dist-info` metadata from a directory.
-fn dist_info_metadata(dist_info_prefix: &str, wheel: impl AsRef<Path>) -> Result<Vec<u8>, Error> {
-    let metadata_file = wheel
-        .as_ref()
-        .join(format!("{dist_info_prefix}.dist-info/METADATA"));
-    Ok(fs::read(metadata_file)?)
-}
-
-/// Parses the `entry_points.txt` entry in the wheel for console scripts
-///
-/// Returns (`script_name`, module, function)
-///
-/// Extras are supposed to be ignored, which happens if you pass None for extras.
-fn parse_scripts(
-    wheel: impl AsRef<Path>,
-    dist_info_prefix: &str,
-    extras: Option<&[String]>,
-    python_minor: u8,
-) -> Result<(Vec<Script>, Vec<Script>), Error> {
-    let entry_points_path = wheel
-        .as_ref()
-        .join(format!("{dist_info_prefix}.dist-info/entry_points.txt"));
-
-    // Read the entry points mapping. If the file doesn't exist, we just return an empty mapping.
-    let Ok(ini) = fs::read_to_string(entry_points_path) else {
-        return Ok((Vec::new(), Vec::new()));
-    };
-
-    scripts_from_ini(extras, python_minor, ini)
 }

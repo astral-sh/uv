@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.5.26"
+version = "0.6.3"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -31,6 +31,7 @@ uv-distribution-types = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-git = { workspace = true }
+uv-git-types = { workspace = true }
 uv-install-wheel = { workspace = true, default-features = false }
 uv-installer = { workspace = true }
 uv-normalize = { workspace = true }

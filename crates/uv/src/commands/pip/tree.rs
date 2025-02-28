@@ -8,11 +8,12 @@ use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::prelude::EdgeRef;
 use petgraph::Direction;
 use rustc_hash::{FxHashMap, FxHashSet};
+use tokio::sync::Semaphore;
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
-use uv_client::{Connectivity, RegistryClientBuilder};
-use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType, TrustedHost};
+use uv_client::RegistryClientBuilder;
+use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
 use uv_distribution_types::{Diagnostic, IndexCapabilities, IndexLocations, Name};
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
@@ -27,6 +28,7 @@ use crate::commands::pip::operations::report_target_environment;
 use crate::commands::reporters::LatestVersionReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 
 /// Display the installed packages in the current environment as a dependency tree.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -42,14 +44,12 @@ pub(crate) async fn pip_tree(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
-    allow_insecure_host: Vec<TrustedHost>,
-    connectivity: Connectivity,
+    network_settings: NetworkSettings,
     concurrency: Concurrency,
     strict: bool,
     exclude_newer: Option<ExcludeNewer>,
     python: Option<&str>,
     system: bool,
-    native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -86,15 +86,16 @@ pub(crate) async fn pip_tree(
         // Initialize the registry client.
         let client =
             RegistryClientBuilder::new(cache.clone().with_refresh(Refresh::All(Timestamp::now())))
-                .native_tls(native_tls)
-                .connectivity(connectivity)
+                .native_tls(network_settings.native_tls)
+                .connectivity(network_settings.connectivity)
                 .index_urls(index_locations.index_urls())
                 .index_strategy(index_strategy)
                 .keyring(keyring_provider)
-                .allow_insecure_host(allow_insecure_host.clone())
+                .allow_insecure_host(network_settings.allow_insecure_host.clone())
                 .markers(environment.interpreter().markers())
                 .platform(environment.interpreter().platform())
                 .build();
+        let download_concurrency = Semaphore::new(concurrency.downloads);
 
         // Determine the platform tags.
         let interpreter = environment.interpreter();
@@ -117,7 +118,10 @@ pub(crate) async fn pip_tree(
         // Fetch the latest version for each package.
         let mut fetches = futures::stream::iter(&packages)
             .map(|(name, ..)| async {
-                let Some(filename) = client.find_latest(name, None).await? else {
+                let Some(filename) = client
+                    .find_latest(name, None, &download_concurrency)
+                    .await?
+                else {
                     return Ok(None);
                 };
                 Ok::<Option<_>, uv_client::Error>(Some((*name, filename.into_version())))

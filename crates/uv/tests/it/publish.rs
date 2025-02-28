@@ -23,7 +23,6 @@ fn username_password_no_longer_supported() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv publish` is experimental and may change without warning
     Publishing 1 file to https://test.pypi.org/legacy/
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
     error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/
@@ -49,7 +48,6 @@ fn invalid_token() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv publish` is experimental and may change without warning
     Publishing 1 file to https://test.pypi.org/legacy/
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
     error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/
@@ -82,7 +80,6 @@ fn mixed_credentials() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv publish` is experimental and may change without warning
     Publishing 1 file to https://test.pypi.org/legacy/
     error: a username and a password are not allowed when using trusted publishing
     "###
@@ -109,7 +106,6 @@ fn missing_trusted_publishing_permission() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv publish` is experimental and may change without warning
     Publishing 1 file to https://test.pypi.org/legacy/
     error: Failed to obtain token for trusted publishing
       Caused by: Environment variable ACTIONS_ID_TOKEN_REQUEST_TOKEN not set, is the `id-token: write` permission missing?
@@ -136,7 +132,6 @@ fn no_credentials() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv publish` is experimental and may change without warning
     Publishing 1 file to https://test.pypi.org/legacy/
     Note: Neither credentials nor keyring are configured, and there was an error fetching the trusted publishing token. If you don't want to use trusted publishing, you can ignore this error, but you need to provide credentials.
     Trusted publishing error: Environment variable ACTIONS_ID_TOKEN_REQUEST_TOKEN not set, is the `id-token: write` permission missing?
@@ -162,7 +157,6 @@ fn skip_existing_redirect() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv publish` is experimental and may change without warning
     error: `uv publish` does not support `--skip-existing` because there is not a reliable way to identify when an upload fails due to an existing distribution. Instead, use `--check-url` to provide the URL to the simple API for your index. uv will check the index for existing distributions before attempting uploads.
     "###
     );
@@ -193,7 +187,6 @@ fn dubious_filenames() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv publish` is experimental and may change without warning
     warning: Skipping file that looks like a distribution, but is not a valid distribution filename: `[TEMP_DIR]/data.tar.gz`
     warning: Skipping file that looks like a distribution, but is not a valid distribution filename: `[TEMP_DIR]/not-a-wheel.whl`
     warning: Skipping file that looks like a distribution, but is not a valid distribution filename: `[TEMP_DIR]/not-sdist-1-2-3-asdf.zip`
@@ -239,7 +232,6 @@ fn check_keyring_behaviours() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv publish` is experimental and may change without warning
     Publishing 1 file to https://test.pypi.org/legacy/?ok
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
     error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
@@ -264,7 +256,6 @@ fn check_keyring_behaviours() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv publish` is experimental and may change without warning
     Publishing 1 file to https://test.pypi.org/legacy/?ok
     warning: Using `--keyring-provider` with a password or token and no check URL has no effect
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
@@ -291,7 +282,6 @@ fn check_keyring_behaviours() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv publish` is experimental and may change without warning
     Publishing 1 file to https://test.pypi.org/legacy/?ok
     Request for dummy@https://test.pypi.org/legacy/?ok
     Request for dummy@test.pypi.org
@@ -321,7 +311,6 @@ fn check_keyring_behaviours() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv publish` is experimental and may change without warning
     Publishing 1 file to https://test.pypi.org/legacy/?ok
     Request for dummy@https://test.pypi.org/legacy/?ok
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
@@ -374,7 +363,6 @@ fn invalid_index() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv publish` is experimental and may change without warning
     error: Index not found: `bar`. Found indexes: `foo`, `internal`
     "###
     );
@@ -394,7 +382,6 @@ fn invalid_index() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv publish` is experimental and may change without warning
     error: Index is missing a publish URL: `foo`
     "###
     );

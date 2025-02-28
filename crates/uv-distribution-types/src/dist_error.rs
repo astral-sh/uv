@@ -100,7 +100,7 @@ impl DerivationChain {
             else {
                 return false;
             };
-            target == dist.as_ref()
+            target == dist.as_ref().into()
         })?;
 
         // Perform a BFS to find the shortest path to the root.

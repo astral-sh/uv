@@ -23,10 +23,11 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, DevGroupsSpecification, EditableMode, ExportFormat,
-    ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType,
-    NoBinary, NoBuild, PreviewMode, ProjectBuildBackend, Reinstall, RequiredVersion,
-    SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
+    BuildOptions, Concurrency, ConfigSettings, DevGroupsSpecification, DryRun, EditableMode,
+    ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
+    KeyringProviderType, NoBinary, NoBuild, PreviewMode, ProjectBuildBackend, Reinstall,
+    RequiredVersion, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
+    VersionControlSystem,
 };
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl};
 use uv_install_wheel::LinkMode;
@@ -59,10 +60,8 @@ pub(crate) struct GlobalSettings {
     pub(crate) quiet: bool,
     pub(crate) verbose: u8,
     pub(crate) color: ColorChoice,
-    pub(crate) native_tls: bool,
+    pub(crate) network_settings: NetworkSettings,
     pub(crate) concurrency: Concurrency,
-    pub(crate) connectivity: Connectivity,
-    pub(crate) allow_insecure_host: Vec<TrustedHost>,
     pub(crate) show_settings: bool,
     pub(crate) preview: PreviewMode,
     pub(crate) python_preference: PythonPreference,
@@ -74,6 +73,7 @@ pub(crate) struct GlobalSettings {
 impl GlobalSettings {
     /// Resolve the [`GlobalSettings`] from the CLI and filesystem configuration.
     pub(crate) fn resolve(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
+        let network_settings = NetworkSettings::resolve(args, workspace);
         Self {
             required_version: workspace
                 .and_then(|workspace| workspace.globals.required_version.clone()),
@@ -100,9 +100,7 @@ impl GlobalSettings {
             } else {
                 ColorChoice::Auto
             },
-            native_tls: flag(args.native_tls, args.no_native_tls)
-                .combine(workspace.and_then(|workspace| workspace.globals.native_tls))
-                .unwrap_or(false),
+            network_settings,
             concurrency: Concurrency {
                 downloads: env(env::CONCURRENT_DOWNLOADS)
                     .combine(workspace.and_then(|workspace| workspace.globals.concurrent_downloads))
@@ -117,31 +115,6 @@ impl GlobalSettings {
                     .map(NonZeroUsize::get)
                     .unwrap_or_else(Concurrency::threads),
             },
-            connectivity: if flag(args.offline, args.no_offline)
-                .combine(workspace.and_then(|workspace| workspace.globals.offline))
-                .unwrap_or(false)
-            {
-                Connectivity::Offline
-            } else {
-                Connectivity::Online
-            },
-            allow_insecure_host: args
-                .allow_insecure_host
-                .as_ref()
-                .map(|allow_insecure_host| {
-                    allow_insecure_host
-                        .iter()
-                        .filter_map(|value| value.clone().into_option())
-                })
-                .into_iter()
-                .flatten()
-                .chain(
-                    workspace
-                        .and_then(|workspace| workspace.globals.allow_insecure_host.clone())
-                        .into_iter()
-                        .flatten(),
-                )
-                .collect(),
             show_settings: args.show_settings,
             preview: PreviewMode::from(
                 flag(args.preview, args.no_preview)
@@ -161,6 +134,52 @@ impl GlobalSettings {
             // with log messages.
             no_progress: args.no_progress || std::env::var_os(EnvVars::RUST_LOG).is_some(),
             installer_metadata: !args.no_installer_metadata,
+        }
+    }
+}
+
+/// The resolved network settings to use for any invocation of the CLI.
+#[derive(Debug, Clone)]
+pub(crate) struct NetworkSettings {
+    pub(crate) connectivity: Connectivity,
+    pub(crate) native_tls: bool,
+    pub(crate) allow_insecure_host: Vec<TrustedHost>,
+}
+
+impl NetworkSettings {
+    pub(crate) fn resolve(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
+        let connectivity = if flag(args.offline, args.no_offline)
+            .combine(workspace.and_then(|workspace| workspace.globals.offline))
+            .unwrap_or(false)
+        {
+            Connectivity::Offline
+        } else {
+            Connectivity::Online
+        };
+        let native_tls = flag(args.native_tls, args.no_native_tls)
+            .combine(workspace.and_then(|workspace| workspace.globals.native_tls))
+            .unwrap_or(false);
+        let allow_insecure_host = args
+            .allow_insecure_host
+            .as_ref()
+            .map(|allow_insecure_host| {
+                allow_insecure_host
+                    .iter()
+                    .filter_map(|value| value.clone().into_option())
+            })
+            .into_iter()
+            .flatten()
+            .chain(
+                workspace
+                    .and_then(|workspace| workspace.globals.allow_insecure_host.clone())
+                    .into_iter()
+                    .flatten(),
+            )
+            .collect();
+        Self {
+            connectivity,
+            native_tls,
+            allow_insecure_host,
         }
     }
 }
@@ -196,12 +215,14 @@ pub(crate) struct InitSettings {
     pub(crate) name: Option<PackageName>,
     pub(crate) package: bool,
     pub(crate) kind: InitKind,
+    pub(crate) bare: bool,
     pub(crate) description: Option<String>,
+    pub(crate) no_description: bool,
     pub(crate) vcs: Option<VersionControlSystem>,
     pub(crate) build_backend: Option<ProjectBuildBackend>,
     pub(crate) no_readme: bool,
     pub(crate) author_from: Option<AuthorFrom>,
-    pub(crate) no_pin_python: bool,
+    pub(crate) pin_python: bool,
     pub(crate) no_workspace: bool,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -217,15 +238,18 @@ impl InitSettings {
             r#virtual,
             package,
             no_package,
+            bare,
             app,
             lib,
             script,
             description,
+            no_description,
             vcs,
             build_backend,
             no_readme,
             author_from,
             no_pin_python,
+            pin_python,
             no_workspace,
             python,
             ..
@@ -246,17 +270,21 @@ impl InitSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
+        let no_description = no_description || (bare && description.is_none());
+
         Self {
             path,
             name,
             package,
             kind,
+            bare,
             description,
-            vcs,
+            no_description,
+            vcs: vcs.or(bare.then_some(VersionControlSystem::None)),
             build_backend,
-            no_readme,
+            no_readme: no_readme || bare,
             author_from,
-            no_pin_python,
+            pin_python: flag(pin_python, no_pin_python).unwrap_or(!bare),
             no_workspace,
             python: python.and_then(Maybe::into_option),
             install_mirrors,
@@ -282,6 +310,7 @@ pub(crate) struct RunSettings {
     pub(crate) all_packages: bool,
     pub(crate) package: Option<PackageName>,
     pub(crate) no_project: bool,
+    pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -289,9 +318,16 @@ pub(crate) struct RunSettings {
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) env_file: Vec<PathBuf>,
     pub(crate) no_env_file: bool,
+    pub(crate) max_recursion_depth: u32,
 }
 
 impl RunSettings {
+    // Default value for UV_RUN_MAX_RECURSION_DEPTH if unset. This is large
+    // enough that it's unlikely a user actually needs this recursion depth,
+    // but short enough that we detect recursion quickly enough to avoid OOMing
+    // or hanging for a long time.
+    const DEFAULT_MAX_RECURSION_DEPTH: u32 = 100;
+
     /// Resolve the [`RunSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: RunArgs, filesystem: Option<FilesystemOptions>) -> Self {
@@ -319,6 +355,8 @@ impl RunSettings {
             with_editable,
             with_requirements,
             isolated,
+            active,
+            no_active,
             no_sync,
             locked,
             frozen,
@@ -332,6 +370,7 @@ impl RunSettings {
             show_resolution,
             env_file,
             no_env_file,
+            max_recursion_depth,
         } = args;
 
         let install_mirrors = filesystem
@@ -381,6 +420,7 @@ impl RunSettings {
             package,
             no_project,
             no_sync,
+            active: flag(active, no_active),
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
@@ -390,6 +430,7 @@ impl RunSettings {
             env_file,
             no_env_file,
             install_mirrors,
+            max_recursion_depth: max_recursion_depth.unwrap_or(Self::DEFAULT_MAX_RECURSION_DEPTH),
         }
     }
 }
@@ -446,9 +487,9 @@ impl ToolRunSettings {
         // If `--reinstall` was passed explicitly, warn.
         if installer.reinstall || !installer.reinstall_package.is_empty() {
             if with.is_empty() && with_requirements.is_empty() {
-                warn_user_once!("Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --reinstall` to reinstall all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool.");
+                warn_user_once!("Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --all --reinstall` to reinstall all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool.");
             } else {
-                warn_user_once!("Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --reinstall` to reinstall all installed tools, `{invocation_source} package@latest` to run the latest version of a tool, or `{invocation_source} --refresh package` to reinstall any `--with` dependencies.");
+                warn_user_once!("Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --all --reinstall` to reinstall all installed tools, `{invocation_source} package@latest` to run the latest version of a tool, or `{invocation_source} --refresh package` to reinstall any `--with` dependencies.");
             }
         }
 
@@ -945,6 +986,9 @@ impl PythonPinSettings {
 pub(crate) struct SyncSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
+    pub(crate) dry_run: DryRun,
+    pub(crate) script: Option<PathBuf>,
+    pub(crate) active: Option<bool>,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: DevGroupsSpecification,
     pub(crate) editable: EditableMode,
@@ -983,11 +1027,15 @@ impl SyncSettings {
             no_install_package,
             locked,
             frozen,
+            active,
+            no_active,
+            dry_run,
             installer,
             build,
             refresh,
             all_packages,
             package,
+            script,
             python,
         } = args;
         let install_mirrors = filesystem
@@ -1003,6 +1051,9 @@ impl SyncSettings {
         Self {
             locked,
             frozen,
+            dry_run: DryRun::from_args(dry_run),
+            script,
+            active: flag(active, no_active),
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 no_extra,
@@ -1045,7 +1096,7 @@ impl SyncSettings {
 pub(crate) struct LockSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
-    pub(crate) dry_run: bool,
+    pub(crate) dry_run: DryRun,
     pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -1076,7 +1127,7 @@ impl LockSettings {
         Self {
             locked: check,
             frozen: check_exists,
-            dry_run,
+            dry_run: DryRun::from_args(dry_run),
             script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
@@ -1092,6 +1143,7 @@ impl LockSettings {
 pub(crate) struct AddSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
+    pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
     pub(crate) packages: Vec<String>,
     pub(crate) requirements: Vec<PathBuf>,
@@ -1131,6 +1183,8 @@ impl AddSettings {
             no_sync,
             locked,
             frozen,
+            active,
+            no_active,
             installer,
             build,
             refresh,
@@ -1202,6 +1256,7 @@ impl AddSettings {
         Self {
             locked,
             frozen,
+            active: flag(active, no_active),
             no_sync,
             packages,
             requirements,
@@ -1232,6 +1287,7 @@ impl AddSettings {
 pub(crate) struct RemoveSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
+    pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
     pub(crate) packages: Vec<PackageName>,
     pub(crate) dependency_type: DependencyType,
@@ -1255,6 +1311,8 @@ impl RemoveSettings {
             no_sync,
             locked,
             frozen,
+            active,
+            no_active,
             installer,
             build,
             refresh,
@@ -1286,6 +1344,7 @@ impl RemoveSettings {
         Self {
             locked,
             frozen,
+            active: flag(active, no_active),
             no_sync,
             packages,
             dependency_type,
@@ -1500,6 +1559,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
+    pub(crate) build_constraints_from_workspace: Vec<Requirement>,
     pub(crate) environments: SupportedEnvironments,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
@@ -1586,6 +1646,20 @@ impl PipCompileSettings {
             Vec::new()
         };
 
+        let build_constraints_from_workspace = if let Some(configuration) = &filesystem {
+            configuration
+                .build_constraint_dependencies
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
         let environments = if let Some(configuration) = &filesystem {
             configuration.environments.clone().unwrap_or_default()
         } else {
@@ -1608,6 +1682,7 @@ impl PipCompileSettings {
                 .collect(),
             constraints_from_workspace,
             overrides_from_workspace,
+            build_constraints_from_workspace,
             environments,
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
@@ -1652,7 +1727,7 @@ pub(crate) struct PipSyncSettings {
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
-    pub(crate) dry_run: bool,
+    pub(crate) dry_run: DryRun,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
 }
@@ -1701,7 +1776,7 @@ impl PipSyncSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            dry_run,
+            dry_run: DryRun::from_args(dry_run),
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {
@@ -1740,9 +1815,10 @@ pub(crate) struct PipInstallSettings {
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
-    pub(crate) dry_run: bool,
+    pub(crate) dry_run: DryRun,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
+    pub(crate) build_constraints_from_workspace: Vec<Requirement>,
     pub(crate) modifications: Modifications,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
@@ -1818,6 +1894,20 @@ impl PipInstallSettings {
             Vec::new()
         };
 
+        let build_constraints_from_workspace = if let Some(configuration) = &filesystem {
+            configuration
+                .build_constraint_dependencies
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
         Self {
             package,
             requirements,
@@ -1834,9 +1924,10 @@ impl PipInstallSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            dry_run,
+            dry_run: DryRun::from_args(dry_run),
             constraints_from_workspace,
             overrides_from_workspace,
+            build_constraints_from_workspace,
             modifications: if flag(exact, inexact).unwrap_or(false) {
                 Modifications::Exact
             } else {
@@ -1875,7 +1966,7 @@ impl PipInstallSettings {
 pub(crate) struct PipUninstallSettings {
     pub(crate) package: Vec<String>,
     pub(crate) requirements: Vec<PathBuf>,
-    pub(crate) dry_run: bool,
+    pub(crate) dry_run: DryRun,
     pub(crate) settings: PipSettings,
 }
 
@@ -1900,7 +1991,7 @@ impl PipUninstallSettings {
         Self {
             package,
             requirements,
-            dry_run,
+            dry_run: DryRun::from_args(dry_run),
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),

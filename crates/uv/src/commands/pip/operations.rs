@@ -13,7 +13,7 @@ use uv_tool::InstalledTools;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification, DryRun,
     ExtrasSpecification, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
@@ -60,13 +60,27 @@ pub(crate) async fn read_requirements(
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
     // return an error.
     if !extras.is_empty() && !requirements.iter().any(RequirementsSource::allows_extras) {
+        let hint = if requirements.iter().any(|source| {
+            matches!(
+                source,
+                RequirementsSource::Editable(_) | RequirementsSource::SourceTree(_)
+            )
+        }) {
+            "Use `<dir>[extra]` syntax or `-r <file>` instead."
+        } else {
+            "Use `package[extra]` syntax instead."
+        };
         return Err(anyhow!(
-            "Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file."
+            "Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file. {hint}"
         )
         .into());
     }
     if !groups.is_empty() && !requirements.iter().any(RequirementsSource::allows_groups) {
-        return Err(anyhow!("Requesting groups requires a `pyproject.toml`.").into());
+        let flags = groups.history().as_flags_pretty().join(" ");
+        return Err(anyhow!(
+            "Requesting groups requires a `pyproject.toml`. Requested via: {flags}"
+        )
+        .into());
     }
 
     // Read all requirements from the provided sources.
@@ -404,7 +418,7 @@ pub(crate) async fn install(
     venv: &PythonEnvironment,
     logger: Box<dyn InstallLogger>,
     installer_metadata: bool,
-    dry_run: bool,
+    dry_run: DryRun,
     printer: Printer,
 ) -> Result<Changelog, Error> {
     let start = std::time::Instant::now();
@@ -425,7 +439,7 @@ pub(crate) async fn install(
         )
         .context("Failed to determine installation plan")?;
 
-    if dry_run {
+    if dry_run.enabled() {
         report_dry_run(resolution, plan, modifications, start, printer)?;
         return Ok(Changelog::default());
     }
@@ -540,7 +554,7 @@ pub(crate) async fn install(
     }
 
     if compile {
-        compile_bytecode(venv, cache, printer).await?;
+        compile_bytecode(venv, &concurrency, cache, printer).await?;
     }
 
     // Construct a summary of the changes made to the environment.

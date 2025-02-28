@@ -19,6 +19,7 @@ workspace = true
 uv-cache = { workspace = true, features = ["clap"] }
 uv-cli = { workspace = true }
 uv-client = { workspace = true }
+uv-configuration = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-extract = { workspace = true, optional = true }
@@ -56,6 +57,9 @@ tracing-subscriber = { workspace = true }
 uv-performance-flate2-backend = { path = "../uv-performance-flate2-backend", optional = true }
 uv-performance-memory-allocator = { path = "../uv-performance-memory-allocator", optional = true }
 walkdir = { workspace = true }
+
+[lib]
+name = "uv_dev"
 
 [[bin]]
 name = "uv-dev"

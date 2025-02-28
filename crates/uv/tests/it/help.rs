@@ -461,10 +461,10 @@ fn help_subsubcommand() {
     ----- stdout -----
     Download and install Python versions.
 
-    Multiple Python versions may be requested.
-
     Supports CPython and PyPy. CPython distributions are downloaded from the Astral
-    `python-build-standalone` project. PyPy distributions are downloaded from `python.org`.
+    `python-build-standalone` project. PyPy distributions are downloaded from `python.org`. The
+    available Python versions are bundled with each uv release. To install new Python versions, you may
+    need upgrade uv.
 
     Python versions are installed into the uv Python directory, which can be retrieved with `uv python
     dir`.
@@ -472,6 +472,8 @@ fn help_subsubcommand() {
     A `python` executable is not made globally available, managed Python versions are only used in uv
     commands or in active virtual environments. There is experimental support for adding Python
     executables to the `PATH` — use the `--preview` flag to enable this behavior.
+
+    Multiple Python versions may be requested.
 
     See `uv help python` to view supported request formats.
 
@@ -481,11 +483,14 @@ fn help_subsubcommand() {
       [TARGETS]...
               The Python version(s) to install.
               
-              If not provided, the requested Python version(s) will be read from the `.python-versions`
-              or `.python-version` files. If neither file is present, uv will check if it has installed
-              any Python versions. If not, it will install the latest stable version of Python.
+              If not provided, the requested Python version(s) will be read from the `UV_PYTHON`
+              environment variable then `.python-versions` or `.python-version` files. If none of the
+              above are present, uv will check if it has installed any Python versions. If not, it will
+              install the latest stable version of Python.
               
               See `uv help python` to view supported request formats.
+              
+              [env: UV_PYTHON=]
 
     Options:
       -i, --install-dir <INSTALL_DIR>
@@ -773,7 +778,7 @@ fn help_flag_subsubcommand() {
     Usage: uv python install [OPTIONS] [TARGETS]...
 
     Arguments:
-      [TARGETS]...  The Python version(s) to install
+      [TARGETS]...  The Python version(s) to install [env: UV_PYTHON=]
 
     Options:
       -i, --install-dir <INSTALL_DIR>  The directory to store the Python installation in [env:

@@ -58,7 +58,8 @@ impl<'de> serde::de::Deserialize<'de> for IndexName {
     where
         D: serde::de::Deserializer<'de>,
     {
-        IndexName::new(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+        let s = String::deserialize(deserializer)?;
+        IndexName::new(s).map_err(serde::de::Error::custom)
     }
 }
 

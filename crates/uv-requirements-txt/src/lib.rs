@@ -55,8 +55,10 @@ use uv_pypi_types::{Requirement, VerbatimParsedUrl};
 
 use crate::requirement::EditableError;
 pub use crate::requirement::RequirementsTxtRequirement;
+use crate::shquote::unquote;
 
 mod requirement;
+mod shquote;
 
 /// We emit one of those for each `requirements.txt` entry.
 enum RequirementsTxtStatement {
@@ -520,18 +522,26 @@ fn parse_entry(
 
     let start = s.cursor();
     Ok(Some(if s.eat_if("-r") || s.eat_if("--requirement") {
-        let requirements_file = parse_value(content, s, |c: char| !is_terminal(c))?;
+        let filename = parse_value(content, s, |c: char| !is_terminal(c))?;
+        let filename = unquote(filename)
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| filename.to_string());
         let end = s.cursor();
         RequirementsTxtStatement::Requirements {
-            filename: requirements_file.to_string(),
+            filename,
             start,
             end,
         }
     } else if s.eat_if("-c") || s.eat_if("--constraint") {
-        let constraints_file = parse_value(content, s, |c: char| !is_terminal(c))?;
+        let filename = parse_value(content, s, |c: char| !is_terminal(c))?;
+        let filename = unquote(filename)
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| filename.to_string());
         let end = s.cursor();
         RequirementsTxtStatement::Constraint {
-            filename: constraints_file.to_string(),
+            filename,
             start,
             end,
         }
@@ -572,7 +582,12 @@ fn parse_entry(
         })
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
         let given = parse_value(content, s, |c: char| !is_terminal(c))?;
-        let expanded = expand_env_vars(given);
+        let given = unquote(given)
+            .ok()
+            .flatten()
+            .map(Cow::Owned)
+            .unwrap_or(Cow::Borrowed(given));
+        let expanded = expand_env_vars(given.as_ref());
         let url = if let Some(path) = std::path::absolute(expanded.as_ref())
             .ok()
             .filter(|path| path.exists())
@@ -598,7 +613,12 @@ fn parse_entry(
         RequirementsTxtStatement::IndexUrl(url.with_given(given))
     } else if s.eat_if("--extra-index-url") {
         let given = parse_value(content, s, |c: char| !is_terminal(c))?;
-        let expanded = expand_env_vars(given);
+        let given = unquote(given)
+            .ok()
+            .flatten()
+            .map(Cow::Owned)
+            .unwrap_or(Cow::Borrowed(given));
+        let expanded = expand_env_vars(given.as_ref());
         let url = if let Some(path) = std::path::absolute(expanded.as_ref())
             .ok()
             .filter(|path| path.exists())
@@ -626,7 +646,12 @@ fn parse_entry(
         RequirementsTxtStatement::NoIndex
     } else if s.eat_if("--find-links") || s.eat_if("-f") {
         let given = parse_value(content, s, |c: char| !is_terminal(c))?;
-        let expanded = expand_env_vars(given);
+        let given = unquote(given)
+            .ok()
+            .flatten()
+            .map(Cow::Owned)
+            .unwrap_or(Cow::Borrowed(given));
+        let expanded = expand_env_vars(given.as_ref());
         let url = if let Some(path) = std::path::absolute(expanded.as_ref())
             .ok()
             .filter(|path| path.exists())
@@ -652,7 +677,12 @@ fn parse_entry(
         RequirementsTxtStatement::FindLinks(url.with_given(given))
     } else if s.eat_if("--no-binary") {
         let given = parse_value(content, s, |c: char| !is_terminal(c))?;
-        let specifier = PackageNameSpecifier::from_str(given).map_err(|err| {
+        let given = unquote(given)
+            .ok()
+            .flatten()
+            .map(Cow::Owned)
+            .unwrap_or(Cow::Borrowed(given));
+        let specifier = PackageNameSpecifier::from_str(given.as_ref()).map_err(|err| {
             RequirementsTxtParserError::NoBinary {
                 source: err,
                 specifier: given.to_string(),
@@ -663,7 +693,12 @@ fn parse_entry(
         RequirementsTxtStatement::NoBinary(NoBinary::from_pip_arg(specifier))
     } else if s.eat_if("--only-binary") {
         let given = parse_value(content, s, |c: char| !is_terminal(c))?;
-        let specifier = PackageNameSpecifier::from_str(given).map_err(|err| {
+        let given = unquote(given)
+            .ok()
+            .flatten()
+            .map(Cow::Owned)
+            .unwrap_or(Cow::Borrowed(given));
+        let specifier = PackageNameSpecifier::from_str(given.as_ref()).map_err(|err| {
             RequirementsTxtParserError::NoBinary {
                 source: err,
                 specifier: given.to_string(),

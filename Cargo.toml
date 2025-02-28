@@ -39,6 +39,7 @@ uv-distribution-types = { path = "crates/uv-distribution-types" }
 uv-extract = { path = "crates/uv-extract" }
 uv-fs = { path = "crates/uv-fs", features = ["serde", "tokio"] }
 uv-git = { path = "crates/uv-git" }
+uv-git-types = { path = "crates/uv-git-types" }
 uv-globfilter = { path = "crates/uv-globfilter" }
 uv-install-wheel = { path = "crates/uv-install-wheel", default-features = false }
 uv-installer = { path = "crates/uv-installer" }
@@ -73,6 +74,7 @@ uv-workspace = { path = "crates/uv-workspace" }
 anstream = { version = "0.6.15" }
 anyhow = { version = "1.0.89" }
 arcstr = { version = "1.2.0" }
+astral-tokio-tar = { version = "0.5.1" }
 async-channel = { version = "2.3.1" }
 async-compression = { version = "0.4.12", features = ["bzip2", "gzip", "xz", "zstd"] }
 async-trait = { version = "0.1.82" }
@@ -84,7 +86,6 @@ base64 = { version = "0.22.1" }
 bitflags = { version = "2.6.0" }
 boxcar = { version = "0.2.5" }
 bytecheck = { version = "0.8.0" }
-cachedir = { version = "0.3.1" }
 cargo-util = { version = "0.2.14" }
 clap = { version = "4.5.17", features = ["derive", "env", "string", "wrap_help"] }
 clap_complete_command = { version = "0.6.1" }
@@ -116,10 +117,9 @@ indexmap = { version = "2.5.0" }
 indicatif = { version = "0.17.8" }
 indoc = { version = "2.0.5" }
 itertools = { version = "0.14.0" }
-jiff = { version = "0.1.14", features = ["serde"] }
+jiff = { version = "0.2.0", features = ["serde"] }
 junction = { version = "1.2.0" }
-krata-tokio-tar = { version = "0.4.2" }
-mailparse = { version = "0.15.0" }
+mailparse = { version = "0.16.0" }
 md-5 = { version = "0.10.6" }
 memchr = { version = "2.7.4" }
 miette = { version = "7.2.0", features = ["fancy-no-backtrace"] }
@@ -130,10 +130,9 @@ path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
 percent-encoding = { version = "2.3.1" }
 petgraph = { version = "0.7.1" }
-platform-info = { version = "2.0.3" }
 proc-macro2 = { version = "1.0.86" }
 procfs = { version = "0.17.0", default-features = false, features = ["flate2"] }
-pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "648aa343486e5529953153781fc86025c73c4a61" }
+pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "b70cf707aa43f21b32f3a61b8a0889b15032d5c4" }
 quote = { version = "1.0.37" }
 rayon = { version = "1.10.0" }
 reflink-copy = { version = "0.1.19" }
@@ -177,13 +176,12 @@ tracing-tree = { version = "0.4.0" }
 unicode-width = { version = "0.1.13" }
 unscanny = { version = "0.1.0" }
 url = { version = "2.5.2", features = ["serde"] }
-version-ranges = { git = "https://github.com/astral-sh/pubgrub", rev = "648aa343486e5529953153781fc86025c73c4a61" }
+version-ranges = { git = "https://github.com/astral-sh/pubgrub", rev = "b70cf707aa43f21b32f3a61b8a0889b15032d5c4" }
 walkdir = { version = "2.5.0" }
 which = { version = "7.0.0", features = ["regex"] }
-windows-registry = { version = "0.4.0" }
+windows-registry = { version = "0.5.0" }
 windows-result = { version = "0.3.0" }
 windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Ioctl", "Win32_System_IO"] }
-winreg = { version = "0.53.0" }
 winsafe = { version = "0.0.22", features = ["kernel"] }
 wiremock = { version = "0.6.2" }
 xz2 = { version = "0.1.7" }

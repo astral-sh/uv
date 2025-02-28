@@ -152,6 +152,19 @@ impl TestContext {
         self
     }
 
+    /// Add extra standard filtering for Windows-compatible missing file errors.
+    pub fn with_filtered_missing_file_error(mut self) -> Self {
+        self.filters.push((
+            regex::escape("The system cannot find the file specified. (os error 2)"),
+            "[OS ERROR 2]".to_string(),
+        ));
+        self.filters.push((
+            regex::escape("No such file or directory (os error 2)"),
+            "[OS ERROR 2]".to_string(),
+        ));
+        self
+    }
+
     /// Add extra standard filtering for executable suffixes on the current platform e.g.
     /// drops `.exe` on Windows.
     #[must_use]
@@ -250,6 +263,19 @@ impl TestContext {
         self
     }
 
+    /// Add a filter that ignores temporary directory in path.
+    pub fn with_filtered_windows_temp_dir(mut self) -> Self {
+        let pattern = regex::escape(
+            &self
+                .temp_dir
+                .simplified_display()
+                .to_string()
+                .replace('/', "\\"),
+        );
+        self.filters.push((pattern, "[TEMP_DIR]".to_string()));
+        self
+    }
+
     /// Add extra directories and configuration for managed Python installations.
     #[must_use]
     pub fn with_managed_python_dirs(mut self) -> Self {
@@ -264,6 +290,12 @@ impl TestContext {
         self.extra_env
             .push((EnvVars::UV_PYTHON_DOWNLOADS.into(), "automatic".into()));
 
+        self
+    }
+
+    /// Clear filters on `TestContext`.
+    pub fn clear_filters(mut self) -> Self {
+        self.filters.clear();
         self
     }
 
@@ -299,6 +331,11 @@ impl TestContext {
         fs_err::create_dir_all(&bucket).expect("Failed to create test bucket");
 
         let root = tempfile::TempDir::new_in(bucket).expect("Failed to create test root directory");
+
+        // Create a `.git` directory to isolate tests that search for git boundaries from the state
+        // of the file system
+        fs_err::create_dir_all(root.path().join(".git"))
+            .expect("Failed to create `.git` placeholder in test root directory");
 
         let temp_dir = ChildPath::new(root.path()).child("temp");
         fs_err::create_dir_all(&temp_dir).expect("Failed to create test working directory");
@@ -362,9 +399,15 @@ impl TestContext {
 
         let mut filters = Vec::new();
 
+        filters.extend(
+            Self::path_patterns(get_bin())
+                .into_iter()
+                .map(|pattern| (pattern, "[UV]".to_string())),
+        );
+
         // Exclude `link-mode` on Windows since we set it in the remote test suite
         if cfg!(windows) {
-            filters.push(("--link-mode <LINK_MODE> ".to_string(), String::new()));
+            filters.push((" --link-mode <LINK_MODE>".to_string(), String::new()));
             filters.push((r#"link-mode = "copy"\n"#.to_string(), String::new()));
         }
 
@@ -503,7 +546,7 @@ impl TestContext {
     /// Create a uv command for testing.
     pub fn command(&self) -> Command {
         let mut command = self.new_command();
-        self.add_shared_args(&mut command, true);
+        self.add_shared_options(&mut command, true);
         command
     }
 
@@ -535,7 +578,18 @@ impl TestContext {
     /// * Hide other Pythons with `UV_PYTHON_INSTALL_DIR` and installed interpreters with
     ///   `UV_TEST_PYTHON_PATH` and an active venv (if applicable) by removing `VIRTUAL_ENV`.
     /// * Increase the stack size to avoid stack overflows on windows due to large async functions.
-    pub fn add_shared_args(&self, command: &mut Command, activate_venv: bool) {
+    pub fn add_shared_options(&self, command: &mut Command, activate_venv: bool) {
+        self.add_shared_args(command);
+        self.add_shared_env(command, activate_venv);
+    }
+
+    /// Only the arguments of [`TestContext::add_shared_options`].
+    pub fn add_shared_args(&self, command: &mut Command) {
+        command.arg("--cache-dir").arg(self.cache_dir.path());
+    }
+
+    /// Only the environment variables of [`TestContext::add_shared_options`].
+    pub fn add_shared_env(&self, command: &mut Command, activate_venv: bool) {
         // Push the test context bin to the front of the PATH
         let path = env::join_paths(std::iter::once(self.bin_dir.to_path_buf()).chain(
             env::split_paths(&env::var(EnvVars::PATH).unwrap_or_default()),
@@ -543,11 +597,13 @@ impl TestContext {
         .unwrap();
 
         command
-            .arg("--cache-dir")
-            .arg(self.cache_dir.path())
             // When running the tests in a venv, ignore that venv, otherwise we'll capture warnings.
             .env_remove(EnvVars::VIRTUAL_ENV)
+            // Disable wrapping of uv output for readability / determinism in snapshots.
             .env(EnvVars::UV_NO_WRAP, "1")
+            // While we disable wrapping in uv above, invoked tools may still wrap their output so
+            // we set a fixed `COLUMNS` value for isolation from terminal width.
+            .env(EnvVars::COLUMNS, "100")
             .env(EnvVars::PATH, path)
             .env(EnvVars::HOME, self.home_dir.as_os_str())
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
@@ -555,6 +611,9 @@ impl TestContext {
             .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
             .env(EnvVars::UV_TEST_PYTHON_PATH, self.python_path())
             .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
+            // Since downloads, fetches and builds run in parallel, their message output order is
+            // non-deterministic, so can't capture them in test output.
+            .env(EnvVars::UV_TEST_NO_CLI_PROGRESS, "1")
             .env_remove(EnvVars::UV_CACHE_DIR)
             .env_remove(EnvVars::UV_TOOL_BIN_DIR)
             .current_dir(self.temp_dir.path());
@@ -577,7 +636,7 @@ impl TestContext {
     pub fn pip_compile(&self) -> Command {
         let mut command = self.new_command();
         command.arg("pip").arg("compile");
-        self.add_shared_args(&mut command, true);
+        self.add_shared_options(&mut command, true);
         command
     }
 
@@ -585,14 +644,14 @@ impl TestContext {
     pub fn pip_sync(&self) -> Command {
         let mut command = self.new_command();
         command.arg("pip").arg("sync");
-        self.add_shared_args(&mut command, true);
+        self.add_shared_options(&mut command, true);
         command
     }
 
     pub fn pip_show(&self) -> Command {
         let mut command = self.new_command();
         command.arg("pip").arg("show");
-        self.add_shared_args(&mut command, true);
+        self.add_shared_options(&mut command, true);
         command
     }
 
@@ -600,7 +659,7 @@ impl TestContext {
     pub fn pip_freeze(&self) -> Command {
         let mut command = self.new_command();
         command.arg("pip").arg("freeze");
-        self.add_shared_args(&mut command, true);
+        self.add_shared_options(&mut command, true);
         command
     }
 
@@ -608,14 +667,14 @@ impl TestContext {
     pub fn pip_check(&self) -> Command {
         let mut command = self.new_command();
         command.arg("pip").arg("check");
-        self.add_shared_args(&mut command, true);
+        self.add_shared_options(&mut command, true);
         command
     }
 
     pub fn pip_list(&self) -> Command {
         let mut command = self.new_command();
         command.arg("pip").arg("list");
-        self.add_shared_args(&mut command, true);
+        self.add_shared_options(&mut command, true);
         command
     }
 
@@ -623,7 +682,7 @@ impl TestContext {
     pub fn venv(&self) -> Command {
         let mut command = self.new_command();
         command.arg("venv");
-        self.add_shared_args(&mut command, false);
+        self.add_shared_options(&mut command, false);
         command
     }
 
@@ -631,7 +690,7 @@ impl TestContext {
     pub fn pip_install(&self) -> Command {
         let mut command = self.new_command();
         command.arg("pip").arg("install");
-        self.add_shared_args(&mut command, true);
+        self.add_shared_options(&mut command, true);
         command
     }
 
@@ -639,7 +698,7 @@ impl TestContext {
     pub fn pip_uninstall(&self) -> Command {
         let mut command = self.new_command();
         command.arg("pip").arg("uninstall");
-        self.add_shared_args(&mut command, true);
+        self.add_shared_options(&mut command, true);
         command
     }
 
@@ -647,7 +706,7 @@ impl TestContext {
     pub fn pip_tree(&self) -> Command {
         let mut command = self.new_command();
         command.arg("pip").arg("tree");
-        self.add_shared_args(&mut command, true);
+        self.add_shared_options(&mut command, true);
         command
     }
 
@@ -665,7 +724,7 @@ impl TestContext {
     pub fn init(&self) -> Command {
         let mut command = self.new_command();
         command.arg("init");
-        self.add_shared_args(&mut command, false);
+        self.add_shared_options(&mut command, false);
         command
     }
 
@@ -673,7 +732,7 @@ impl TestContext {
     pub fn sync(&self) -> Command {
         let mut command = self.new_command();
         command.arg("sync");
-        self.add_shared_args(&mut command, false);
+        self.add_shared_options(&mut command, false);
         command
     }
 
@@ -681,7 +740,7 @@ impl TestContext {
     pub fn lock(&self) -> Command {
         let mut command = self.new_command();
         command.arg("lock");
-        self.add_shared_args(&mut command, false);
+        self.add_shared_options(&mut command, false);
         command
     }
 
@@ -689,7 +748,7 @@ impl TestContext {
     pub fn export(&self) -> Command {
         let mut command = self.new_command();
         command.arg("export");
-        self.add_shared_args(&mut command, false);
+        self.add_shared_options(&mut command, false);
         command
     }
 
@@ -697,7 +756,7 @@ impl TestContext {
     pub fn build(&self) -> Command {
         let mut command = self.new_command();
         command.arg("build");
-        self.add_shared_args(&mut command, false);
+        self.add_shared_options(&mut command, false);
         command
     }
 
@@ -717,14 +776,14 @@ impl TestContext {
             .env(EnvVars::UV_PREVIEW, "1")
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
             .current_dir(&self.temp_dir);
-        self.add_shared_args(&mut command, false);
+        self.add_shared_options(&mut command, false);
         command
     }
 
     /// Create a `uv python install` command with options shared across scenarios.
     pub fn python_install(&self) -> Command {
         let mut command = self.new_command();
-        self.add_shared_args(&mut command, true);
+        self.add_shared_options(&mut command, true);
         command
             .arg("python")
             .arg("install")
@@ -735,7 +794,7 @@ impl TestContext {
     /// Create a `uv python uninstall` command with options shared across scenarios.
     pub fn python_uninstall(&self) -> Command {
         let mut command = self.new_command();
-        self.add_shared_args(&mut command, true);
+        self.add_shared_options(&mut command, true);
         command
             .arg("python")
             .arg("uninstall")
@@ -747,7 +806,7 @@ impl TestContext {
     pub fn python_pin(&self) -> Command {
         let mut command = self.new_command();
         command.arg("python").arg("pin");
-        self.add_shared_args(&mut command, true);
+        self.add_shared_options(&mut command, true);
         command
     }
 
@@ -755,7 +814,7 @@ impl TestContext {
     pub fn python_dir(&self) -> Command {
         let mut command = self.new_command();
         command.arg("python").arg("dir");
-        self.add_shared_args(&mut command, true);
+        self.add_shared_options(&mut command, true);
         command
     }
 
@@ -763,7 +822,7 @@ impl TestContext {
     pub fn run(&self) -> Command {
         let mut command = self.new_command();
         command.arg("run").env(EnvVars::UV_SHOW_RESOLUTION, "1");
-        self.add_shared_args(&mut command, true);
+        self.add_shared_options(&mut command, true);
         command
     }
 
@@ -774,7 +833,7 @@ impl TestContext {
             .arg("tool")
             .arg("run")
             .env(EnvVars::UV_SHOW_RESOLUTION, "1");
-        self.add_shared_args(&mut command, false);
+        self.add_shared_options(&mut command, false);
         command
     }
 
@@ -782,7 +841,7 @@ impl TestContext {
     pub fn tool_upgrade(&self) -> Command {
         let mut command = self.new_command();
         command.arg("tool").arg("upgrade");
-        self.add_shared_args(&mut command, false);
+        self.add_shared_options(&mut command, false);
         command
     }
 
@@ -790,7 +849,7 @@ impl TestContext {
     pub fn tool_install(&self) -> Command {
         let mut command = self.new_command();
         command.arg("tool").arg("install");
-        self.add_shared_args(&mut command, false);
+        self.add_shared_options(&mut command, false);
         command
     }
 
@@ -798,7 +857,7 @@ impl TestContext {
     pub fn tool_list(&self) -> Command {
         let mut command = self.new_command();
         command.arg("tool").arg("list");
-        self.add_shared_args(&mut command, false);
+        self.add_shared_options(&mut command, false);
         command
     }
 
@@ -806,7 +865,7 @@ impl TestContext {
     pub fn tool_dir(&self) -> Command {
         let mut command = self.new_command();
         command.arg("tool").arg("dir");
-        self.add_shared_args(&mut command, false);
+        self.add_shared_options(&mut command, false);
         command
     }
 
@@ -814,7 +873,7 @@ impl TestContext {
     pub fn tool_uninstall(&self) -> Command {
         let mut command = self.new_command();
         command.arg("tool").arg("uninstall");
-        self.add_shared_args(&mut command, false);
+        self.add_shared_options(&mut command, false);
         command
     }
 
@@ -822,7 +881,7 @@ impl TestContext {
     pub fn add(&self) -> Command {
         let mut command = self.new_command();
         command.arg("add");
-        self.add_shared_args(&mut command, false);
+        self.add_shared_options(&mut command, false);
         command
     }
 
@@ -830,7 +889,7 @@ impl TestContext {
     pub fn remove(&self) -> Command {
         let mut command = self.new_command();
         command.arg("remove");
-        self.add_shared_args(&mut command, false);
+        self.add_shared_options(&mut command, false);
         command
     }
 
@@ -838,7 +897,7 @@ impl TestContext {
     pub fn tree(&self) -> Command {
         let mut command = self.new_command();
         command.arg("tree");
-        self.add_shared_args(&mut command, false);
+        self.add_shared_options(&mut command, false);
         command
     }
 
@@ -846,7 +905,7 @@ impl TestContext {
     pub fn clean(&self) -> Command {
         let mut command = self.new_command();
         command.arg("cache").arg("clean");
-        self.add_shared_args(&mut command, false);
+        self.add_shared_options(&mut command, false);
         command
     }
 
@@ -854,7 +913,7 @@ impl TestContext {
     pub fn prune(&self) -> Command {
         let mut command = self.new_command();
         command.arg("cache").arg("prune");
-        self.add_shared_args(&mut command, false);
+        self.add_shared_options(&mut command, false);
         command
     }
 
@@ -864,7 +923,7 @@ impl TestContext {
     pub fn build_backend(&self) -> Command {
         let mut command = self.new_command();
         command.arg("build-backend");
-        self.add_shared_args(&mut command, false);
+        self.add_shared_options(&mut command, false);
         command
     }
 
@@ -963,6 +1022,14 @@ impl TestContext {
             .iter()
             .map(|(p, r)| (p.as_str(), r.as_str()))
             .chain(INSTA_FILTERS.iter().copied())
+            .collect()
+    }
+
+    /// Only the filters added to this test context.
+    pub fn filters_without_standard_filters(&self) -> Vec<(&str, &str)> {
+        self.filters
+            .iter()
+            .map(|(p, r)| (p.as_str(), r.as_str()))
             .collect()
     }
 

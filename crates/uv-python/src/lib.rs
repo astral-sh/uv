@@ -66,6 +66,9 @@ pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
 #[derive(Debug, Error)]
 pub enum Error {
     #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
     VirtualEnv(#[from] virtualenv::Error),
 
     #[error(transparent)]
@@ -289,7 +292,7 @@ mod tests {
             fs_err::write(
                 path,
                 formatdoc! {r"
-                #!/bin/bash
+                #!/bin/sh
                 echo '{json}'
                 "},
             )?;
@@ -311,7 +314,7 @@ mod tests {
             fs_err::write(
                 path,
                 formatdoc! {r"
-                #!/bin/bash
+                #!/bin/sh
                 echo '{output}' 1>&2
                 "},
             )?;
@@ -507,7 +510,7 @@ mod tests {
             matches!(
                 interpreter,
                 PythonInstallation {
-                    source: PythonSource::SearchPath,
+                    source: PythonSource::SearchPathFirst,
                     interpreter: _
                 }
             ),
@@ -532,7 +535,7 @@ mod tests {
         fs_err::write(
             children[0].join(format!("python{}", env::consts::EXE_SUFFIX)),
             formatdoc! {r"
-        #!/bin/bash
+        #!/bin/sh
         echo 'foo'
         "},
         )?;
@@ -936,7 +939,7 @@ mod tests {
             matches!(
             python,
             PythonInstallation {
-                source: PythonSource::SearchPath,
+                source: PythonSource::SearchPathFirst,
                 interpreter: _
             }
         ),
@@ -2427,7 +2430,7 @@ mod tests {
             matches!(
                 python,
                 PythonInstallation {
-                    source: PythonSource::SearchPath,
+                    source: PythonSource::SearchPathFirst,
                     interpreter: _
                 }
             ),
@@ -2479,7 +2482,7 @@ mod tests {
             matches!(
                 python,
                 PythonInstallation {
-                    source: PythonSource::SearchPath,
+                    source: PythonSource::SearchPathFirst,
                     interpreter: _
                 }
             ),

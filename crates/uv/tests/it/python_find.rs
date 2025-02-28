@@ -482,6 +482,56 @@ fn python_find_venv() {
 
     ----- stderr -----
     "###);
+
+    // Or at the front of the PATH
+    #[cfg(not(windows))]
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, child_dir.join(".venv").join("bin").as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/child/.venv/[BIN]/python
+
+    ----- stderr -----
+    "###);
+
+    // This holds even if there are other directories before it in the path, as long as they do
+    // not contain a Python executable
+    #[cfg(not(windows))]
+    {
+        let path = std::env::join_paths(&[
+            context.temp_dir.to_path_buf(),
+            child_dir.join(".venv").join("bin"),
+        ])
+        .unwrap();
+
+        uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, path.as_os_str()), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        [TEMP_DIR]/child/.venv/[BIN]/python
+
+        ----- stderr -----
+        "###);
+    }
+
+    // But, if there's an executable _before_ the virtual environment — we prefer that
+    #[cfg(not(windows))]
+    {
+        let path = std::env::join_paths(
+            std::env::split_paths(&context.python_path())
+                .chain(std::iter::once(child_dir.join(".venv").join("bin"))),
+        )
+        .unwrap();
+
+        uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, path.as_os_str()), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        [PYTHON-3.11]
+
+        ----- stderr -----
+        "###);
+    }
 }
 
 #[cfg(unix)]

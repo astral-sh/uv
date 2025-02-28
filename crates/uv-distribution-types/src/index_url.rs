@@ -17,15 +17,17 @@ use crate::{Index, Verbatim};
 static PYPI_URL: LazyLock<Url> = LazyLock::new(|| Url::parse("https://pypi.org/simple").unwrap());
 
 static DEFAULT_INDEX: LazyLock<Index> = LazyLock::new(|| {
-    Index::from_index_url(IndexUrl::Pypi(VerbatimUrl::from_url(PYPI_URL.clone())))
+    Index::from_index_url(IndexUrl::Pypi(Arc::new(VerbatimUrl::from_url(
+        PYPI_URL.clone(),
+    ))))
 });
 
 /// The URL of an index to use for fetching packages (e.g., PyPI).
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub enum IndexUrl {
-    Pypi(VerbatimUrl),
-    Url(VerbatimUrl),
-    Path(VerbatimUrl),
+    Pypi(Arc<VerbatimUrl>),
+    Url(Arc<VerbatimUrl>),
+    Path(Arc<VerbatimUrl>),
 }
 
 impl IndexUrl {
@@ -96,9 +98,9 @@ impl IndexUrl {
     /// Convert the index URL into a [`Url`].
     pub fn into_url(self) -> Url {
         match self {
-            Self::Pypi(url) => url.into_url(),
-            Self::Url(url) => url.into_url(),
-            Self::Path(url) => url.into_url(),
+            Self::Pypi(url) => url.to_url(),
+            Self::Url(url) => url.to_url(),
+            Self::Path(url) => url.to_url(),
         }
     }
 
@@ -169,19 +171,32 @@ impl<'de> serde::de::Deserialize<'de> for IndexUrl {
     where
         D: serde::de::Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        IndexUrl::from_str(&s).map_err(serde::de::Error::custom)
+        struct Visitor;
+
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = IndexUrl;
+
+            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                IndexUrl::from_str(v).map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 
 impl From<VerbatimUrl> for IndexUrl {
     fn from(url: VerbatimUrl) -> Self {
         if url.scheme() == "file" {
-            Self::Path(url)
+            Self::Path(Arc::new(url))
         } else if *url.raw() == *PYPI_URL {
-            Self::Pypi(url)
+            Self::Pypi(Arc::new(url))
         } else {
-            Self::Url(url)
+            Self::Url(Arc::new(url))
         }
     }
 }
@@ -265,7 +280,7 @@ impl<'a> IndexLocations {
             let mut seen = FxHashSet::default();
             self.indexes
                 .iter()
-                .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
+                .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
                 .find(|index| index.default)
                 .or_else(|| Some(&DEFAULT_INDEX))
         }
@@ -282,7 +297,7 @@ impl<'a> IndexLocations {
             Either::Right(
                 self.indexes
                     .iter()
-                    .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
+                    .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
                     .filter(|index| !index.default && !index.explicit),
             )
         }
@@ -311,9 +326,9 @@ impl<'a> IndexLocations {
         } else {
             let mut seen = FxHashSet::default();
             Either::Right(
-                self.indexes.iter().filter(move |index| {
-                    index.name.as_ref().map_or(true, |name| seen.insert(name))
-                }),
+                self.indexes
+                    .iter()
+                    .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name))),
             )
         }
     }
@@ -354,7 +369,7 @@ impl<'a> IndexLocations {
                 self.indexes
                     .iter()
                     .chain(self.flat_index.iter())
-                    .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
+                    .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
             } {
                 if index.default {
                     if default {
@@ -385,6 +400,13 @@ pub struct IndexUrls {
 }
 
 impl<'a> IndexUrls {
+    pub fn from_indexes(indexes: Vec<Index>) -> Self {
+        Self {
+            indexes,
+            no_index: false,
+        }
+    }
+
     /// Return the default [`Index`] entry.
     ///
     /// If `--no-index` is set, return `None`.
@@ -397,7 +419,7 @@ impl<'a> IndexUrls {
             let mut seen = FxHashSet::default();
             self.indexes
                 .iter()
-                .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
+                .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
                 .find(|index| index.default)
                 .or_else(|| Some(&DEFAULT_INDEX))
         }
@@ -414,7 +436,7 @@ impl<'a> IndexUrls {
             Either::Right(
                 self.indexes
                     .iter()
-                    .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
+                    .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
                     .filter(|index| !index.default && !index.explicit),
             )
         }
@@ -431,6 +453,44 @@ impl<'a> IndexUrls {
         self.implicit_indexes()
             .chain(self.default_index())
             .filter(|index| !index.explicit)
+    }
+
+    /// Return an iterator over all user-defined [`Index`] entries in order.
+    ///
+    /// Prioritizes the `[tool.uv.index]` definitions over the `--extra-index-url` definitions
+    /// over the `--index-url` definition.
+    ///
+    /// Unlike [`IndexUrl::indexes`], this includes explicit indexes and does _not_ insert PyPI
+    /// as a fallback default.
+    ///
+    /// If `no_index` was enabled, then this always returns an empty
+    /// iterator.
+    pub fn defined_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
+        if self.no_index {
+            Either::Left(std::iter::empty())
+        } else {
+            Either::Right(
+                {
+                    let mut seen = FxHashSet::default();
+                    self.indexes
+                        .iter()
+                        .filter(move |index| {
+                            index.name.as_ref().is_none_or(|name| seen.insert(name))
+                        })
+                        .filter(|index| !index.default)
+                }
+                .chain({
+                    let mut seen = FxHashSet::default();
+                    self.indexes
+                        .iter()
+                        .filter(move |index| {
+                            index.name.as_ref().is_none_or(|name| seen.insert(name))
+                        })
+                        .find(|index| index.default)
+                        .into_iter()
+                }),
+            )
+        }
     }
 }
 

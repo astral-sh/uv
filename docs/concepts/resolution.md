@@ -81,6 +81,28 @@ the same platform the lockfile was created on. To solve this problem, platform-i
 uv supports both [platform-specific](#platform-specific-resolution) and
 [universal](#universal-resolution) resolution.
 
+## Platform-specific resolution
+
+By default, uv's pip interface, i.e., [`uv pip compile`](../pip/compile.md), produces a resolution
+that is platform-specific, like `pip-tools`. There is no way to use platform-specific resolution in
+the uv's project interface.
+
+uv also supports resolving for specific, alternate platforms and Python versions with the
+`--python-platform` and `--python-version` options. For example, if using Python 3.12 on macOS,
+`uv pip compile --python-platform linux --python-version 3.10 requirements.in` can be used to
+produce a resolution for Python 3.10 on Linux instead. Unlike universal resolution, during
+platform-specific resolution, the provided `--python-version` is the exact python version to use,
+not a lower bound.
+
+!!! note
+
+    Python's environment markers expose far more information about the current machine
+    than can be expressed by a simple `--python-platform` argument. For example, the `platform_version` marker
+    on macOS includes the time at which the kernel was built, which can (in theory) be encoded in
+    package requirements. uv's resolver makes a best-effort attempt to generate a resolution that is
+    compatible with any machine running on the target `--python-platform`, which should be sufficient for
+    most use cases, but may lose fidelity for complex package and platform combinations.
+
 ## Universal resolution
 
 uv's lockfile (`uv.lock`) is created with a universal resolution and is portable across platforms.
@@ -117,27 +139,82 @@ bounds on `requires-python` often leads to formally correct but practically inco
 as, e.g., resolvers will backtrack to the first published version that omits the upper bound (see:
 [`Requires-Python` upper limits](https://discuss.python.org/t/requires-python-upper-limits/12663)).
 
-## Platform-specific resolution
+### Limited resolution environments
 
-By default, uv's pip interface, i.e., [`uv pip compile`](../pip/compile.md), produces a resolution
-that is platform-specific, like `pip-tools`. There is no way to use platform-specific resolution in
-the uv's project interface.
+By default, the universal resolver attempts to solve for all platforms and Python versions.
 
-uv also supports resolving for specific, alternate platforms and Python versions with the
-`--python-platform` and `--python-version` options. For example, if using Python 3.12 on macOS,
-`uv pip compile --python-platform linux --python-version 3.10 requirements.in` can be used to
-produce a resolution for Python 3.10 on Linux instead. Unlike universal resolution, during
-platform-specific resolution, the provided `--python-version` is the exact python version to use,
-not a lower bound.
+If your project supports only a limited set of platforms or Python versions, you can constrain the
+set of solved platforms via the `environments` setting, which accepts a list of
+[PEP 508 environment markers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers).
+In other words, you can use the `environments` setting to _reduce_ the set of supported platforms.
 
-!!! note
+For example, to constrain the lockfile to macOS and Linux, and avoid solving for Windows:
 
-    Python's environment markers expose far more information about the current machine
-    than can be expressed by a simple `--python-platform` argument. For example, the `platform_version` marker
-    on macOS includes the time at which the kernel was built, which can (in theory) be encoded in
-    package requirements. uv's resolver makes a best-effort attempt to generate a resolution that is
-    compatible with any machine running on the target `--python-platform`, which should be sufficient for
-    most use cases, but may lose fidelity for complex package and platform combinations.
+```toml title="pyproject.toml"
+[tool.uv]
+environments = [
+    "sys_platform == 'darwin'",
+    "sys_platform == 'linux'",
+]
+```
+
+Or, to avoid solving for alternative Python implementations:
+
+```toml title="pyproject.toml"
+[tool.uv]
+environments = [
+    "implementation_name == 'cpython'"
+]
+```
+
+Entries in the `environments` setting must be disjoint (i.e., they must not overlap). For example,
+`sys_platform == 'darwin'` and `sys_platform == 'linux'` are disjoint, but
+`sys_platform == 'darwin'` and `python_version >= '3.9'` are not, since both could be true at the
+same time.
+
+### Required environments
+
+In the Python ecosystem, packages can be published as source distributions, built distributions
+(wheels), or both; but to install a package, a built distribution is required. If a package lacks a
+built distribution, or lacks a distribution for the current platform or Python version (built
+distributions are often platform-specific), uv will attempt to build the package from source, then
+install the resulting built distribution.
+
+Some packages (like PyTorch) publish built distributions, but omit a source distribution. Such
+packages are _only_ installable on platforms for which a built distribution is available. For
+example, if a package publishes built distributions for Linux, but not macOS or Windows, then that
+package will _only_ be installable on Windows.
+
+Packages that lack source distributions cause problems for universal resolution, since there will
+typically be at least one platform or Python version for which the package is not installable.
+
+By default, uv requires each such package to include at least one wheel that is compatible with the
+target Python version. The `required-environments` setting can be used to ensure that the resulting
+resolution contains wheels for specific platforms, or fails if no such wheels are available. The
+setting accepts a list of
+[PEP 508 environment markers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers).
+
+While the `environments` setting _limits_ the set of environments that uv will consider when
+resolving dependencies, `required-environments` _expands_ the set of platforms that uv _must_
+support when resolving dependencies.
+
+For example, `environments = ["sys_platform == 'darwin'"]` would limit uv to solving for macOS (and
+ignoring Linux and Windows). On the other hand,
+`required-environments = ["sys_platform == 'darwin'"]` would _require_ that any package without a
+source distribution include a wheel for macOS in order to be installable (and would fail if no such
+wheel is available).
+
+In practice, `required-environments` can be useful for declaring explicit support for non-latest
+platforms, since this often requires backtracking past the latest published versions of those
+packages. For example, to guarantee that any built distribution-only packages includes support for
+Intel macOS:
+
+```toml title="pyproject.toml"
+[tool.uv]
+required-environments = [
+    "sys_platform == 'darwin' and platform_machine == 'x86_64'"
+]
+```
 
 ## Dependency preferences
 

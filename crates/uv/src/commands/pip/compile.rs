@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::env;
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
@@ -10,11 +11,11 @@ use rustc_hash::FxHashSet;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification,
-    ExtrasSpecification, IndexStrategy, LowerBound, NoBinary, NoBuild, PreviewMode, Reinstall,
-    SourceStrategy, TrustedHost, Upgrade,
+    ExtrasSpecification, IndexStrategy, NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy,
+    Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -45,6 +46,7 @@ use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::{operations, resolution_environment};
 use crate::commands::{diagnostics, ExitStatus, OutputWriter};
 use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 
 /// Resolve a set of requirements into a set of pinned versions.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -55,6 +57,7 @@ pub(crate) async fn pip_compile(
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
+    build_constraints_from_workspace: Vec<Requirement>,
     environments: SupportedEnvironments,
     extras: ExtrasSpecification,
     groups: DevGroupsSpecification,
@@ -80,29 +83,50 @@ pub(crate) async fn pip_compile(
     index_strategy: IndexStrategy,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
-    allow_insecure_host: &[TrustedHost],
+    network_settings: &NetworkSettings,
     config_settings: ConfigSettings,
-    connectivity: Connectivity,
     no_build_isolation: bool,
     no_build_isolation_package: Vec<PackageName>,
     build_options: BuildOptions,
-    python_version: Option<PythonVersion>,
+    mut python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     universal: bool,
     exclude_newer: Option<ExcludeNewer>,
     sources: SourceStrategy,
     annotation_style: AnnotationStyle,
     link_mode: LinkMode,
-    python: Option<String>,
+    mut python: Option<String>,
     system: bool,
     python_preference: PythonPreference,
     concurrency: Concurrency,
-    native_tls: bool,
     quiet: bool,
     cache: Cache,
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
+    // Respect `UV_PYTHON`
+    if python.is_none() && python_version.is_none() {
+        if let Ok(request) = std::env::var("UV_PYTHON") {
+            if !request.is_empty() {
+                python = Some(request);
+            }
+        }
+    }
+
+    // If `--python` / `-p` is a simple Python version request, we treat it as `--python-version`
+    // for backwards compatibility. `-p` was previously aliased to `--python-version` but changed to
+    // `--python` for consistency with the rest of the CLI in v0.6.0. Since we assume metadata is
+    // consistent across wheels, it's okay for us to build wheels (to determine metadata) with an
+    // alternative Python interpreter as long as we solve with the proper Python version tags.
+    if python_version.is_none() {
+        if let Some(request) = python.as_ref() {
+            if let Ok(version) = PythonVersion::from_str(request) {
+                python_version = Some(version);
+                python = None;
+            }
+        }
+    }
+
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
     // return an error.
     if !extras.is_empty() && !requirements.iter().any(RequirementsSource::allows_extras) {
@@ -112,10 +136,10 @@ pub(crate) async fn pip_compile(
     }
 
     let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
         .keyring(keyring_provider)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -160,8 +184,17 @@ pub(crate) async fn pip_compile(
         .collect();
 
     // Read build constraints.
-    let build_constraints =
-        operations::read_constraints(build_constraints, &client_builder).await?;
+    let build_constraints: Vec<NameRequirementSpecification> =
+        operations::read_constraints(build_constraints, &client_builder)
+            .await?
+            .iter()
+            .cloned()
+            .chain(
+                build_constraints_from_workspace
+                    .into_iter()
+                    .map(NameRequirementSpecification::from),
+            )
+            .collect();
 
     // If all the metadata could be statically resolved, validate that every extra was used. If we
     // need to resolve metadata via PEP 517, we don't know which extras are used until much later.
@@ -189,8 +222,8 @@ pub(crate) async fn pip_compile(
         let request = PythonRequest::parse(python);
         PythonInstallation::find(&request, environment_preference, python_preference, &cache)
     } else {
-        // TODO(zanieb): The split here hints at a problem with the abstraction; we should be able to use
-        // `PythonInstallation::find(...)` here.
+        // TODO(zanieb): The split here hints at a problem with the request abstraction; we should
+        // be able to use `PythonInstallation::find(...)` here.
         let request = if let Some(version) = python_version.as_ref() {
             // TODO(zanieb): We should consolidate `VersionRequest` and `PythonVersion`
             PythonRequest::Version(VersionRequest::from(version))
@@ -216,6 +249,7 @@ pub(crate) async fn pip_compile(
                 && python_version.minor() == interpreter.python_minor()
         };
         if no_build.is_none()
+            && python.is_none()
             && python_version.version() != interpreter.python_version()
             && (python_version.patch().is_some() || !matches_without_patch)
         {
@@ -361,7 +395,6 @@ pub(crate) async fn pip_compile(
         &build_options,
         &build_hashes,
         exclude_newer,
-        LowerBound::Warn,
         sources,
         concurrency,
         preview,
@@ -409,7 +442,7 @@ pub(crate) async fn pip_compile(
     {
         Ok(resolution) => resolution,
         Err(err) => {
-            return diagnostics::OperationDiagnostic::native_tls(native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }

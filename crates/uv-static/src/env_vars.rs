@@ -5,6 +5,17 @@ pub struct EnvVars;
 
 #[attribute_env_vars_metadata]
 impl EnvVars {
+    /// The path to the binary that was used to invoke uv.
+    ///
+    /// This is propagated to all subprocesses spawned by uv.
+    ///
+    /// If the executable was invoked through a symbolic link, some platforms will return the path
+    /// of the symbolic link and other platforms will return the path of the symbolic link’s target.
+    ///
+    /// See <https://doc.rust-lang.org/std/env/fn.current_exe.html#security> for security
+    /// considerations.
+    pub const UV: &'static str = "UV";
+
     /// Equivalent to the `--offline` command-line argument. If set, uv will disable network access.
     pub const UV_OFFLINE: &'static str = "UV_OFFLINE";
 
@@ -141,6 +152,15 @@ impl EnvVars {
     /// Equivalent to the `--compile-bytecode` command-line argument. If set, uv
     /// will compile Python source files to bytecode after installation.
     pub const UV_COMPILE_BYTECODE: &'static str = "UV_COMPILE_BYTECODE";
+
+    /// Equivalent to the `--no-binary` command-line argument. If set, uv will install
+    /// all packages from source. The resolver will still use pre-built wheels to
+    /// extract package metadata, if available.
+    pub const UV_NO_BINARY: &'static str = "UV_NO_BINARY";
+
+    /// Equivalent to the `--no-binary-package` command line argument. If set, uv will
+    /// not use pre-built wheels for the given space-delimited list of packages.
+    pub const UV_NO_BINARY_PACKAGE: &'static str = "UV_NO_BINARY_PACKAGE";
 
     /// Equivalent to the `--publish-url` command-line argument. The URL of the upload
     /// endpoint of the index to use with `uv publish`.
@@ -449,6 +469,15 @@ impl EnvVars {
     #[attr_hidden]
     pub const GIT_ALTERNATE_OBJECT_DIRECTORIES: &'static str = "GIT_ALTERNATE_OBJECT_DIRECTORIES";
 
+    /// Disables SSL verification for git operations.
+    #[attr_hidden]
+    pub const GIT_SSL_NO_VERIFY: &'static str = "GIT_SSL_NO_VERIFY";
+
+    /// Disable interactive git prompts in terminals, e.g., for credentials. Does not disable
+    /// GUI prompts.
+    #[attr_hidden]
+    pub const GIT_TERMINAL_PROMPT: &'static str = "GIT_TERMINAL_PROMPT";
+
     /// Used in tests for better git isolation.
     ///
     /// For example, we run some tests in ~/.local/share/uv/tests.
@@ -575,6 +604,10 @@ impl EnvVars {
     #[attr_hidden]
     pub const UV_TEST_INDEX_URL: &'static str = "UV_TEST_INDEX_URL";
 
+    /// Hide progress messages with non-deterministic order in tests.
+    #[attr_hidden]
+    pub const UV_TEST_NO_CLI_PROGRESS: &'static str = "UV_TEST_NO_CLI_PROGRESS";
+
     /// `.env` files from which to load environment variables when executing `uv run` commands.
     pub const UV_ENV_FILE: &'static str = "UV_ENV_FILE";
 
@@ -606,4 +639,19 @@ impl EnvVars {
 
     /// Enables fetching files stored in Git LFS when installing a package from a Git repository.
     pub const UV_GIT_LFS: &'static str = "UV_GIT_LFS";
+
+    /// Number of times that `uv run` has been recursively invoked. Used to guard against infinite
+    /// recursion, e.g., when `uv run`` is used in a script shebang.
+    #[attr_hidden]
+    pub const UV_RUN_RECURSION_DEPTH: &'static str = "UV_RUN_RECURSION_DEPTH";
+
+    /// Number of times that `uv run` will allow recursive invocations, before exiting with an
+    /// error.
+    #[attr_hidden]
+    pub const UV_RUN_MAX_RECURSION_DEPTH: &'static str = "UV_RUN_MAX_RECURSION_DEPTH";
+
+    /// Overrides terminal width used for wrapping. This variable is not read by uv directly.
+    ///
+    /// This is a quasi-standard variable, described e.g. in `ncurses(3x)`.
+    pub const COLUMNS: &'static str = "COLUMNS";
 }

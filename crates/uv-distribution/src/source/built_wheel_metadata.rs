@@ -9,7 +9,7 @@ use uv_fs::files;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::Tags;
-use uv_pypi_types::HashDigest;
+use uv_pypi_types::{HashDigest, HashDigests};
 
 /// The information about the wheel we either just built or got from the cache.
 #[derive(Debug, Clone)]
@@ -21,7 +21,7 @@ pub(crate) struct BuiltWheelMetadata {
     /// The parsed filename.
     pub(crate) filename: WheelFilename,
     /// The computed hashes of the source distribution from which the wheel was built.
-    pub(crate) hashes: Vec<HashDigest>,
+    pub(crate) hashes: HashDigests,
     /// The cache information for the underlying source distribution.
     pub(crate) cache_info: CacheInfo,
 }
@@ -29,8 +29,8 @@ pub(crate) struct BuiltWheelMetadata {
 impl BuiltWheelMetadata {
     /// Find a compatible wheel in the cache.
     pub(crate) fn find_in_cache(tags: &Tags, cache_shard: &CacheShard) -> Option<Self> {
-        for directory in files(cache_shard) {
-            if let Some(metadata) = Self::from_path(directory, cache_shard) {
+        for file in files(cache_shard) {
+            if let Some(metadata) = Self::from_path(file, cache_shard) {
                 // Validate that the wheel is compatible with the target platform.
                 if metadata.filename.is_compatible(tags) {
                     return Some(metadata);
@@ -49,25 +49,25 @@ impl BuiltWheelMetadata {
             path,
             filename,
             cache_info: CacheInfo::default(),
-            hashes: vec![],
+            hashes: HashDigests::empty(),
         })
     }
 
     #[must_use]
-    pub(crate) fn with_hashes(mut self, hashes: Vec<HashDigest>) -> Self {
+    pub(crate) fn with_hashes(mut self, hashes: HashDigests) -> Self {
         self.hashes = hashes;
         self
     }
 
     /// Returns `true` if the wheel matches the given package name and version.
     pub(crate) fn matches(&self, name: Option<&PackageName>, version: Option<&Version>) -> bool {
-        name.map_or(true, |name| self.filename.name == *name)
-            && version.map_or(true, |version| self.filename.version == *version)
+        name.is_none_or(|name| self.filename.name == *name)
+            && version.is_none_or(|version| self.filename.version == *version)
     }
 }
 
 impl Hashed for BuiltWheelMetadata {
     fn hashes(&self) -> &[HashDigest] {
-        &self.hashes
+        self.hashes.as_slice()
     }
 }

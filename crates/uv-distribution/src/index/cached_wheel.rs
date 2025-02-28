@@ -7,7 +7,7 @@ use uv_distribution_types::{
     CachedDirectUrlDist, CachedRegistryDist, DirectUrlSourceDist, DirectorySourceDist,
     GitSourceDist, Hashed, PathSourceDist,
 };
-use uv_pypi_types::{HashDigest, VerbatimParsedUrl};
+use uv_pypi_types::{HashDigest, HashDigests, VerbatimParsedUrl};
 
 use crate::archive::Archive;
 use crate::{HttpArchivePointer, LocalArchivePointer};
@@ -19,14 +19,14 @@ pub struct CachedWheel {
     /// The [`CacheEntry`] for the wheel.
     pub entry: CacheEntry,
     /// The [`HashDigest`]s for the wheel.
-    pub hashes: Vec<HashDigest>,
+    pub hashes: HashDigests,
     /// The [`CacheInfo`] for the wheel.
     pub cache_info: CacheInfo,
 }
 
 impl CachedWheel {
     /// Try to parse a distribution from a cached directory name (like `typing-extensions-4.8.0-py3-none-any`).
-    pub fn from_built_source(path: impl AsRef<Path>) -> Option<Self> {
+    pub fn from_built_source(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
         let path = path.as_ref();
 
         // Determine the wheel filename.
@@ -34,9 +34,9 @@ impl CachedWheel {
         let filename = WheelFilename::from_stem(filename).ok()?;
 
         // Convert to a cached wheel.
-        let archive = path.canonicalize().ok()?;
+        let archive = cache.resolve_link(path).ok()?;
         let entry = CacheEntry::from_path(archive);
-        let hashes = Vec::new();
+        let hashes = HashDigests::empty();
         let cache_info = CacheInfo::default();
         Some(Self {
             filename,
@@ -116,47 +116,52 @@ impl CachedWheel {
         }
     }
 
-    /// Read a cached wheel from a `.http` pointer (e.g., `anyio-4.0.0-py3-none-any.http`).
+    /// Read a cached wheel from a `.http` pointer
     pub fn from_http_pointer(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
         let path = path.as_ref();
-
-        // Determine the wheel filename.
-        let filename = path.file_stem()?.to_str()?;
-        let filename = WheelFilename::from_stem(filename).ok()?;
 
         // Read the pointer.
         let pointer = HttpArchivePointer::read_from(path).ok()??;
         let cache_info = pointer.to_cache_info();
-        let Archive { id, hashes } = pointer.into_archive();
+        let archive = pointer.into_archive();
 
+        // Ignore stale pointers.
+        if !archive.exists(cache) {
+            return None;
+        }
+
+        let Archive { id, hashes, .. } = archive;
         let entry = cache.entry(CacheBucket::Archive, "", id);
 
         // Convert to a cached wheel.
         Some(Self {
-            filename,
+            filename: archive.filename,
             entry,
             hashes,
             cache_info,
         })
     }
 
-    /// Read a cached wheel from a `.rev` pointer (e.g., `anyio-4.0.0-py3-none-any.rev`).
+    /// Read a cached wheel from a `.rev` pointer
     pub fn from_local_pointer(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
         let path = path.as_ref();
-
-        // Determine the wheel filename.
-        let filename = path.file_stem()?.to_str()?;
-        let filename = WheelFilename::from_stem(filename).ok()?;
 
         // Read the pointer.
         let pointer = LocalArchivePointer::read_from(path).ok()??;
         let cache_info = pointer.to_cache_info();
-        let Archive { id, hashes } = pointer.into_archive();
+        let archive = pointer.into_archive();
+
+        // Ignore stale pointers.
+        if !archive.exists(cache) {
+            return None;
+        }
+
+        let Archive { id, hashes, .. } = archive;
+        let entry = cache.entry(CacheBucket::Archive, "", id);
 
         // Convert to a cached wheel.
-        let entry = cache.entry(CacheBucket::Archive, "", id);
         Some(Self {
-            filename,
+            filename: archive.filename,
             entry,
             hashes,
             cache_info,
@@ -172,6 +177,6 @@ impl CachedWheel {
 
 impl Hashed for CachedWheel {
     fn hashes(&self) -> &[HashDigest] {
-        &self.hashes
+        self.hashes.as_slice()
     }
 }

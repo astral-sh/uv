@@ -1,11 +1,13 @@
 use std::fmt::{Display, Formatter};
+use std::hash::Hash;
+use std::str::FromStr;
 
 use memchr::memchr;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
 
+use uv_cache_key::cache_digest;
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::{Version, VersionParseError};
 use uv_platform_tags::{
@@ -104,6 +106,33 @@ impl WheelFilename {
         )
     }
 
+    /// Returns a consistent cache key with a maximum length of 64 characters.
+    ///
+    /// Prefers `{version}-{tags}` if such an identifier fits within the maximum allowed length;
+    /// otherwise, uses a truncated version of the version and a digest of the tags.
+    pub fn cache_key(&self) -> String {
+        const CACHE_KEY_MAX_LEN: usize = 64;
+
+        let full = format!("{}-{}", self.version, self.tags);
+        if full.len() <= CACHE_KEY_MAX_LEN {
+            return full;
+        }
+
+        // Create a digest of the tag string (instead of its individual fields) to retain
+        // compatibility across platforms, Rust versions, etc.
+        let digest = cache_digest(&format!("{}", self.tags));
+
+        // Truncate the version, but avoid trailing dots, plus signs, etc. to avoid ambiguity.
+        let version_width = CACHE_KEY_MAX_LEN - 1 /* dash */ - 16 /* digest */;
+        let mut version = self.version.to_string();
+
+        // PANIC SAFETY: version strings can only contain ASCII characters.
+        version.truncate(version_width);
+        let version = version.trim_end_matches(['.', '+']);
+
+        format!("{version}-{digest}")
+    }
+
     /// Return the wheel's Python tags.
     pub fn python_tags(&self) -> &[LanguageTag] {
         match &self.tags {
@@ -138,6 +167,13 @@ impl WheelFilename {
 
     /// Parse a wheel filename from the stem (e.g., `foo-1.2.3-py3-none-any`).
     pub fn from_stem(stem: &str) -> Result<Self, WheelFilenameError> {
+        // The wheel stem should not contain the `.whl` extension.
+        if std::path::Path::new(stem)
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
+        {
+            return Err(WheelFilenameError::UnexpectedExtension(stem.to_string()));
+        }
         Self::parse(stem, stem)
     }
 
@@ -292,8 +328,21 @@ impl<'de> Deserialize<'de> for WheelFilename {
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        FromStr::from_str(&s).map_err(de::Error::custom)
+        struct Visitor;
+
+        impl de::Visitor<'_> for Visitor {
+            type Value = WheelFilename;
+
+            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                WheelFilename::from_str(v).map_err(de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 
@@ -328,6 +377,8 @@ pub enum WheelFilenameError {
     MissingAbiTag(String),
     #[error("The wheel filename \"{0}\" is missing a platform tag")]
     MissingPlatformTag(String),
+    #[error("The wheel stem \"{0}\" has an unexpected extension")]
+    UnexpectedExtension(String),
 }
 
 #[cfg(test)]
@@ -427,5 +478,32 @@ mod tests {
                 *wheel_name
             );
         }
+    }
+
+    #[test]
+    fn cache_key() {
+        // Short names should use `version-tags` format.
+        let filename = WheelFilename::from_str("django_allauth-0.51.0-py3-none-any.whl").unwrap();
+        insta::assert_snapshot!(filename.cache_key(), @"0.51.0-py3-none-any");
+
+        // Common `manylinux` names should use still use the `version-tags` format.
+        let filename = WheelFilename::from_str(
+            "numpy-1.26.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+        )
+        .unwrap();
+        insta::assert_snapshot!(filename.cache_key(), @"1.26.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64");
+
+        // But larger names should use the `truncated(version)-digest(tags)` format.
+        let filename = WheelFilename::from_str(
+            "numpy-1.26.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.musllinux_1_2.whl",
+        )
+        .unwrap();
+        insta::assert_snapshot!(filename.cache_key(), @"1.26.2-5a2adc379b2dc214");
+
+        // Larger versions should get truncated.
+        let filename = WheelFilename::from_str(
+            "example-1.2.3.4.5.6.7.8.9.0.1.2.3.4.5.6.7.8.9.0.1.2.1.2.3.4.5.6.7.8.9.0.1.1.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
+        ).unwrap();
+        insta::assert_snapshot!(filename.cache_key(), @"1.2.3.4.5.6.7.8.9.0.1.2.3.4.5.6.7.8.9.0.1.2.1.2-80bf8598e9647cf7");
     }
 }

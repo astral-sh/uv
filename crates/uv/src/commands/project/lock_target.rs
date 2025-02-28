@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use itertools::Either;
 
-use uv_configuration::{LowerBound, SourceStrategy};
+use uv_configuration::SourceStrategy;
 use uv_distribution::LoweredRequirement;
 use uv_distribution_types::{Index, IndexLocations};
 use uv_normalize::{GroupName, PackageName};
@@ -79,6 +79,23 @@ impl<'lock> LockTarget<'lock> {
         }
     }
 
+    /// Returns the set of build constraints for the [`LockTarget`].
+    pub(crate) fn build_constraints(self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
+        match self {
+            Self::Workspace(workspace) => workspace.build_constraints(),
+            Self::Script(script) => script
+                .metadata
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.build_constraint_dependencies.as_ref())
+                .into_iter()
+                .flatten()
+                .cloned()
+                .collect(),
+        }
+    }
+
     /// Return the dependency groups that are attached to the target directly, as opposed to being
     /// attached to any members within the target.
     pub(crate) fn dependency_groups(
@@ -144,6 +161,17 @@ impl<'lock> LockTarget<'lock> {
     pub(crate) fn environments(self) -> Option<&'lock SupportedEnvironments> {
         match self {
             Self::Workspace(workspace) => workspace.environments(),
+            Self::Script(_) => {
+                // TODO(charlie): Add support for environments in scripts.
+                None
+            }
+        }
+    }
+
+    /// Returns the set of required platforms for the [`LockTarget`].
+    pub(crate) fn required_environments(self) -> Option<&'lock SupportedEnvironments> {
+        match self {
+            Self::Workspace(workspace) => workspace.required_environments(),
             Self::Script(_) => {
                 // TODO(charlie): Add support for environments in scripts.
                 None
@@ -304,7 +332,6 @@ impl<'lock> LockTarget<'lock> {
                     workspace,
                     locations,
                     sources,
-                    LowerBound::Warn,
                 )?;
 
                 Ok(metadata
@@ -350,7 +377,6 @@ impl<'lock> LockTarget<'lock> {
                             sources,
                             indexes,
                             locations,
-                            LowerBound::Allow,
                         )
                         .map(move |requirement| match requirement {
                             Ok(requirement) => Ok(requirement.into_inner()),

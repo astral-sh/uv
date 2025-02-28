@@ -11,9 +11,7 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace};
 
-use uv_client::Connectivity;
 use uv_configuration::PreviewMode;
-use uv_configuration::TrustedHost;
 use uv_fs::Simplified;
 use uv_python::downloads::{self, DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
 use uv_python::managed::{
@@ -32,6 +30,7 @@ use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 
 #[derive(Debug, Clone)]
 struct InstallRequest {
@@ -131,11 +130,9 @@ pub(crate) async fn install(
     force: bool,
     python_install_mirror: Option<String>,
     pypy_install_mirror: Option<String>,
+    network_settings: NetworkSettings,
     default: bool,
     python_downloads: PythonDownloads,
-    native_tls: bool,
-    connectivity: Connectivity,
-    allow_insecure_host: &[TrustedHost],
     no_config: bool,
     preview: PreviewMode,
     printer: Printer,
@@ -296,9 +293,9 @@ pub(crate) async fn install(
 
     // Download and unpack the Python versions concurrently
     let client = uv_client::BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
-        .allow_insecure_host(allow_insecure_host.to_vec())
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone())
         .build();
     let reporter = PythonDownloadReporter::new(printer, downloads.len() as u64);
     let mut tasks = FuturesUnordered::new();

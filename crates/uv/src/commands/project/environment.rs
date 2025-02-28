@@ -1,21 +1,18 @@
 use tracing::debug;
 
+use uv_cache::{Cache, CacheBucket};
+use uv_cache_key::{cache_digest, hash_digest};
+use uv_configuration::{Concurrency, PreviewMode};
+use uv_distribution_types::{Name, Resolution};
+use uv_python::{Interpreter, PythonEnvironment};
+
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
-use crate::commands::project::install_target::InstallTarget;
+use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{
     resolve_environment, sync_environment, EnvironmentSpecification, PlatformState, ProjectError,
 };
 use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
-use uv_cache::{Cache, CacheBucket};
-use uv_cache_key::{cache_digest, hash_digest};
-use uv_client::Connectivity;
-use uv_configuration::{
-    Concurrency, DevGroupsManifest, ExtrasSpecification, InstallOptions, PreviewMode, TrustedHost,
-};
-use uv_distribution_types::{Name, Resolution};
-use uv_python::{Interpreter, PythonEnvironment};
-use uv_resolver::Installable;
+use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 
 /// A [`PythonEnvironment`] stored in the cache.
 #[derive(Debug)]
@@ -33,14 +30,12 @@ impl CachedEnvironment {
         spec: EnvironmentSpecification<'_>,
         interpreter: &Interpreter,
         settings: &ResolverInstallerSettings,
+        network_settings: &NetworkSettings,
         state: &PlatformState,
         resolve: Box<dyn ResolveLogger>,
         install: Box<dyn InstallLogger>,
         installer_metadata: bool,
-        connectivity: Connectivity,
         concurrency: Concurrency,
-        native_tls: bool,
-        allow_insecure_host: &[TrustedHost],
         cache: &Cache,
         printer: Printer,
         preview: PreviewMode,
@@ -53,12 +48,10 @@ impl CachedEnvironment {
                 spec,
                 &interpreter,
                 settings.as_ref().into(),
+                network_settings,
                 state,
                 resolve,
-                connectivity,
                 concurrency,
-                native_tls,
-                allow_insecure_host,
                 cache,
                 printer,
                 preview,
@@ -66,93 +59,6 @@ impl CachedEnvironment {
             .await?,
         );
 
-        Self::from_resolution(
-            resolution,
-            interpreter,
-            settings,
-            state,
-            install,
-            installer_metadata,
-            connectivity,
-            concurrency,
-            native_tls,
-            allow_insecure_host,
-            cache,
-            printer,
-            preview,
-        )
-        .await
-    }
-
-    /// Get or create an [`CachedEnvironment`] based on a given [`InstallTarget`].
-    pub(crate) async fn from_lock(
-        target: InstallTarget<'_>,
-        extras: &ExtrasSpecification,
-        dev: &DevGroupsManifest,
-        install_options: InstallOptions,
-        settings: &ResolverInstallerSettings,
-        interpreter: &Interpreter,
-        state: &PlatformState,
-        install: Box<dyn InstallLogger>,
-        installer_metadata: bool,
-        connectivity: Connectivity,
-        concurrency: Concurrency,
-        native_tls: bool,
-        allow_insecure_host: &[TrustedHost],
-        cache: &Cache,
-        printer: Printer,
-        preview: PreviewMode,
-    ) -> Result<Self, ProjectError> {
-        let interpreter = Self::base_interpreter(interpreter, cache)?;
-
-        // Determine the tags, markers, and interpreter to use for resolution.
-        let tags = interpreter.tags()?;
-        let marker_env = interpreter.resolver_marker_environment();
-
-        // Read the lockfile.
-        let resolution = target.to_resolution(
-            &marker_env,
-            tags,
-            extras,
-            dev,
-            &settings.build_options,
-            &install_options,
-        )?;
-
-        Self::from_resolution(
-            resolution,
-            interpreter,
-            settings,
-            state,
-            install,
-            installer_metadata,
-            connectivity,
-            concurrency,
-            native_tls,
-            allow_insecure_host,
-            cache,
-            printer,
-            preview,
-        )
-        .await
-    }
-
-    /// Get or create an [`CachedEnvironment`] based on a given [`Resolution`].
-    pub(crate) async fn from_resolution(
-        resolution: Resolution,
-        interpreter: Interpreter,
-        settings: &ResolverInstallerSettings,
-        state: &PlatformState,
-        install: Box<dyn InstallLogger>,
-        installer_metadata: bool,
-        connectivity: Connectivity,
-        concurrency: Concurrency,
-        native_tls: bool,
-        allow_insecure_host: &[TrustedHost],
-        cache: &Cache,
-        printer: Printer,
-        preview: PreviewMode,
-    ) -> Result<Self, ProjectError> {
         // Hash the resolution by hashing the generated lockfile.
         // TODO(charlie): If the resolution contains any mutable metadata (like a path or URL
         // dependency), skip this step.
@@ -170,7 +76,7 @@ impl CachedEnvironment {
         let cache_entry = cache.entry(CacheBucket::Environments, interpreter_hash, resolution_hash);
 
         if cache.refresh().is_none() {
-            if let Ok(root) = fs_err::read_link(cache_entry.path()) {
+            if let Ok(root) = cache.resolve_link(cache_entry.path()) {
                 if let Ok(environment) = PythonEnvironment::from_root(root, cache) {
                     return Ok(Self(environment));
                 }
@@ -192,14 +98,13 @@ impl CachedEnvironment {
         sync_environment(
             venv,
             &resolution,
+            Modifications::Exact,
             settings.as_ref().into(),
+            network_settings,
             state,
             install,
             installer_metadata,
-            connectivity,
             concurrency,
-            native_tls,
-            allow_insecure_host,
             cache,
             printer,
             preview,
@@ -215,9 +120,34 @@ impl CachedEnvironment {
         Ok(Self(PythonEnvironment::from_root(root, cache)?))
     }
 
-    /// Convert the [`CachedEnvironment`] into an [`Interpreter`].
-    pub(crate) fn into_interpreter(self) -> Interpreter {
-        self.0.into_interpreter()
+    /// Set the ephemeral overlay for a Python environment.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn set_overlay(&self, contents: impl AsRef<[u8]>) -> Result<(), ProjectError> {
+        let site_packages = self
+            .0
+            .site_packages()
+            .next()
+            .ok_or(ProjectError::NoSitePackages)?;
+        let overlay_path = site_packages.join("_uv_ephemeral_overlay.pth");
+        fs_err::write(overlay_path, contents)?;
+        Ok(())
+    }
+
+    /// Clear the ephemeral overlay for a Python environment, if it exists.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn clear_overlay(&self) -> Result<(), ProjectError> {
+        let site_packages = self
+            .0
+            .site_packages()
+            .next()
+            .ok_or(ProjectError::NoSitePackages)?;
+        let overlay_path = site_packages.join("_uv_ephemeral_overlay.pth");
+        match fs_err::remove_file(overlay_path) {
+            Ok(()) => (),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => (),
+            Err(err) => return Err(ProjectError::OverlayRemoval(err)),
+        }
+        Ok(())
     }
 
     /// Return the [`Interpreter`] to use for the cached environment, based on a given
@@ -229,18 +159,24 @@ impl CachedEnvironment {
         interpreter: &Interpreter,
         cache: &Cache,
     ) -> Result<Interpreter, uv_python::Error> {
-        if let Some(interpreter) = interpreter.to_base_interpreter(cache)? {
+        let base_python = if cfg!(unix) {
+            interpreter.find_base_python()?
+        } else {
+            interpreter.to_base_python()?
+        };
+        if base_python == interpreter.sys_executable() {
             debug!(
                 "Caching via base interpreter: `{}`",
                 interpreter.sys_executable().display()
             );
-            Ok(interpreter)
-        } else {
-            debug!(
-                "Caching via interpreter: `{}`",
-                interpreter.sys_executable().display()
-            );
             Ok(interpreter.clone())
+        } else {
+            let base_interpreter = Interpreter::query(base_python, cache)?;
+            debug!(
+                "Caching via base interpreter: `{}`",
+                base_interpreter.sys_executable().display()
+            );
+            Ok(base_interpreter)
         }
     }
 }

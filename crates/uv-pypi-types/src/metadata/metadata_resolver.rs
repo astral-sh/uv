@@ -11,7 +11,7 @@ use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::Requirement;
 
 use crate::lenient_requirement::LenientRequirement;
-use crate::metadata::pyproject_toml::parse_pyproject_toml;
+use crate::metadata::pyproject_toml::PyProjectToml;
 use crate::metadata::Headers;
 use crate::{metadata, LenientVersionSpecifiers, MetadataError, VerbatimParsedUrl};
 
@@ -40,7 +40,7 @@ impl ResolutionMetadata {
     pub fn parse_metadata(content: &[u8]) -> Result<Self, MetadataError> {
         let headers = Headers::parse(content)?;
 
-        let name = PackageName::new(
+        let name = PackageName::from_owned(
             headers
                 .get_first_value("Name")
                 .ok_or(MetadataError::FieldNotFound("Name"))?,
@@ -63,13 +63,15 @@ impl ResolutionMetadata {
             .map(VersionSpecifiers::from);
         let provides_extras = headers
             .get_all_values("Provides-Extra")
-            .filter_map(|provides_extra| match ExtraName::new(provides_extra) {
-                Ok(extra_name) => Some(extra_name),
-                Err(err) => {
-                    warn!("Ignoring invalid extra: {err}");
-                    None
-                }
-            })
+            .filter_map(
+                |provides_extra| match ExtraName::from_owned(provides_extra) {
+                    Ok(extra_name) => Some(extra_name),
+                    Err(err) => {
+                        warn!("Ignoring invalid extra: {err}");
+                        None
+                    }
+                },
+            )
             .collect::<Vec<_>>();
         let dynamic = headers
             .get_all_values("Dynamic")
@@ -116,7 +118,7 @@ impl ResolutionMetadata {
         }
 
         // The `Name` and `Version` fields are required, and can't be dynamic.
-        let name = PackageName::new(
+        let name = PackageName::from_owned(
             headers
                 .get_first_value("Name")
                 .ok_or(MetadataError::FieldNotFound("Name"))?,
@@ -141,13 +143,15 @@ impl ResolutionMetadata {
             .map(VersionSpecifiers::from);
         let provides_extras = headers
             .get_all_values("Provides-Extra")
-            .filter_map(|provides_extra| match ExtraName::new(provides_extra) {
-                Ok(extra_name) => Some(extra_name),
-                Err(err) => {
-                    warn!("Ignoring invalid extra: {err}");
-                    None
-                }
-            })
+            .filter_map(
+                |provides_extra| match ExtraName::from_owned(provides_extra) {
+                    Ok(extra_name) => Some(extra_name),
+                    Err(err) => {
+                        warn!("Ignoring invalid extra: {err}");
+                        None
+                    }
+                },
+            )
             .collect::<Vec<_>>();
 
         Ok(Self {
@@ -160,11 +164,95 @@ impl ResolutionMetadata {
         })
     }
 
+    /// Extract the metadata from a `pyproject.toml` file, as specified in PEP 621.
+    ///
+    /// If we're coming from a source distribution, we may already know the version (unlike for a
+    /// source tree), so we can tolerate dynamic versions.
     pub fn parse_pyproject_toml(
-        toml: &str,
+        pyproject_toml: PyProjectToml,
         sdist_version: Option<&Version>,
     ) -> Result<Self, MetadataError> {
-        parse_pyproject_toml(toml, sdist_version)
+        let project = pyproject_toml
+            .project
+            .ok_or(MetadataError::FieldNotFound("project"))?;
+
+        // If any of the fields we need were declared as dynamic, we can't use the `pyproject.toml` file.
+        let mut dynamic = false;
+        for field in project.dynamic.unwrap_or_default() {
+            match field.as_str() {
+                "dependencies" => return Err(MetadataError::DynamicField("dependencies")),
+                "optional-dependencies" => {
+                    return Err(MetadataError::DynamicField("optional-dependencies"))
+                }
+                "requires-python" => return Err(MetadataError::DynamicField("requires-python")),
+                // When building from a source distribution, the version is known from the filename and
+                // fixed by it, so we can pretend it's static.
+                "version" => {
+                    if sdist_version.is_none() {
+                        return Err(MetadataError::DynamicField("version"));
+                    }
+                    dynamic = true;
+                }
+                _ => (),
+            }
+        }
+
+        // If dependencies are declared with Poetry, and `project.dependencies` is omitted, treat
+        // the dependencies as dynamic. The inclusion of a `project` table without defining
+        // `project.dependencies` is almost certainly an error.
+        if project.dependencies.is_none()
+            && pyproject_toml.tool.and_then(|tool| tool.poetry).is_some()
+        {
+            return Err(MetadataError::PoetrySyntax);
+        }
+
+        let name = project.name;
+        let version = project
+            .version
+            // When building from a source distribution, the version is known from the filename and
+            // fixed by it, so we can pretend it's static.
+            .or_else(|| sdist_version.cloned())
+            .ok_or(MetadataError::FieldNotFound("version"))?;
+
+        // Parse the Python version requirements.
+        let requires_python = project
+            .requires_python
+            .map(|requires_python| {
+                LenientVersionSpecifiers::from_str(&requires_python).map(VersionSpecifiers::from)
+            })
+            .transpose()?;
+
+        // Extract the requirements.
+        let mut requires_dist = project
+            .dependencies
+            .unwrap_or_default()
+            .into_iter()
+            .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
+            .map_ok(Requirement::from)
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // Extract the optional dependencies.
+        let mut provides_extras: Vec<ExtraName> = Vec::new();
+        for (extra, requirements) in project.optional_dependencies.unwrap_or_default() {
+            requires_dist.extend(
+                requirements
+                    .into_iter()
+                    .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
+                    .map_ok(Requirement::from)
+                    .map_ok(|requirement| requirement.with_extra_marker(&extra))
+                    .collect::<Result<Vec<_>, _>>()?,
+            );
+            provides_extras.push(extra);
+        }
+
+        Ok(Self {
+            name,
+            version,
+            requires_dist,
+            requires_python,
+            provides_extras,
+            dynamic,
+        })
     }
 }
 
@@ -239,5 +327,91 @@ mod tests {
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
         assert_eq!(meta.requires_dist, vec!["foo".parse().unwrap()]);
+    }
+
+    #[test]
+    fn test_parse_pyproject_toml() {
+        let s = r#"
+        [project]
+        name = "asdf"
+    "#;
+        let pyproject = PyProjectToml::from_toml(s).unwrap();
+        let meta = ResolutionMetadata::parse_pyproject_toml(pyproject, None);
+        assert!(matches!(meta, Err(MetadataError::FieldNotFound("version"))));
+
+        let s = r#"
+        [project]
+        name = "asdf"
+        dynamic = ["version"]
+    "#;
+        let pyproject = PyProjectToml::from_toml(s).unwrap();
+        let meta = ResolutionMetadata::parse_pyproject_toml(pyproject, None);
+        assert!(matches!(meta, Err(MetadataError::DynamicField("version"))));
+
+        let s = r#"
+        [project]
+        name = "asdf"
+        version = "1.0"
+    "#;
+        let pyproject = PyProjectToml::from_toml(s).unwrap();
+        let meta = ResolutionMetadata::parse_pyproject_toml(pyproject, None).unwrap();
+        assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
+        assert_eq!(meta.version, Version::new([1, 0]));
+        assert!(meta.requires_python.is_none());
+        assert!(meta.requires_dist.is_empty());
+        assert!(meta.provides_extras.is_empty());
+
+        let s = r#"
+        [project]
+        name = "asdf"
+        version = "1.0"
+        requires-python = ">=3.6"
+    "#;
+        let pyproject = PyProjectToml::from_toml(s).unwrap();
+        let meta = ResolutionMetadata::parse_pyproject_toml(pyproject, None).unwrap();
+        assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
+        assert_eq!(meta.version, Version::new([1, 0]));
+        assert_eq!(meta.requires_python, Some(">=3.6".parse().unwrap()));
+        assert!(meta.requires_dist.is_empty());
+        assert!(meta.provides_extras.is_empty());
+
+        let s = r#"
+        [project]
+        name = "asdf"
+        version = "1.0"
+        requires-python = ">=3.6"
+        dependencies = ["foo"]
+    "#;
+        let pyproject = PyProjectToml::from_toml(s).unwrap();
+        let meta = ResolutionMetadata::parse_pyproject_toml(pyproject, None).unwrap();
+        assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
+        assert_eq!(meta.version, Version::new([1, 0]));
+        assert_eq!(meta.requires_python, Some(">=3.6".parse().unwrap()));
+        assert_eq!(meta.requires_dist, vec!["foo".parse().unwrap()]);
+        assert!(meta.provides_extras.is_empty());
+
+        let s = r#"
+        [project]
+        name = "asdf"
+        version = "1.0"
+        requires-python = ">=3.6"
+        dependencies = ["foo"]
+
+        [project.optional-dependencies]
+        dotenv = ["bar"]
+    "#;
+        let pyproject = PyProjectToml::from_toml(s).unwrap();
+        let meta = ResolutionMetadata::parse_pyproject_toml(pyproject, None).unwrap();
+        assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
+        assert_eq!(meta.version, Version::new([1, 0]));
+        assert_eq!(meta.requires_python, Some(">=3.6".parse().unwrap()));
+        assert_eq!(
+            meta.requires_dist,
+            vec![
+                "foo".parse().unwrap(),
+                "bar; extra == \"dotenv\"".parse().unwrap()
+            ]
+        );
+        assert_eq!(meta.provides_extras, vec!["dotenv".parse().unwrap()]);
     }
 }

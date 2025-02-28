@@ -1,8 +1,6 @@
+# NOTE: Usually, you should edit the template instead.
+# This file is used for forks and contributors, production uses `mkdocs.insiders.yml`.
 INHERIT: mkdocs.template.yml
-# Omit the `typeset` plugin which is only available in the Insiders version.
-plugins:
-  - search
-validation:
-  anchors: warn
+
 watch:
   - mkdocs.template.yml

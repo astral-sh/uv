@@ -54,6 +54,7 @@ impl VersionMap {
         build_options: &BuildOptions,
     ) -> Self {
         let mut stable = false;
+        let mut local = false;
         let mut map = BTreeMap::new();
         // Create stubs for each entry in simple metadata. The full conversion
         // from a `VersionFiles` to a PrioritizedDist for each version
@@ -62,6 +63,7 @@ impl VersionMap {
             let version = rkyv::deserialize::<Version, rkyv::rancor::Error>(&datum.version)
                 .expect("archived version always deserializes");
             stable |= version.is_stable();
+            local |= version.is_local();
             map.insert(
                 version,
                 LazyPrioritizedDist::OnlySimple(SimplePrioritizedDist {
@@ -100,6 +102,7 @@ impl VersionMap {
             inner: VersionMapInner::Lazy(VersionMapLazy {
                 map,
                 stable,
+                local,
                 simple_metadata,
                 no_binary: build_options.no_binary_package(package_name),
                 no_build: build_options.no_build_package(package_name),
@@ -122,7 +125,7 @@ impl VersionMap {
     }
 
     /// Return an iterator over the versions in this map.
-    pub(crate) fn versions(&self) -> impl Iterator<Item = &Version> {
+    pub(crate) fn versions(&self) -> impl DoubleEndedIterator<Item = &Version> {
         match &self.inner {
             VersionMapInner::Eager(eager) => either::Either::Left(eager.map.keys()),
             VersionMapInner::Lazy(lazy) => either::Either::Right(lazy.map.keys()),
@@ -198,12 +201,12 @@ impl VersionMap {
     }
 
     /// Return the [`Hashes`] for the given version, if any.
-    pub(crate) fn hashes(&self, version: &Version) -> Option<Vec<HashDigest>> {
+    pub(crate) fn hashes(&self, version: &Version) -> Option<&[HashDigest]> {
         match self.inner {
             VersionMapInner::Eager(ref eager) => {
-                eager.map.get(version).map(|file| file.hashes().to_vec())
+                eager.map.get(version).map(PrioritizedDist::hashes)
             }
-            VersionMapInner::Lazy(ref lazy) => lazy.get(version).map(|file| file.hashes().to_vec()),
+            VersionMapInner::Lazy(ref lazy) => lazy.get(version).map(PrioritizedDist::hashes),
         }
     }
 
@@ -225,14 +228,23 @@ impl VersionMap {
             VersionMapInner::Lazy(ref map) => map.stable,
         }
     }
+
+    /// Returns `true` if the map contains at least one local version (e.g., `2.6.0+cpu`).
+    pub(crate) fn local(&self) -> bool {
+        match self.inner {
+            VersionMapInner::Eager(ref map) => map.local,
+            VersionMapInner::Lazy(ref map) => map.local,
+        }
+    }
 }
 
 impl From<FlatDistributions> for VersionMap {
     fn from(flat_index: FlatDistributions) -> Self {
         let stable = flat_index.iter().any(|(version, _)| version.is_stable());
+        let local = flat_index.iter().any(|(version, _)| version.is_local());
         let map = flat_index.into();
         Self {
-            inner: VersionMapInner::Eager(VersionMapEager { map, stable }),
+            inner: VersionMapInner::Eager(VersionMapEager { map, stable, local }),
         }
     }
 }
@@ -294,6 +306,8 @@ struct VersionMapEager {
     map: BTreeMap<Version, PrioritizedDist>,
     /// Whether the version map contains at least one stable (non-pre-release) version.
     stable: bool,
+    /// Whether the version map contains at least one local version.
+    local: bool,
 }
 
 /// A map that lazily materializes some prioritized distributions upon access.
@@ -305,11 +319,14 @@ struct VersionMapEager {
 /// avoiding another conversion step into a fully filled out `VersionMap` can
 /// provide substantial savings in some cases.
 #[derive(Debug)]
+#[allow(clippy::struct_excessive_bools)]
 struct VersionMapLazy {
     /// A map from version to possibly-initialized distribution.
     map: BTreeMap<Version, LazyPrioritizedDist>,
     /// Whether the version map contains at least one stable (non-pre-release) version.
     stable: bool,
+    /// Whether the version map contains at least one local version.
+    local: bool,
     /// The raw simple metadata from which `PrioritizedDist`s should
     /// be constructed.
     simple_metadata: OwnedArchive<SimpleMetadata>,
@@ -397,7 +414,7 @@ impl VersionMapLazy {
                 };
 
                 // Prioritize amongst all available files.
-                let yanked = file.yanked.clone();
+                let yanked = file.yanked.as_deref();
                 let hashes = file.hashes.clone();
                 match filename {
                     DistFilename::WheelFilename(filename) => {
@@ -405,7 +422,7 @@ impl VersionMapLazy {
                             &filename,
                             &filename.name,
                             &filename.version,
-                            &hashes,
+                            hashes.as_slice(),
                             yanked,
                             excluded,
                             upload_time,
@@ -421,7 +438,7 @@ impl VersionMapLazy {
                         let compatibility = self.source_dist_compatibility(
                             &filename.name,
                             &filename.version,
-                            &hashes,
+                            hashes.as_slice(),
                             yanked,
                             excluded,
                             upload_time,
@@ -452,7 +469,7 @@ impl VersionMapLazy {
         name: &PackageName,
         version: &Version,
         hashes: &[HashDigest],
-        yanked: Option<Yanked>,
+        yanked: Option<&Yanked>,
         excluded: bool,
         upload_time: Option<i64>,
     ) -> SourceDistCompatibility {
@@ -471,7 +488,9 @@ impl VersionMapLazy {
         // Check if yanked
         if let Some(yanked) = yanked {
             if yanked.is_yanked() && !self.allowed_yanks.contains(name, version) {
-                return SourceDistCompatibility::Incompatible(IncompatibleSource::Yanked(yanked));
+                return SourceDistCompatibility::Incompatible(IncompatibleSource::Yanked(
+                    yanked.clone(),
+                ));
             }
         }
 
@@ -499,7 +518,7 @@ impl VersionMapLazy {
         name: &PackageName,
         version: &Version,
         hashes: &[HashDigest],
-        yanked: Option<Yanked>,
+        yanked: Option<&Yanked>,
         excluded: bool,
         upload_time: Option<i64>,
     ) -> WheelCompatibility {
@@ -516,7 +535,7 @@ impl VersionMapLazy {
         // Check if yanked
         if let Some(yanked) = yanked {
             if yanked.is_yanked() && !self.allowed_yanks.contains(name, version) {
-                return WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(yanked));
+                return WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(yanked.clone()));
             }
         }
 

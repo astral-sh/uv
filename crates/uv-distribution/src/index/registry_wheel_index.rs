@@ -6,7 +6,7 @@ use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_key::cache_digest;
 use uv_configuration::ConfigSettings;
 use uv_distribution_types::{CachedRegistryDist, Hashed, Index, IndexLocations, IndexUrl};
-use uv_fs::{directories, files, symlinks};
+use uv_fs::{directories, files};
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
 use uv_types::HashStrategy;
@@ -98,7 +98,7 @@ impl<'a> RegistryWheelIndex<'a> {
             // Index all the wheels that were downloaded directly from the registry.
             let wheel_dir = cache.shard(
                 CacheBucket::Wheels,
-                WheelCache::Index(index.url()).wheel_dir(package.to_string()),
+                WheelCache::Index(index.url()).wheel_dir(package.as_ref()),
             );
 
             // For registry wheels, the cache structure is: `<index>/<package-name>/<wheel>.http`
@@ -166,7 +166,7 @@ impl<'a> RegistryWheelIndex<'a> {
             // from the registry.
             let cache_shard = cache.shard(
                 CacheBucket::SourceDistributions,
-                WheelCache::Index(index.url()).wheel_dir(package.to_string()),
+                WheelCache::Index(index.url()).wheel_dir(package.as_ref()),
             );
 
             // For registry source distributions, the cache structure is: `<index>/<package-name>/<version>/`.
@@ -205,8 +205,16 @@ impl<'a> RegistryWheelIndex<'a> {
                         cache_shard.shard(cache_digest(build_configuration))
                     };
 
-                    for wheel_dir in symlinks(cache_shard) {
-                        if let Some(wheel) = CachedWheel::from_built_source(wheel_dir) {
+                    for wheel_dir in uv_fs::entries(cache_shard) {
+                        // Ignore any `.lock` files.
+                        if wheel_dir
+                            .extension()
+                            .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
+                        {
+                            continue;
+                        }
+
+                        if let Some(wheel) = CachedWheel::from_built_source(wheel_dir, cache) {
                             if wheel.filename.compatibility(tags).is_compatible() {
                                 // Enforce hash-checking based on the source distribution.
                                 if revision.satisfies(

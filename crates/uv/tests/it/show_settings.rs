@@ -60,14 +60,16 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -90,6 +92,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -144,10 +147,24 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -217,14 +234,16 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -247,6 +266,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -301,10 +321,24 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -375,14 +409,16 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -405,6 +441,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -459,10 +496,24 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -565,14 +616,16 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -595,6 +648,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -649,10 +703,24 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -724,14 +792,16 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -754,6 +824,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -778,10 +849,24 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -862,14 +947,16 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -892,6 +979,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -946,10 +1034,24 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -1044,14 +1146,16 @@ fn resolve_index_url() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -1074,6 +1178,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -1157,10 +1262,24 @@ fn resolve_index_url() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -1232,14 +1351,16 @@ fn resolve_index_url() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -1262,6 +1383,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -1376,10 +1498,24 @@ fn resolve_index_url() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -1474,14 +1610,16 @@ fn resolve_find_links() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -1504,6 +1642,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -1558,10 +1697,24 @@ fn resolve_find_links() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -1655,14 +1808,16 @@ fn resolve_top_level() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -1685,6 +1840,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -1709,10 +1865,24 @@ fn resolve_top_level() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -1799,14 +1969,16 @@ fn resolve_top_level() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -1829,6 +2001,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -1912,10 +2085,24 @@ fn resolve_top_level() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -1985,14 +2172,16 @@ fn resolve_top_level() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2015,6 +2204,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -2098,10 +2288,24 @@ fn resolve_top_level() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -2195,14 +2399,16 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2225,6 +2431,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -2249,10 +2456,24 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -2329,14 +2550,16 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2359,6 +2582,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -2383,10 +2607,24 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -2463,14 +2701,16 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2493,6 +2733,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -2517,10 +2758,24 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -2599,14 +2854,16 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2629,6 +2886,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -2653,10 +2911,24 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -2745,7 +3017,7 @@ fn resolve_tool() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.tool_install(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in")
-        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2754,14 +3026,16 @@ fn resolve_tool() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2863,7 +3137,7 @@ fn resolve_tool() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    "###
+    "#
     );
 
     Ok(())
@@ -2913,14 +3187,16 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2943,6 +3219,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -2967,10 +3244,24 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -3075,14 +3366,16 @@ fn resolve_both() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -3105,6 +3398,7 @@ fn resolve_both() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -3159,10 +3453,24 @@ fn resolve_both() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -3355,14 +3663,16 @@ fn resolve_config_file() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -3385,6 +3695,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -3439,10 +3750,24 @@ fn resolve_config_file() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -3527,7 +3852,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `publish-url`, `trusted-publishing`, `check-url`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`, `build-backend`
+    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `publish-url`, `trusted-publishing`, `check-url`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`, `build-backend`
     "###
     );
 
@@ -3613,14 +3938,16 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -3643,6 +3970,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -3667,10 +3995,24 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -3750,14 +4092,16 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -3780,6 +4124,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -3804,10 +4149,24 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -3895,25 +4254,27 @@ fn allow_insecure_host() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [
+                Host {
+                    scheme: None,
+                    host: "google.com",
+                    port: None,
+                },
+                Host {
+                    scheme: None,
+                    host: "example.com",
+                    port: None,
+                },
+            ],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [
-            Host {
-                scheme: None,
-                host: "google.com",
-                port: None,
-            },
-            Host {
-                scheme: None,
-                host: "example.com",
-                port: None,
-            },
-        ],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -3936,6 +4297,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -3960,10 +4322,24 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -4054,14 +4430,16 @@ fn index_priority() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -4084,6 +4462,7 @@ fn index_priority() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -4169,10 +4548,24 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -4242,14 +4635,16 @@ fn index_priority() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -4272,6 +4667,7 @@ fn index_priority() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -4357,10 +4753,24 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -4436,14 +4846,16 @@ fn index_priority() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -4466,6 +4878,7 @@ fn index_priority() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -4551,10 +4964,24 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -4625,14 +5052,16 @@ fn index_priority() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -4655,6 +5084,7 @@ fn index_priority() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -4740,10 +5170,24 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -4821,14 +5265,16 @@ fn index_priority() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -4851,6 +5297,7 @@ fn index_priority() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -4936,10 +5383,24 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -5010,14 +5471,16 @@ fn index_priority() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -5040,6 +5503,7 @@ fn index_priority() -> anyhow::Result<()> {
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
         ),
@@ -5125,10 +5589,24 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -5212,14 +5690,16 @@ fn verify_hashes() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -5242,9 +5722,10 @@ fn verify_hashes() -> anyhow::Result<()> {
         constraints: [],
         overrides: [],
         build_constraints: [],
-        dry_run: false,
+        dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         modifications: Sufficient,
         refresh: None(
             Timestamp(
@@ -5267,10 +5748,24 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -5340,14 +5835,16 @@ fn verify_hashes() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -5370,9 +5867,10 @@ fn verify_hashes() -> anyhow::Result<()> {
         constraints: [],
         overrides: [],
         build_constraints: [],
-        dry_run: false,
+        dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         modifications: Sufficient,
         refresh: None(
             Timestamp(
@@ -5395,10 +5893,24 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -5466,14 +5978,16 @@ fn verify_hashes() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -5496,9 +6010,10 @@ fn verify_hashes() -> anyhow::Result<()> {
         constraints: [],
         overrides: [],
         build_constraints: [],
-        dry_run: false,
+        dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         modifications: Sufficient,
         refresh: None(
             Timestamp(
@@ -5521,10 +6036,24 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -5594,14 +6123,16 @@ fn verify_hashes() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -5624,9 +6155,10 @@ fn verify_hashes() -> anyhow::Result<()> {
         constraints: [],
         overrides: [],
         build_constraints: [],
-        dry_run: false,
+        dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         modifications: Sufficient,
         refresh: None(
             Timestamp(
@@ -5649,10 +6181,24 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -5720,14 +6266,16 @@ fn verify_hashes() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -5750,9 +6298,10 @@ fn verify_hashes() -> anyhow::Result<()> {
         constraints: [],
         overrides: [],
         build_constraints: [],
-        dry_run: false,
+        dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         modifications: Sufficient,
         refresh: None(
             Timestamp(
@@ -5775,10 +6324,24 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,
@@ -5847,14 +6410,16 @@ fn verify_hashes() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -5877,9 +6442,10 @@ fn verify_hashes() -> anyhow::Result<()> {
         constraints: [],
         overrides: [],
         build_constraints: [],
-        dry_run: false,
+        dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
         modifications: Sufficient,
         refresh: None(
             Timestamp(
@@ -5902,10 +6468,24 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification {
-                dev: None,
-                groups: None,
-            },
+            groups: DevGroupsSpecification(
+                DevGroupsSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_groups: false,
+                    history: DevGroupsSpecificationHistory {
+                        dev_mode: None,
+                        group: [],
+                        only_group: [],
+                        no_group: [],
+                        all_groups: false,
+                        no_default_groups: false,
+                        defaults: [],
+                    },
+                },
+            ),
             break_system_packages: false,
             target: None,
             prefix: None,

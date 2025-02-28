@@ -1,4 +1,35 @@
 ## Project metadata
+### [`build-constraint-dependencies`](#build-constraint-dependencies) {: #build-constraint-dependencies }
+
+Constraints to apply when solving build dependencies.
+
+Build constraints are used to restrict the versions of build dependencies that are selected
+when building a package during resolution or installation.
+
+Including a package as a constraint will _not_ trigger installation of the package during
+a build; instead, the package must be requested elsewhere in the project's build dependency
+graph.
+
+!!! note
+    In `uv lock`, `uv sync`, and `uv run`, uv will only read `build-constraint-dependencies` from
+    the `pyproject.toml` at the workspace root, and will ignore any declarations in other
+    workspace members or `uv.toml` files.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+# Ensure that the setuptools v60.0.0 is used whenever a package has a build dependency
+# on setuptools.
+build-constraint-dependencies = ["setuptools==60.0.0"]
+```
+
+---
+
 ### [`conflicts`](#conflicts) {: #conflicts }
 
 Declare collections of extras or dependency groups that are conflicting
@@ -269,6 +300,45 @@ package = false
 
 ---
 
+### [`required-environments`](#required-environments) {: #required-environments }
+
+A list of required platforms, for packages that lack source distributions.
+
+When a package does not have a source distribution, it's availability will be limited to
+the platforms supported by its built distributions (wheels). For example, if a package only
+publishes wheels for Linux, then it won't be installable on macOS or Windows.
+
+By default, uv requires each package to include at least one wheel that is compatible with
+the designated Python version. The `required-environments` setting can be used to ensure that
+the resulting resolution contains wheels for specific platforms, or fails if no such wheels
+are available.
+
+While the `environments` setting _limits_ the set of environments that uv will consider when
+resolving dependencies, `required-environments` _expands_ the set of platforms that uv _must_
+support when resolving dependencies.
+
+For example, `environments = ["sys_platform == 'darwin'"]` would limit uv to solving for
+macOS (and ignoring Linux and Windows). On the other hand, `required-environments = ["sys_platform == 'darwin'"]`
+would _require_ that any package without a source distribution include a wheel for macOS in
+order to be installable.
+
+**Default value**: `[]`
+
+**Type**: `str | list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+# Require that the package is available for macOS ARM and x86 (Intel).
+required-environments = [
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+]
+```
+
+---
+
 ### [`sources`](#sources) {: #sources }
 
 The sources to use when resolving dependencies.
@@ -378,8 +448,8 @@ bypasses SSL verification and could expose you to MITM attacks.
 
 Path to the cache directory.
 
-Defaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on
-Linux, and `%LOCALAPPDATA%\uv\cache` on Windows.
+Defaults to `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Linux and macOS, and
+`%LOCALAPPDATA%\uv\cache` on Windows.
 
 **Default value**: `None`
 
@@ -448,12 +518,12 @@ globs are interpreted as relative to the project directory.
 
     ```toml
     [tool.uv]
-    cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true }]
+    cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true } }]
     ```
 === "uv.toml"
 
     ```toml
-    cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true }]
+    cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true } }]
     ```
 
 ---
