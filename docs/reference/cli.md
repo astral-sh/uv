@@ -46,6 +46,8 @@ uv [OPTIONS] <COMMAND>
 </dd>
 <dt><a href="#uv-version"><code>uv version</code></a></dt><dd><p>Display uv&#8217;s version</p>
 </dd>
+<dt><a href="#uv-generate-shell-completion"><code>uv generate-shell-completion</code></a></dt><dd><p>Generate shell completion</p>
+</dd>
 <dt><a href="#uv-help"><code>uv help</code></a></dt><dd><p>Display documentation for a command</p>
 </dd>
 </dl>
