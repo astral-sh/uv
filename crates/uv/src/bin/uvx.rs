@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use std::path::Path;
 use std::{
     ffi::OsString,
     process::{Command, ExitCode, ExitStatus},
@@ -22,6 +23,34 @@ fn exec_spawn(cmd: &mut Command) -> std::io::Result<Infallible> {
     }
 }
 
+fn get_uvx_suffix(current_exe: &Path) -> std::io::Result<&str> {
+    let Some(os_file_name) = current_exe.file_name() else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Could not determine the file name of the `uvx` binary",
+        ));
+    };
+    let Some(file_name_str) = os_file_name.to_str() else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Could not determine the file name of the `uvx` binary",
+        ));
+    };
+    let Some(file_name_no_ext) = file_name_str.strip_suffix(std::env::consts::EXE_SUFFIX) else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Could not determine the file name of the `uvx` binary",
+        ));
+    };
+    let Some(uvx_suffix) = file_name_no_ext.strip_prefix("uvx") else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Could not determine the file name of the `uvx` binary",
+        ));
+    };
+    Ok(uvx_suffix)
+}
+
 fn run() -> std::io::Result<ExitStatus> {
     let current_exe = std::env::current_exe()?;
     let Some(bin) = current_exe.parent() else {
@@ -30,7 +59,8 @@ fn run() -> std::io::Result<ExitStatus> {
             "Could not determine the location of the `uvx` binary",
         ));
     };
-    let uv = bin.join(format!("uv{}", std::env::consts::EXE_SUFFIX));
+    let uvx_suffix = get_uvx_suffix(&current_exe)?;
+    let uv = bin.join(format!("uv{}{}", uvx_suffix, std::env::consts::EXE_SUFFIX));
     let args = ["tool", "uvx"]
         .iter()
         .map(OsString::from)
