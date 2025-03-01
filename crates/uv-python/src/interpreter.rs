@@ -848,9 +848,13 @@ impl InterpreterInfo {
 
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
-            // Shard interpreter metadata by host architecture, to avoid cache collisions when
-            // running universal binaries under Rosetta.
-            ARCH,
+            // Shard interpreter metadata by host architecture, operating system, and version, to
+            // invalidate the cache (e.g.) on OS upgrades.
+            cache_digest(&(
+                ARCH,
+                sys_info::os_type().unwrap_or_default(),
+                sys_info::os_release().unwrap_or_default(),
+            )),
             // We use the absolute path for the cache entry to avoid cache collisions for relative
             // paths. But we don't to query the executable with symbolic links resolved.
             format!("{}.msgpack", cache_digest(&absolute)),

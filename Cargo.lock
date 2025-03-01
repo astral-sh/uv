@@ -5456,6 +5456,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "sys-info",
  "target-lexicon",
  "temp-env",
  "tempfile",
