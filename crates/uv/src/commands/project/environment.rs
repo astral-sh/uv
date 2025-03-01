@@ -150,6 +150,22 @@ impl CachedEnvironment {
         Ok(())
     }
 
+    /// Enable system site packages for a Python environment.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn set_system_site_packages(&self) -> Result<(), ProjectError> {
+        self.0
+            .set_pyvenv_cfg("include-system-site-packages", "true")?;
+        Ok(())
+    }
+
+    /// Disable system site packages for a Python environment.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn clear_system_site_packages(&self) -> Result<(), ProjectError> {
+        self.0
+            .set_pyvenv_cfg("include-system-site-packages", "false")?;
+        Ok(())
+    }
+
     /// Return the [`Interpreter`] to use for the cached environment, based on a given
     /// [`Interpreter`].
     ///

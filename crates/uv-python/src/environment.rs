@@ -270,6 +270,16 @@ impl PythonEnvironment {
         Ok(PyVenvConfiguration::parse(self.0.root.join("pyvenv.cfg"))?)
     }
 
+    /// Set a key-value pair in the `pyvenv.cfg` file.
+    pub fn set_pyvenv_cfg(&self, key: &str, value: &str) -> Result<(), Error> {
+        let content = fs_err::read_to_string(self.0.root.join("pyvenv.cfg"))?;
+        fs_err::write(
+            self.0.root.join("pyvenv.cfg"),
+            PyVenvConfiguration::set(&content, key, value),
+        )?;
+        Ok(())
+    }
+
     /// Returns `true` if the environment is "relocatable".
     pub fn relocatable(&self) -> bool {
         self.cfg().is_ok_and(|cfg| cfg.is_relocatable())
