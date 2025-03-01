@@ -471,7 +471,7 @@ pub enum Commands {
         output_format: VersionFormat,
     },
     /// Generate shell completion
-    #[command(alias = "--generate-shell-completion", hide = true)]
+    #[command(alias = "--generate-shell-completion")]
     GenerateShellCompletion(GenerateShellCompletionArgs),
     /// Display documentation for a command.
     // To avoid showing the global options when displaying help for the help command, we are

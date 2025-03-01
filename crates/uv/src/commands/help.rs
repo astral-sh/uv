@@ -15,15 +15,8 @@ use crate::printer::Printer;
 use uv_cli::Cli;
 use uv_static::EnvVars;
 
-// hidden subcommands to show in the help command
-const SHOW_HIDDEN_COMMANDS: &[&str] = &["generate-shell-completion"];
-
 pub(crate) fn help(query: &[String], printer: Printer, no_pager: bool) -> Result<ExitStatus> {
-    let mut uv: clap::Command = SHOW_HIDDEN_COMMANDS
-        .iter()
-        .fold(Cli::command(), |uv, &name| {
-            uv.mut_subcommand(name, |cmd| cmd.hide(false))
-        });
+    let mut uv: clap::Command = Cli::command();
 
     // It is very important to build the command before beginning inspection or subcommands
     // will be missing all of the propagated options.
