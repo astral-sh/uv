@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::{io, mem};
@@ -128,7 +129,13 @@ fn write_wheel(
         return Err(Error::AbsoluteModuleRoot(settings.module_root.clone()));
     }
     let strip_root = source_tree.join(settings.module_root);
-    let module_root = strip_root.join(pyproject_toml.name().as_dist_info_name().as_ref());
+
+    let module_name = settings
+        .module_name
+        .map_or(pyproject_toml.name().as_dist_info_name(), Cow::from);
+    debug!("Module name is: {:?}", module_name);
+
+    let module_root = strip_root.join(module_name.as_ref());
     if !module_root.join("__init__.py").is_file() {
         return Err(Error::MissingModule(module_root));
     }

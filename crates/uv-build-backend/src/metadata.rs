@@ -846,6 +846,9 @@ pub(crate) struct BuildBackendSettings {
     /// using the flat layout over the src layout.
     pub(crate) module_root: PathBuf,
 
+    /// Explicitly specified module name if differing from the project name.
+    pub(crate) module_name: Option<String>,
+
     /// Glob expressions which files and directories to additionally include in the source
     /// distribution.
     ///
@@ -877,6 +880,7 @@ impl Default for BuildBackendSettings {
     fn default() -> Self {
         Self {
             module_root: PathBuf::from("src"),
+            module_name: None,
             source_include: Vec::new(),
             default_excludes: true,
             source_exclude: Vec::new(),
