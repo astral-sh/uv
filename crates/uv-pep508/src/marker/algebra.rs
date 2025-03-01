@@ -470,7 +470,7 @@ impl InternerGuard<'_> {
                 .children
                 .nodes()
                 .all(|y| self.disjointness(y.negate(yi), xi)),
-            // X and Y represent the same variable, their merged edges must be unsatisifiable.
+            // X and Y represent the same variable, their merged edges must be unsatisfiable.
             Ordering::Equal => x.children.is_disjoint(xi, &y.children, yi, self),
         }
     }
@@ -514,7 +514,7 @@ impl InternerGuard<'_> {
                 .children
                 .nodes()
                 .all(|y| self.disjointness(y.negate(yi), xi)),
-            // X and Y represent the same variable, their merged edges must be unsatisifiable.
+            // X and Y represent the same variable, their merged edges must be unsatisfiable.
             Ordering::Equal => x.children.is_disjoint(xi, &y.children, yi, self),
         }
     }
