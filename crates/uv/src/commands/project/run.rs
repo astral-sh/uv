@@ -25,8 +25,9 @@ use uv_fs::{PythonExt, Simplified};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
-    EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
+    EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
+    VersionFileDiscoveryOptions,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::Lock;
@@ -923,6 +924,21 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             "import site; site.addsitedir(\"{}\")",
             site_packages.escape_for_python()
         ))?;
+
+        // If `--system-site-packages` is enabled, add the system site packages to the ephemeral
+        // environment.
+        if base_interpreter
+            .is_virtualenv()
+            .then(|| {
+                PyVenvConfiguration::parse(base_interpreter.sys_prefix().join("pyvenv.cfg"))
+                    .is_ok_and(|cfg| cfg.include_system_side_packages())
+            })
+            .unwrap_or(false)
+        {
+            ephemeral_env.set_system_site_packages()?;
+        } else {
+            ephemeral_env.clear_system_site_packages()?;
+        }
     }
 
     // Cast from `CachedEnvironment` to `PythonEnvironment`.
