@@ -82,6 +82,14 @@ impl Shell {
         parse_shell_from_path(path.as_ref())
     }
 
+    /// Returns `true` if the shell supports a `PATH` update command.
+    pub fn supports_update(self) -> bool {
+        match self {
+            Shell::Powershell | Shell::Cmd => true,
+            shell => !shell.configuration_files().is_empty(),
+        }
+    }
+
     /// Return the configuration files that should be modified to append to a shell's `PATH`.
     ///
     /// Some of the logic here is based on rustup's rc file detection.
