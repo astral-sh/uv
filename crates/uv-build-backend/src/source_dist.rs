@@ -5,6 +5,7 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use fs_err::File;
 use globset::{Glob, GlobSet};
+use std::borrow::Cow;
 use std::io;
 use std::io::{BufReader, Cursor};
 use std::path::{Path, PathBuf};
@@ -65,11 +66,17 @@ fn source_dist_matcher(
     let mut includes: Vec<String> = settings.source_include;
     // pyproject.toml is always included.
     includes.push(globset::escape("pyproject.toml"));
+
+    let module_name = settings
+        .module_name
+        .map_or(pyproject_toml.name().as_dist_info_name(), Cow::from);
+    debug!("Module name is: {:?}", module_name);
+
     // The wheel must not include any files included by the source distribution (at least until we
     // have files generated in the source dist -> wheel build step).
     let import_path = &settings
         .module_root
-        .join(pyproject_toml.name().as_dist_info_name().as_ref())
+        .join(module_name.as_ref())
         .portable_display()
         .to_string();
     includes.push(format!("{}/**", globset::escape(import_path)));
