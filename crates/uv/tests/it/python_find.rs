@@ -707,3 +707,127 @@ fn python_required_python_major_minor() {
     error: No interpreter found for Python >3.11.[X], <3.12 in virtual environments, managed installations, or search path
     "###);
 }
+
+#[test]
+fn python_find_script() {
+    let context = TestContext::new("3.13");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(
+            r"environments-v2/[\w-]+",
+            "environments-v2/[HASHEDNAME]",
+        )])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.init().arg("--script").arg("foo.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized script at `foo.py`
+    "###);
+
+    uv_snapshot!(filters, context.sync().arg("--script").arg("foo.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Creating script environment at: [CACHE_DIR]/environments-v2/[HASHEDNAME]
+    "###);
+
+    if cfg!(windows) {
+        uv_snapshot!(filters, context.python_find().arg("--script").arg("foo.py"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        [CACHE_DIR]/environments-v2/[HASHEDNAME]/Scripts/python.exe
+
+        ----- stderr -----
+        "###);
+    } else {
+        uv_snapshot!(filters, context.python_find().arg("--script").arg("foo.py"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        [CACHE_DIR]/environments-v2/[HASHEDNAME]/bin/python3
+
+        ----- stderr -----
+        "###);
+    }
+}
+
+#[test]
+fn python_find_script_failure() {
+    let context = TestContext::new_with_versions(&[]);
+
+    let script = context.temp_dir.child("foo.py");
+
+    script
+        .write_str(indoc! {r"
+            # /// script
+            # dependencies = []
+            # ///
+        "})
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    "###);
+}
+
+#[test]
+fn python_find_script_no_such_version() {
+    let context = TestContext::new("3.13");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(
+            r"environments-v2/[\w-]+",
+            "environments-v2/[HASHEDNAME]",
+        )])
+        .collect::<Vec<_>>();
+
+    let script = context.temp_dir.child("foo.py");
+
+    script
+        .write_str(indoc! {r#"
+            # /// script
+            # requires-python = ">=3.13"
+            # dependencies = []
+            # ///
+        "#})
+        .unwrap();
+
+    uv_snapshot!(filters, context.sync().arg("--script").arg("foo.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Creating script environment at: [CACHE_DIR]/environments-v2/[HASHEDNAME]
+    "###);
+
+    script
+        .write_str(indoc! {r#"
+            # /// script
+            # requires-python = ">=3.14"
+            # dependencies = []
+            # ///
+        "#})
+        .unwrap();
+
+    uv_snapshot!(filters, context.python_find().arg("--script").arg("foo.py"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    "###);
+}
