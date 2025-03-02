@@ -203,13 +203,10 @@ impl VersionMap {
     /// Return the [`Hashes`] for the given version, if any.
     pub(crate) fn hashes(&self, version: &Version) -> Option<&[HashDigest]> {
         match self.inner {
-            VersionMapInner::Eager(ref eager) => eager
-                .map
-                .get(version)
-                .map(uv_distribution_types::PrioritizedDist::hashes),
-            VersionMapInner::Lazy(ref lazy) => lazy
-                .get(version)
-                .map(uv_distribution_types::PrioritizedDist::hashes),
+            VersionMapInner::Eager(ref eager) => {
+                eager.map.get(version).map(PrioritizedDist::hashes)
+            }
+            VersionMapInner::Lazy(ref lazy) => lazy.get(version).map(PrioritizedDist::hashes),
         }
     }
 

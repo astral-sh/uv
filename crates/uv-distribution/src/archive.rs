@@ -1,4 +1,5 @@
 use uv_cache::{ArchiveId, Cache, ARCHIVE_VERSION};
+use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::Hashed;
 use uv_pypi_types::{HashDigest, HashDigests};
 
@@ -9,16 +10,19 @@ pub struct Archive {
     pub id: ArchiveId,
     /// The computed hashes of the archive.
     pub hashes: HashDigests,
+    /// The filename of the wheel.
+    pub filename: WheelFilename,
     /// The version of the archive bucket.
     pub version: u8,
 }
 
 impl Archive {
     /// Create a new [`Archive`] with the given ID and hashes.
-    pub(crate) fn new(id: ArchiveId, hashes: HashDigests) -> Self {
+    pub(crate) fn new(id: ArchiveId, hashes: HashDigests, filename: WheelFilename) -> Self {
         Self {
             id,
             hashes,
+            filename,
             version: ARCHIVE_VERSION,
         }
     }

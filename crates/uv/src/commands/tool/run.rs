@@ -13,8 +13,8 @@ use tracing::{debug, warn};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
-use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, PreviewMode, TrustedHost};
+use uv_client::BaseClientBuilder;
+use uv_configuration::{Concurrency, PreviewMode};
 use uv_distribution_types::{Name, UnresolvedRequirement, UnresolvedRequirementSpecification};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -45,6 +45,7 @@ use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::ExitStatus;
 use crate::commands::{diagnostics, project::environment::CachedEnvironment};
 use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 use crate::settings::ResolverInstallerSettings;
 
 /// The user-facing command used to invoke a tool run.
@@ -75,15 +76,13 @@ pub(crate) async fn run(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
+    network_settings: NetworkSettings,
     invocation_source: ToolRunCommand,
     isolated: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
-    connectivity: Connectivity,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     cache: Cache,
     printer: Printer,
     preview: PreviewMode,
@@ -121,14 +120,12 @@ pub(crate) async fn run(
         python.as_deref(),
         install_mirrors,
         &settings,
+        &network_settings,
         isolated,
         python_preference,
         python_downloads,
         installer_metadata,
-        connectivity,
         concurrency,
-        native_tls,
-        allow_insecure_host,
         &cache,
         printer,
         preview,
@@ -138,7 +135,7 @@ pub(crate) async fn run(
     let (from, environment) = match result {
         Ok(resolution) => resolution,
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .with_context("tool")
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
@@ -453,22 +450,20 @@ async fn get_or_create_environment(
     python: Option<&str>,
     install_mirrors: PythonInstallMirrors,
     settings: &ResolverInstallerSettings,
+    network_settings: &NetworkSettings,
     isolated: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
-    connectivity: Connectivity,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<(ToolRequirement, PythonEnvironment), ProjectError> {
     let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -560,11 +555,9 @@ async fn get_or_create_environment(
                     vec![spec],
                     &interpreter,
                     settings,
+                    network_settings,
                     &state,
-                    connectivity,
                     concurrency,
-                    native_tls,
-                    allow_insecure_host,
                     cache,
                     printer,
                     preview,
@@ -640,9 +633,9 @@ async fn get_or_create_environment(
     // Read the `--with` requirements.
     let spec = {
         let client_builder = BaseClientBuilder::new()
-            .connectivity(connectivity)
-            .native_tls(native_tls)
-            .allow_insecure_host(allow_insecure_host.to_vec());
+            .connectivity(network_settings.connectivity)
+            .native_tls(network_settings.native_tls)
+            .allow_insecure_host(network_settings.allow_insecure_host.clone());
         RequirementsSpecification::from_simple_sources(with, &client_builder).await?
     };
 
@@ -658,11 +651,9 @@ async fn get_or_create_environment(
                 spec.requirements.clone(),
                 &interpreter,
                 settings,
+                network_settings,
                 &state,
-                connectivity,
                 concurrency,
-                native_tls,
-                allow_insecure_host,
                 cache,
                 printer,
                 preview,
@@ -727,6 +718,7 @@ async fn get_or_create_environment(
         spec.clone(),
         &interpreter,
         settings,
+        network_settings,
         &state,
         if show_resolution {
             Box::new(DefaultResolveLogger)
@@ -739,10 +731,7 @@ async fn get_or_create_environment(
             Box::new(SummaryInstallLogger)
         },
         installer_metadata,
-        connectivity,
         concurrency,
-        native_tls,
-        allow_insecure_host,
         cache,
         printer,
         preview,
@@ -786,6 +775,7 @@ async fn get_or_create_environment(
                     spec,
                     &interpreter,
                     settings,
+                    network_settings,
                     &state,
                     if show_resolution {
                         Box::new(DefaultResolveLogger)
@@ -798,10 +788,7 @@ async fn get_or_create_environment(
                         Box::new(SummaryInstallLogger)
                     },
                     installer_metadata,
-                    connectivity,
                     concurrency,
-                    native_tls,
-                    allow_insecure_host,
                     cache,
                     printer,
                     preview,
@@ -814,6 +801,7 @@ async fn get_or_create_environment(
 
     // Clear any existing overlay.
     environment.clear_overlay()?;
+    environment.clear_system_site_packages()?;
 
     Ok((from, environment.into()))
 }

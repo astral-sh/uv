@@ -578,9 +578,10 @@ fn fetch_with_cli(
     disable_ssl: bool,
 ) -> Result<()> {
     let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
-    // Fix for https://github.com/astral-sh/uv/issues/5107.
-    // Interactive prompts via GUI like SSH_ASKPASS still work
-    cmd.env("GIT_TERMINAL_PROMPT", "0");
+    // Disable interactive prompts in the terminal, as they'll be erased by the progress bar
+    // animation and the process will "hang". Interactive prompts via the GUI like `SSH_ASKPASS`
+    // are still usable.
+    cmd.env(EnvVars::GIT_TERMINAL_PROMPT, "0");
 
     cmd.arg("fetch");
     if tags {

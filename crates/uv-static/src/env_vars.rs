@@ -473,6 +473,11 @@ impl EnvVars {
     #[attr_hidden]
     pub const GIT_SSL_NO_VERIFY: &'static str = "GIT_SSL_NO_VERIFY";
 
+    /// Disable interactive git prompts in terminals, e.g., for credentials. Does not disable
+    /// GUI prompts.
+    #[attr_hidden]
+    pub const GIT_TERMINAL_PROMPT: &'static str = "GIT_TERMINAL_PROMPT";
+
     /// Used in tests for better git isolation.
     ///
     /// For example, we run some tests in ~/.local/share/uv/tests.
@@ -547,6 +552,11 @@ impl EnvVars {
     /// See the [tracing documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#example-syntax)
     /// for more.
     pub const RUST_LOG: &'static str = "RUST_LOG";
+
+    /// Add additional context and structure to log messages.
+    ///
+    /// If logging is not enabled, e.g., with `RUST_LOG` or `-v`, this has no effect.
+    pub const UV_LOG_CONTEXT: &'static str = "UV_LOG_CONTEXT";
 
     /// Use to set the stack size used by uv.
     ///

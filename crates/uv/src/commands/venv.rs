@@ -11,10 +11,10 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, KeyringProviderType,
-    NoBinary, NoBuild, PreviewMode, SourceStrategy, TrustedHost,
+    NoBinary, NoBuild, PreviewMode, SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
@@ -37,6 +37,7 @@ use crate::commands::project::{validate_project_requires_python, WorkspacePython
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 
 /// Create a virtual environment.
 #[allow(clippy::unnecessary_wraps, clippy::fn_params_excessive_bools)]
@@ -52,15 +53,13 @@ pub(crate) async fn venv(
     index_strategy: IndexStrategy,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
-    allow_insecure_host: &[TrustedHost],
+    network_settings: &NetworkSettings,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
-    connectivity: Connectivity,
     seed: bool,
     allow_existing: bool,
     exclude_newer: Option<ExcludeNewer>,
     concurrency: Concurrency,
-    native_tls: bool,
     no_config: bool,
     no_project: bool,
     cache: &Cache,
@@ -78,17 +77,15 @@ pub(crate) async fn venv(
         index_strategy,
         dependency_metadata,
         keyring_provider,
-        allow_insecure_host,
+        network_settings,
         prompt,
         system_site_packages,
-        connectivity,
         seed,
         python_preference,
         python_downloads,
         allow_existing,
         exclude_newer,
         concurrency,
-        native_tls,
         no_config,
         no_project,
         cache,
@@ -137,17 +134,15 @@ async fn venv_impl(
     index_strategy: IndexStrategy,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
-    allow_insecure_host: &[TrustedHost],
+    network_settings: &NetworkSettings,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
-    connectivity: Connectivity,
     seed: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     allow_existing: bool,
     exclude_newer: Option<ExcludeNewer>,
     concurrency: Concurrency,
-    native_tls: bool,
     no_config: bool,
     no_project: bool,
     cache: &Cache,
@@ -193,9 +188,9 @@ async fn venv_impl(
     );
 
     let client_builder = BaseClientBuilder::default()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -300,7 +295,7 @@ async fn venv_impl(
             .index_urls(index_locations.index_urls())
             .index_strategy(index_strategy)
             .keyring(keyring_provider)
-            .allow_insecure_host(allow_insecure_host.to_vec())
+            .allow_insecure_host(network_settings.allow_insecure_host.clone())
             .markers(interpreter.markers())
             .platform(interpreter.platform())
             .build();

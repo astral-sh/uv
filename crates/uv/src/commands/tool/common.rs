@@ -301,18 +301,18 @@ pub(crate) fn install_executables(
     if !Shell::contains_path(&executable_directory) {
         if let Some(shell) = Shell::from_env() {
             if let Some(command) = shell.prepend_path(&executable_directory) {
-                if shell.configuration_files().is_empty() {
-                    warn_user!(
-                        "`{}` is not on your PATH. To use installed tools, run `{}`.",
-                        executable_directory.simplified_display().cyan(),
-                        command.green()
-                    );
-                } else {
+                if shell.supports_update() {
                     warn_user!(
                         "`{}` is not on your PATH. To use installed tools, run `{}` or `{}`.",
                         executable_directory.simplified_display().cyan(),
                         command.green(),
                         "uv tool update-shell".green()
+                    );
+                } else {
+                    warn_user!(
+                        "`{}` is not on your PATH. To use installed tools, run `{}`.",
+                        executable_directory.simplified_display().cyan(),
+                        command.green()
                     );
                 }
             } else {

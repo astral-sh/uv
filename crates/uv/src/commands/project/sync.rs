@@ -8,10 +8,10 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
-use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, DryRun, EditableMode,
-    ExtrasSpecification, HashCheckingMode, InstallOptions, PreviewMode, TrustedHost,
+    ExtrasSpecification, HashCheckingMode, InstallOptions, PreviewMode,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{
@@ -43,7 +43,7 @@ use crate::commands::project::{
 };
 use crate::commands::{diagnostics, ExitStatus};
 use crate::printer::Printer;
-use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings};
+use crate::settings::{InstallerSettingsRef, NetworkSettings, ResolverInstallerSettings};
 
 /// Sync the project environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -65,12 +65,10 @@ pub(crate) async fn sync(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     settings: ResolverInstallerSettings,
+    network_settings: NetworkSettings,
     script: Option<Pep723Script>,
     installer_metadata: bool,
-    connectivity: Connectivity,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     no_config: bool,
     cache: &Cache,
     printer: Printer,
@@ -125,11 +123,9 @@ pub(crate) async fn sync(
                 project.workspace(),
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
+                &network_settings,
                 python_preference,
                 python_downloads,
-                connectivity,
-                native_tls,
-                allow_insecure_host,
                 no_config,
                 active,
                 cache,
@@ -142,11 +138,9 @@ pub(crate) async fn sync(
             ScriptEnvironment::get_or_init(
                 Pep723ItemRef::Script(script),
                 python.as_deref().map(PythonRequest::parse),
+                &network_settings,
                 python_preference,
                 python_downloads,
-                connectivity,
-                native_tls,
-                allow_insecure_host,
                 &install_mirrors,
                 no_config,
                 active,
@@ -284,14 +278,12 @@ pub(crate) async fn sync(
                 spec,
                 modifications,
                 &settings,
+                &network_settings,
                 &PlatformState::default(),
                 Box::new(DefaultResolveLogger),
                 Box::new(DefaultInstallLogger),
                 installer_metadata,
-                connectivity,
                 concurrency,
-                native_tls,
-                allow_insecure_host,
                 cache,
                 dry_run,
                 printer,
@@ -301,9 +293,11 @@ pub(crate) async fn sync(
             {
                 Ok(..) => return Ok(ExitStatus::Success),
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::native_tls(native_tls)
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    return diagnostics::OperationDiagnostic::native_tls(
+                        network_settings.native_tls,
+                    )
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                 }
                 Err(err) => return Err(err.into()),
             }
@@ -333,12 +327,10 @@ pub(crate) async fn sync(
         mode,
         lock_target,
         settings.as_ref().into(),
+        &network_settings,
         &state,
         Box::new(DefaultResolveLogger),
-        connectivity,
         concurrency,
-        native_tls,
-        allow_insecure_host,
         cache,
         printer,
         preview,
@@ -386,7 +378,7 @@ pub(crate) async fn sync(
             result.into_lock()
         }
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
@@ -458,13 +450,11 @@ pub(crate) async fn sync(
         install_options,
         modifications,
         settings.as_ref().into(),
+        &network_settings,
         &state,
         Box::new(DefaultInstallLogger),
         installer_metadata,
-        connectivity,
         concurrency,
-        native_tls,
-        allow_insecure_host,
         cache,
         dry_run,
         printer,
@@ -474,7 +464,7 @@ pub(crate) async fn sync(
     {
         Ok(()) => {}
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
@@ -522,13 +512,11 @@ pub(super) async fn do_sync(
     install_options: InstallOptions,
     modifications: Modifications,
     settings: InstallerSettingsRef<'_>,
+    network_settings: &NetworkSettings,
     state: &PlatformState,
     logger: Box<dyn InstallLogger>,
     installer_metadata: bool,
-    connectivity: Connectivity,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     dry_run: DryRun,
     printer: Printer,
@@ -632,12 +620,12 @@ pub(super) async fn do_sync(
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
-        .native_tls(native_tls)
-        .connectivity(connectivity)
+        .native_tls(network_settings.native_tls)
+        .connectivity(network_settings.connectivity)
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
-        .allow_insecure_host(allow_insecure_host.to_vec())
+        .allow_insecure_host(network_settings.allow_insecure_host.clone())
         .markers(venv.interpreter().markers())
         .platform(venv.interpreter().platform())
         .build();

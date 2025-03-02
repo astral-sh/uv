@@ -14,6 +14,7 @@ use std::str::FromStr;
 
 use glob::Pattern;
 use owo_colors::OwoColorize;
+use rustc_hash::{FxBuildHasher, FxHashSet};
 use serde::{de::IntoDeserializer, de::SeqAccess, Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use url::Url;
@@ -280,6 +281,30 @@ pub struct Tool {
     pub uv: Option<ToolUv>,
 }
 
+/// Validates that index names in the `tool.uv.index` field are unique.
+///
+/// This custom deserializer function checks for duplicate index names
+/// and returns an error if any duplicates are found.
+fn deserialize_index_vec<'de, D>(deserializer: D) -> Result<Option<Vec<Index>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let indexes = Option::<Vec<Index>>::deserialize(deserializer)?;
+    if let Some(indexes) = indexes.as_ref() {
+        let mut seen_names = FxHashSet::with_capacity_and_hasher(indexes.len(), FxBuildHasher);
+        for index in indexes {
+            if let Some(name) = index.name.as_ref() {
+                if !seen_names.insert(name) {
+                    return Err(serde::de::Error::custom(format!(
+                        "duplicate index name `{name}`"
+                    )));
+                }
+            }
+        }
+    }
+    Ok(indexes)
+}
+
 // NOTE(charlie): When adding fields to this struct, mark them as ignored on `Options` in
 // `crates/uv-settings/src/settings.rs`.
 #[derive(Deserialize, OptionsMetadata, Debug, Clone, PartialEq, Eq)]
@@ -342,6 +367,7 @@ pub struct ToolUv {
             url = "https://download.pytorch.org/whl/cu121"
         "#
     )]
+    #[serde(deserialize_with = "deserialize_index_vec", default)]
     pub index: Option<Vec<Index>>,
 
     /// The workspace definition for the project, if any.

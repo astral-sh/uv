@@ -11,9 +11,11 @@ use indoc::indoc;
 use predicates::prelude::predicate;
 use url::Url;
 
+#[cfg(feature = "git")]
+use crate::common::{self, decode_token};
+
 use crate::common::{
-    self, build_vendor_links_url, decode_token, get_bin, uv_snapshot, venv_bin_path,
-    venv_to_interpreter, TestContext,
+    build_vendor_links_url, get_bin, uv_snapshot, venv_bin_path, venv_to_interpreter, TestContext,
 };
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -2084,7 +2086,7 @@ fn install_git_private_https_pat_not_authorized() {
     // and hang the test
     uv_snapshot!(filters, context.pip_install()
         .arg(format!("uv-private-pypackage @ git+https://git:{token}@github.com/astral-test/uv-private-pypackage"))
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2095,9 +2097,10 @@ fn install_git_private_https_pat_not_authorized() {
       ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
       ╰─▶ process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:***@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
           --- stderr
-          remote: Invalid username or password.
+          remote: Support for password authentication was removed on August 13, 2021.
+          remote: Please see https://docs.github.com/get-started/getting-started-with-git/about-remote-repositories#cloning-with-https-urls for information on currently recommended modes of authentication.
           fatal: Authentication failed for 'https://github.com/astral-test/uv-private-pypackage/'
-    "###);
+    ");
 }
 
 /// Install a package from a private GitHub repository using a PAT

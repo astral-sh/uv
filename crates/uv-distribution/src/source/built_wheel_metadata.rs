@@ -29,8 +29,8 @@ pub(crate) struct BuiltWheelMetadata {
 impl BuiltWheelMetadata {
     /// Find a compatible wheel in the cache.
     pub(crate) fn find_in_cache(tags: &Tags, cache_shard: &CacheShard) -> Option<Self> {
-        for directory in files(cache_shard) {
-            if let Some(metadata) = Self::from_path(directory, cache_shard) {
+        for file in files(cache_shard) {
+            if let Some(metadata) = Self::from_path(file, cache_shard) {
                 // Validate that the wheel is compatible with the target platform.
                 if metadata.filename.is_compatible(tags) {
                     return Some(metadata);
