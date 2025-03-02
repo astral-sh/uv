@@ -33,15 +33,17 @@ the `pyproject.toml`, `setup.py`, or `setup.cfg` file in the directory root has 
 heuristic and, in some cases, may lead to fewer re-installs than desired.
 
 To incorporate other information into the cache key for a given package, you can add cache key
-entries under `tool.uv.cache-keys`, which can include both file paths and Git commit hashes.
+entries under `tool.uv.cache-keys`, which can include both file paths and Git commit hashes. Setting
+`tool.uv.cache-keys` will replace the default values for the package, so you should include your
+project file in the cache key if you want to keep the default behavior.
 
-For example, if a project uses [`setuptools-scm`](https://pypi.org/project/setuptools-scm/), and
-should be rebuilt whenever the commit hash changes, you can add the following to the project's
-`pyproject.toml`:
+For example, if a project specifies dependencies in `pyproject.toml`, uses
+[`setuptools-scm`](https://pypi.org/project/setuptools-scm/), and should be rebuilt whenever the
+commit hash or dependencies change, you can add the following to the project's `pyproject.toml`:
 
 ```toml title="pyproject.toml"
 [tool.uv]
-cache-keys = [{ git = { commit = true } }]
+cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true } }]
 ```
 
 If your dynamic metadata incorporates information from the set of Git tags, you can expand the cache
