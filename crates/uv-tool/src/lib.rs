@@ -75,7 +75,7 @@ impl InstalledTools {
     /// 3. A directory in the local data directory, e.g., `./.uv/tools`
     pub fn from_settings() -> Result<Self, Error> {
         if let Some(tool_dir) = std::env::var_os(EnvVars::UV_TOOL_DIR) {
-            Ok(Self::from_path(tool_dir))
+            Ok(Self::from_path(std::path::absolute(tool_dir)?))
         } else {
             Ok(Self::from_path(
                 StateStore::from_settings(None)?.bucket(StateBucket::Tools),
