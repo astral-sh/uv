@@ -9272,7 +9272,7 @@ uv self uninstall [OPTIONS]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+<dl class="cli-reference"><dt id="uv-self-uninstall--allow-insecure-host"><a href="#uv-self-uninstall--allow-insecure-host"><code>--allow-insecure-host</code></a> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 
 <p>Can be provided multiple times.</p>
 
@@ -9281,14 +9281,14 @@ uv self uninstall [OPTIONS]
 <p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
 
 <p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p>
-</dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
+</dd><dt id="uv-self-uninstall--cache-dir"><a href="#uv-self-uninstall--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
 
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
+</dd><dt id="uv-self-uninstall--color"><a href="#uv-self-uninstall--color"><code>--color</code></a> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
 <p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
 
@@ -9301,47 +9301,47 @@ uv self uninstall [OPTIONS]
 
 <li><code>never</code>:  Disables colored output</li>
 </ul>
-</dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
+</dd><dt id="uv-self-uninstall--config-file"><a href="#uv-self-uninstall--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
 
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
-</dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+</dd><dt id="uv-self-uninstall--directory"><a href="#uv-self-uninstall--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
 <p>Relative paths are resolved with the given directory as the base.</p>
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
-</dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="uv-self-uninstall--help"><a href="#uv-self-uninstall--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
-</dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
+</dd><dt id="uv-self-uninstall--native-tls"><a href="#uv-self-uninstall--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
 
 <p>However, in some cases, you may want to use the platform&#8217;s native certificate store, especially if you&#8217;re relying on a corporate trust root (e.g., for a mandatory proxy) that&#8217;s included in your system&#8217;s certificate store.</p>
 
 <p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p>
-</dd><dt><code>--no-cache</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
+</dd><dt id="uv-self-uninstall--no-cache"><a href="#uv-self-uninstall--no-cache"><code>--no-cache</code></a>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
-</dd><dt><code>--no-config</code></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
+</dd><dt id="uv-self-uninstall--no-config"><a href="#uv-self-uninstall--no-config"><code>--no-config</code></a></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
 
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
-</dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>
+</dd><dt id="uv-self-uninstall--no-progress"><a href="#uv-self-uninstall--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
 
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python.</p>
+</dd><dt id="uv-self-uninstall--no-python-downloads"><a href="#uv-self-uninstall--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 
-</dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
+</dd><dt id="uv-self-uninstall--offline"><a href="#uv-self-uninstall--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
-</dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+</dd><dt id="uv-self-uninstall--project"><a href="#uv-self-uninstall--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
 
@@ -9351,7 +9351,7 @@ uv self uninstall [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
+</dd><dt id="uv-self-uninstall--python-preference"><a href="#uv-self-uninstall--python-preference"><code>--python-preference</code></a> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
 
@@ -9367,15 +9367,15 @@ uv self uninstall [OPTIONS]
 
 <li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
 </ul>
-</dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-self-uninstall--quiet"><a href="#uv-self-uninstall--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
-</dd><dt><code>--remove-data</code></dt><dd><p>true iff should run <code>uv cache clean</code> and remove directories pointed to by <code>uv python dir</code> and <code>uv tool dir</code></p>
+</dd><dt id="uv-self-uninstall--remove-data"><a href="#uv-self-uninstall--remove-data"><code>--remove-data</code></a></dt><dd><p>true iff should run <code>uv cache clean</code> and remove directories pointed to by <code>uv python dir</code> and <code>uv tool dir</code></p>
 
-</dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+</dd><dt id="uv-self-uninstall--verbose"><a href="#uv-self-uninstall--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
+</dd><dt id="uv-self-uninstall--version"><a href="#uv-self-uninstall--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 

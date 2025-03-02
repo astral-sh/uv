@@ -428,7 +428,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: "Build"
-        run: cargo build
+        run: cargo build --features self-update
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
@@ -506,7 +506,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
       - name: "Build"
-        run: cargo build --bin uv --bin uvx
+        run: cargo build --features self-update --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
@@ -540,7 +540,7 @@ jobs:
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build --bin uv --bin uvx
+        run: cargo build --features self-update --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
@@ -578,7 +578,7 @@ jobs:
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build --target aarch64-pc-windows-msvc
+        run: cargo build --features self-update --target aarch64-pc-windows-msvc
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
