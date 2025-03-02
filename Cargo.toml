@@ -7,7 +7,6 @@ exclude = [
   # Only used to pull in features, allocators, etc. — we specifically don't want them
   # to be part of a workspace-wide cargo check, cargo clippy, etc.
   "crates/uv-performance-memory-allocator",
-  "crates/uv-performance-flate2-backend",
 ]
 resolver = "2"
 
@@ -100,7 +99,7 @@ dunce = { version = "1.0.5" }
 either = { version = "1.13.0" }
 encoding_rs_io = { version = "0.1.7" }
 etcetera = { version = "0.9.0" }
-flate2 = { version = "1.0.33", default-features = false }
+flate2 = { version = "1.0.33", default-features = false, features = ["zlib-rs"] }
 fs-err = { version = "3.0.0", features = ["tokio"] }
 fs2 = { version = "0.4.3" }
 futures = { version = "0.3.30" }

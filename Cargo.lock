@@ -646,15 +646,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6"
 
 [[package]]
-name = "cmake"
-version = "0.1.53"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e24a03c8b52922d68a1589ad61032f2c1aa5a8158d2aa0d93c6e9534944bbad6"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "codspeed"
 version = "2.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1126,7 +1117,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "11faaf5a5236997af9848be0bef4db95824b1d534ebc64d0f0c6cf3e67bd38dc"
 dependencies = [
  "crc32fast",
- "libz-ng-sys",
  "libz-rs-sys",
  "miniz_oxide",
 ]
@@ -2053,16 +2043,6 @@ dependencies = [
  "bitflags 2.9.0",
  "libc",
  "redox_syscall 0.5.8",
-]
-
-[[package]]
-name = "libz-ng-sys"
-version = "1.1.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4436751a01da56f1277f323c80d584ffad94a3d14aecd959dd0dff75aa73a438"
-dependencies = [
- "cmake",
- "libc",
 ]
 
 [[package]]
@@ -4581,7 +4561,6 @@ dependencies = [
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
- "uv-performance-flate2-backend",
  "uv-performance-memory-allocator",
  "uv-platform-tags",
  "uv-publish",
@@ -4926,7 +4905,6 @@ dependencies = [
  "uv-macros",
  "uv-options-metadata",
  "uv-pep508",
- "uv-performance-flate2-backend",
  "uv-performance-memory-allocator",
  "uv-pypi-types",
  "uv-python",
@@ -5334,14 +5312,6 @@ dependencies = [
  "uv-normalize",
  "uv-pep440",
  "version-ranges",
-]
-
-[[package]]
-name = "uv-performance-flate2-backend"
-version = "0.1.0"
-dependencies = [
- "flate2",
- "libz-ng-sys",
 ]
 
 [[package]]
