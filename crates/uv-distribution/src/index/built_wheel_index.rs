@@ -203,7 +203,7 @@ impl<'a> BuiltWheelIndex<'a> {
         let mut candidate: Option<CachedWheel> = None;
 
         // Unzipped wheels are stored as symlinks into the archive directory.
-        for wheel_dir in uv_fs::entries(shard) {
+        for wheel_dir in uv_fs::entries(shard).ok().into_iter().flatten() {
             // Ignore any `.lock` files.
             if wheel_dir
                 .extension()

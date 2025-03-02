@@ -28,16 +28,19 @@ pub(crate) struct BuiltWheelMetadata {
 
 impl BuiltWheelMetadata {
     /// Find a compatible wheel in the cache.
-    pub(crate) fn find_in_cache(tags: &Tags, cache_shard: &CacheShard) -> Option<Self> {
-        for file in files(cache_shard) {
+    pub(crate) fn find_in_cache(
+        tags: &Tags,
+        cache_shard: &CacheShard,
+    ) -> Result<Option<Self>, std::io::Error> {
+        for file in files(cache_shard)? {
             if let Some(metadata) = Self::from_path(file, cache_shard) {
                 // Validate that the wheel is compatible with the target platform.
                 if metadata.filename.is_compatible(tags) {
-                    return Some(metadata);
+                    return Ok(Some(metadata));
                 }
             }
         }
-        None
+        Ok(None)
     }
 
     /// Try to parse a distribution from a cached directory name (like `typing-extensions-4.8.0-py3-none-any.whl`).
