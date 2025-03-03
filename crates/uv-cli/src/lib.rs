@@ -2729,7 +2729,7 @@ pub struct RunArgs {
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
-    /// Ignore the the default dependency groups.
+    /// Ignore the default dependency groups.
     ///
     /// uv includes the groups defined in `tool.uv.default-groups` by default.
     /// This disables that option, however, specific groups can still be included with `--group`.
@@ -3024,7 +3024,7 @@ pub struct SyncArgs {
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
-    /// Ignore the the default dependency groups.
+    /// Ignore the default dependency groups.
     ///
     /// uv includes the groups defined in `tool.uv.default-groups` by default.
     /// This disables that option, however, specific groups can still be included with `--group`.
