@@ -93,7 +93,7 @@ pub struct Options {
         default = r#"[{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }]"#,
         value_type = "list[dict]",
         example = r#"
-            cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true }]
+            cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true } }]
         "#
     )]
     cache_keys: Option<Vec<CacheKey>>,
@@ -218,8 +218,8 @@ pub struct GlobalOptions {
     pub no_cache: Option<bool>,
     /// Path to the cache directory.
     ///
-    /// Defaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on
-    /// Linux, and `%LOCALAPPDATA%\uv\cache` on Windows.
+    /// Defaults to `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Linux and macOS, and
+    /// `%LOCALAPPDATA%\uv\cache` on Windows.
     #[option(
         default = "None",
         value_type = "str",

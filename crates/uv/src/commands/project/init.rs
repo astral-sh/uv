@@ -8,9 +8,9 @@ use std::str::FromStr;
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_cli::AuthorFrom;
-use uv_client::{BaseClientBuilder, Connectivity};
+use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    PreviewMode, ProjectBuildBackend, TrustedHost, VersionControlError, VersionControlSystem,
+    PreviewMode, ProjectBuildBackend, VersionControlError, VersionControlSystem,
 };
 use uv_fs::{Simplified, CWD};
 use uv_git::GIT;
@@ -32,6 +32,7 @@ use crate::commands::project::{find_requires_python, init_script_python_requirem
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::single_match_else, clippy::fn_params_excessive_bools)]
@@ -52,11 +53,9 @@ pub(crate) async fn init(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     no_workspace: bool,
+    network_settings: &NetworkSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    connectivity: Connectivity,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     no_config: bool,
     cache: &Cache,
     printer: Printer,
@@ -75,7 +74,7 @@ pub(crate) async fn init(
                 path,
                 python,
                 install_mirrors,
-                connectivity,
+                network_settings,
                 python_preference,
                 python_downloads,
                 cache,
@@ -85,8 +84,6 @@ pub(crate) async fn init(
                 author_from,
                 pin_python,
                 package,
-                native_tls,
-                allow_insecure_host,
                 no_config,
             )
             .await?;
@@ -126,7 +123,7 @@ pub(crate) async fn init(
                     // Pre-normalize the package name by removing any leading or trailing
                     // whitespace, and replacing any internal whitespace with hyphens.
                     let name = name.trim().replace(' ', "-");
-                    PackageName::new(name)?
+                    PackageName::from_owned(name)?
                 }
             };
 
@@ -146,11 +143,9 @@ pub(crate) async fn init(
                 python,
                 install_mirrors,
                 no_workspace,
+                network_settings,
                 python_preference,
                 python_downloads,
-                connectivity,
-                native_tls,
-                allow_insecure_host,
                 no_config,
                 cache,
                 printer,
@@ -193,7 +188,7 @@ async fn init_script(
     script_path: &Path,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
-    connectivity: Connectivity,
+    network_settings: &NetworkSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     cache: &Cache,
@@ -203,8 +198,6 @@ async fn init_script(
     author_from: Option<AuthorFrom>,
     pin_python: bool,
     package: bool,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     no_config: bool,
 ) -> Result<()> {
     if no_workspace {
@@ -220,9 +213,9 @@ async fn init_script(
         warn_user_once!("`--package` is a no-op for Python scripts, which are standalone");
     }
     let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -290,11 +283,9 @@ async fn init_project(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     no_workspace: bool,
+    network_settings: &NetworkSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    connectivity: Connectivity,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     no_config: bool,
     cache: &Cache,
     printer: Printer,
@@ -344,9 +335,9 @@ async fn init_project(
 
     let reporter = PythonDownloadReporter::single(printer);
     let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // First, determine if there is an request for Python
     let python_request = if let Some(request) = python {

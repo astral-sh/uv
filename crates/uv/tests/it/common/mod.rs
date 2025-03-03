@@ -152,6 +152,19 @@ impl TestContext {
         self
     }
 
+    /// Add extra standard filtering for Windows-compatible missing file errors.
+    pub fn with_filtered_missing_file_error(mut self) -> Self {
+        self.filters.push((
+            regex::escape("The system cannot find the file specified. (os error 2)"),
+            "[OS ERROR 2]".to_string(),
+        ));
+        self.filters.push((
+            regex::escape("No such file or directory (os error 2)"),
+            "[OS ERROR 2]".to_string(),
+        ));
+        self
+    }
+
     /// Add extra standard filtering for executable suffixes on the current platform e.g.
     /// drops `.exe` on Windows.
     #[must_use]
@@ -250,6 +263,19 @@ impl TestContext {
         self
     }
 
+    /// Add a filter that ignores temporary directory in path.
+    pub fn with_filtered_windows_temp_dir(mut self) -> Self {
+        let pattern = regex::escape(
+            &self
+                .temp_dir
+                .simplified_display()
+                .to_string()
+                .replace('/', "\\"),
+        );
+        self.filters.push((pattern, "[TEMP_DIR]".to_string()));
+        self
+    }
+
     /// Add extra directories and configuration for managed Python installations.
     #[must_use]
     pub fn with_managed_python_dirs(mut self) -> Self {
@@ -264,6 +290,12 @@ impl TestContext {
         self.extra_env
             .push((EnvVars::UV_PYTHON_DOWNLOADS.into(), "automatic".into()));
 
+        self
+    }
+
+    /// Clear filters on `TestContext`.
+    pub fn clear_filters(mut self) -> Self {
+        self.filters.clear();
         self
     }
 
@@ -299,6 +331,11 @@ impl TestContext {
         fs_err::create_dir_all(&bucket).expect("Failed to create test bucket");
 
         let root = tempfile::TempDir::new_in(bucket).expect("Failed to create test root directory");
+
+        // Create a `.git` directory to isolate tests that search for git boundaries from the state
+        // of the file system
+        fs_err::create_dir_all(root.path().join(".git"))
+            .expect("Failed to create `.git` placeholder in test root directory");
 
         let temp_dir = ChildPath::new(root.path()).child("temp");
         fs_err::create_dir_all(&temp_dir).expect("Failed to create test working directory");
@@ -985,6 +1022,14 @@ impl TestContext {
             .iter()
             .map(|(p, r)| (p.as_str(), r.as_str()))
             .chain(INSTA_FILTERS.iter().copied())
+            .collect()
+    }
+
+    /// Only the filters added to this test context.
+    pub fn filters_without_standard_filters(&self) -> Vec<(&str, &str)> {
+        self.filters
+            .iter()
+            .map(|(p, r)| (p.as_str(), r.as_str()))
             .collect()
     }
 

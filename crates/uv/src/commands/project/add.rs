@@ -1,7 +1,7 @@
 use std::collections::hash_map::Entry;
 use std::fmt::Write;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -14,10 +14,10 @@ use url::Url;
 
 use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
-use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevGroupsSpecification, DevMode, DryRun, EditableMode,
-    ExtrasSpecification, InstallOptions, PreviewMode, SourceStrategy, TrustedHost,
+    Concurrency, Constraints, DependencyGroups, DevMode, DryRun, EditableMode, ExtrasSpecification,
+    InstallOptions, PreviewMode, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -51,9 +51,9 @@ use crate::commands::project::{
     ProjectInterpreter, ScriptInterpreter, UniversalState,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{diagnostics, project, ExitStatus};
+use crate::commands::{diagnostics, project, ExitStatus, ScriptPath};
 use crate::printer::Printer;
-use crate::settings::{ResolverInstallerSettings, ResolverInstallerSettingsRef};
+use crate::settings::{NetworkSettings, ResolverInstallerSettings, ResolverInstallerSettingsRef};
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -76,14 +76,12 @@ pub(crate) async fn add(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
-    script: Option<PathBuf>,
+    network_settings: NetworkSettings,
+    script: Option<ScriptPath>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
-    connectivity: Connectivity,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     no_config: bool,
     cache: &Cache,
     printer: Printer,
@@ -130,40 +128,39 @@ pub(crate) async fn add(
         }
 
         let client_builder = BaseClientBuilder::new()
-            .connectivity(connectivity)
-            .native_tls(native_tls)
-            .allow_insecure_host(allow_insecure_host.to_vec());
+            .connectivity(network_settings.connectivity)
+            .native_tls(network_settings.native_tls)
+            .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
         // If we found a script, add to the existing metadata. Otherwise, create a new inline
         // metadata tag.
-        let script = if let Some(script) = Pep723Script::read(&script).await? {
-            script
-        } else {
-            let requires_python = init_script_python_requirement(
-                python.as_deref(),
-                &install_mirrors,
-                project_dir,
-                false,
-                python_preference,
-                python_downloads,
-                no_config,
-                &client_builder,
-                cache,
-                &reporter,
-            )
-            .await?;
-            Pep723Script::init(&script, requires_python.specifiers()).await?
+        let script = match script {
+            ScriptPath::Script(script) => script,
+            ScriptPath::Path(path) => {
+                let requires_python = init_script_python_requirement(
+                    python.as_deref(),
+                    &install_mirrors,
+                    project_dir,
+                    false,
+                    python_preference,
+                    python_downloads,
+                    no_config,
+                    &client_builder,
+                    cache,
+                    &reporter,
+                )
+                .await?;
+                Pep723Script::init(&path, requires_python.specifiers()).await?
+            }
         };
 
         // Discover the interpreter.
         let interpreter = ScriptInterpreter::discover(
             Pep723ItemRef::Script(&script),
             python.as_deref().map(PythonRequest::parse),
+            &network_settings,
             python_preference,
             python_downloads,
-            connectivity,
-            native_tls,
-            allow_insecure_host,
             &install_mirrors,
             no_config,
             active,
@@ -208,11 +205,9 @@ pub(crate) async fn add(
                 project.workspace(),
                 project_dir,
                 python.as_deref().map(PythonRequest::parse),
+                &network_settings,
                 python_preference,
                 python_downloads,
-                connectivity,
-                native_tls,
-                allow_insecure_host,
                 &install_mirrors,
                 no_config,
                 active,
@@ -229,11 +224,9 @@ pub(crate) async fn add(
                 project.workspace(),
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
+                &network_settings,
                 python_preference,
                 python_downloads,
-                connectivity,
-                native_tls,
-                allow_insecure_host,
                 no_config,
                 active,
                 cache,
@@ -248,10 +241,10 @@ pub(crate) async fn add(
     };
 
     let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
         .keyring(settings.keyring_provider)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Read the requirements.
     let RequirementsSpecification { requirements, .. } =
@@ -631,11 +624,9 @@ pub(crate) async fn add(
         &dependency_type,
         raw_sources,
         settings.as_ref(),
+        &network_settings,
         installer_metadata,
-        connectivity,
         concurrency,
-        native_tls,
-        allow_insecure_host,
         cache,
         printer,
         preview,
@@ -648,7 +639,7 @@ pub(crate) async fn add(
                 let _ = snapshot.revert();
             }
             match err {
-                ProjectError::Operation(err) => diagnostics::OperationDiagnostic::native_tls(native_tls).with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()))
+                ProjectError::Operation(err) => diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls).with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()))
                     .report(err)
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
                 err => Err(err.into()),
@@ -669,11 +660,9 @@ async fn lock_and_sync(
     dependency_type: &DependencyType,
     raw_sources: bool,
     settings: ResolverInstallerSettingsRef<'_>,
+    network_settings: &NetworkSettings,
     installer_metadata: bool,
-    connectivity: Connectivity,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
     preview: PreviewMode,
@@ -686,12 +675,10 @@ async fn lock_and_sync(
         },
         (&target).into(),
         settings.into(),
+        network_settings,
         &lock_state,
         Box::new(DefaultResolveLogger),
-        connectivity,
         concurrency,
-        native_tls,
-        allow_insecure_host,
         cache,
         printer,
         preview,
@@ -806,12 +793,10 @@ async fn lock_and_sync(
                 },
                 (&target).into(),
                 settings.into(),
+                network_settings,
                 &lock_state,
                 Box::new(SummaryResolveLogger),
-                connectivity,
                 concurrency,
-                native_tls,
-                allow_insecure_host,
                 cache,
                 printer,
                 preview,
@@ -835,22 +820,22 @@ async fn lock_and_sync(
     let (extras, dev) = match dependency_type {
         DependencyType::Production => {
             let extras = ExtrasSpecification::None;
-            let dev = DevGroupsSpecification::from_dev_mode(DevMode::Exclude);
+            let dev = DependencyGroups::from_dev_mode(DevMode::Exclude);
             (extras, dev)
         }
         DependencyType::Dev => {
             let extras = ExtrasSpecification::None;
-            let dev = DevGroupsSpecification::from_dev_mode(DevMode::Include);
+            let dev = DependencyGroups::from_dev_mode(DevMode::Include);
             (extras, dev)
         }
         DependencyType::Optional(ref extra_name) => {
             let extras = ExtrasSpecification::Some(vec![extra_name.clone()]);
-            let dev = DevGroupsSpecification::from_dev_mode(DevMode::Exclude);
+            let dev = DependencyGroups::from_dev_mode(DevMode::Exclude);
             (extras, dev)
         }
         DependencyType::Group(ref group_name) => {
             let extras = ExtrasSpecification::None;
-            let dev = DevGroupsSpecification::from_group(group_name.clone());
+            let dev = DependencyGroups::from_group(group_name.clone());
             (extras, dev)
         }
     };
@@ -877,13 +862,11 @@ async fn lock_and_sync(
         InstallOptions::default(),
         Modifications::Sufficient,
         settings.into(),
+        network_settings,
         &sync_state,
         Box::new(DefaultInstallLogger),
         installer_metadata,
-        connectivity,
         concurrency,
-        native_tls,
-        allow_insecure_host,
         cache,
         DryRun::Disabled,
         printer,

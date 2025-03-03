@@ -7,8 +7,8 @@ use tracing::{debug, trace};
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
-use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, DryRun, PreviewMode, Reinstall, TrustedHost, Upgrade};
+use uv_client::BaseClientBuilder;
+use uv_configuration::{Concurrency, DryRun, PreviewMode, Reinstall, Upgrade};
 use uv_distribution_types::{NameRequirementSpecification, UnresolvedRequirementSpecification};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
@@ -34,7 +34,7 @@ use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::ExitStatus;
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
+use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 
 /// Install a tool.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -50,21 +50,19 @@ pub(crate) async fn install(
     force: bool,
     options: ResolverInstallerOptions,
     settings: ResolverInstallerSettings,
+    network_settings: NetworkSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
-    connectivity: Connectivity,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     cache: Cache,
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
     let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -90,9 +88,9 @@ pub(crate) async fn install(
     let state = PlatformState::default();
 
     let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Parse the input requirement.
     let request = ToolRequest::parse(&package, from.as_deref());
@@ -131,11 +129,9 @@ pub(crate) async fn install(
                 requirement,
                 &interpreter,
                 &settings,
+                &network_settings,
                 &state,
-                connectivity,
                 concurrency,
-                native_tls,
-                allow_insecure_host,
                 &cache,
                 printer,
                 preview,
@@ -245,11 +241,9 @@ pub(crate) async fn install(
                 spec.requirements.clone(),
                 &interpreter,
                 &settings,
+                &network_settings,
                 &state,
-                connectivity,
                 concurrency,
-                native_tls,
-                allow_insecure_host,
                 &cache,
                 printer,
                 preview,
@@ -271,11 +265,9 @@ pub(crate) async fn install(
         spec.overrides,
         &interpreter,
         &settings,
+        &network_settings,
         &state,
-        connectivity,
         concurrency,
-        native_tls,
-        allow_insecure_host,
         &cache,
         printer,
         preview,
@@ -401,14 +393,12 @@ pub(crate) async fn install(
             spec,
             Modifications::Exact,
             &settings,
+            &network_settings,
             &state,
             Box::new(DefaultResolveLogger),
             Box::new(DefaultInstallLogger),
             installer_metadata,
-            connectivity,
             concurrency,
-            native_tls,
-            allow_insecure_host,
             &cache,
             DryRun::Disabled,
             printer,
@@ -418,7 +408,7 @@ pub(crate) async fn install(
         {
             Ok(update) => update.into_environment(),
             Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::native_tls(native_tls)
+                return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                     .report(err)
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
             }
@@ -441,12 +431,10 @@ pub(crate) async fn install(
             spec.clone(),
             &interpreter,
             settings.as_ref().into(),
+            &network_settings,
             &state,
             Box::new(DefaultResolveLogger),
-            connectivity,
             concurrency,
-            native_tls,
-            allow_insecure_host,
             &cache,
             printer,
             preview,
@@ -454,8 +442,8 @@ pub(crate) async fn install(
         .await;
 
         // If the resolution failed, retry with the inferred `requires-python` constraint.
-        let resolution = match resolution {
-            Ok(resolution) => resolution,
+        let (resolution, interpreter) = match resolution {
+            Ok(resolution) => (resolution, interpreter),
             Err(err) => match err {
                 ProjectError::Operation(err) => {
                     // If the resolution failed due to the discovered interpreter not satisfying the
@@ -478,9 +466,11 @@ pub(crate) async fn install(
                     .await
                     .ok()
                     .flatten() else {
-                        return diagnostics::OperationDiagnostic::native_tls(native_tls)
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        return diagnostics::OperationDiagnostic::native_tls(
+                            network_settings.native_tls,
+                        )
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     };
 
                     debug!(
@@ -493,23 +483,23 @@ pub(crate) async fn install(
                         spec,
                         &interpreter,
                         settings.as_ref().into(),
+                        &network_settings,
                         &state,
                         Box::new(DefaultResolveLogger),
-                        connectivity,
                         concurrency,
-                        native_tls,
-                        allow_insecure_host,
                         &cache,
                         printer,
                         preview,
                     )
                     .await
                     {
-                        Ok(resolution) => resolution,
+                        Ok(resolution) => (resolution, interpreter),
                         Err(ProjectError::Operation(err)) => {
-                            return diagnostics::OperationDiagnostic::native_tls(native_tls)
-                                .report(err)
-                                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                            return diagnostics::OperationDiagnostic::native_tls(
+                                network_settings.native_tls,
+                            )
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                         }
                         Err(err) => return Err(err.into()),
                     }
@@ -532,13 +522,11 @@ pub(crate) async fn install(
             &resolution.into(),
             Modifications::Exact,
             settings.as_ref().into(),
+            &network_settings,
             &state,
             Box::new(DefaultInstallLogger),
             installer_metadata,
-            connectivity,
             concurrency,
-            native_tls,
-            allow_insecure_host,
             &cache,
             printer,
             preview,
@@ -551,7 +539,7 @@ pub(crate) async fn install(
         }) {
             Ok(environment) => environment,
             Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::native_tls(native_tls)
+                return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                     .report(err)
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
             }

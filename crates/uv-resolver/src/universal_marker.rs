@@ -1,9 +1,14 @@
 use std::borrow::Borrow;
+use std::str::FromStr;
 
 use itertools::Itertools;
+use rustc_hash::FxHashMap;
 
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder, MarkerOperator, MarkerTree};
+use uv_pep508::{
+    ExtraOperator, MarkerEnvironment, MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator,
+    MarkerTree,
+};
 use uv_pypi_types::{ConflictItem, ConflictPackage, Conflicts};
 
 use crate::ResolveError;
@@ -503,7 +508,7 @@ fn encode_package_extra(package: &PackageName, extra: &ExtraName) -> ExtraName {
     // character in `package` or `extra` values. But if we know the length of
     // the package name, we can always parse each field unambiguously.
     let package_len = package.as_str().len();
-    ExtraName::new(format!("extra-{package_len}-{package}-{extra}")).unwrap()
+    ExtraName::from_owned(format!("extra-{package_len}-{package}-{extra}")).unwrap()
 }
 
 /// Encodes the given package name and its corresponding group into a valid
@@ -511,7 +516,7 @@ fn encode_package_extra(package: &PackageName, extra: &ExtraName) -> ExtraName {
 fn encode_package_group(package: &PackageName, group: &GroupName) -> ExtraName {
     // See `encode_package_extra`, the same considerations apply here.
     let package_len = package.as_str().len();
-    ExtraName::new(format!("group-{package_len}-{package}-{group}")).unwrap()
+    ExtraName::from_owned(format!("group-{package_len}-{package}-{group}")).unwrap()
 }
 
 #[derive(Debug)]
@@ -580,7 +585,7 @@ impl<'a> ParsedRawExtra<'a> {
     }
 
     fn to_conflict_item(&self) -> Result<ConflictItem, ResolveError> {
-        let package = PackageName::new(self.package().to_string()).map_err(|name_error| {
+        let package = PackageName::from_str(self.package()).map_err(|name_error| {
             ResolveError::InvalidValueInConflictMarker {
                 kind: "package",
                 name_error,
@@ -588,7 +593,7 @@ impl<'a> ParsedRawExtra<'a> {
         })?;
         match *self {
             ParsedRawExtra::Extra { extra, .. } => {
-                let extra = ExtraName::new(extra.to_string()).map_err(|name_error| {
+                let extra = ExtraName::from_str(extra).map_err(|name_error| {
                     ResolveError::InvalidValueInConflictMarker {
                         kind: "extra",
                         name_error,
@@ -597,7 +602,7 @@ impl<'a> ParsedRawExtra<'a> {
                 Ok(ConflictItem::from((package, extra)))
             }
             ParsedRawExtra::Group { group, .. } => {
-                let group = GroupName::new(group.to_string()).map_err(|name_error| {
+                let group = GroupName::from_str(group).map_err(|name_error| {
                     ResolveError::InvalidValueInConflictMarker {
                         kind: "group",
                         name_error,
@@ -614,6 +619,110 @@ impl<'a> ParsedRawExtra<'a> {
             ParsedRawExtra::Group { package, .. } => package,
         }
     }
+}
+
+/// Resolve the conflict markers in a [`MarkerTree`] based on the conditions under which each
+/// conflict item is known to be true.
+///
+/// For example, if the `cpu` extra is known to be enabled when `sys_platform == 'darwin'`, then
+/// given the combined marker `python_version >= '3.8' and extra == 'extra-7-project-cpu'`, this
+/// method would return `python_version >= '3.8' and sys_platform == 'darwin'`.
+///
+/// If a conflict item isn't present in the map of known conflicts, it's assumed to be false in all
+/// environments.
+pub(crate) fn resolve_conflicts(
+    marker: MarkerTree,
+    known_conflicts: &FxHashMap<ConflictItem, MarkerTree>,
+) -> MarkerTree {
+    if marker.is_true() || marker.is_false() {
+        return marker;
+    }
+
+    let mut transformed = MarkerTree::FALSE;
+
+    // Convert the marker to DNF, then re-build it.
+    for dnf in marker.to_dnf() {
+        let mut or = MarkerTree::TRUE;
+
+        for marker in dnf {
+            let MarkerExpression::Extra {
+                ref operator,
+                ref name,
+            } = marker
+            else {
+                or.and(MarkerTree::expression(marker));
+                continue;
+            };
+
+            let Some(name) = name.as_extra() else {
+                or.and(MarkerTree::expression(marker));
+                continue;
+            };
+
+            // Given an extra marker (like `extra == 'extra-7-project-cpu'`), search for the
+            // corresponding conflict; once found, inline the marker of conditions under which the
+            // conflict is known to be true.
+            let mut found = false;
+            for (conflict_item, conflict_marker) in known_conflicts {
+                // Search for the conflict item as an extra.
+                if let Some(extra) = conflict_item.extra() {
+                    let package = conflict_item.package();
+                    let encoded = encode_package_extra(package, extra);
+                    if encoded == *name {
+                        match operator {
+                            ExtraOperator::Equal => {
+                                or.and(*conflict_marker);
+                                found = true;
+                                break;
+                            }
+                            ExtraOperator::NotEqual => {
+                                or.and(conflict_marker.negate());
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Search for the conflict item as a group.
+                if let Some(group) = conflict_item.group() {
+                    let package = conflict_item.package();
+                    let encoded = encode_package_group(package, group);
+                    if encoded == *name {
+                        match operator {
+                            ExtraOperator::Equal => {
+                                or.and(*conflict_marker);
+                                found = true;
+                                break;
+                            }
+                            ExtraOperator::NotEqual => {
+                                or.and(conflict_marker.negate());
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // If we didn't find the marker in the list of known conflicts, assume it's always
+            // false.
+            if !found {
+                match operator {
+                    ExtraOperator::Equal => {
+                        or.and(MarkerTree::FALSE);
+                    }
+                    ExtraOperator::NotEqual => {
+                        or.and(MarkerTree::TRUE);
+                    }
+                }
+            }
+        }
+
+        transformed.or(or);
+    }
+
+    transformed
 }
 
 #[cfg(test)]
@@ -653,12 +762,31 @@ mod tests {
 
     /// Shortcut for creating an extra name.
     fn create_extra(name: &str) -> ExtraName {
-        ExtraName::new(name.to_string()).unwrap()
+        ExtraName::from_str(name).unwrap()
     }
 
     /// Shortcut for creating a conflict marker from an extra name.
     fn create_extra_marker(name: &str) -> ConflictMarker {
         ConflictMarker::extra(&create_package("pkg"), &create_extra(name))
+    }
+
+    /// Shortcut for creating a conflict item from an extra name.
+    fn create_extra_item(name: &str) -> ConflictItem {
+        ConflictItem::from((create_package("pkg"), create_extra(name)))
+    }
+
+    /// Shortcut for creating a conflict map.
+    fn create_known_conflicts<'a>(
+        it: impl IntoIterator<Item = (&'a str, &'a str)>,
+    ) -> FxHashMap<ConflictItem, MarkerTree> {
+        it.into_iter()
+            .map(|(extra, marker)| {
+                (
+                    create_extra_item(extra),
+                    MarkerTree::from_str(marker).unwrap(),
+                )
+            })
+            .collect()
     }
 
     /// Returns a string representation of the given conflict marker.
@@ -780,5 +908,29 @@ mod tests {
         );
         dep_conflict_marker.imbibe(conflicts_marker);
         assert_eq!(format!("{dep_conflict_marker:?}"), "true");
+    }
+
+    #[test]
+    fn resolve() {
+        let known_conflicts = create_known_conflicts([("foo", "sys_platform == 'darwin'")]);
+        let cm = MarkerTree::from_str("(python_version >= '3.10' and extra == 'extra-3-pkg-foo') or (python_version < '3.10' and extra != 'extra-3-pkg-foo')").unwrap();
+        let cm = resolve_conflicts(cm, &known_conflicts);
+        assert_eq!(
+            cm.try_to_string().as_deref(),
+            Some("(python_full_version < '3.10' and sys_platform != 'darwin') or (python_full_version >= '3.10' and sys_platform == 'darwin')")
+        );
+
+        let cm = MarkerTree::from_str("python_version >= '3.10' and extra == 'extra-3-pkg-foo'")
+            .unwrap();
+        let cm = resolve_conflicts(cm, &known_conflicts);
+        assert_eq!(
+            cm.try_to_string().as_deref(),
+            Some("python_full_version >= '3.10' and sys_platform == 'darwin'")
+        );
+
+        let cm = MarkerTree::from_str("python_version >= '3.10' and extra == 'extra-3-pkg-bar'")
+            .unwrap();
+        let cm = resolve_conflicts(cm, &known_conflicts);
+        assert!(cm.is_false());
     }
 }

@@ -7,12 +7,14 @@
 //! Then lowers them into a dependency specification.
 
 use std::collections::BTreeMap;
+use std::fmt::Formatter;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use glob::Pattern;
 use owo_colors::OwoColorize;
+use rustc_hash::{FxBuildHasher, FxHashSet};
 use serde::{de::IntoDeserializer, de::SeqAccess, Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use url::Url;
@@ -34,9 +36,13 @@ pub enum PyprojectTomlError {
     TomlSyntax(#[from] toml_edit::TomlError),
     #[error(transparent)]
     TomlSchema(#[from] toml_edit::de::Error),
-    #[error("`pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set")]
+    #[error(
+        "`pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set"
+    )]
     MissingName,
-    #[error("`pyproject.toml` is using the `[project]` table, but the required `project.version` field is neither set nor present in the `project.dynamic` list")]
+    #[error(
+        "`pyproject.toml` is using the `[project]` table, but the required `project.version` field is neither set nor present in the `project.dynamic` list"
+    )]
     MissingVersion,
 }
 
@@ -279,6 +285,30 @@ pub struct Tool {
     pub uv: Option<ToolUv>,
 }
 
+/// Validates that index names in the `tool.uv.index` field are unique.
+///
+/// This custom deserializer function checks for duplicate index names
+/// and returns an error if any duplicates are found.
+fn deserialize_index_vec<'de, D>(deserializer: D) -> Result<Option<Vec<Index>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let indexes = Option::<Vec<Index>>::deserialize(deserializer)?;
+    if let Some(indexes) = indexes.as_ref() {
+        let mut seen_names = FxHashSet::with_capacity_and_hasher(indexes.len(), FxBuildHasher);
+        for index in indexes {
+            if let Some(name) = index.name.as_ref() {
+                if !seen_names.insert(name) {
+                    return Err(serde::de::Error::custom(format!(
+                        "duplicate index name `{name}`"
+                    )));
+                }
+            }
+        }
+    }
+    Ok(indexes)
+}
+
 // NOTE(charlie): When adding fields to this struct, mark them as ignored on `Options` in
 // `crates/uv-settings/src/settings.rs`.
 #[derive(Deserialize, OptionsMetadata, Debug, Clone, PartialEq, Eq)]
@@ -341,6 +371,7 @@ pub struct ToolUv {
             url = "https://download.pytorch.org/whl/cu121"
         "#
     )]
+    #[serde(deserialize_with = "deserialize_index_vec", default)]
     pub index: Option<Vec<Index>>,
 
     /// The workspace definition for the project, if any.
@@ -713,8 +744,39 @@ pub struct ToolUvWorkspace {
 }
 
 /// (De)serialize globs as strings.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-pub struct SerdePattern(#[serde(with = "serde_from_and_to_string")] pub Pattern);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SerdePattern(Pattern);
+
+impl serde::ser::Serialize for SerdePattern {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        self.0.as_str().serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for SerdePattern {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = SerdePattern;
+
+            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                Pattern::from_str(v)
+                    .map(SerdePattern)
+                    .map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
+    }
+}
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for SerdePattern {
@@ -722,8 +784,8 @@ impl schemars::JsonSchema for SerdePattern {
         <String as schemars::JsonSchema>::schema_name()
     }
 
-    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-        <String as schemars::JsonSchema>::json_schema(gen)
+    fn json_schema(r#gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
+        <String as schemars::JsonSchema>::json_schema(r#gen)
     }
 }
 
@@ -1135,7 +1197,7 @@ impl<'de> Deserialize<'de> for Source {
                 _ => {
                     return Err(serde::de::Error::custom(
                         "expected at most one of `rev`, `tag`, or `branch`",
-                    ))
+                    ));
                 }
             };
 
@@ -1376,23 +1438,36 @@ pub enum SourceError {
     WorkspacePackageUrl(String),
     #[error("Workspace dependency `{0}` must refer to local directory, not a file")]
     WorkspacePackageFile(String),
-    #[error("`{0}` did not resolve to a Git repository, but a Git reference (`--rev {1}`) was provided.")]
+    #[error(
+        "`{0}` did not resolve to a Git repository, but a Git reference (`--rev {1}`) was provided."
+    )]
     UnusedRev(String, String),
-    #[error("`{0}` did not resolve to a Git repository, but a Git reference (`--tag {1}`) was provided.")]
+    #[error(
+        "`{0}` did not resolve to a Git repository, but a Git reference (`--tag {1}`) was provided."
+    )]
     UnusedTag(String, String),
-    #[error("`{0}` did not resolve to a Git repository, but a Git reference (`--branch {1}`) was provided.")]
+    #[error(
+        "`{0}` did not resolve to a Git repository, but a Git reference (`--branch {1}`) was provided."
+    )]
     UnusedBranch(String, String),
-    #[error("`{0}` did not resolve to a local directory, but the `--editable` flag was provided. Editable installs are only supported for local directories.")]
+    #[error(
+        "`{0}` did not resolve to a local directory, but the `--editable` flag was provided. Editable installs are only supported for local directories."
+    )]
     UnusedEditable(String),
-    #[error("Workspace dependency `{0}` was marked as `--no-editable`, but workspace dependencies are always added in editable mode. Pass `--no-editable` to `uv sync` or `uv run` to install workspace dependencies in non-editable mode.")]
+    #[error(
+        "Workspace dependency `{0}` was marked as `--no-editable`, but workspace dependencies are always added in editable mode. Pass `--no-editable` to `uv sync` or `uv run` to install workspace dependencies in non-editable mode."
+    )]
     UnusedNoEditable(String),
     #[error("Failed to resolve absolute path")]
     Absolute(#[from] std::io::Error),
     #[error("Path contains invalid characters: `{}`", _0.display())]
     NonUtf8Path(PathBuf),
-    #[error("Source markers must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
+    #[error("Source markers must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold()
+    )]
     OverlappingMarkers(String, String, String),
-    #[error("When multiple sources are provided, each source must include a platform marker (e.g., `marker = \"sys_platform == 'linux'\"`)")]
+    #[error(
+        "When multiple sources are provided, each source must include a platform marker (e.g., `marker = \"sys_platform == 'linux'\"`)"
+    )]
     MissingMarkers,
     #[error("Must provide at least one source")]
     EmptySources,
@@ -1584,31 +1659,4 @@ pub enum DependencyType {
     Optional(ExtraName),
     /// A dependency in `dependency-groups.{0}`.
     Group(GroupName),
-}
-
-/// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
-mod serde_from_and_to_string {
-    use std::fmt::Display;
-    use std::str::FromStr;
-
-    use serde::{de, Deserialize, Deserializer, Serializer};
-
-    pub(super) fn serialize<T, S>(value: &T, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        T: Display,
-        S: Serializer,
-    {
-        serializer.collect_str(value)
-    }
-
-    pub(super) fn deserialize<'de, T, D>(deserializer: D) -> Result<T, D::Error>
-    where
-        T: FromStr,
-        T::Err: Display,
-        D: Deserializer<'de>,
-    {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(de::Error::custom)
-    }
 }

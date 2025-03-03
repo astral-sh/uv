@@ -3974,12 +3974,14 @@ fn run_with_multiple_env_files() -> Result<()> {
     "###);
 
     uv_snapshot!(context.filters(), context.run().arg("test.py").env(EnvVars::UV_ENV_FILE, ".env1 .env2"), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    palpatine
+    obi_wan_kenobi
+    C3PO
 
     ----- stderr -----
-    error: No environment file found at: `.env1 .env2`
     "###);
 
     Ok(())

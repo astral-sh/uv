@@ -43,6 +43,11 @@ impl BaseUrl {
     pub fn as_url(&self) -> &Url {
         &self.0
     }
+
+    /// Return the underlying [`Url`] as a serialized string.
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
 }
 
 impl From<Url> for BaseUrl {

@@ -22,7 +22,7 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, DevGroupsSpecification, DryRun, EditableMode,
+    BuildOptions, Concurrency, ConfigSettings, DependencyGroups, DryRun, EditableMode,
     ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
     KeyringProviderType, NoBinary, NoBuild, PreviewMode, ProjectBuildBackend, Reinstall,
     RequiredVersion, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
@@ -59,10 +59,8 @@ pub(crate) struct GlobalSettings {
     pub(crate) quiet: bool,
     pub(crate) verbose: u8,
     pub(crate) color: ColorChoice,
-    pub(crate) native_tls: bool,
+    pub(crate) network_settings: NetworkSettings,
     pub(crate) concurrency: Concurrency,
-    pub(crate) connectivity: Connectivity,
-    pub(crate) allow_insecure_host: Vec<TrustedHost>,
     pub(crate) show_settings: bool,
     pub(crate) preview: PreviewMode,
     pub(crate) python_preference: PythonPreference,
@@ -74,6 +72,7 @@ pub(crate) struct GlobalSettings {
 impl GlobalSettings {
     /// Resolve the [`GlobalSettings`] from the CLI and filesystem configuration.
     pub(crate) fn resolve(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
+        let network_settings = NetworkSettings::resolve(args, workspace);
         Self {
             required_version: workspace
                 .and_then(|workspace| workspace.globals.required_version.clone()),
@@ -100,9 +99,7 @@ impl GlobalSettings {
             } else {
                 ColorChoice::Auto
             },
-            native_tls: flag(args.native_tls, args.no_native_tls)
-                .combine(workspace.and_then(|workspace| workspace.globals.native_tls))
-                .unwrap_or(false),
+            network_settings,
             concurrency: Concurrency {
                 downloads: env(env::CONCURRENT_DOWNLOADS)
                     .combine(workspace.and_then(|workspace| workspace.globals.concurrent_downloads))
@@ -117,31 +114,6 @@ impl GlobalSettings {
                     .map(NonZeroUsize::get)
                     .unwrap_or_else(Concurrency::threads),
             },
-            connectivity: if flag(args.offline, args.no_offline)
-                .combine(workspace.and_then(|workspace| workspace.globals.offline))
-                .unwrap_or(false)
-            {
-                Connectivity::Offline
-            } else {
-                Connectivity::Online
-            },
-            allow_insecure_host: args
-                .allow_insecure_host
-                .as_ref()
-                .map(|allow_insecure_host| {
-                    allow_insecure_host
-                        .iter()
-                        .filter_map(|value| value.clone().into_option())
-                })
-                .into_iter()
-                .flatten()
-                .chain(
-                    workspace
-                        .and_then(|workspace| workspace.globals.allow_insecure_host.clone())
-                        .into_iter()
-                        .flatten(),
-                )
-                .collect(),
             show_settings: args.show_settings,
             preview: PreviewMode::from(
                 flag(args.preview, args.no_preview)
@@ -161,6 +133,52 @@ impl GlobalSettings {
             // with log messages.
             no_progress: args.no_progress || std::env::var_os(EnvVars::RUST_LOG).is_some(),
             installer_metadata: !args.no_installer_metadata,
+        }
+    }
+}
+
+/// The resolved network settings to use for any invocation of the CLI.
+#[derive(Debug, Clone)]
+pub(crate) struct NetworkSettings {
+    pub(crate) connectivity: Connectivity,
+    pub(crate) native_tls: bool,
+    pub(crate) allow_insecure_host: Vec<TrustedHost>,
+}
+
+impl NetworkSettings {
+    pub(crate) fn resolve(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
+        let connectivity = if flag(args.offline, args.no_offline)
+            .combine(workspace.and_then(|workspace| workspace.globals.offline))
+            .unwrap_or(false)
+        {
+            Connectivity::Offline
+        } else {
+            Connectivity::Online
+        };
+        let native_tls = flag(args.native_tls, args.no_native_tls)
+            .combine(workspace.and_then(|workspace| workspace.globals.native_tls))
+            .unwrap_or(false);
+        let allow_insecure_host = args
+            .allow_insecure_host
+            .as_ref()
+            .map(|allow_insecure_host| {
+                allow_insecure_host
+                    .iter()
+                    .filter_map(|value| value.clone().into_option())
+            })
+            .into_iter()
+            .flatten()
+            .chain(
+                workspace
+                    .and_then(|workspace| workspace.globals.allow_insecure_host.clone())
+                    .into_iter()
+                    .flatten(),
+            )
+            .collect();
+        Self {
+            connectivity,
+            native_tls,
+            allow_insecure_host,
         }
     }
 }
@@ -280,7 +298,7 @@ pub(crate) struct RunSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: DevGroupsSpecification,
+    pub(crate) dev: DependencyGroups,
     pub(crate) editable: EditableMode,
     pub(crate) modifications: Modifications,
     pub(crate) with: Vec<String>,
@@ -367,7 +385,7 @@ impl RunSettings {
                 no_extra,
                 extra.unwrap_or_default(),
             ),
-            dev: DevGroupsSpecification::from_args(
+            dev: DependencyGroups::from_args(
                 dev,
                 no_dev,
                 only_dev,
@@ -971,7 +989,7 @@ pub(crate) struct SyncSettings {
     pub(crate) script: Option<PathBuf>,
     pub(crate) active: Option<bool>,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: DevGroupsSpecification,
+    pub(crate) dev: DependencyGroups,
     pub(crate) editable: EditableMode,
     pub(crate) install_options: InstallOptions,
     pub(crate) modifications: Modifications,
@@ -1040,7 +1058,7 @@ impl SyncSettings {
                 no_extra,
                 extra.unwrap_or_default(),
             ),
-            dev: DevGroupsSpecification::from_args(
+            dev: DependencyGroups::from_args(
                 dev,
                 no_dev,
                 only_dev,
@@ -1346,7 +1364,7 @@ impl RemoveSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct TreeSettings {
-    pub(crate) dev: DevGroupsSpecification,
+    pub(crate) dev: DependencyGroups,
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) universal: bool,
@@ -1394,7 +1412,7 @@ impl TreeSettings {
             .unwrap_or_default();
 
         Self {
-            dev: DevGroupsSpecification::from_args(
+            dev: DependencyGroups::from_args(
                 dev,
                 no_dev,
                 only_dev,
@@ -1432,7 +1450,7 @@ pub(crate) struct ExportSettings {
     pub(crate) package: Option<PackageName>,
     pub(crate) prune: Vec<PackageName>,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: DevGroupsSpecification,
+    pub(crate) dev: DependencyGroups,
     pub(crate) editable: EditableMode,
     pub(crate) hashes: bool,
     pub(crate) install_options: InstallOptions,
@@ -1500,7 +1518,7 @@ impl ExportSettings {
                 no_extra,
                 extra.unwrap_or_default(),
             ),
-            dev: DevGroupsSpecification::from_args(
+            dev: DependencyGroups::from_args(
                 dev,
                 no_dev,
                 only_dev,
@@ -2636,7 +2654,7 @@ pub(crate) struct PipSettings {
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) system: bool,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) groups: DevGroupsSpecification,
+    pub(crate) groups: DependencyGroups,
     pub(crate) break_system_packages: bool,
     pub(crate) target: Option<Target>,
     pub(crate) prefix: Option<Prefix>,
@@ -2830,7 +2848,7 @@ impl PipSettings {
                 args.no_extra.combine(no_extra).unwrap_or_default(),
                 args.extra.combine(extra).unwrap_or_default(),
             ),
-            groups: DevGroupsSpecification::from_args(
+            groups: DependencyGroups::from_args(
                 false,
                 false,
                 false,

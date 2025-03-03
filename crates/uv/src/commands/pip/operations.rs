@@ -13,7 +13,7 @@ use uv_tool::InstalledTools;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification, DryRun,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DependencyGroups, DryRun,
     ExtrasSpecification, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
@@ -54,7 +54,7 @@ pub(crate) async fn read_requirements(
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     extras: &ExtrasSpecification,
-    groups: &DevGroupsSpecification,
+    groups: &DependencyGroups,
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
@@ -114,7 +114,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     mut project: Option<PackageName>,
     workspace_members: BTreeSet<PackageName>,
     extras: &ExtrasSpecification,
-    groups: &DevGroupsSpecification,
+    groups: &DependencyGroups,
     preferences: Vec<Preference>,
     installed_packages: InstalledPackages,
     hasher: &HashStrategy,
@@ -554,7 +554,7 @@ pub(crate) async fn install(
     }
 
     if compile {
-        compile_bytecode(venv, cache, printer).await?;
+        compile_bytecode(venv, &concurrency, cache, printer).await?;
     }
 
     // Construct a summary of the changes made to the environment.

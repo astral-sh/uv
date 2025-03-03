@@ -1,4 +1,6 @@
 use std::fmt::{Display, Formatter};
+use std::sync::Arc;
+
 use uv_pep440::Version;
 use uv_pep508::PackageName;
 use uv_pypi_types::Yanked;
@@ -16,10 +18,10 @@ use crate::{
 #[allow(clippy::large_enum_variant)]
 pub enum ResolvedDist {
     Installed {
-        dist: InstalledDist,
+        dist: Arc<InstalledDist>,
     },
     Installable {
-        dist: Dist,
+        dist: Arc<Dist>,
         version: Option<Version>,
     },
 }
@@ -72,9 +74,11 @@ impl ResolvedDist {
     /// Returns the [`Yanked`] status of the distribution, if available.
     pub fn yanked(&self) -> Option<&Yanked> {
         match self {
-            Self::Installable { dist, .. } => match dist {
-                Dist::Source(SourceDist::Registry(sdist)) => sdist.file.yanked.as_ref(),
-                Dist::Built(BuiltDist::Registry(wheel)) => wheel.best_wheel().file.yanked.as_ref(),
+            Self::Installable { dist, .. } => match dist.as_ref() {
+                Dist::Source(SourceDist::Registry(sdist)) => sdist.file.yanked.as_deref(),
+                Dist::Built(BuiltDist::Registry(wheel)) => {
+                    wheel.best_wheel().file.yanked.as_deref()
+                }
                 _ => None,
             },
             Self::Installed { .. } => None,
@@ -103,7 +107,7 @@ impl ResolvedDistRef<'_> {
                     "expected chosen sdist to match prioritized sdist"
                 );
                 ResolvedDist::Installable {
-                    dist: Dist::Source(SourceDist::Registry(source)),
+                    dist: Arc::new(Dist::Source(SourceDist::Registry(source))),
                     version: Some(sdist.version.clone()),
                 }
             }
@@ -119,12 +123,12 @@ impl ResolvedDistRef<'_> {
                 // has at least one wheel, so this always succeeds.
                 let built = prioritized.built_dist().expect("at least one wheel");
                 ResolvedDist::Installable {
-                    dist: Dist::Built(BuiltDist::Registry(built)),
+                    dist: Arc::new(Dist::Built(BuiltDist::Registry(built))),
                     version: Some(wheel.filename.version.clone()),
                 }
             }
             Self::Installed { dist } => ResolvedDist::Installed {
-                dist: (*dist).clone(),
+                dist: Arc::new((*dist).clone()),
             },
         }
     }

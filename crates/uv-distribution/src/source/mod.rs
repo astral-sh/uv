@@ -41,7 +41,7 @@ use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
 use uv_pep440::{release_specifiers_to_ranges, Version};
 use uv_platform_tags::Tags;
-use uv_pypi_types::{HashAlgorithm, HashDigest, PyProjectToml, ResolutionMetadata};
+use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
 use uv_types::{BuildContext, BuildStack, SourceBuildTrait};
 use uv_workspace::pyproject::ToolUvSources;
 
@@ -415,16 +415,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = cache_shard.shard(revision.id());
         let source_dist_entry = cache_shard.entry(SOURCE);
 
-        // Validate that the subdirectory exists.
-        if let Some(subdirectory) = subdirectory {
-            if !source_dist_entry.path().join(subdirectory).is_dir() {
-                return Err(Error::MissingSubdirectory(
-                    url.clone(),
-                    subdirectory.to_path_buf(),
-                ));
-            }
-        }
-
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.build_context.config_settings();
         let cache_shard = if config_settings.is_empty() {
@@ -435,6 +425,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains a compatible wheel, return it.
         if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard)
+            .ok()
+            .flatten()
             .filter(|built_wheel| built_wheel.matches(source.name(), source.version()))
         {
             return Ok(built_wheel.with_hashes(revision.into_hashes()));
@@ -455,6 +447,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             )
             .await?
         };
+
+        // Validate that the subdirectory exists.
+        if let Some(subdirectory) = subdirectory {
+            if !source_dist_entry.path().join(subdirectory).is_dir() {
+                return Err(Error::MissingSubdirectory(
+                    url.clone(),
+                    subdirectory.to_path_buf(),
+                ));
+            }
+        }
 
         let task = self
             .reporter
@@ -528,16 +530,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = cache_shard.shard(revision.id());
         let source_dist_entry = cache_shard.entry(SOURCE);
 
-        // Validate that the subdirectory exists.
-        if let Some(subdirectory) = subdirectory {
-            if !source_dist_entry.path().join(subdirectory).is_dir() {
-                return Err(Error::MissingSubdirectory(
-                    url.clone(),
-                    subdirectory.to_path_buf(),
-                ));
-            }
-        }
-
         // If the metadata is static, return it.
         let dynamic =
             match StaticMetadata::read(source, source_dist_entry.path(), subdirectory).await? {
@@ -585,6 +577,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             )
             .await?
         };
+
+        // Validate that the subdirectory exists.
+        if let Some(subdirectory) = subdirectory {
+            if !source_dist_entry.path().join(subdirectory).is_dir() {
+                return Err(Error::MissingSubdirectory(
+                    url.clone(),
+                    subdirectory.to_path_buf(),
+                ));
+            }
+        }
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.build_context.config_settings();
@@ -708,7 +710,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .download_archive(response, source, ext, entry.path(), &algorithms)
                     .await?;
 
-                Ok(revision.with_hashes(hashes))
+                Ok(revision.with_hashes(HashDigests::from(hashes)))
             }
             .boxed_local()
             .instrument(info_span!("download", source_dist = %source))
@@ -795,6 +797,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains a compatible wheel, return it.
         if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard)
+            .ok()
+            .flatten()
             .filter(|built_wheel| built_wheel.matches(source.name(), source.version()))
         {
             return Ok(built_wheel);
@@ -1037,7 +1041,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await?;
 
         // Include the hashes and cache info in the revision.
-        let revision = revision.with_hashes(hashes);
+        let revision = revision.with_hashes(HashDigests::from(hashes));
 
         // Persist the revision.
         let pointer = LocalRevisionPointer {
@@ -1097,6 +1101,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains a compatible wheel, return it.
         if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard)
+            .ok()
+            .flatten()
             .filter(|built_wheel| built_wheel.matches(source.name(), source.version()))
         {
             return Ok(built_wheel);
@@ -1474,6 +1480,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains a compatible wheel, return it.
         if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard)
+            .ok()
+            .flatten()
             .filter(|built_wheel| built_wheel.matches(source.name(), source.version()))
         {
             return Ok(built_wheel);
@@ -1509,7 +1517,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             path: cache_shard.join(&disk_filename),
             target: cache_shard.join(filename.stem()),
             filename,
-            hashes: vec![],
+            hashes: HashDigests::empty(),
             cache_info: CacheInfo::default(),
         })
     }
@@ -1561,7 +1569,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                 debug!("Found static metadata via GitHub fast path for: {source}");
                                 return Ok(ArchiveMetadata {
                                     metadata: Metadata::from_metadata23(metadata),
-                                    hashes: vec![],
+                                    hashes: HashDigests::empty(),
                                 });
                             }
                             Err(err) => {
@@ -1974,7 +1982,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 return Err(Error::CacheHeal(source.to_string(), existing.algorithm()));
             }
         }
-        Ok(revision.with_hashes(hashes))
+        Ok(revision.with_hashes(HashDigests::from(hashes)))
     }
 
     /// Heal a [`Revision`] for a remote archive.
@@ -2011,7 +2019,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         return Err(Error::CacheHeal(source.to_string(), existing.algorithm()));
                     }
                 }
-                Ok(revision.clone().with_hashes(hashes))
+                Ok(revision.clone().with_hashes(HashDigests::from(hashes)))
             }
             .boxed_local()
             .instrument(info_span!("download", source_dist = %source))
@@ -2765,8 +2773,8 @@ impl CachedMetadata {
 
     /// Returns `true` if the metadata matches the given package name and version.
     fn matches(&self, name: Option<&PackageName>, version: Option<&Version>) -> bool {
-        name.map_or(true, |name| self.0.name == *name)
-            && version.map_or(true, |version| self.0.version == *version)
+        name.is_none_or(|name| self.0.name == *name)
+            && version.is_none_or(|version| self.0.version == *version)
     }
 }
 

@@ -34,13 +34,13 @@ pub(crate) async fn uninstall(name: Vec<PackageName>, printer: Printer) -> Resul
     do_uninstall(&installed_tools, name, printer).await?;
 
     // Clean up any empty directories.
-    if uv_fs::directories(installed_tools.root()).all(|path| uv_fs::is_temporary(&path)) {
+    if uv_fs::directories(installed_tools.root())?.all(|path| uv_fs::is_temporary(&path)) {
         fs_err::tokio::remove_dir_all(&installed_tools.root())
             .await
             .ignore_currently_being_deleted()?;
-        if let Some(top_level) = installed_tools.root().parent() {
-            if uv_fs::directories(top_level).all(|path| uv_fs::is_temporary(&path)) {
-                fs_err::tokio::remove_dir_all(top_level)
+        if let Some(parent) = installed_tools.root().parent() {
+            if uv_fs::directories(parent)?.all(|path| uv_fs::is_temporary(&path)) {
+                fs_err::tokio::remove_dir_all(parent)
                     .await
                     .ignore_currently_being_deleted()?;
             }

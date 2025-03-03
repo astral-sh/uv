@@ -173,6 +173,12 @@ a link mode.
 Equivalent to the `--locked` command-line argument. If set, uv will assert that the
 `uv.lock` remains unchanged.
 
+### `UV_LOG_CONTEXT`
+
+Add additional context and structure to log messages.
+
+If logging is not enabled, e.g., with `RUST_LOG` or `-v`, this has no effect.
+
 ### `UV_NATIVE_TLS`
 
 Equivalent to the `--native-tls` command-line argument. If set to `true`, uv will
@@ -391,10 +397,6 @@ Used for trusted publishing via `uv publish`. Contains the oidc token url.
 
 General proxy for all network requests.
 
-### `APPDATA`
-
-The base path for user site packages on Windows.
-
 ### `BASH_VERSION`
 
 Used to detect Bash shell usage.
@@ -507,29 +509,9 @@ The validation modes to use when run with `--compile`.
 
 See [`PycInvalidationMode`](https://docs.python.org/3/library/py_compile.html#py_compile.PycInvalidationMode).
 
-### `PYTHONHOME`
-
-Overrides `sys.prefix`.
-
-### `PYTHONNOUSERSITE`
-
-Don't add the user site packages to `sys.path`.
-
 ### `PYTHONPATH`
 
 Adds directories to Python module search path (e.g., `PYTHONPATH=/path/to/modules`).
-
-### `PYTHONPLATLIBDIR`
-
-Overrides `sys.platlibdir`.
-
-### `PYTHONSAFEPATH`
-
-Don't prepend a potentially unsafe path to `sys.path`.
-
-### `PYTHONUSERBASE`
-
-Overrides `site.USER_BASE`.
 
 ### `RUST_LOG`
 

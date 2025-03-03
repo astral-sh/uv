@@ -2729,7 +2729,7 @@ pub struct RunArgs {
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
-    /// Ignore the the default dependency groups.
+    /// Ignore the default dependency groups.
     ///
     /// uv includes the groups defined in `tool.uv.default-groups` by default.
     /// This disables that option, however, specific groups can still be included with `--group`.
@@ -2784,7 +2784,7 @@ pub struct RunArgs {
     ///
     /// Can be provided multiple times, with subsequent files overriding values defined in previous
     /// files.
-    #[arg(long, env = EnvVars::UV_ENV_FILE)]
+    #[arg(long, value_delimiter = ' ', env = EnvVars::UV_ENV_FILE)]
     pub env_file: Vec<PathBuf>,
 
     /// Avoid reading environment variables from a `.env` file.
@@ -3024,7 +3024,7 @@ pub struct SyncArgs {
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
-    /// Ignore the the default dependency groups.
+    /// Ignore the default dependency groups.
     ///
     /// uv includes the groups defined in `tool.uv.default-groups` by default.
     /// This disables that option, however, specific groups can still be included with `--group`.
@@ -3543,7 +3543,7 @@ pub struct TreeArgs {
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
-    /// Ignore the the default dependency groups.
+    /// Ignore the default dependency groups.
     ///
     /// uv includes the groups defined in `tool.uv.default-groups` by default.
     /// This disables that option, however, specific groups can still be included with `--group`.
@@ -3716,7 +3716,7 @@ pub struct ExportArgs {
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
-    /// Ignore the the default dependency groups.
+    /// Ignore the default dependency groups.
     ///
     /// uv includes the groups defined in `tool.uv.default-groups` by default.
     /// This disables that option, however, specific groups can still be included with `--group`.

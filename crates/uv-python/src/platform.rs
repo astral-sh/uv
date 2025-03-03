@@ -103,6 +103,26 @@ impl Arch {
         }
     }
 
+    /// Does the current architecture support running the other?
+    ///
+    /// When the architecture is equal, this is always true. Otherwise, this is true if the
+    /// architecture is transparently emulated or is a microarchitecture with worse performance
+    /// characteristics.
+    pub(crate) fn supports(self, other: Self) -> bool {
+        if self == other {
+            return true;
+        }
+
+        // TODO: Implement `variant` support checks
+
+        // Windows ARM64 runs emulated x86_64 binaries transparently
+        if cfg!(windows) && matches!(self.family, target_lexicon::Architecture::Aarch64(_)) {
+            return other.family == target_lexicon::Architecture::X86_64;
+        }
+
+        false
+    }
+
     pub fn family(&self) -> target_lexicon::Architecture {
         self.family
     }

@@ -7,7 +7,7 @@ use futures::stream::FuturesOrdered;
 use futures::TryStreamExt;
 use url::Url;
 
-use uv_configuration::{DevGroupsSpecification, ExtrasSpecification};
+use uv_configuration::{DependencyGroups, ExtrasSpecification};
 use uv_distribution::{DistributionDatabase, FlatRequiresDist, Reporter, RequiresDist};
 use uv_distribution_types::{
     BuildableSource, DirectorySourceUrl, HashGeneration, HashPolicy, SourceUrl, VersionId,
@@ -37,7 +37,7 @@ pub struct SourceTreeResolver<'a, Context: BuildContext> {
     /// The extras to include when resolving requirements.
     extras: &'a ExtrasSpecification,
     /// The groups to include when resolving requirements.
-    groups: &'a DevGroupsSpecification,
+    groups: &'a DependencyGroups,
     /// The hash policy to enforce.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -50,7 +50,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
     /// Instantiate a new [`SourceTreeResolver`] for a given set of `source_trees`.
     pub fn new(
         extras: &'a ExtrasSpecification,
-        groups: &'a DevGroupsSpecification,
+        groups: &'a DependencyGroups,
         hasher: &'a HashStrategy,
         index: &'a InMemoryIndex,
         database: DistributionDatabase<'a, Context>,
@@ -197,32 +197,30 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         // Fetch the metadata for the distribution.
         let metadata = {
             let id = VersionId::from_url(source.url());
-            if let Some(archive) =
-                self.index
-                    .distributions()
-                    .get(&id)
-                    .as_deref()
-                    .and_then(|response| {
-                        if let MetadataResponse::Found(archive) = response {
-                            Some(archive)
-                        } else {
-                            None
-                        }
-                    })
-            {
-                // If the metadata is already in the index, return it.
-                archive.metadata.clone()
-            } else {
+            if self.index.distributions().register(id.clone()) {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let source = BuildableSource::Url(source);
                 let archive = self.database.build_wheel_metadata(&source, hashes).await?;
 
+                let metadata = archive.metadata.clone();
+
                 // Insert the metadata into the index.
                 self.index
                     .distributions()
-                    .done(id, Arc::new(MetadataResponse::Found(archive.clone())));
+                    .done(id, Arc::new(MetadataResponse::Found(archive)));
 
-                archive.metadata
+                metadata
+            } else {
+                let response = self
+                    .index
+                    .distributions()
+                    .wait(&id)
+                    .await
+                    .expect("missing value for registered task");
+                let MetadataResponse::Found(archive) = &*response else {
+                    panic!("Failed to find metadata for: {}", path.user_display());
+                };
+                archive.metadata.clone()
             }
         };
 

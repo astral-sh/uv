@@ -2,7 +2,6 @@ use std::future::Future;
 use std::io;
 use std::path::Path;
 use std::pin::Pin;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
@@ -27,11 +26,10 @@ use uv_distribution_types::{
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
 use uv_platform_tags::Tags;
-use uv_pypi_types::HashDigest;
+use uv_pypi_types::{HashDigest, HashDigests};
 use uv_types::{BuildContext, BuildStack};
 
 use crate::archive::Archive;
-use crate::locks::Locks;
 use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::source::SourceDistributionBuilder;
 use crate::{Error, LocalWheel, Reporter, RequiresDist};
@@ -51,7 +49,6 @@ use crate::{Error, LocalWheel, Reporter, RequiresDist};
 pub struct DistributionDatabase<'a, Context: BuildContext> {
     build_context: &'a Context,
     builder: SourceDistributionBuilder<'a, Context>,
-    locks: Rc<Locks>,
     client: ManagedClient<'a>,
     reporter: Option<Arc<dyn Reporter>>,
 }
@@ -65,7 +62,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         Self {
             build_context,
             builder: SourceDistributionBuilder::new(build_context),
-            locks: Rc::new(Locks::default()),
             client: ManagedClient::new(client, concurrent_downloads),
             reporter: None,
         }
@@ -193,7 +189,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let wheel_entry = self.build_context.cache().entry(
                     CacheBucket::Wheels,
                     WheelCache::Index(&wheel.index).wheel_dir(wheel.name().as_ref()),
-                    wheel.filename.stem(),
+                    wheel.filename.cache_key(),
                 );
 
                 // If the URL is a file URL, load the wheel directly.
@@ -266,7 +262,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let wheel_entry = self.build_context.cache().entry(
                     CacheBucket::Wheels,
                     WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
-                    wheel.filename.stem(),
+                    wheel.filename.cache_key(),
                 );
 
                 // Download and unzip.
@@ -321,7 +317,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let cache_entry = self.build_context.cache().entry(
                     CacheBucket::Wheels,
                     WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
-                    wheel.filename.stem(),
+                    wheel.filename.cache_key(),
                 );
 
                 self.load_wheel(
@@ -347,9 +343,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         tags: &Tags,
         hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
-        let lock = self.locks.acquire(dist).await;
-        let _guard = lock.lock().await;
-
         let built_wheel = self
             .builder
             .download_and_build(&BuildableSource::Dist(dist), tags, hashes, &self.client)
@@ -496,9 +489,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             }
         }
 
-        let lock = self.locks.acquire(source).await;
-        let _guard = lock.lock().await;
-
         let metadata = self
             .builder
             .download_and_build_metadata(source, hashes, &self.client)
@@ -536,7 +526,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         };
 
         // Create an entry for the HTTP cache.
-        let http_entry = wheel_entry.with_file(format!("{}.http", filename.stem()));
+        let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
 
         let download = |response: reqwest::Response| {
             async {
@@ -591,6 +581,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 Ok(Archive::new(
                     id,
                     hashers.into_iter().map(HashDigest::from).collect(),
+                    filename.clone(),
                 ))
             }
             .instrument(info_span!("wheel", wheel = %dist))
@@ -668,7 +659,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         };
 
         // Create an entry for the HTTP cache.
-        let http_entry = wheel_entry.with_file(format!("{}.http", filename.stem()));
+        let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
 
         let download = |response: reqwest::Response| {
             async {
@@ -729,7 +720,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     })
                     .await??;
 
-                    vec![]
+                    HashDigests::empty()
                 } else {
                     // Create a hasher for each hash algorithm.
                     let algorithms = hashes.algorithms();
@@ -755,7 +746,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     reporter.on_download_complete(dist.name(), progress);
                 }
 
-                Ok(Archive::new(id, hashes))
+                Ok(Archive::new(id, hashes, filename.clone()))
             }
             .instrument(info_span!("wheel", wheel = %dist))
         };
@@ -833,7 +824,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let modified = Timestamp::from_path(path).map_err(Error::CacheRead)?;
 
         // Attempt to read the archive pointer from the cache.
-        let pointer_entry = wheel_entry.with_file(format!("{}.rev", filename.stem()));
+        let pointer_entry = wheel_entry.with_file(format!("{}.rev", filename.cache_key()));
         let pointer = LocalArchivePointer::read_from(&pointer_entry)?;
 
         // Extract the archive from the pointer.
@@ -853,7 +844,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             })
         } else if hashes.is_none() {
             // Otherwise, unzip the wheel.
-            let archive = Archive::new(self.unzip_wheel(path, wheel_entry.path()).await?, vec![]);
+            let archive = Archive::new(
+                self.unzip_wheel(path, wheel_entry.path()).await?,
+                HashDigests::empty(),
+                filename.clone(),
+            );
 
             // Write the archive pointer to the cache.
             let pointer = LocalArchivePointer {
@@ -899,7 +894,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .map_err(Error::CacheWrite)?;
 
             // Create an archive.
-            let archive = Archive::new(id, hashes);
+            let archive = Archive::new(id, hashes, filename.clone());
 
             // Write the archive pointer to the cache.
             let pointer = LocalArchivePointer {

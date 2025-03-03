@@ -12,7 +12,7 @@ use tracing::{debug, instrument};
 use url::Url;
 
 use uv_cache_key::{cache_digest, RepositoryUrl};
-use uv_git_types::{GitOid, GitUrl};
+use uv_git_types::GitUrl;
 
 use crate::git::GitRemote;
 use crate::GIT_STORE;
@@ -107,7 +107,7 @@ impl GitSource {
                     &db_path,
                     db,
                     self.git.reference(),
-                    locked_rev.map(GitOid::from),
+                    locked_rev,
                     &self.client,
                     self.disable_ssl,
                 )?;

@@ -1,4 +1,4 @@
-use std::{ffi::OsString, path::PathBuf};
+use std::ffi::OsString;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -8,8 +8,6 @@ pub enum Error {
     AsyncZip(#[from] async_zip::error::ZipError),
     #[error(transparent)]
     Io(#[from] std::io::Error),
-    #[error("Unsupported archive type: {0}")]
-    UnsupportedArchive(PathBuf),
     #[error(
         "The top-level of the archive must only contain a list directory, but it contains: {0:?}"
     )]

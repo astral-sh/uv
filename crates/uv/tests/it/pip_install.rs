@@ -11,9 +11,11 @@ use indoc::indoc;
 use predicates::prelude::predicate;
 use url::Url;
 
+#[cfg(feature = "git")]
+use crate::common::{self, decode_token};
+
 use crate::common::{
-    self, build_vendor_links_url, decode_token, get_bin, uv_snapshot, venv_bin_path,
-    venv_to_interpreter, TestContext,
+    build_vendor_links_url, get_bin, uv_snapshot, venv_bin_path, venv_to_interpreter, TestContext,
 };
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -2084,7 +2086,7 @@ fn install_git_private_https_pat_not_authorized() {
     // and hang the test
     uv_snapshot!(filters, context.pip_install()
         .arg(format!("uv-private-pypackage @ git+https://git:{token}@github.com/astral-test/uv-private-pypackage"))
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2098,7 +2100,7 @@ fn install_git_private_https_pat_not_authorized() {
           remote: Support for password authentication was removed on August 13, 2021.
           remote: Please see https://docs.github.com/get-started/getting-started-with-git/about-remote-repositories#cloning-with-https-urls for information on currently recommended modes of authentication.
           fatal: Authentication failed for 'https://github.com/astral-test/uv-private-pypackage/'
-    "###);
+    ");
 }
 
 /// Install a package from a private GitHub repository using a PAT
@@ -2173,6 +2175,39 @@ fn install_github_artifact_private_https_multiple_pat() {
     "###);
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
+}
+
+/// Fail to a package from a private GitHub repository using interactive authentication
+/// It should fail gracefully, instead of silently hanging forever
+/// Regression test for <https://github.com/astral-sh/uv/issues/5107>
+#[test]
+#[cfg(feature = "git")]
+fn install_git_private_https_interactive() {
+    let context = TestContext::new("3.8");
+
+    let package = "uv-private-pypackage@ git+https://github.com/astral-test/uv-private-pypackage";
+
+    // The path to a git binary may be arbitrary, filter and replace
+    // The trailing space is load bearing, as to not match on false positives
+    let filters: Vec<_> = [("\\/([[:alnum:]]*\\/)*git ", "/usr/bin/git ")]
+        .into_iter()
+        .chain(context.filters())
+        .collect();
+
+    uv_snapshot!(filters, context.pip_install().arg(package)
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `uv-private-pypackage @ git+https://github.com/astral-test/uv-private-pypackage`
+      ├─▶ Git operation failed
+      ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
+      ╰─▶ process didn't exit successfully: `/usr/bin/git fetch --force --update-head-ok 'https://github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+          --- stderr
+          fatal: could not read Username for 'https://github.com': terminal prompts disabled
+    "###);
 }
 
 /// Install a package without using pre-built wheels.
@@ -7009,6 +7044,146 @@ fn verify_hashes_editable() -> Result<()> {
      + idna==3.6
      + multidict==6.0.5
      + yarl==1.9.4
+    "###
+    );
+
+    Ok(())
+}
+
+/// Allow arguments within a `requirements.txt` file to be quoted or unquoted, as in the CLI.
+#[test]
+fn double_quoted_arguments() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let constraints_in = context.temp_dir.child("constraints.in");
+    constraints_in.write_str(indoc::indoc! {r"
+        iniconfig==1.0.0
+    "})?;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(indoc::indoc! {r#"
+       --constraint "./constraints.in"
+
+        iniconfig
+    "#})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==1.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Allow arguments within a `requirements.txt` file to be quoted or unquoted, as in the CLI.
+#[test]
+fn single_quoted_arguments() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let constraints_in = context.temp_dir.child("constraints.in");
+    constraints_in.write_str(indoc::indoc! {r"
+        iniconfig==1.0.0
+    "})?;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(indoc::indoc! {r"
+       --constraint './constraints.in'
+
+        iniconfig
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==1.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Allow arguments within a `requirements.txt` file to be quoted or unquoted, as in the CLI.
+#[test]
+fn unquoted_arguments() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let constraints_in = context.temp_dir.child("constraints.in");
+    constraints_in.write_str(indoc::indoc! {r"
+        iniconfig==1.0.0
+    "})?;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(indoc::indoc! {r"
+       --constraint ./constraints.in
+
+        iniconfig
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==1.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Allow arguments within a `requirements.txt` file to be quoted or unquoted, as in the CLI.
+#[test]
+fn concatenated_quoted_arguments() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let constraints_in = context.temp_dir.child("constraints.in");
+    constraints_in.write_str(indoc::indoc! {r"
+        iniconfig==1.0.0
+    "})?;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(indoc::indoc! {r#"
+       --constraint "./constr""aints.in"
+
+        iniconfig
+    "#})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==1.0.0
     "###
     );
 

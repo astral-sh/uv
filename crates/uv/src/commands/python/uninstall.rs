@@ -37,7 +37,7 @@ pub(crate) async fn uninstall(
     do_uninstall(&installations, targets, all, printer, preview).await?;
 
     // Clean up any empty directories.
-    if uv_fs::directories(installations.root()).all(|path| uv_fs::is_temporary(&path)) {
+    if uv_fs::directories(installations.root())?.all(|path| uv_fs::is_temporary(&path)) {
         fs_err::tokio::remove_dir_all(&installations.root()).await?;
 
         if let Some(top_level) = installations.root().parent() {
@@ -48,7 +48,7 @@ pub(crate) async fn uninstall(
                 Err(err) => return Err(err.into()),
             }
 
-            if uv_fs::directories(top_level).all(|path| uv_fs::is_temporary(&path)) {
+            if uv_fs::directories(top_level)?.all(|path| uv_fs::is_temporary(&path)) {
                 fs_err::tokio::remove_dir_all(top_level).await?;
             }
         }

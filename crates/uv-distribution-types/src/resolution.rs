@@ -1,7 +1,7 @@
 use uv_distribution_filename::DistExtension;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
-use uv_pypi_types::{HashDigest, RequirementSource};
+use uv_pypi_types::{HashDigest, HashDigests, RequirementSource};
 
 use crate::{BuiltDist, Diagnostic, Dist, Name, ResolvedDist, SourceDist};
 
@@ -183,7 +183,7 @@ pub enum Node {
     Root,
     Dist {
         dist: ResolvedDist,
-        hashes: Vec<HashDigest>,
+        hashes: HashDigests,
         install: bool,
     },
 }
@@ -220,7 +220,7 @@ impl Edge {
 impl From<&ResolvedDist> for RequirementSource {
     fn from(resolved_dist: &ResolvedDist) -> Self {
         match resolved_dist {
-            ResolvedDist::Installable { dist, .. } => match dist {
+            ResolvedDist::Installable { dist, .. } => match dist.as_ref() {
                 Dist::Built(BuiltDist::Registry(wheels)) => {
                     let wheel = wheels.best_wheel();
                     RequirementSource::Registry {
