@@ -32,20 +32,17 @@ fn get_uvx_suffix(current_exe: &Path) -> std::io::Result<&str> {
     };
     let Some(file_name_str) = os_file_name.to_str() else {
         return Err(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "Could not determine the file name of the `uvx` binary",
+            std::io::ErrorKind::InvalidData,
+            "Unable to convert executable name of `uvx` binary into a valid UTF-8 string",
         ));
     };
-    let Some(file_name_no_ext) = file_name_str.strip_suffix(std::env::consts::EXE_SUFFIX) else {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "Could not determine the file name of the `uvx` binary",
-        ));
-    };
+    let file_name_no_ext = file_name_str
+        .strip_suffix(std::env::consts::EXE_SUFFIX)
+        .unwrap_or(file_name_str);
     let Some(uvx_suffix) = file_name_no_ext.strip_prefix("uvx") else {
         return Err(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "Could not determine the file name of the `uvx` binary",
+            std::io::ErrorKind::InvalidData,
+            "Current executable name does not contain `uvx`",
         ));
     };
     Ok(uvx_suffix)
