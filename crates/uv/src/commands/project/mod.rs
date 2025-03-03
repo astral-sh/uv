@@ -12,7 +12,7 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsManifest, DependencyGroupsSpecification, DryRun,
+    Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DryRun,
     ExtrasSpecification, PreviewMode, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -260,8 +260,8 @@ pub(crate) struct ConflictError {
     pub(crate) set: ConflictSet,
     /// The items from the set that were enabled, and thus create the conflict.
     pub(crate) conflicts: Vec<ConflictPackage>,
-    /// The manifest of enabled dependency groups.
-    pub(crate) dev: DependencyGroupsManifest,
+    /// Enabled dependency groups with defaults applied.
+    pub(crate) dev: DependencyGroupsWithDefaults,
 }
 
 impl std::fmt::Display for ConflictError {
@@ -1714,7 +1714,7 @@ pub(crate) async fn resolve_environment(
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let extras = ExtrasSpecification::default();
-    let groups = DependencyGroupsSpecification::default();
+    let groups = DependencyGroups::default();
     let hasher = HashStrategy::default();
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
@@ -2084,7 +2084,7 @@ pub(crate) async fn update_environment(
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
     let extras = ExtrasSpecification::default();
-    let groups = DependencyGroupsSpecification::default();
+    let groups = DependencyGroups::default();
     let hasher = HashStrategy::default();
     let preferences = Vec::default();
 
@@ -2274,7 +2274,7 @@ pub(crate) fn default_dependency_groups(
 pub(crate) fn detect_conflicts(
     lock: &Lock,
     extras: &ExtrasSpecification,
-    dev: &DependencyGroupsManifest,
+    dev: &DependencyGroupsWithDefaults,
 ) -> Result<(), ProjectError> {
     // Note that we need to collect all extras and groups that match in
     // a particular set, since extras can be declared as conflicting with

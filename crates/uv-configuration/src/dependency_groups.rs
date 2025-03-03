@@ -6,11 +6,11 @@ use uv_normalize::{GroupName, DEV_DEPENDENCIES};
 ///
 /// This is an Arc mostly just to avoid size bloat on things that contain these.
 #[derive(Debug, Default, Clone)]
-pub struct DependencyGroupsSpecification(Arc<DependencyGroupsSpecificationInner>);
+pub struct DependencyGroups(Arc<DependencyGroupsInner>);
 
 /// Manager of all dependency-group decisions and settings history.
 #[derive(Debug, Default, Clone)]
-pub struct DependencyGroupsSpecificationInner {
+pub struct DependencyGroupsInner {
     /// Groups to include.
     include: IncludeGroups,
     /// Groups to exclude (always wins over include).
@@ -19,19 +19,19 @@ pub struct DependencyGroupsSpecificationInner {
     ///
     /// If true, users of this API should refrain from looking at packages
     /// that *aren't* specified by the dependency-groups. This is exposed
-    /// via [`DependencyGroupsSpecificationInner::prod`][].
+    /// via [`DependencyGroupsInner::prod`][].
     only_groups: bool,
     /// The "raw" flags/settings we were passed for diagnostics.
-    history: DependencyGroupsSpecificationHistory,
+    history: DependencyGroupsHistory,
 }
 
-impl DependencyGroupsSpecification {
+impl DependencyGroups {
     /// Create from history.
     ///
     /// This is the "real" constructor, it's basically taking raw CLI flags but in
     /// a way that's a bit nicer for other constructors to use.
-    fn from_history(history: DependencyGroupsSpecificationHistory) -> Self {
-        let DependencyGroupsSpecificationHistory {
+    fn from_history(history: DependencyGroupsHistory) -> Self {
+        let DependencyGroupsHistory {
             dev_mode,
             mut group,
             mut only_group,
@@ -69,7 +69,7 @@ impl DependencyGroupsSpecification {
             IncludeGroups::Some(group)
         };
 
-        Self(Arc::new(DependencyGroupsSpecificationInner {
+        Self(Arc::new(DependencyGroupsInner {
             include,
             exclude: no_group,
             only_groups,
@@ -104,7 +104,7 @@ impl DependencyGroupsSpecification {
             None
         };
 
-        Self::from_history(DependencyGroupsSpecificationHistory {
+        Self::from_history(DependencyGroupsHistory {
             dev_mode,
             group,
             only_group,
@@ -118,7 +118,7 @@ impl DependencyGroupsSpecification {
 
     /// Helper to make a spec from just a --dev flag
     pub fn from_dev_mode(dev_mode: DevMode) -> Self {
-        Self::from_history(DependencyGroupsSpecificationHistory {
+        Self::from_history(DependencyGroupsHistory {
             dev_mode: Some(dev_mode),
             ..Default::default()
         })
@@ -126,35 +126,35 @@ impl DependencyGroupsSpecification {
 
     /// Helper to make a spec from just a --group
     pub fn from_group(group: GroupName) -> Self {
-        Self::from_history(DependencyGroupsSpecificationHistory {
+        Self::from_history(DependencyGroupsHistory {
             group: vec![group],
             ..Default::default()
         })
     }
 
-    /// Apply defaults to a base [`DependencyGroupsSpecification`].
+    /// Apply defaults to a base [`DependencyGroups`].
     ///
     /// This is appropriate in projects, where the `dev` group is synced by default.
-    pub fn with_defaults(&self, defaults: Vec<GroupName>) -> DependencyGroupsManifest {
+    pub fn with_defaults(&self, defaults: Vec<GroupName>) -> DependencyGroupsWithDefaults {
         // Explicitly clone the inner history and set the defaults, then remake the result.
         let mut history = self.0.history.clone();
         history.defaults = defaults;
 
-        DependencyGroupsManifest {
+        DependencyGroupsWithDefaults {
             cur: Self::from_history(history),
             prev: self.clone(),
         }
     }
 }
 
-impl std::ops::Deref for DependencyGroupsSpecification {
-    type Target = DependencyGroupsSpecificationInner;
+impl std::ops::Deref for DependencyGroups {
+    type Target = DependencyGroupsInner;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl DependencyGroupsSpecificationInner {
+impl DependencyGroupsInner {
     /// Returns `true` if packages other than the ones referenced by these
     /// dependency-groups should be considered.
     ///
@@ -180,7 +180,7 @@ impl DependencyGroupsSpecificationInner {
 
     /// Iterate over all groups the user explicitly asked for on the CLI
     pub fn explicit_names(&self) -> impl Iterator<Item = &GroupName> {
-        let DependencyGroupsSpecificationHistory {
+        let DependencyGroupsHistory {
             // Strictly speaking this is an explicit reference to "dev"
             // but we're currently tolerant of dev not existing when referenced with
             // these flags, since it kinda implicitly always exists even if
@@ -206,14 +206,14 @@ impl DependencyGroupsSpecificationInner {
     }
 
     /// Get the raw history for diagnostics
-    pub fn history(&self) -> &DependencyGroupsSpecificationHistory {
+    pub fn history(&self) -> &DependencyGroupsHistory {
         &self.history
     }
 }
 
-/// Context about a [`DependencyGroupsSpecification`][] that we've preserved for diagnostics
+/// Context about a [`DependencyGroups`][] that we've preserved for diagnostics
 #[derive(Debug, Default, Clone)]
-pub struct DependencyGroupsSpecificationHistory {
+pub struct DependencyGroupsHistory {
     pub dev_mode: Option<DevMode>,
     pub group: Vec<GroupName>,
     pub only_group: Vec<GroupName>,
@@ -223,17 +223,17 @@ pub struct DependencyGroupsSpecificationHistory {
     pub defaults: Vec<GroupName>,
 }
 
-impl DependencyGroupsSpecificationHistory {
+impl DependencyGroupsHistory {
     /// Returns all the CLI flags that this represents.
     ///
     /// If a flag was provided multiple times (e.g. `--group A --group B`) this will
     /// elide the arguments and just show the flag once (e.g. just yield "--group").
     ///
     /// Conceptually this being an empty list should be equivalent to
-    /// [`DependencyGroupsSpecification::is_empty`][] when there aren't any defaults set.
+    /// [`DependencyGroups::is_empty`][] when there aren't any defaults set.
     /// When there are defaults the two will disagree, and rightfully so!
     pub fn as_flags_pretty(&self) -> Vec<Cow<str>> {
-        let DependencyGroupsSpecificationHistory {
+        let DependencyGroupsHistory {
             dev_mode,
             group,
             only_group,
@@ -273,27 +273,27 @@ impl DependencyGroupsSpecificationHistory {
     }
 }
 
-/// A trivial newtype wrapped around [`DependencyGroupsSpecification`][] that signifies "defaults applied"
+/// A trivial newtype wrapped around [`DependencyGroups`][] that signifies "defaults applied"
 ///
 /// It includes a copy of the previous semantics to provide info on if
 /// the group being a default actually affected it being enabled, because it's obviously "correct".
 /// (These are Arcs so it's ~free to hold onto the previous semantics)
 #[derive(Debug, Clone)]
-pub struct DependencyGroupsManifest {
+pub struct DependencyGroupsWithDefaults {
     /// The active semantics
-    cur: DependencyGroupsSpecification,
+    cur: DependencyGroups,
     /// The semantics before defaults were applied
-    prev: DependencyGroupsSpecification,
+    prev: DependencyGroups,
 }
 
-impl DependencyGroupsManifest {
+impl DependencyGroupsWithDefaults {
     /// Returns `true` if the specification was enabled, and *only* because it was a default
     pub fn contains_because_default(&self, group: &GroupName) -> bool {
         self.cur.contains(group) && !self.prev.contains(group)
     }
 }
-impl std::ops::Deref for DependencyGroupsManifest {
-    type Target = DependencyGroupsSpecification;
+impl std::ops::Deref for DependencyGroupsWithDefaults {
+    type Target = DependencyGroups;
     fn deref(&self) -> &Self::Target {
         &self.cur
     }

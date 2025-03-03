@@ -22,7 +22,7 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, DependencyGroupsSpecification, DryRun, EditableMode,
+    BuildOptions, Concurrency, ConfigSettings, DependencyGroups, DryRun, EditableMode,
     ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
     KeyringProviderType, NoBinary, NoBuild, PreviewMode, ProjectBuildBackend, Reinstall,
     RequiredVersion, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
@@ -298,7 +298,7 @@ pub(crate) struct RunSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: DependencyGroupsSpecification,
+    pub(crate) dev: DependencyGroups,
     pub(crate) editable: EditableMode,
     pub(crate) modifications: Modifications,
     pub(crate) with: Vec<String>,
@@ -385,7 +385,7 @@ impl RunSettings {
                 no_extra,
                 extra.unwrap_or_default(),
             ),
-            dev: DependencyGroupsSpecification::from_args(
+            dev: DependencyGroups::from_args(
                 dev,
                 no_dev,
                 only_dev,
@@ -989,7 +989,7 @@ pub(crate) struct SyncSettings {
     pub(crate) script: Option<PathBuf>,
     pub(crate) active: Option<bool>,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: DependencyGroupsSpecification,
+    pub(crate) dev: DependencyGroups,
     pub(crate) editable: EditableMode,
     pub(crate) install_options: InstallOptions,
     pub(crate) modifications: Modifications,
@@ -1058,7 +1058,7 @@ impl SyncSettings {
                 no_extra,
                 extra.unwrap_or_default(),
             ),
-            dev: DependencyGroupsSpecification::from_args(
+            dev: DependencyGroups::from_args(
                 dev,
                 no_dev,
                 only_dev,
@@ -1364,7 +1364,7 @@ impl RemoveSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct TreeSettings {
-    pub(crate) dev: DependencyGroupsSpecification,
+    pub(crate) dev: DependencyGroups,
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) universal: bool,
@@ -1412,7 +1412,7 @@ impl TreeSettings {
             .unwrap_or_default();
 
         Self {
-            dev: DependencyGroupsSpecification::from_args(
+            dev: DependencyGroups::from_args(
                 dev,
                 no_dev,
                 only_dev,
@@ -1450,7 +1450,7 @@ pub(crate) struct ExportSettings {
     pub(crate) package: Option<PackageName>,
     pub(crate) prune: Vec<PackageName>,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: DependencyGroupsSpecification,
+    pub(crate) dev: DependencyGroups,
     pub(crate) editable: EditableMode,
     pub(crate) hashes: bool,
     pub(crate) install_options: InstallOptions,
@@ -1518,7 +1518,7 @@ impl ExportSettings {
                 no_extra,
                 extra.unwrap_or_default(),
             ),
-            dev: DependencyGroupsSpecification::from_args(
+            dev: DependencyGroups::from_args(
                 dev,
                 no_dev,
                 only_dev,
@@ -2654,7 +2654,7 @@ pub(crate) struct PipSettings {
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) system: bool,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) groups: DependencyGroupsSpecification,
+    pub(crate) groups: DependencyGroups,
     pub(crate) break_system_packages: bool,
     pub(crate) target: Option<Target>,
     pub(crate) prefix: Option<Prefix>,
@@ -2848,7 +2848,7 @@ impl PipSettings {
                 args.no_extra.combine(no_extra).unwrap_or_default(),
                 args.extra.combine(extra).unwrap_or_default(),
             ),
-            groups: DependencyGroupsSpecification::from_args(
+            groups: DependencyGroups::from_args(
                 false,
                 false,
                 false,

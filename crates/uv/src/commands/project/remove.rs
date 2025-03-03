@@ -9,8 +9,8 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_configuration::{
-    Concurrency, DependencyGroupsSpecification, DryRun, EditableMode, ExtrasSpecification,
-    InstallOptions, PreviewMode,
+    Concurrency, DependencyGroups, DryRun, EditableMode, ExtrasSpecification, InstallOptions,
+    PreviewMode,
 };
 use uv_fs::Simplified;
 use uv_normalize::DEV_DEPENDENCIES;
@@ -326,7 +326,7 @@ pub(crate) async fn remove(
         target,
         venv,
         &extras,
-        &DependencyGroupsSpecification::default().with_defaults(defaults),
+        &DependencyGroups::default().with_defaults(defaults),
         EditableMode::Editable,
         install_options,
         Modifications::Exact,

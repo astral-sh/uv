@@ -17,8 +17,8 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, DependencyGroupsSpecification, DryRun, EditableMode, ExtrasSpecification,
-    InstallOptions, PreviewMode,
+    Concurrency, DependencyGroups, DryRun, EditableMode, ExtrasSpecification, InstallOptions,
+    PreviewMode,
 };
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified};
@@ -74,7 +74,7 @@ pub(crate) async fn run(
     no_project: bool,
     no_config: bool,
     extras: ExtrasSpecification,
-    dev: DependencyGroupsSpecification,
+    dev: DependencyGroups,
     editable: EditableMode,
     modifications: Modifications,
     python: Option<String>,

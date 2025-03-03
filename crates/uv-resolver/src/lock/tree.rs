@@ -7,7 +7,7 @@ use petgraph::prelude::EdgeRef;
 use petgraph::Direction;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::DependencyGroupsManifest;
+use uv_configuration::DependencyGroupsWithDefaults;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
@@ -39,7 +39,7 @@ impl<'env> TreeDisplay<'env> {
         depth: usize,
         prune: &[PackageName],
         packages: &[PackageName],
-        dev: &DependencyGroupsManifest,
+        dev: &DependencyGroupsWithDefaults,
         no_dedupe: bool,
         invert: bool,
     ) -> Self {

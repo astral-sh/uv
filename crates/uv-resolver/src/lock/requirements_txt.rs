@@ -13,7 +13,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use url::Url;
 
 use uv_configuration::{
-    DependencyGroupsManifest, EditableMode, ExtrasSpecification, InstallOptions,
+    DependencyGroupsWithDefaults, EditableMode, ExtrasSpecification, InstallOptions,
 };
 use uv_distribution_filename::{DistExtension, SourceDistExtension};
 use uv_fs::Simplified;
@@ -40,7 +40,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
         target: &impl Installable<'lock>,
         prune: &[PackageName],
         extras: &ExtrasSpecification,
-        dev: &DependencyGroupsManifest,
+        dev: &DependencyGroupsWithDefaults,
         editable: EditableMode,
         hashes: bool,
         install_options: &'lock InstallOptions,

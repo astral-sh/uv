@@ -10,7 +10,7 @@ use petgraph::Graph;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_configuration::{
-    BuildOptions, DependencyGroupsManifest, ExtrasSpecification, InstallOptions,
+    BuildOptions, DependencyGroupsWithDefaults, ExtrasSpecification, InstallOptions,
 };
 use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -40,7 +40,7 @@ pub trait Installable<'lock> {
         marker_env: &ResolverMarkerEnvironment,
         tags: &Tags,
         extras: &ExtrasSpecification,
-        dev: &DependencyGroupsManifest,
+        dev: &DependencyGroupsWithDefaults,
         build_options: &BuildOptions,
         install_options: &InstallOptions,
     ) -> Result<Resolution, LockError> {
