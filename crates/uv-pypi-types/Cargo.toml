@@ -42,6 +42,7 @@ url = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+insta = { version = "1.40.0"}
 
 [features]
 schemars = ["dep:schemars", "uv-normalize/schemars"]

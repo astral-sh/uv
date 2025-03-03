@@ -1,6 +1,7 @@
 use crate::common::{uv_snapshot, venv_bin_path, TestContext};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
+use assert_fs::fixture::{FileWriteStr, PathChild};
 use flate2::bufread::GzDecoder;
 use fs_err::File;
 use indoc::indoc;
@@ -274,6 +275,89 @@ fn preserve_executable_bit() -> Result<()> {
     Hi from the shell
 
     ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+/// Test `tool.uv.build-backend.module-name`.
+#[test]
+fn rename_module() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let temp_dir = TempDir::new()?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+
+        [tool.uv.build-backend]
+        module-name = "bar"
+
+        [build-system]
+        requires = ["uv>=0.5,<0.7"]
+        build-backend = "uv"
+    "#})?;
+
+    context
+        .temp_dir
+        .child("src/foo/__init__.py")
+        .write_str(r#"print("Hi from foo")"#)?;
+    context
+        .temp_dir
+        .child("src/bar/__init__.py")
+        .write_str(r#"print("Hi from bar")"#)?;
+
+    uv_snapshot!(context
+        .build_backend()
+        .arg("build-wheel")
+        .arg(temp_dir.path())
+        .env("UV_PREVIEW", "1"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    foo-1.0.0-py3-none-any.whl
+
+    ----- stderr -----
+    "###);
+
+    context
+        .pip_install()
+        .arg(temp_dir.path().join("foo-1.0.0-py3-none-any.whl"))
+        .assert()
+        .success();
+
+    // Importing the renamed module succeeds
+    uv_snapshot!(Command::new(context.interpreter())
+        .arg("-c")
+        .arg("import bar")
+        // Python on windows
+        .env(EnvVars::PYTHONUTF8, "1"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hi from bar
+
+    ----- stderr -----
+    "###);
+
+    // Importing the package name fails
+    uv_snapshot!(Command::new(context.interpreter())
+        .arg("-c")
+        .arg("import foo")
+        // Python on windows
+        .env(EnvVars::PYTHONUTF8, "1"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Traceback (most recent call last):
+      File "<string>", line 1, in <module>
+    ModuleNotFoundError: No module named 'foo'
     "###);
 
     Ok(())
