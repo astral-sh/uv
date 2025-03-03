@@ -13,7 +13,7 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DependencyGroupsSpecification,
     ExtrasSpecification, IndexStrategy, NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy,
     Upgrade,
 };
@@ -60,7 +60,7 @@ pub(crate) async fn pip_compile(
     build_constraints_from_workspace: Vec<Requirement>,
     environments: SupportedEnvironments,
     extras: ExtrasSpecification,
-    groups: DevGroupsSpecification,
+    groups: DependencyGroupsSpecification,
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PrereleaseMode,

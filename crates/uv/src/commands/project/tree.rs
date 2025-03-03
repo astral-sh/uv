@@ -7,7 +7,7 @@ use tokio::sync::Semaphore;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::RegistryClientBuilder;
-use uv_configuration::{Concurrency, DevGroupsSpecification, PreviewMode, TargetTriple};
+use uv_configuration::{Concurrency, DependencyGroupsSpecification, PreviewMode, TargetTriple};
 use uv_distribution_types::IndexCapabilities;
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
@@ -33,7 +33,7 @@ use crate::settings::{NetworkSettings, ResolverSettings};
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn tree(
     project_dir: &Path,
-    dev: DevGroupsSpecification,
+    dev: DependencyGroupsSpecification,
     locked: bool,
     frozen: bool,
     universal: bool,

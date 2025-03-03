@@ -12,7 +12,9 @@ use petgraph::{Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use url::Url;
 
-use uv_configuration::{DevGroupsManifest, EditableMode, ExtrasSpecification, InstallOptions};
+use uv_configuration::{
+    DependencyGroupsManifest, EditableMode, ExtrasSpecification, InstallOptions,
+};
 use uv_distribution_filename::{DistExtension, SourceDistExtension};
 use uv_fs::Simplified;
 use uv_git_types::GitReference;
@@ -38,7 +40,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
         target: &impl Installable<'lock>,
         prune: &[PackageName],
         extras: &ExtrasSpecification,
-        dev: &DevGroupsManifest,
+        dev: &DependencyGroupsManifest,
         editable: EditableMode,
         hashes: bool,
         install_options: &'lock InstallOptions,

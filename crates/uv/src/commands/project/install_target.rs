@@ -5,7 +5,7 @@ use std::str::FromStr;
 use itertools::Either;
 use rustc_hash::FxHashSet;
 
-use uv_configuration::{DevGroupsManifest, ExtrasSpecification};
+use uv_configuration::{DependencyGroupsManifest, ExtrasSpecification};
 use uv_distribution_types::Index;
 use uv_normalize::PackageName;
 use uv_pypi_types::{LenientRequirement, VerbatimParsedUrl};
@@ -299,7 +299,10 @@ impl<'lock> InstallTarget<'lock> {
 
     /// Validate the dependency groups requested by the [`DependencyGroupSpecifier`].
     #[allow(clippy::result_large_err)]
-    pub(crate) fn validate_groups(self, groups: &DevGroupsManifest) -> Result<(), ProjectError> {
+    pub(crate) fn validate_groups(
+        self,
+        groups: &DependencyGroupsManifest,
+    ) -> Result<(), ProjectError> {
         // If no groups were specified, short-circuit.
         if groups.explicit_names().next().is_none() {
             return Ok(());
