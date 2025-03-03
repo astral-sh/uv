@@ -2090,13 +2090,13 @@ fn mixed() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         revision = 1
         requires-python = ">=3.12"
         conflicts = [[
-            { package = "project", group = "group1" },
             { package = "project", extra = "extra1" },
+            { package = "project", group = "group1" },
         ]]
 
         [options]
@@ -2141,7 +2141,7 @@ fn mixed() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
         ]
-        "###
+        "#
         );
     });
 
@@ -2189,14 +2189,14 @@ fn mixed() -> Result<()> {
      + sortedcontainers==2.4.0
     "###);
     // And finally, installing both the group and the extra should fail.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1").arg("--extra=extra1"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1").arg("--extra=extra1"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Group `group1` and extra `extra1` are incompatible with the declared conflicts: {`project:group1`, `project[extra1]`}
-    "###);
+    error: Extra `extra1` and group `group1` are incompatible with the declared conflicts: {`project[extra1]`, `project:group1`}
+    ");
 
     Ok(())
 }
@@ -3054,13 +3054,13 @@ fn shared_optional_dependency_extra1() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         revision = 1
         requires-python = ">=3.12"
         conflicts = [[
-            { package = "project", extra = "foo" },
             { package = "project", extra = "bar" },
+            { package = "project", extra = "foo" },
         ]]
 
         [options]
@@ -3130,7 +3130,7 @@ fn shared_optional_dependency_extra1() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -3194,13 +3194,13 @@ fn shared_optional_dependency_group1() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         revision = 1
         requires-python = ">=3.12"
         conflicts = [[
-            { package = "project", group = "foo" },
             { package = "project", group = "bar" },
+            { package = "project", group = "foo" },
         ]]
 
         [options]
@@ -3269,7 +3269,7 @@ fn shared_optional_dependency_group1() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -3480,13 +3480,13 @@ fn shared_optional_dependency_extra2() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         revision = 1
         requires-python = "==3.11.*"
         conflicts = [[
-            { package = "project", extra = "foo" },
             { package = "project", extra = "bar" },
+            { package = "project", extra = "foo" },
         ]]
 
         [options]
@@ -3556,7 +3556,7 @@ fn shared_optional_dependency_extra2() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -3621,13 +3621,13 @@ fn shared_optional_dependency_group2() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         revision = 1
         requires-python = "==3.11.*"
         conflicts = [[
-            { package = "project", group = "foo" },
             { package = "project", group = "bar" },
+            { package = "project", group = "foo" },
         ]]
 
         [options]
@@ -3700,7 +3700,7 @@ fn shared_optional_dependency_group2() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -3911,13 +3911,13 @@ fn shared_dependency_extra() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         revision = 1
         requires-python = ">=3.12"
         conflicts = [[
-            { package = "project", extra = "foo" },
             { package = "project", extra = "bar" },
+            { package = "project", extra = "foo" },
         ]]
 
         [options]
@@ -3987,7 +3987,7 @@ fn shared_dependency_extra() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -4086,13 +4086,13 @@ fn shared_dependency_group() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         revision = 1
         requires-python = ">=3.12"
         conflicts = [[
-            { package = "project", group = "foo" },
             { package = "project", group = "bar" },
+            { package = "project", group = "foo" },
         ]]
 
         [options]
@@ -4161,7 +4161,7 @@ fn shared_dependency_group() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -4988,13 +4988,13 @@ fn collision_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock,
-            @r###"
+            @r#"
         version = 1
         revision = 1
         requires-python = ">=3.12"
         conflicts = [[
-            { package = "pkg", extra = "foo" },
             { package = "pkg", extra = "bar" },
+            { package = "pkg", extra = "foo" },
         ]]
 
         [options]
@@ -5077,7 +5077,7 @@ fn collision_extra() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
         ]
-        "###
+        "#
         );
     });
 
@@ -10167,14 +10167,14 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 133 packages in [TIME]
-    "###);
+    Resolved 132 packages in [TIME]
+    ");
 
     let lock = context.read("uv.lock");
     insta::with_settings!({

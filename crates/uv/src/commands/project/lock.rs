@@ -396,7 +396,14 @@ async fn do_lock(
         .collect::<Result<BTreeMap<_, _>, ProjectError>>()?;
 
     // Collect the conflicts.
-    let conflicts = target.conflicts();
+    let mut conflicts = target.conflicts();
+    if let LockTarget::Workspace(workspace) = target {
+        if let Some(groups) = &workspace.pyproject_toml().dependency_groups {
+            if let Some(project) = &workspace.pyproject_toml().project {
+                conflicts.expand_transitive_group_includes(&project.name, groups);
+            }
+        }
+    }
 
     // Collect the list of supported environments.
     let environments = {
@@ -756,7 +763,7 @@ async fn do_lock(
                 None,
                 resolver_env,
                 python_requirement,
-                conflicts,
+                conflicts.clone(),
                 &client,
                 &flat_index,
                 state.index(),
@@ -787,7 +794,7 @@ async fn do_lock(
             let previous = existing_lock.map(ValidatedLock::into_lock);
             let lock = Lock::from_resolution(&resolution, target.install_path())?
                 .with_manifest(manifest)
-                .with_conflicts(target.conflicts())
+                .with_conflicts(conflicts)
                 .with_supported_environments(
                     environments
                         .cloned()
