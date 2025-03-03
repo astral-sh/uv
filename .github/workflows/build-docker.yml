@@ -82,6 +82,27 @@ jobs:
           platform=${{ matrix.platform }}
           echo "PLATFORM_TUPLE=${platform//\//-}" >> $GITHUB_ENV
 
+      - name: Docker build caches
+        uses: actions/cache@v4
+        id: docker-build-caches
+        with:
+          path: |
+            var-cache-apt
+            var-lib-apt
+            tool-caches
+          key: docker-caches-${{ matrix.platform }}-${{ hashFiles('Dockerfile') }}
+
+      - name: Inject build caches into docker
+        uses: reproducible-containers/buildkit-cache-dance@v3
+        with:
+          cache-map: |
+            {
+              "var-cache-apt": "/var/cache/apt",
+              "var-lib-apt": "/var/lib/apt",
+              "tool-caches": {"target": "/buildkit-cache", "id": "tool-caches"}
+            }
+          skip-extraction: ${{ steps.docker-build-caches.outputs.cache-hit }}
+
       # Adapted from https://docs.docker.com/build/ci/github-actions/multi-platform/
       - name: Build and push by digest
         id: build
