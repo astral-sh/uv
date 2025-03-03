@@ -162,7 +162,7 @@ impl DevGroupsSpecificationInner {
     /// you should ignore the project itself and all its dependencies,
     /// and instead just install the dependency-groups.
     ///
-    /// (This is really just asking if an --only flag was passed.)  
+    /// (This is really just asking if an --only flag was passed.)
     pub fn prod(&self) -> bool {
         !self.only_groups
     }
