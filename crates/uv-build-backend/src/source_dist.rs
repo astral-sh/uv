@@ -5,15 +5,16 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use fs_err::File;
 use globset::{Glob, GlobSet};
-use std::borrow::Cow;
 use std::io;
 use std::io::{BufReader, Cursor};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use tar::{EntryType, Header};
 use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename};
 use uv_fs::Simplified;
 use uv_globfilter::{parse_portable_glob, GlobDirFilter};
+use uv_pypi_types::Identifier;
 use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
 
@@ -67,10 +68,14 @@ fn source_dist_matcher(
     // pyproject.toml is always included.
     includes.push(globset::escape("pyproject.toml"));
 
-    let module_name = settings
-        .module_name
-        .map_or(pyproject_toml.name().as_dist_info_name(), Cow::from);
-    debug!("Module name is: {:?}", module_name);
+    let module_name = if let Some(module_name) = settings.module_name {
+        module_name
+    } else {
+        // Should never happen, the rules for package names (in dist-info formatting) are stricter
+        // than those for identifiers
+        Identifier::from_str(pyproject_toml.name().as_dist_info_name().as_ref())?
+    };
+    debug!("Module name: `{:?}`", module_name);
 
     // The wheel must not include any files included by the source distribution (at least until we
     // have files generated in the source dist -> wheel build step).
