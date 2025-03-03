@@ -5120,7 +5120,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
- "winsafe 0.0.22",
+ "winsafe 0.0.23",
 ]
 
 [[package]]
@@ -6481,9 +6481,9 @@ checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
 
 [[package]]
 name = "winsafe"
-version = "0.0.22"
+version = "0.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d6ad6cbd9c6e5144971e326303f0e453b61d82e4f72067fccf23106bccd8437"
+checksum = "a096fc628cb2c601e13c401ca0c354806424a7f5716000d69b76044eb8e624b9"
 
 [[package]]
 name = "wiremock"
