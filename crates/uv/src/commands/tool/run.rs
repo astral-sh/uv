@@ -17,6 +17,7 @@ use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, PreviewMode, TrustedHost};
 use uv_distribution_types::{Name, UnresolvedRequirement, UnresolvedRequirementSpecification};
+use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
@@ -89,7 +90,8 @@ pub(crate) async fn run(
     printer: Printer,
     preview: PreviewMode,
 ) -> anyhow::Result<ExitStatus> {
-    fn is_python_script(path: &Path) -> bool {
+    /// Whether or not a path looks like a Python script based on the file extension.
+    fn has_python_script_ext(path: &Path) -> bool {
         path.extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
     }
@@ -107,33 +109,41 @@ pub(crate) async fn run(
     };
 
     let Some(target) = target.to_str() else {
-        return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
+        return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name"));
     };
 
-    if let Some(ref f) = from {
-        let possible_script = Path::new(f);
-        if is_python_script(possible_script) {
+    if let Some(ref from) = from {
+        if has_python_script_ext(Path::new(from)) {
+            let package_name = PackageName::new(from.clone())?;
             return Err(anyhow::anyhow!(
-                "It looks you have passed a script instead of a package into `--from`. \n\n{}{} Did you mean to run a tool with `{}`?",
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    format!("{} --from {} {}", invocation_source, PackageName::new(possible_script.to_string_lossy().to_string())?.cyan(), target),
+                "It looks you provided a Python script to `--from`, which is not supported\n\n{}{} If you meant to run a command from the `{}` package, use the normalized package name instead to disambiguate, e.g., `{}`",
+                "hint".bold().cyan(),
+                ":".bold(),
+                package_name.cyan(),
+                format!("{} --from {} {}", invocation_source, package_name.cyan(), target),
             ));
         }
     } else {
-        let possible_script = Path::new(target);
-        if is_python_script(possible_script) {
-            return if possible_script.try_exists()? {
+        let target_path = Path::new(target);
+        if has_python_script_ext(target_path) {
+            return if target_path.try_exists()? {
                 Err(anyhow::anyhow!(
-                    "It looks like you are trying to run a script. Did you mean `{}`?",
-                    format!("uv run {}", possible_script.display()).cyan()
-                ))
-            } else {
-                Err(anyhow::anyhow!(
-                    "It looks like you are trying to run a script that doesn't exist. \n\n{}{} Did you mean to run a tool with `{}`?",
+                    "It looks you tried to run a Python script at `{}`, which is not supported by `{}`\n\n{}{} Use `{}` instead",
+                    target_path.user_display(),
+                    invocation_source,
                     "hint".bold().cyan(),
                     ":".bold(),
-                    format!("{} {}", invocation_source, PackageName::new(possible_script.to_string_lossy().to_string())?.cyan()),
+                    format!("uv run {}", target_path.user_display().cyan()),
+                ))
+            } else {
+                let package_name = PackageName::new(target.to_string())?;
+                Err(anyhow::anyhow!(
+                    "It looks you provided a Python script to run, which is not supported supported by `{}`\n\n{}{} We did not find a script at the requested path. If you meant to run a command from the `{}` package, pass the normalized package name to `--from` to disambiguate, e.g., `{}`",
+                    invocation_source,
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package_name.cyan(),
+                    format!("{} --from {} {}", invocation_source, package_name, target),
                 ))
             };
         }
