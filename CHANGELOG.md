@@ -3,6 +3,55 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.6.4
+
+### Enhancements
+
+- Upgrade pypy3.10 to v7.3.19 ([#11814](https://github.com/astral-sh/uv/pull/11814))
+- Allow configuring log verbosity from the CLI (i.e., `-vvv`) ([#11758](https://github.com/astral-sh/uv/pull/11758))
+- Warn when duplicate index names found in single file ([#11824](https://github.com/astral-sh/uv/pull/11824))
+
+### Bug fixes
+
+- Always store registry index on resolution packages ([#11815](https://github.com/astral-sh/uv/pull/11815))
+- Avoid error on relative paths in `uv tool uninstall` ([#11889](https://github.com/astral-sh/uv/pull/11889))
+- Avoid silently dropping errors in directory enumeration ([#11890](https://github.com/astral-sh/uv/pull/11890))
+- Disable interactive git terminal prompts during fetches ([#11744](https://github.com/astral-sh/uv/pull/11744))
+- Discover Windows registry (PEP 514) Python versions across 32/64-bit ([#11801](https://github.com/astral-sh/uv/pull/11801))
+- Don't panic on Ctrl-C in confirm prompt ([#11706](https://github.com/astral-sh/uv/pull/11706))
+- Fix non-directory in workspace on Windows ([#11833](https://github.com/astral-sh/uv/pull/11833))
+- Make interpreter caching robust to OS upgrades ([#11875](https://github.com/astral-sh/uv/pull/11875))
+- Respect `include-system-site-packages` in layered environments ([#11873](https://github.com/astral-sh/uv/pull/11873))
+- Suggest `uv tool update-shell` in PowerShell ([#11846](https://github.com/astral-sh/uv/pull/11846))
+- Update code page to `65001` before setting environment variables in virtual environments ([#11831](https://github.com/astral-sh/uv/pull/11831))
+- Use hash instead of full wheel name in wheels bucket ([#11738](https://github.com/astral-sh/uv/pull/11738))
+- Fix version string truncation while generating cache_key ([#11830](https://github.com/astral-sh/uv/pull/11830))
+- Explicitly handle ctrl-c in confirmation prompt instead of using a signal handler ([#11897](https://github.com/astral-sh/uv/pull/11897))
+
+### Performance
+
+- Avoid cloning to string when creating cache path ([#11772](https://github.com/astral-sh/uv/pull/11772))
+- Avoid redundant clones in version containment check ([#11767](https://github.com/astral-sh/uv/pull/11767))
+- Avoid string allocation when enumerating tool names ([#11910](https://github.com/astral-sh/uv/pull/11910))
+- Avoid using owned `String` for package name constructors ([#11768](https://github.com/astral-sh/uv/pull/11768))
+- Avoid using owned `String` in deserializers ([#11764](https://github.com/astral-sh/uv/pull/11764))
+- Migrate to `zlib-rs` (again) ([#11894](https://github.com/astral-sh/uv/pull/11894))
+- Remove unnecessary clones when adding package names ([#11771](https://github.com/astral-sh/uv/pull/11771))
+- Skip unquote allocation for non-quoted strings ([#11813](https://github.com/astral-sh/uv/pull/11813))
+- Use `SmallString` for filenames and URLs ([#11765](https://github.com/astral-sh/uv/pull/11765))
+- Use a Boxed slice for version specifiers ([#11766](https://github.com/astral-sh/uv/pull/11766))
+- Use matches over contains for extra value parsing ([#11770](https://github.com/astral-sh/uv/pull/11770))
+
+### Documentation
+
+- Avoid fallback to PyPI in mixed CPU/CUDA example ([#11115](https://github.com/astral-sh/uv/pull/11115))
+- Docs: Clarify that setting cache-keys overrides defaults ([#11895](https://github.com/astral-sh/uv/pull/11895))
+- Document our MSRV policy ([#11898](https://github.com/astral-sh/uv/pull/11898))
+- Fix reference to macOS cache path ([#11845](https://github.com/astral-sh/uv/pull/11845))
+- Fix typo in `no_default_groups` documentation and changelog ([#11928](https://github.com/astral-sh/uv/pull/11928))
+- Update the "Locking and syncing" page ([#11647](https://github.com/astral-sh/uv/pull/11647))
+- Update alternative indexes documentation to use new interface ([#10826](https://github.com/astral-sh/uv/pull/10826))
+
 ## 0.6.3
 
 ### Enhancements

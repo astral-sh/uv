@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.6.3"
+version = "0.6.4"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
