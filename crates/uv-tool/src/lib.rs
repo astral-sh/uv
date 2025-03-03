@@ -97,7 +97,7 @@ impl InstalledTools {
     #[allow(clippy::type_complexity)]
     pub fn tools(&self) -> Result<Vec<(PackageName, Result<Tool, Error>)>, Error> {
         let mut tools = Vec::new();
-        for directory in uv_fs::directories(self.root()) {
+        for directory in uv_fs::directories(self.root())? {
             let name = directory.file_name().unwrap().to_string_lossy().to_string();
             let name = PackageName::from_str(&name)?;
             let path = directory.join("uv-receipt.toml");

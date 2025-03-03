@@ -425,6 +425,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains a compatible wheel, return it.
         if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard)
+            .ok()
+            .flatten()
             .filter(|built_wheel| built_wheel.matches(source.name(), source.version()))
         {
             return Ok(built_wheel.with_hashes(revision.into_hashes()));
@@ -795,6 +797,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains a compatible wheel, return it.
         if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard)
+            .ok()
+            .flatten()
             .filter(|built_wheel| built_wheel.matches(source.name(), source.version()))
         {
             return Ok(built_wheel);
@@ -1097,6 +1101,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains a compatible wheel, return it.
         if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard)
+            .ok()
+            .flatten()
             .filter(|built_wheel| built_wheel.matches(source.name(), source.version()))
         {
             return Ok(built_wheel);
@@ -1474,6 +1480,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains a compatible wheel, return it.
         if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard)
+            .ok()
+            .flatten()
             .filter(|built_wheel| built_wheel.matches(source.name(), source.version()))
         {
             return Ok(built_wheel);
