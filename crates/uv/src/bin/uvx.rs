@@ -48,15 +48,25 @@ fn get_uvx_suffix(current_exe: &Path) -> std::io::Result<&str> {
     Ok(uvx_suffix)
 }
 
-fn get_uv_path(current_exe_parent: &Path, uvx_suffix: &str) -> PathBuf {
+fn get_uv_path(current_exe_parent: &Path, uvx_suffix: &str) -> std::io::Result<PathBuf> {
     let uv_with_suffix =
         current_exe_parent.join(format!("uv{}{}", uvx_suffix, std::env::consts::EXE_SUFFIX));
+    let uv = current_exe_parent.join(format!("uv{}", std::env::consts::EXE_SUFFIX));
 
     // fall back to plain `uv` if the suffixed version doesn't exist
     if uv_with_suffix.exists() {
-        uv_with_suffix
+        Ok(uv_with_suffix)
+    } else if uv.exists() {
+        Ok(uv)
     } else {
-        current_exe_parent.join(format!("uv{}", std::env::consts::EXE_SUFFIX))
+        Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!(
+                "Could not find uv binary at {} or {}",
+                uv_with_suffix.to_str().unwrap_or("[invalid path]"),
+                uv.to_str().unwrap_or("[invalid path]"),
+            ),
+        ))
     }
 }
 
@@ -69,7 +79,7 @@ fn run() -> std::io::Result<ExitStatus> {
         ));
     };
     let uvx_suffix = get_uvx_suffix(&current_exe)?;
-    let uv = get_uv_path(bin, uvx_suffix);
+    let uv = get_uv_path(bin, uvx_suffix)?;
     let args = ["tool", "uvx"]
         .iter()
         .map(OsString::from)
