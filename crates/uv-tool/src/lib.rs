@@ -98,8 +98,13 @@ impl InstalledTools {
     pub fn tools(&self) -> Result<Vec<(PackageName, Result<Tool, Error>)>, Error> {
         let mut tools = Vec::new();
         for directory in uv_fs::directories(self.root())? {
-            let name = directory.file_name().unwrap().to_string_lossy().to_string();
-            let name = PackageName::from_str(&name)?;
+            let Some(name) = directory
+                .file_name()
+                .and_then(|file_name| file_name.to_str())
+            else {
+                continue;
+            };
+            let name = PackageName::from_str(name)?;
             let path = directory.join("uv-receipt.toml");
             let contents = match fs_err::read_to_string(&path) {
                 Ok(contents) => contents,
