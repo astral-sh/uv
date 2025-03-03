@@ -147,14 +147,14 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -321,14 +321,14 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -496,14 +496,14 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -703,14 +703,14 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -849,14 +849,14 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -1034,14 +1034,14 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -1262,14 +1262,14 @@ fn resolve_index_url() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -1498,14 +1498,14 @@ fn resolve_index_url() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -1697,14 +1697,14 @@ fn resolve_find_links() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -1865,14 +1865,14 @@ fn resolve_top_level() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -2085,14 +2085,14 @@ fn resolve_top_level() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -2288,14 +2288,14 @@ fn resolve_top_level() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -2456,14 +2456,14 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -2607,14 +2607,14 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -2758,14 +2758,14 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -2911,14 +2911,14 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -3244,14 +3244,14 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -3453,14 +3453,14 @@ fn resolve_both() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -3750,14 +3750,14 @@ fn resolve_config_file() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -3995,14 +3995,14 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -4149,14 +4149,14 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -4322,14 +4322,14 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -4548,14 +4548,14 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -4753,14 +4753,14 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -4964,14 +4964,14 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -5170,14 +5170,14 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -5383,14 +5383,14 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -5589,14 +5589,14 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -5748,14 +5748,14 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -5893,14 +5893,14 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -6036,14 +6036,14 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -6181,14 +6181,14 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -6324,14 +6324,14 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -6468,14 +6468,14 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],

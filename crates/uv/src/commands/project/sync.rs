@@ -10,7 +10,7 @@ use owo_colors::OwoColorize;
 use uv_cache::Cache;
 use uv_client::{FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, DryRun, EditableMode,
+    Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
     ExtrasSpecification, HashCheckingMode, InstallOptions, PreviewMode,
 };
 use uv_dispatch::BuildDispatch;
@@ -56,7 +56,7 @@ pub(crate) async fn sync(
     all_packages: bool,
     package: Option<PackageName>,
     extras: ExtrasSpecification,
-    dev: DevGroupsSpecification,
+    dev: DependencyGroups,
     editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
@@ -507,7 +507,7 @@ pub(super) async fn do_sync(
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
     extras: &ExtrasSpecification,
-    dev: &DevGroupsManifest,
+    dev: &DependencyGroupsWithDefaults,
     editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,

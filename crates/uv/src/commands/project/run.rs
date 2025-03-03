@@ -17,7 +17,7 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, DevGroupsSpecification, DryRun, EditableMode, ExtrasSpecification, InstallOptions,
+    Concurrency, DependencyGroups, DryRun, EditableMode, ExtrasSpecification, InstallOptions,
     PreviewMode,
 };
 use uv_fs::which::is_executable;
@@ -74,7 +74,7 @@ pub(crate) async fn run(
     no_project: bool,
     no_config: bool,
     extras: ExtrasSpecification,
-    dev: DevGroupsSpecification,
+    dev: DependencyGroups,
     editable: EditableMode,
     modifications: Modifications,
     python: Option<String>,

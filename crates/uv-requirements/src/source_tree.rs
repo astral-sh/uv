@@ -7,7 +7,7 @@ use futures::stream::FuturesOrdered;
 use futures::TryStreamExt;
 use url::Url;
 
-use uv_configuration::{DevGroupsSpecification, ExtrasSpecification};
+use uv_configuration::{DependencyGroups, ExtrasSpecification};
 use uv_distribution::{DistributionDatabase, FlatRequiresDist, Reporter, RequiresDist};
 use uv_distribution_types::{
     BuildableSource, DirectorySourceUrl, HashGeneration, HashPolicy, SourceUrl, VersionId,
@@ -37,7 +37,7 @@ pub struct SourceTreeResolver<'a, Context: BuildContext> {
     /// The extras to include when resolving requirements.
     extras: &'a ExtrasSpecification,
     /// The groups to include when resolving requirements.
-    groups: &'a DevGroupsSpecification,
+    groups: &'a DependencyGroups,
     /// The hash policy to enforce.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -50,7 +50,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
     /// Instantiate a new [`SourceTreeResolver`] for a given set of `source_trees`.
     pub fn new(
         extras: &'a ExtrasSpecification,
-        groups: &'a DevGroupsSpecification,
+        groups: &'a DependencyGroups,
         hasher: &'a HashStrategy,
         index: &'a InMemoryIndex,
         database: DistributionDatabase<'a, Context>,

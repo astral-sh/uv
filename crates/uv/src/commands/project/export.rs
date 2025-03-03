@@ -8,8 +8,8 @@ use uv_settings::PythonInstallMirrors;
 
 use uv_cache::Cache;
 use uv_configuration::{
-    Concurrency, DevGroupsSpecification, EditableMode, ExportFormat, ExtrasSpecification,
-    InstallOptions, PreviewMode,
+    Concurrency, DependencyGroups, EditableMode, ExportFormat, ExtrasSpecification, InstallOptions,
+    PreviewMode,
 };
 use uv_normalize::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
@@ -59,7 +59,7 @@ pub(crate) async fn export(
     install_options: InstallOptions,
     output_file: Option<PathBuf>,
     extras: ExtrasSpecification,
-    dev: DevGroupsSpecification,
+    dev: DependencyGroups,
     editable: EditableMode,
     locked: bool,
     frozen: bool,
