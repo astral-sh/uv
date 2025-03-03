@@ -443,8 +443,8 @@ impl schemars::JsonSchema for SchemaConflictItem {
         "SchemaConflictItem".to_string()
     }
 
-    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-        <ConflictItemWire as schemars::JsonSchema>::json_schema(gen)
+    fn json_schema(r#gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
+        <ConflictItemWire as schemars::JsonSchema>::json_schema(r#gen)
     }
 }
 
