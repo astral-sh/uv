@@ -520,98 +520,7 @@ impl ManagedPythonDownload {
                     serde_json::from_str(BUILTIN_PYTHON_DOWNLOADS_JSON)?
                 };
 
-            let result = json_downloads
-                .into_iter()
-                .filter_map(|(key, entry)| {
-                    let implementation = match entry.name.as_str() {
-                        "cpython" => LenientImplementationName::Known(ImplementationName::CPython),
-                        "pypy" => LenientImplementationName::Known(ImplementationName::PyPy),
-                        _ => LenientImplementationName::Unknown(entry.name.clone()),
-                    };
-
-                    let arch_str = if let Some(variant) = entry.arch.variant {
-                        format!("{}_{}", entry.arch.family, variant)
-                    } else {
-                        entry.arch.family
-                    };
-
-                    let arch = match Arch::from_str(&arch_str) {
-                        Ok(arch) => arch,
-                        Err(e) => {
-                            debug!("Skipping entry {key}: Invalid arch '{arch_str}' - {e}");
-                            return None;
-                        }
-                    };
-
-                    let os = match Os::from_str(&entry.os) {
-                        Ok(os) => os,
-                        Err(e) => {
-                            debug!("Skipping entry {}: Invalid OS '{}' - {}", key, entry.os, e);
-                            return None;
-                        }
-                    };
-
-                    let libc = match Libc::from_str(&entry.libc) {
-                        Ok(libc) => libc,
-                        Err(e) => {
-                            debug!(
-                                "Skipping entry {}: Invalid libc '{}' - {}",
-                                key, entry.libc, e
-                            );
-                            return None;
-                        }
-                    };
-
-                    let variant = entry
-                        .variant
-                        .as_deref()
-                        .map(PythonVariant::from_str)
-                        .transpose()
-                        .unwrap_or_else(|()| {
-                            debug!(
-                                "Skipping entry {key}: Unknown python variant - {}",
-                                entry.variant.unwrap_or_default()
-                            );
-                            None
-                        })
-                        .unwrap_or(PythonVariant::Default);
-
-                    let version_str = format!(
-                        "{}.{}.{}{}",
-                        entry.major,
-                        entry.minor,
-                        entry.patch,
-                        entry.prerelease.as_deref().unwrap_or_default()
-                    );
-
-                    let version = match PythonVersion::from_str(&version_str) {
-                        Ok(version) => version,
-                        Err(e) => {
-                            debug!("Skipping entry {key}: Invalid version '{version_str}' - {e}");
-                            return None;
-                        }
-                    };
-
-                    let url = Box::leak(entry.url.into_boxed_str()) as &'static str;
-                    let sha256 = entry
-                        .sha256
-                        .map(|s| Box::leak(s.into_boxed_str()) as &'static str);
-
-                    Some(ManagedPythonDownload {
-                        key: PythonInstallationKey::new_from_version(
-                            implementation,
-                            &version,
-                            os,
-                            arch,
-                            libc,
-                            variant,
-                        ),
-                        url,
-                        sha256,
-                    })
-                })
-                .sorted_by(|a, b| Ord::cmp(&b.key, &a.key))
-                .collect();
+            let result = parse_json_downloads(json_downloads);
             Ok(Cow::Owned(result))
         })?;
 
@@ -849,6 +758,103 @@ impl ManagedPythonDownload {
 
         Ok(Url::parse(self.url)?)
     }
+}
+
+fn parse_json_downloads(
+    json_downloads: HashMap<String, JsonPythonDownload>,
+) -> Vec<ManagedPythonDownload> {
+    json_downloads
+        .into_iter()
+        .filter_map(|(key, entry)| {
+            let implementation = match entry.name.as_str() {
+                "cpython" => LenientImplementationName::Known(ImplementationName::CPython),
+                "pypy" => LenientImplementationName::Known(ImplementationName::PyPy),
+                _ => LenientImplementationName::Unknown(entry.name.clone()),
+            };
+
+            let arch_str = if let Some(variant) = entry.arch.variant {
+                format!("{}_{}", entry.arch.family, variant)
+            } else {
+                entry.arch.family
+            };
+
+            let arch = match Arch::from_str(&arch_str) {
+                Ok(arch) => arch,
+                Err(e) => {
+                    debug!("Skipping entry {key}: Invalid arch '{arch_str}' - {e}");
+                    return None;
+                }
+            };
+
+            let os = match Os::from_str(&entry.os) {
+                Ok(os) => os,
+                Err(e) => {
+                    debug!("Skipping entry {}: Invalid OS '{}' - {}", key, entry.os, e);
+                    return None;
+                }
+            };
+
+            let libc = match Libc::from_str(&entry.libc) {
+                Ok(libc) => libc,
+                Err(e) => {
+                    debug!(
+                        "Skipping entry {}: Invalid libc '{}' - {}",
+                        key, entry.libc, e
+                    );
+                    return None;
+                }
+            };
+
+            let variant = entry
+                .variant
+                .as_deref()
+                .map(PythonVariant::from_str)
+                .transpose()
+                .unwrap_or_else(|()| {
+                    debug!(
+                        "Skipping entry {key}: Unknown python variant - {}",
+                        entry.variant.unwrap_or_default()
+                    );
+                    None
+                })
+                .unwrap_or(PythonVariant::Default);
+
+            let version_str = format!(
+                "{}.{}.{}{}",
+                entry.major,
+                entry.minor,
+                entry.patch,
+                entry.prerelease.as_deref().unwrap_or_default()
+            );
+
+            let version = match PythonVersion::from_str(&version_str) {
+                Ok(version) => version,
+                Err(e) => {
+                    debug!("Skipping entry {key}: Invalid version '{version_str}' - {e}");
+                    return None;
+                }
+            };
+
+            let url = Box::leak(entry.url.into_boxed_str()) as &'static str;
+            let sha256 = entry
+                .sha256
+                .map(|s| Box::leak(s.into_boxed_str()) as &'static str);
+
+            Some(ManagedPythonDownload {
+                key: PythonInstallationKey::new_from_version(
+                    implementation,
+                    &version,
+                    os,
+                    arch,
+                    libc,
+                    variant,
+                ),
+                url,
+                sha256,
+            })
+        })
+        .sorted_by(|a, b| Ord::cmp(&b.key, &a.key))
+        .collect()
 }
 
 impl Error {
