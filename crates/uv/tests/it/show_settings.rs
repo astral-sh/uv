@@ -3120,25 +3120,6 @@ fn resolve_tool() -> anyhow::Result<()> {
                 no_index: false,
             },
             index_strategy: FirstIndex,
-            url_auth_policies: UrlAuthPolicies(
-                {
-                    Url {
-                        scheme: "https",
-                        cannot_be_a_base: false,
-                        username: "",
-                        password: None,
-                        host: Some(
-                            Domain(
-                                "pypi.org",
-                            ),
-                        ),
-                        port: None,
-                        path: "/simple",
-                        query: None,
-                        fragment: None,
-                    }: Auto,
-                },
-            ),
             keyring_provider: Disabled,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,

@@ -236,11 +236,8 @@ impl<'a> BaseClientBuilder<'a> {
         );
 
         // Wrap in any relevant middleware and handle connectivity.
-        let client = self.apply_middleware(raw_client.clone(), self.url_auth_policies.as_ref());
-        let dangerous_client = self.apply_middleware(
-            raw_dangerous_client.clone(),
-            self.url_auth_policies.as_ref(),
-        );
+        let client = self.apply_middleware(raw_client.clone());
+        let dangerous_client = self.apply_middleware(raw_dangerous_client.clone());
 
         BaseClient {
             connectivity: self.connectivity,
@@ -257,12 +254,8 @@ impl<'a> BaseClientBuilder<'a> {
     /// Share the underlying client between two different middleware configurations.
     pub fn wrap_existing(&self, existing: &BaseClient) -> BaseClient {
         // Wrap in any relevant middleware and handle connectivity.
-        let client =
-            self.apply_middleware(existing.raw_client.clone(), self.url_auth_policies.as_ref());
-        let dangerous_client = self.apply_middleware(
-            existing.raw_dangerous_client.clone(),
-            self.url_auth_policies.as_ref(),
-        );
+        let client = self.apply_middleware(existing.raw_client.clone());
+        let dangerous_client = self.apply_middleware(existing.raw_dangerous_client.clone());
 
         BaseClient {
             connectivity: self.connectivity,
@@ -321,11 +314,7 @@ impl<'a> BaseClientBuilder<'a> {
             .expect("Failed to build HTTP client.")
     }
 
-    fn apply_middleware(
-        &self,
-        client: Client,
-        url_auth_policies: Option<&UrlAuthPolicies>,
-    ) -> ClientWithMiddleware {
+    fn apply_middleware(&self, client: Client) -> ClientWithMiddleware {
         match self.connectivity {
             Connectivity::Online => {
                 let mut client = reqwest_middleware::ClientBuilder::new(client);
@@ -345,7 +334,7 @@ impl<'a> BaseClientBuilder<'a> {
                     AuthIntegration::Default => {
                         let mut auth_middleware =
                             AuthMiddleware::new().with_keyring(self.keyring.to_provider());
-                        if let Some(url_auth_policies) = url_auth_policies {
+                        if let Some(url_auth_policies) = &self.url_auth_policies {
                             auth_middleware =
                                 auth_middleware.with_url_auth_policies(url_auth_policies.clone());
                         }

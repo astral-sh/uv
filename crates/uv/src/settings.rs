@@ -6,7 +6,6 @@ use std::str::FromStr;
 
 use url::Url;
 
-use uv_auth::UrlAuthPolicies;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
@@ -2382,7 +2381,6 @@ impl VenvSettings {
 pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) index_locations: &'a IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
-    pub(crate) url_auth_policies: &'a UrlAuthPolicies,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) dependency_metadata: &'a DependencyMetadata,
     pub(crate) config_setting: &'a ConfigSettings,
@@ -2405,7 +2403,6 @@ pub(crate) struct InstallerSettingsRef<'a> {
 pub(crate) struct ResolverSettings {
     pub(crate) index_locations: IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
-    pub(crate) url_auth_policies: UrlAuthPolicies,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
@@ -2425,7 +2422,6 @@ pub(crate) struct ResolverSettings {
 pub(crate) struct ResolverSettingsRef<'a> {
     pub(crate) index_locations: &'a IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
-    pub(crate) url_auth_policies: &'a UrlAuthPolicies,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
@@ -2458,7 +2454,6 @@ impl ResolverSettings {
         ResolverSettingsRef {
             index_locations: &self.index_locations,
             index_strategy: self.index_strategy,
-            url_auth_policies: &self.url_auth_policies,
             keyring_provider: self.keyring_provider,
             resolution: self.resolution,
             prerelease: self.prerelease,
@@ -2494,7 +2489,6 @@ impl From<ResolverOptions> for ResolverSettings {
                 .collect(),
             value.no_index.unwrap_or_default(),
         );
-        let url_auth_policies = (&index_locations).into();
         Self {
             index_locations,
             resolution: value.resolution.unwrap_or_default(),
@@ -2504,7 +2498,6 @@ impl From<ResolverOptions> for ResolverSettings {
                 value.dependency_metadata.into_iter().flatten(),
             ),
             index_strategy: value.index_strategy.unwrap_or_default(),
-            url_auth_policies,
             keyring_provider: value.keyring_provider.unwrap_or_default(),
             config_setting: value.config_settings.unwrap_or_default(),
             no_build_isolation: value.no_build_isolation.unwrap_or_default(),
@@ -2533,7 +2526,6 @@ impl From<ResolverOptions> for ResolverSettings {
 pub(crate) struct ResolverInstallerSettingsRef<'a> {
     pub(crate) index_locations: &'a IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
-    pub(crate) url_auth_policies: &'a UrlAuthPolicies,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
@@ -2561,7 +2553,6 @@ pub(crate) struct ResolverInstallerSettingsRef<'a> {
 pub(crate) struct ResolverInstallerSettings {
     pub(crate) index_locations: IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
-    pub(crate) url_auth_policies: UrlAuthPolicies,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
@@ -2599,7 +2590,6 @@ impl ResolverInstallerSettings {
         ResolverInstallerSettingsRef {
             index_locations: &self.index_locations,
             index_strategy: self.index_strategy,
-            url_auth_policies: &self.url_auth_policies,
             keyring_provider: self.keyring_provider,
             resolution: self.resolution,
             prerelease: self.prerelease,
@@ -2637,7 +2627,6 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 .collect(),
             value.no_index.unwrap_or_default(),
         );
-        let url_auth_policies = (&index_locations).into();
         Self {
             index_locations,
             resolution: value.resolution.unwrap_or_default(),
@@ -2647,7 +2636,6 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 value.dependency_metadata.into_iter().flatten(),
             ),
             index_strategy: value.index_strategy.unwrap_or_default(),
-            url_auth_policies,
             keyring_provider: value.keyring_provider.unwrap_or_default(),
             config_setting: value.config_settings.unwrap_or_default(),
             no_build_isolation: value.no_build_isolation.unwrap_or_default(),
@@ -3042,7 +3030,6 @@ impl<'a> From<ResolverInstallerSettingsRef<'a>> for ResolverSettingsRef<'a> {
         Self {
             index_locations: settings.index_locations,
             index_strategy: settings.index_strategy,
-            url_auth_policies: settings.url_auth_policies,
             keyring_provider: settings.keyring_provider,
             resolution: settings.resolution,
             prerelease: settings.prerelease,
@@ -3065,7 +3052,6 @@ impl<'a> From<ResolverInstallerSettingsRef<'a>> for InstallerSettingsRef<'a> {
         Self {
             index_locations: settings.index_locations,
             index_strategy: settings.index_strategy,
-            url_auth_policies: settings.url_auth_policies,
             keyring_provider: settings.keyring_provider,
             dependency_metadata: settings.dependency_metadata,
             config_setting: settings.config_setting,

@@ -4,6 +4,7 @@ use anstream::print;
 use anyhow::{Error, Result};
 use futures::StreamExt;
 use tokio::sync::Semaphore;
+use uv_auth::UrlAuthPolicies;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::RegistryClientBuilder;
@@ -180,10 +181,9 @@ pub(crate) async fn tree(
             PackageMap::default()
         } else {
             let ResolverSettings {
-                index_locations: _,
+                index_locations,
                 index_strategy: _,
                 keyring_provider,
-                url_auth_policies,
                 resolution: _,
                 prerelease: _,
                 fork_strategy: _,
@@ -207,7 +207,7 @@ pub(crate) async fn tree(
             .native_tls(network_settings.native_tls)
             .connectivity(network_settings.connectivity)
             .allow_insecure_host(network_settings.allow_insecure_host.clone())
-            .url_auth_policies(url_auth_policies.clone())
+            .url_auth_policies(UrlAuthPolicies::from(index_locations))
             .keyring(*keyring_provider)
             .build();
             let download_concurrency = Semaphore::new(concurrency.downloads);

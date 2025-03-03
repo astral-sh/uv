@@ -175,6 +175,28 @@ url = "https://public:koala@pypi-proxy.corp.dev/simple"
 For security purposes, credentials are _never_ stored in the `uv.lock` file; as such, uv _must_ have
 access to the authenticated URL at installation time.
 
+## Configuring authentication for indexes
+
+By default, when sending requests to an index, uv will first attempt an unauthenticated request. If
+that fails, it will search for credentials and attempt an authenticated request.
+
+It is possible to change this default behavior for an index by providing an authentication policy:
+
+```toml
+[[tool.uv.index]]
+name = "example"
+url = "https://example.com/simple"
+auth-policy = "always"
+```
+
+The following values are supported for `auth-policy`:
+
+- `auto` (default): First attempt an unauthenticated request. If that fails, search for credentials
+  and attempt an authenticated request.
+- `always`: Always search for credentials and attempt an authenticated request. If that fails, the
+  request fails.
+- `never`: Only attempt an unauthenticated request. If that fails, the request fails.
+
 ## `--index-url` and `--extra-index-url`
 
 In addition to the `[[tool.uv.index]]` configuration option, uv supports pip-style `--index-url` and

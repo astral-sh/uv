@@ -10,6 +10,7 @@ use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::instrument;
+use uv_auth::UrlAuthPolicies;
 
 use crate::commands::pip::operations;
 use crate::commands::project::{find_requires_python, ProjectError};
@@ -197,7 +198,6 @@ async fn build_impl(
     let ResolverSettingsRef {
         index_locations,
         index_strategy,
-        url_auth_policies: _,
         keyring_provider,
         resolution: _,
         prerelease: _,
@@ -522,7 +522,7 @@ async fn build_package(
         .native_tls(network_settings.native_tls)
         .connectivity(network_settings.connectivity)
         .allow_insecure_host(network_settings.allow_insecure_host.clone())
-        .url_auth_policies((index_locations).into())
+        .url_auth_policies(UrlAuthPolicies::from(index_locations))
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)

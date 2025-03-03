@@ -1,11 +1,11 @@
 use std::sync::{Arc, LazyLock};
 
 use http::{Extensions, StatusCode};
-use rustc_hash::FxHashMap;
 use url::Url;
 
 use crate::{
     credentials::{Credentials, Username},
+    policy::{AuthPolicy, UrlAuthPolicies},
     realm::Realm,
     CredentialsCache, KeyringProvider, CREDENTIALS_CACHE,
 };
@@ -46,54 +46,6 @@ impl NetrcMode {
             NetrcMode::Enabled(netrc) => Some(netrc),
             NetrcMode::Disabled => None,
         }
-    }
-}
-
-#[derive(Copy, Clone, Debug, Default, Hash, Eq, PartialEq)]
-pub enum AuthPolicy {
-    /// Attempt to authenticate if needed.
-    #[default]
-    Auto,
-    /// Always attempt to authenticate.
-    Always,
-    /// Never attempt to authenticate.
-    Never,
-}
-
-#[derive(Debug, Default, Clone, Eq, PartialEq)]
-pub struct UrlAuthPolicies(FxHashMap<Url, AuthPolicy>);
-
-impl UrlAuthPolicies {
-    pub fn new() -> Self {
-        Self(FxHashMap::default())
-    }
-
-    /// Create a new `UrlAuthPolicies` from a list of URL and `AuthPolicy`
-    /// tuples.
-    pub fn from_tuples(tuples: &[(Url, AuthPolicy)]) -> Self {
-        let mut auth_policies = UrlAuthPolicies::new();
-        for (url, auth_policy) in tuples {
-            auth_policies.add_policy(url.clone(), *auth_policy);
-        }
-        auth_policies
-    }
-
-    /// An an `AuthPolicy` for a URL.
-    pub fn add_policy(&mut self, url: Url, auth_policy: AuthPolicy) {
-        self.0.insert(url, auth_policy);
-    }
-
-    /// Get the `AuthPolicy` for a URL.
-    pub fn policy_for(&self, url: &Url) -> AuthPolicy {
-        // TODO: There are probably not many URLs to iterate through,
-        // but we could use a trie instead of a HashMap here for more
-        // efficient search.
-        for (auth_url, auth_policy) in &self.0 {
-            if url.as_str().starts_with(auth_url.as_str()) {
-                return *auth_policy;
-            }
-        }
-        AuthPolicy::Auto
     }
 }
 
@@ -224,65 +176,36 @@ impl Middleware for AuthMiddleware {
         next: Next<'_>,
     ) -> reqwest_middleware::Result<Response> {
         // Check for credentials attached to the request already
-        let credentials = Credentials::from_request(&request);
+        let request_credentials = Credentials::from_request(&request);
 
         // In the middleware, existing credentials are already moved from the URL
         // to the headers so for display purposes we restore some information
-        let url = tracing_url(&request, credentials.as_ref());
+        let url = tracing_url(&request, request_credentials.as_ref());
         trace!("Handling request for {url}");
 
-        if let Some(credentials) = credentials {
-            let credentials = Arc::new(credentials);
+        let auth_policy = self.url_auth_policies.policy_for(request.url());
 
-            // If there's a password, send the request and cache
-            if credentials.password().is_some() {
-                trace!("Request for {url} is already fully authenticated");
+        let credentials: Option<Arc<Credentials>> = if matches!(auth_policy, AuthPolicy::Never) {
+            None
+        } else {
+            if let Some(request_credentials) = request_credentials {
                 return self
-                    .complete_request(Some(credentials), request, extensions, next)
+                    .complete_request_with_request_credentials(
+                        request_credentials,
+                        request,
+                        extensions,
+                        next,
+                        &url,
+                    )
                     .await;
             }
 
-            trace!("Request for {url} is missing a password, looking for credentials");
-            // There's just a username, try to find a password
-            let credentials = if let Some(credentials) = self
-                .cache()
-                .get_realm(Realm::from(request.url()), credentials.to_username())
-            {
-                request = credentials.authenticate(request);
-                // Do not insert already-cached credentials
-                None
-            } else if let Some(credentials) = self
-                .cache()
-                .get_url(request.url(), credentials.as_username())
-            {
-                request = credentials.authenticate(request);
-                // Do not insert already-cached credentials
-                None
-            } else if let Some(credentials) = self
-                .fetch_credentials(Some(&credentials), request.url())
-                .await
-            {
-                request = credentials.authenticate(request);
-                Some(credentials)
-            } else {
-                // If we don't find a password, we'll still attempt the request with the existing credentials
-                Some(credentials)
-            };
+            // We have no credentials
+            trace!("Request for {url} is unauthenticated, checking cache");
 
-            return self
-                .complete_request(credentials, request, extensions, next)
-                .await;
-        }
-
-        // We have no credentials
-        trace!("Request for {url} is unauthenticated, checking cache");
-
-        let auth_policy = self.url_auth_policies.policy_for(request.url());
-        let mut credentials: Option<Arc<Credentials>> = None;
-        if !matches!(auth_policy, AuthPolicy::Never) {
             // Check the cache for a URL match first. This can save us from
             // making a failing request
-            credentials = self.cache().get_url(request.url(), &Username::none());
+            let credentials = self.cache().get_url(request.url(), &Username::none());
             if let Some(credentials) = credentials.as_ref() {
                 request = credentials.authenticate(request);
 
@@ -296,7 +219,8 @@ impl Middleware for AuthMiddleware {
                 // if it fails
                 trace!("Found username for {url} in cache, attempting request");
             }
-        }
+            credentials
+        };
         let attempt_has_username = credentials
             .as_ref()
             .is_some_and(|credentials| credentials.username().is_some());
@@ -429,6 +353,57 @@ impl AuthMiddleware {
         };
 
         result
+    }
+
+    /// Use known request credentials to complete the request.
+    async fn complete_request_with_request_credentials(
+        &self,
+        credentials: Credentials,
+        mut request: Request,
+        extensions: &mut Extensions,
+        next: Next<'_>,
+        url: &str,
+    ) -> reqwest_middleware::Result<Response> {
+        let credentials = Arc::new(credentials);
+
+        // If there's a password, send the request and cache
+        if credentials.password().is_some() {
+            trace!("Request for {url} is already fully authenticated");
+            return self
+                .complete_request(Some(credentials), request, extensions, next)
+                .await;
+        }
+
+        trace!("Request for {url} is missing a password, looking for credentials");
+        // There's just a username, try to find a password
+        let credentials = if let Some(credentials) = self
+            .cache()
+            .get_realm(Realm::from(request.url()), credentials.to_username())
+        {
+            request = credentials.authenticate(request);
+            // Do not insert already-cached credentials
+            None
+        } else if let Some(credentials) = self
+            .cache()
+            .get_url(request.url(), &credentials.to_username())
+        {
+            request = credentials.authenticate(request);
+            // Do not insert already-cached credentials
+            None
+        } else if let Some(credentials) = self
+            .fetch_credentials(Some(&credentials), request.url())
+            .await
+        {
+            request = credentials.authenticate(request);
+            Some(credentials)
+        } else {
+            // If we don't find a password, we'll still attempt the request with the existing credentials
+            Some(credentials)
+        };
+
+        return self
+            .complete_request(credentials, request, extensions, next)
+            .await;
     }
 
     /// Fetch credentials for a URL.
@@ -1607,6 +1582,196 @@ mod tests {
                 .status(),
             401, // INCORRECT BEHAVIOR
             "Requests to other paths in the failing prefix will also fail"
+        );
+
+        Ok(())
+    }
+
+    fn auth_policies_for(url: &Url, policy: AuthPolicy) -> UrlAuthPolicies {
+        let mut url = url.clone();
+        let mut policies = UrlAuthPolicies::new();
+        url.set_password(None).ok();
+        url.set_username("").ok();
+        policies.add_policy(url, policy);
+        policies
+    }
+
+    /// With the "always" auth policy, requests should succeed on
+    /// authenticated requests with the correct credentials.
+    #[test(tokio::test)]
+    async fn test_auth_policy_always_with_credentials() -> Result<(), Error> {
+        let username = "user";
+        let password = "password";
+
+        let server = start_test_server(username, password).await;
+
+        let base_url = Url::parse(&server.uri())?;
+
+        let auth_policies = auth_policies_for(&base_url, AuthPolicy::Always);
+        let client = test_client_builder()
+            .with(
+                AuthMiddleware::new()
+                    .with_cache(CredentialsCache::new())
+                    .with_url_auth_policies(auth_policies),
+            )
+            .build();
+
+        Mock::given(method("GET"))
+            .and(path_regex("/*"))
+            .and(basic_auth(username, password))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        let mut url = base_url.clone();
+        url.set_username(username).unwrap();
+        url.set_password(Some(password)).unwrap();
+        assert_eq!(client.get(url).send().await?.status(), 200);
+
+        assert_eq!(
+            client
+                .get(format!("{}/foo", server.uri()))
+                .send()
+                .await?
+                .status(),
+            200,
+            "Requests can be to different paths with index URL as prefix"
+        );
+
+        let mut url = base_url.clone();
+        url.set_username(username).unwrap();
+        url.set_password(Some("invalid")).unwrap();
+        assert_eq!(
+            client.get(url).send().await?.status(),
+            401,
+            "Incorrect credentials should fail"
+        );
+
+        Ok(())
+    }
+
+    /// With the "always" auth policy, requests should fail if only
+    /// unauthenticated requests are supported.
+    #[test(tokio::test)]
+    async fn test_auth_policy_always_unauthenticated() -> Result<(), Error> {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path_regex("/*"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        let base_url = Url::parse(&server.uri())?;
+
+        let auth_policies = auth_policies_for(&base_url, AuthPolicy::Always);
+        let client = test_client_builder()
+            .with(
+                AuthMiddleware::new()
+                    .with_cache(CredentialsCache::new())
+                    .with_url_auth_policies(auth_policies),
+            )
+            .build();
+
+        // Unauthenticated requests are not allowed.
+        assert!(matches!(
+            client.get(server.uri()).send().await,
+            Err(reqwest_middleware::Error::Middleware(_))
+        ),);
+
+        Ok(())
+    }
+
+    /// With the "never" auth policy, requests should fail if
+    /// an endpoint requires authentication.
+    #[test(tokio::test)]
+    async fn test_auth_policy_never_with_credentials() -> Result<(), Error> {
+        let username = "user";
+        let password = "password";
+
+        let server = start_test_server(username, password).await;
+        let base_url = Url::parse(&server.uri())?;
+
+        Mock::given(method("GET"))
+            .and(path_regex("/*"))
+            .and(basic_auth(username, password))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        let auth_policies = auth_policies_for(&base_url, AuthPolicy::Never);
+        let client = test_client_builder()
+            .with(
+                AuthMiddleware::new()
+                    .with_cache(CredentialsCache::new())
+                    .with_url_auth_policies(auth_policies),
+            )
+            .build();
+
+        let mut url = base_url.clone();
+        url.set_username(username).unwrap();
+        url.set_password(Some(password)).unwrap();
+
+        assert_eq!(
+            client
+                .get(format!("{}/foo", server.uri()))
+                .send()
+                .await?
+                .status(),
+            401,
+            "Requests should not be completed if credentials are required"
+        );
+
+        Ok(())
+    }
+
+    /// With the "never" auth policy, requests should succeed if
+    /// unauthenticated requests succeed.
+    #[test(tokio::test)]
+    async fn test_auth_policy_never_unauthenticated() -> Result<(), Error> {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path_regex("/*"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        let base_url = Url::parse(&server.uri())?;
+
+        let auth_policies = auth_policies_for(&base_url, AuthPolicy::Never);
+        let client = test_client_builder()
+            .with(
+                AuthMiddleware::new()
+                    .with_cache(CredentialsCache::new())
+                    .with_url_auth_policies(auth_policies),
+            )
+            .build();
+
+        assert_eq!(
+            client.get(server.uri()).send().await?.status(),
+            200,
+            "Requests should succeed if unauthenticated requests can succeed"
         );
 
         Ok(())
