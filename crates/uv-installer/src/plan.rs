@@ -118,7 +118,7 @@ impl<'a> Planner<'a> {
             match dist.as_ref() {
                 Dist::Built(BuiltDist::Registry(wheel)) => {
                     if let Some(distribution) = registry_index.get(wheel.name()).find_map(|entry| {
-                        if *entry.index.url() != wheel.best_wheel().index {
+                        if *entry.index.proxy_or_url() != wheel.best_wheel().index {
                             return None;
                         }
                         if entry.dist.filename.version != wheel.best_wheel().filename.version {
@@ -238,7 +238,7 @@ impl<'a> Planner<'a> {
                 }
                 Dist::Source(SourceDist::Registry(sdist)) => {
                     if let Some(distribution) = registry_index.get(sdist.name()).find_map(|entry| {
-                        if *entry.index.url() != sdist.index {
+                        if *entry.index.proxy_or_url() != sdist.index {
                             return None;
                         }
                         if entry.dist.filename.name != sdist.name {

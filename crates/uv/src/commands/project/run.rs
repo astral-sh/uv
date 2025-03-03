@@ -258,7 +258,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             )
             .await
             {
-                Ok(result) => result.into_lock(),
+                Ok(result) => result
+                    .into_lock()
+                    .with_proxy_urls(settings.index_proxies.as_deref())?,
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::native_tls(
                         network_settings.native_tls,
@@ -634,6 +636,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         .await
                         .ok()
                         .flatten()
+                        .map(|lock| lock.with_proxy_urls(settings.index_proxies.as_deref()))
+                        .transpose()?
                         .map(|lock| (lock, project.workspace().install_path().to_owned()));
                 }
             } else {
@@ -769,7 +773,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 }
 
                 lock = Some((
-                    result.into_lock(),
+                    result
+                        .into_lock()
+                        .with_proxy_urls(settings.index_proxies.as_deref())?,
                     project.workspace().install_path().to_owned(),
                 ));
             }

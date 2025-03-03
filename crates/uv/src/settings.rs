@@ -28,7 +28,9 @@ use uv_configuration::{
     RequiredVersion, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
     VersionControlSystem,
 };
-use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl};
+use uv_distribution_types::{
+    DependencyMetadata, Index, IndexLocations, IndexUrl, Origin, ProxyUrl, ProxyWithCanonicalUrl,
+};
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep508::{ExtraName, RequirementOrigin};
@@ -2382,6 +2384,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
 pub(crate) struct ResolverSettings {
     pub(crate) index_locations: IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
+    pub(crate) index_proxies: Option<Vec<ProxyWithCanonicalUrl>>,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
@@ -2401,6 +2404,7 @@ pub(crate) struct ResolverSettings {
 pub(crate) struct ResolverSettingsRef<'a> {
     pub(crate) index_locations: &'a IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
+    pub(crate) index_proxies: &'a Option<Vec<ProxyWithCanonicalUrl>>,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
@@ -2433,6 +2437,7 @@ impl ResolverSettings {
         ResolverSettingsRef {
             index_locations: &self.index_locations,
             index_strategy: self.index_strategy,
+            index_proxies: &self.index_proxies,
             keyring_provider: self.keyring_provider,
             resolution: self.resolution,
             prerelease: self.prerelease,
@@ -2452,23 +2457,30 @@ impl ResolverSettings {
 
 impl From<ResolverOptions> for ResolverSettings {
     fn from(value: ResolverOptions) -> Self {
+        let mut indexes: Vec<Index> = value
+            .index
+            .into_iter()
+            .flatten()
+            .chain(value.extra_index_url.into_iter().flatten().map(Index::from))
+            .chain(value.index_url.into_iter().map(Index::from))
+            .collect();
+
+        let index_proxies = update_indexes_with_proxies(&mut indexes, value.proxy_urls.as_ref());
+
+        let index_locations = IndexLocations::new(
+            indexes,
+            value
+                .find_links
+                .into_iter()
+                .flatten()
+                .map(Index::from)
+                .collect(),
+            value.no_index.unwrap_or_default(),
+        );
+
         Self {
-            index_locations: IndexLocations::new(
-                value
-                    .index
-                    .into_iter()
-                    .flatten()
-                    .chain(value.extra_index_url.into_iter().flatten().map(Index::from))
-                    .chain(value.index_url.into_iter().map(Index::from))
-                    .collect(),
-                value
-                    .find_links
-                    .into_iter()
-                    .flatten()
-                    .map(Index::from)
-                    .collect(),
-                value.no_index.unwrap_or_default(),
-            ),
+            index_locations,
+            index_proxies,
             resolution: value.resolution.unwrap_or_default(),
             prerelease: value.prerelease.unwrap_or_default(),
             fork_strategy: value.fork_strategy.unwrap_or_default(),
@@ -2504,6 +2516,7 @@ impl From<ResolverOptions> for ResolverSettings {
 pub(crate) struct ResolverInstallerSettingsRef<'a> {
     pub(crate) index_locations: &'a IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
+    pub(crate) index_proxies: &'a Option<Vec<ProxyWithCanonicalUrl>>,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
@@ -2531,6 +2544,7 @@ pub(crate) struct ResolverInstallerSettingsRef<'a> {
 pub(crate) struct ResolverInstallerSettings {
     pub(crate) index_locations: IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
+    pub(crate) index_proxies: Option<Vec<ProxyWithCanonicalUrl>>,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
@@ -2568,6 +2582,7 @@ impl ResolverInstallerSettings {
         ResolverInstallerSettingsRef {
             index_locations: &self.index_locations,
             index_strategy: self.index_strategy,
+            index_proxies: &self.index_proxies,
             keyring_provider: self.keyring_provider,
             resolution: self.resolution,
             prerelease: self.prerelease,
@@ -2589,23 +2604,30 @@ impl ResolverInstallerSettings {
 
 impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
     fn from(value: ResolverInstallerOptions) -> Self {
+        let mut indexes: Vec<Index> = value
+            .index
+            .into_iter()
+            .flatten()
+            .chain(value.extra_index_url.into_iter().flatten().map(Index::from))
+            .chain(value.index_url.into_iter().map(Index::from))
+            .collect();
+
+        let index_proxies = update_indexes_with_proxies(&mut indexes, value.proxy_urls.as_ref());
+
+        let index_locations = IndexLocations::new(
+            indexes,
+            value
+                .find_links
+                .into_iter()
+                .flatten()
+                .map(Index::from)
+                .collect(),
+            value.no_index.unwrap_or_default(),
+        );
+
         Self {
-            index_locations: IndexLocations::new(
-                value
-                    .index
-                    .into_iter()
-                    .flatten()
-                    .chain(value.extra_index_url.into_iter().flatten().map(Index::from))
-                    .chain(value.index_url.into_iter().map(Index::from))
-                    .collect(),
-                value
-                    .find_links
-                    .into_iter()
-                    .flatten()
-                    .map(Index::from)
-                    .collect(),
-                value.no_index.unwrap_or_default(),
-            ),
+            index_locations,
+            index_proxies,
             resolution: value.resolution.unwrap_or_default(),
             prerelease: value.prerelease.unwrap_or_default(),
             fork_strategy: value.fork_strategy.unwrap_or_default(),
@@ -2771,6 +2793,7 @@ impl PipSettings {
             index: top_level_index,
             index_url: top_level_index_url,
             extra_index_url: top_level_extra_index_url,
+            proxy_urls: _,
             no_index: top_level_no_index,
             find_links: top_level_find_links,
             index_strategy: top_level_index_strategy,
@@ -3007,6 +3030,7 @@ impl<'a> From<ResolverInstallerSettingsRef<'a>> for ResolverSettingsRef<'a> {
         Self {
             index_locations: settings.index_locations,
             index_strategy: settings.index_strategy,
+            index_proxies: settings.index_proxies,
             keyring_provider: settings.keyring_provider,
             resolution: settings.resolution,
             prerelease: settings.prerelease,
@@ -3121,6 +3145,34 @@ impl PublishSettings {
                 false,
             ),
         }
+    }
+}
+
+/// Adds proxy urls to any matching indexes and returns `ProxyWithCanonicalUrl`s for
+/// any matches found.
+fn update_indexes_with_proxies(
+    indexes: &mut [Index],
+    proxy_urls: Option<&Vec<ProxyUrl>>,
+) -> Option<Vec<ProxyWithCanonicalUrl>> {
+    let mut index_proxies = Vec::new();
+    for index in indexes.iter_mut() {
+        if let Some(proxy) = proxy_urls.and_then(|proxies| {
+            proxies
+                .iter()
+                .find(|proxy| index.name.as_ref() == Some(&proxy.name))
+        }) {
+            index.proxy_url = Some(proxy.url.clone());
+            index.origin = Some(Origin::Cli);
+            index_proxies.push(ProxyWithCanonicalUrl::new(
+                proxy.url.clone(),
+                index.url.clone(),
+            ));
+        }
+    }
+    if index_proxies.is_empty() {
+        None
+    } else {
+        Some(index_proxies)
     }
 }
 

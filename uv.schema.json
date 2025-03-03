@@ -393,6 +393,16 @@
         "null"
       ]
     },
+    "proxy-urls": {
+      "description": "The optional URL of the index proxy. If it exists, it will be used instead of the canonical index URL for resolution and installation. The canonical URL will still be written to the lockfile.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/ProxyUrl"
+      }
+    },
     "publish-url": {
       "description": "The URL for publishing packages to the Python package index (by default: <https://upload.pypi.org/legacy/>).",
       "type": [
@@ -724,6 +734,17 @@
           "anyOf": [
             {
               "$ref": "#/definitions/IndexName"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "proxy-url": {
+          "description": "The optional URL of the index proxy. If provided, it will be used instead of `Index.url` for resolution and installation. `Index.url` will still be written to the lockfile.\n\nExpects to receive a URL (e.g., `https://pypi.org/simple`) or a local path.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IndexUrl"
             },
             {
               "type": "null"
@@ -1349,6 +1370,21 @@
           ]
         }
       ]
+    },
+    "ProxyUrl": {
+      "type": "object",
+      "required": [
+        "name",
+        "url"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/IndexName"
+        },
+        "url": {
+          "$ref": "#/definitions/IndexUrl"
+        }
+      }
     },
     "PythonDownloads": {
       "oneOf": [

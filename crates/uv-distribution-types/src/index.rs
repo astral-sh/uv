@@ -82,6 +82,12 @@ pub struct Index {
     /// publish-url = "https://upload.pypi.org/legacy/"
     /// ```
     pub publish_url: Option<Url>,
+    /// The optional URL of the index proxy. If provided, it will be used instead
+    /// of `Index.url` for resolution and installation. `Index.url` will still be
+    /// written to the lockfile.
+    ///
+    /// Expects to receive a URL (e.g., `https://pypi.org/simple`) or a local path.
+    pub proxy_url: Option<IndexUrl>,
 }
 
 // #[derive(
@@ -106,6 +112,7 @@ impl Index {
             default: true,
             origin: None,
             publish_url: None,
+            proxy_url: None,
         }
     }
 
@@ -118,6 +125,7 @@ impl Index {
             default: false,
             origin: None,
             publish_url: None,
+            proxy_url: None,
         }
     }
 
@@ -130,6 +138,7 @@ impl Index {
             default: false,
             origin: None,
             publish_url: None,
+            proxy_url: None,
         }
     }
 
@@ -143,6 +152,15 @@ impl Index {
     /// Return the [`IndexUrl`] of the index.
     pub fn url(&self) -> &IndexUrl {
         &self.url
+    }
+
+    /// Return the [`IndexUrl`] of the index, preferring a proxy if it exists.
+    pub fn proxy_or_url(&self) -> &IndexUrl {
+        if let Some(ref proxy_url) = self.proxy_url {
+            proxy_url
+        } else {
+            &self.url
+        }
     }
 
     /// Consume the [`Index`] and return the [`IndexUrl`].
@@ -216,6 +234,7 @@ impl FromStr for Index {
                     default: false,
                     origin: None,
                     publish_url: None,
+                    proxy_url: None,
                 });
             }
         }
@@ -229,6 +248,7 @@ impl FromStr for Index {
             default: false,
             origin: None,
             publish_url: None,
+            proxy_url: None,
         })
     }
 }
@@ -242,4 +262,65 @@ pub enum IndexSourceError {
     IndexName(#[from] IndexNameError),
     #[error("Index included a name, but the name was empty")]
     EmptyName,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct ProxyWithCanonicalUrl {
+    /// The full index proxy URL, e.g., `http://localhost:3141/a/b/`.
+    pub url: IndexUrl,
+    /// The index proxy base URL, e.g., `http://localhost:3141/`.
+    pub url_base: Url,
+    /// The canonical index URL, written to the lockfile but replaced by the
+    /// proxy URL during resolution and installation.
+    pub canonical_url: IndexUrl,
+}
+
+impl ProxyWithCanonicalUrl {
+    pub fn new(url: IndexUrl, canonical_url: IndexUrl) -> Self {
+        let mut url_base = url.url().clone();
+        url_base.set_path("");
+        Self {
+            url,
+            url_base,
+            canonical_url,
+        }
+    }
+
+    pub fn canonical_url_as_str(&self) -> &str {
+        self.canonical_url.url().as_str()
+    }
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct ProxyUrl {
+    pub name: IndexName,
+    pub url: IndexUrl,
+}
+
+impl FromStr for ProxyUrl {
+    type Err = ProxyIndexSourceError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Some((name, url)) = s.split_once('=') {
+            Ok(Self {
+                name: IndexName::from_str(name)?,
+                url: IndexUrl::from_str(url)?,
+            })
+        } else {
+            Err(ProxyIndexSourceError::MissingName)
+        }
+    }
+}
+
+/// An error that can occur when parsing an [`Index`].
+#[derive(Error, Debug)]
+pub enum ProxyIndexSourceError {
+    #[error(transparent)]
+    IndexName(#[from] IndexNameError),
+    #[error(transparent)]
+    IndexUrl(#[from] IndexUrlError),
+    #[error("Proxy index requires a name, but the name was empty")]
+    MissingName,
 }

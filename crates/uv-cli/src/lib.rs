@@ -14,12 +14,15 @@ use uv_configuration::{
     ConfigSettingEntry, ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
     ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
-use uv_distribution_types::{Index, IndexUrl, Origin, PipExtraIndex, PipFindLinks, PipIndex};
+use uv_distribution_types::{
+    Index, IndexUrl, Origin, PipExtraIndex, PipFindLinks, PipIndex, ProxyUrl,
+};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::Requirement;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
+use uv_settings::Combine;
 use uv_static::EnvVars;
 
 pub mod comma;
@@ -896,6 +899,18 @@ fn parse_default_index(input: &str) -> Result<Maybe<Index>, String> {
                 origin: Some(Origin::Cli),
                 ..index
             })),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+}
+
+/// Parse a `--index-proxy-url` argument into an [`ProxyUrl`].
+fn parse_index_proxy_url(input: &str) -> Result<Maybe<ProxyUrl>, String> {
+    if input.is_empty() {
+        Ok(Maybe::None)
+    } else {
+        match ProxyUrl::from_str(input) {
+            Ok(proxy_url) => Ok(Maybe::Some(proxy_url)),
             Err(err) => Err(err.to_string()),
         }
     }
@@ -4738,6 +4753,15 @@ pub struct IndexArgs {
     #[arg(long, env = EnvVars::UV_EXTRA_INDEX_URL, value_delimiter = ' ', value_parser = parse_extra_index_url, help_heading = "Index options")]
     pub extra_index_url: Option<Vec<Maybe<PipExtraIndex>>>,
 
+    /// A proxy URL for an index replaces the canonical index URL specified in
+    /// configuration. It will be used for dependency resolution and installation,
+    /// but the canonical URL will be written to the lockfile.
+    ///
+    /// Accepts either a repository compliant with PEP 503 (the simple repository API), or a local
+    /// directory laid out in the same format.
+    #[arg(long, env = EnvVars::UV_INDEX_PROXY_URL, value_delimiter = ' ', value_parser = parse_index_proxy_url, help_heading = "Index options")]
+    pub index_proxy_url: Option<Vec<Maybe<ProxyUrl>>>,
+
     /// Locations to search for candidate distributions, in addition to those found in the registry
     /// indexes.
     ///
@@ -4760,6 +4784,20 @@ pub struct IndexArgs {
     /// provided via `--find-links`.
     #[arg(long, help_heading = "Index options")]
     pub no_index: bool,
+}
+
+impl IndexArgs {
+    pub fn combined_index(&self) -> Option<Vec<Index>> {
+        self.default_index
+            .clone()
+            .and_then(Maybe::into_option)
+            .map(|default_index| vec![default_index])
+            .combine(
+                self.index
+                    .clone()
+                    .map(|index| index.into_iter().filter_map(Maybe::into_option).collect()),
+            )
+    }
 }
 
 #[derive(Args)]

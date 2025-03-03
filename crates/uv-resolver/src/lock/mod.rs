@@ -27,8 +27,8 @@ use uv_distribution_filename::{
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
     Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations, IndexUrl, Name,
-    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
-    RemoteSource, ResolvedDist, StaticMetadata, ToUrlError, UrlString,
+    PathBuiltDist, PathSourceDist, ProxyWithCanonicalUrl, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RemoteSource, ResolvedDist, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{relative_to, PortablePath, PortablePathBuf};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -972,6 +972,51 @@ impl Lock {
         Ok(doc.to_string())
     }
 
+    /// Sets all `Package` URLs to be proxy URLs instead of canonical URLs.
+    pub fn with_proxy_urls(
+        mut self,
+        proxies: Option<&[ProxyWithCanonicalUrl]>,
+    ) -> Result<Self, url::ParseError> {
+        if proxies.is_none() {
+            return Ok(self);
+        }
+        for package in &mut self.packages {
+            if let Some(proxy) = proxies.as_ref().and_then(|proxies| {
+                proxies.iter().find(|p| {
+                    package
+                        .registry_source_index_url()
+                        .is_ok_and(|url| url.is_some_and(|url| url == p.canonical_url))
+                })
+            }) {
+                package.replace_urls(proxy.canonical_url_as_str(), proxy.url_base.as_str());
+            };
+        }
+        Ok(self)
+    }
+
+    /// Replaces all proxy URLs found in `Package`s with canonical URLs.
+    pub fn substitute_canonical_urls(
+        &mut self,
+        proxies: Option<&[ProxyWithCanonicalUrl]>,
+    ) -> Result<(), url::ParseError> {
+        if proxies.is_none() {
+            return Ok(());
+        }
+
+        for package in &mut self.packages {
+            if let Some(proxy) = proxies.as_ref().and_then(|proxies| {
+                proxies.iter().find(|p| {
+                    package
+                        .registry_source_index_url()
+                        .is_ok_and(|url| url.is_some_and(|url| url == p.url))
+                })
+            }) {
+                package.replace_urls(proxy.url_base.as_str(), proxy.canonical_url_as_str());
+            };
+        }
+        Ok(())
+    }
+
     /// Returns the package with the given name. If there are multiple
     /// matching packages, then an error is returned. If there are no
     /// matching packages, then `Ok(None)` is returned.
@@ -1295,9 +1340,9 @@ impl Lock {
             locations
                 .allowed_indexes()
                 .into_iter()
-                .filter_map(|index| match index.url() {
+                .filter_map(|index| match index.proxy_or_url() {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                        Some(UrlString::from(index.url().redacted().as_ref()))
+                        Some(UrlString::from(index.proxy_or_url().redacted().as_ref()))
                     }
                     IndexUrl::Path(_) => None,
                 })
@@ -1308,7 +1353,7 @@ impl Lock {
             locations
                 .allowed_indexes()
                 .into_iter()
-                .filter_map(|index| match index.url() {
+                .filter_map(|index| match index.proxy_or_url() {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => None,
                     IndexUrl::Path(url) => {
                         let path = url.to_file_path().ok()?;
@@ -1911,6 +1956,17 @@ pub struct Package {
 }
 
 impl Package {
+    /// Replaces pattern `old` with `new` in all URLs.
+    pub fn replace_urls(&mut self, old: &str, new: &str) {
+        self.id.replace_url(new);
+        if let Some(sdist) = &mut self.sdist {
+            sdist.replace_url(old, new);
+        }
+        for wheel in &mut self.wheels {
+            wheel.replace_url(old, new);
+        }
+    }
+
     fn from_annotated_dist(
         annotated_dist: &AnnotatedDist,
         fork_markers: Vec<UniversalMarker>,
@@ -2723,6 +2779,20 @@ impl Package {
         }
     }
 
+    /// Returns the [`IndexUrl`] for the package, if it is a registry source url
+    /// and not a path.
+    pub fn registry_source_index_url(&self) -> Result<Option<IndexUrl>, LockError> {
+        match &self.id.source {
+            Source::Registry(RegistrySource::Url(url)) => {
+                let index = IndexUrl::from(VerbatimUrl::from_url(
+                    url.to_url().map_err(LockErrorKind::InvalidUrl)?,
+                ));
+                Ok(Some(index))
+            }
+            _ => Ok(None),
+        }
+    }
+
     /// Returns all the hashes associated with this [`Package`].
     fn hashes(&self) -> HashDigests {
         let mut hashes = Vec::with_capacity(
@@ -2910,6 +2980,15 @@ impl PackageId {
             }
             self.source.to_toml(table);
         }
+    }
+
+    /// Replaces the URL with `new_url` if `Source::Registry` is a
+    /// `RegistrySource::Url`.
+    fn replace_url(&mut self, new_url: &str) {
+        if let Source::Registry(RegistrySource::Url(..)) = self.source {
+            let new_url = UrlString::new(SmallString::from(new_url));
+            self.source = Source::Registry(RegistrySource::Url(new_url));
+        };
     }
 }
 
@@ -3575,6 +3654,13 @@ impl SourceDist {
             SourceDist::Path { metadata, .. } => metadata.size,
         }
     }
+
+    /// Replaces pattern `old_url` with `new_url`.
+    fn replace_url(&mut self, old_url: &str, new_url: &str) {
+        if let Self::Url { url, .. } = self {
+            *url = UrlString::new(url.base_str().replace(old_url, new_url).into());
+        }
+    }
 }
 
 impl SourceDist {
@@ -4078,6 +4164,15 @@ impl Wheel {
                     index,
                 })
             }
+        }
+    }
+
+    /// Replaces pattern `old_url` with `new_url` if it's a `WheelWireSource::Url`.
+    fn replace_url(&mut self, old: &str, new: &str) {
+        if let WheelWireSource::Url { url } = &self.url {
+            self.url = WheelWireSource::Url {
+                url: UrlString::new(url.base_str().replace(old, new).into()),
+            };
         }
     }
 }

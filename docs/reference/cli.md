@@ -220,6 +220,11 @@ uv run [OPTIONS] [COMMAND]
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
+</dd><dt id="uv-run--index-proxy-url"><a href="#uv-run--index-proxy-url"><code>--index-proxy-url</code></a> <i>index-proxy-url</i></dt><dd><p>A proxy URL for an index replaces the canonical index URL specified in configuration. It will be used for dependency resolution and installation, but the canonical URL will be written to the lockfile.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>May also be set with the <code>UV_INDEX_PROXY_URL</code> environment variable.</p>
 </dd><dt id="uv-run--index-strategy"><a href="#uv-run--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
@@ -893,6 +898,11 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
+</dd><dt id="uv-add--index-proxy-url"><a href="#uv-add--index-proxy-url"><code>--index-proxy-url</code></a> <i>index-proxy-url</i></dt><dd><p>A proxy URL for an index replaces the canonical index URL specified in configuration. It will be used for dependency resolution and installation, but the canonical URL will be written to the lockfile.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>May also be set with the <code>UV_INDEX_PROXY_URL</code> environment variable.</p>
 </dd><dt id="uv-add--index-strategy"><a href="#uv-add--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
@@ -1256,6 +1266,11 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
+</dd><dt id="uv-remove--index-proxy-url"><a href="#uv-remove--index-proxy-url"><code>--index-proxy-url</code></a> <i>index-proxy-url</i></dt><dd><p>A proxy URL for an index replaces the canonical index URL specified in configuration. It will be used for dependency resolution and installation, but the canonical URL will be written to the lockfile.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>May also be set with the <code>UV_INDEX_PROXY_URL</code> environment variable.</p>
 </dd><dt id="uv-remove--index-strategy"><a href="#uv-remove--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
@@ -1627,6 +1642,11 @@ uv sync [OPTIONS]
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
+</dd><dt id="uv-sync--index-proxy-url"><a href="#uv-sync--index-proxy-url"><code>--index-proxy-url</code></a> <i>index-proxy-url</i></dt><dd><p>A proxy URL for an index replaces the canonical index URL specified in configuration. It will be used for dependency resolution and installation, but the canonical URL will be written to the lockfile.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>May also be set with the <code>UV_INDEX_PROXY_URL</code> environment variable.</p>
 </dd><dt id="uv-sync--index-strategy"><a href="#uv-sync--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
@@ -2007,6 +2027,11 @@ uv lock [OPTIONS]
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
+</dd><dt id="uv-lock--index-proxy-url"><a href="#uv-lock--index-proxy-url"><code>--index-proxy-url</code></a> <i>index-proxy-url</i></dt><dd><p>A proxy URL for an index replaces the canonical index URL specified in configuration. It will be used for dependency resolution and installation, but the canonical URL will be written to the lockfile.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>May also be set with the <code>UV_INDEX_PROXY_URL</code> environment variable.</p>
 </dd><dt id="uv-lock--index-strategy"><a href="#uv-lock--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
@@ -2349,6 +2374,11 @@ uv export [OPTIONS]
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
+</dd><dt id="uv-export--index-proxy-url"><a href="#uv-export--index-proxy-url"><code>--index-proxy-url</code></a> <i>index-proxy-url</i></dt><dd><p>A proxy URL for an index replaces the canonical index URL specified in configuration. It will be used for dependency resolution and installation, but the canonical URL will be written to the lockfile.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>May also be set with the <code>UV_INDEX_PROXY_URL</code> environment variable.</p>
 </dd><dt id="uv-export--index-strategy"><a href="#uv-export--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
@@ -2727,6 +2757,11 @@ uv tree [OPTIONS]
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
+</dd><dt id="uv-tree--index-proxy-url"><a href="#uv-tree--index-proxy-url"><code>--index-proxy-url</code></a> <i>index-proxy-url</i></dt><dd><p>A proxy URL for an index replaces the canonical index URL specified in configuration. It will be used for dependency resolution and installation, but the canonical URL will be written to the lockfile.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>May also be set with the <code>UV_INDEX_PROXY_URL</code> environment variable.</p>
 </dd><dt id="uv-tree--index-strategy"><a href="#uv-tree--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
@@ -3209,6 +3244,11 @@ uv tool run [OPTIONS] [COMMAND]
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
+</dd><dt id="uv-tool-run--index-proxy-url"><a href="#uv-tool-run--index-proxy-url"><code>--index-proxy-url</code></a> <i>index-proxy-url</i></dt><dd><p>A proxy URL for an index replaces the canonical index URL specified in configuration. It will be used for dependency resolution and installation, but the canonical URL will be written to the lockfile.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>May also be set with the <code>UV_INDEX_PROXY_URL</code> environment variable.</p>
 </dd><dt id="uv-tool-run--index-strategy"><a href="#uv-tool-run--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
@@ -3542,6 +3582,11 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
+</dd><dt id="uv-tool-install--index-proxy-url"><a href="#uv-tool-install--index-proxy-url"><code>--index-proxy-url</code></a> <i>index-proxy-url</i></dt><dd><p>A proxy URL for an index replaces the canonical index URL specified in configuration. It will be used for dependency resolution and installation, but the canonical URL will be written to the lockfile.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>May also be set with the <code>UV_INDEX_PROXY_URL</code> environment variable.</p>
 </dd><dt id="uv-tool-install--index-strategy"><a href="#uv-tool-install--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
@@ -3867,6 +3912,11 @@ uv tool upgrade [OPTIONS] <NAME>...
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
+</dd><dt id="uv-tool-upgrade--index-proxy-url"><a href="#uv-tool-upgrade--index-proxy-url"><code>--index-proxy-url</code></a> <i>index-proxy-url</i></dt><dd><p>A proxy URL for an index replaces the canonical index URL specified in configuration. It will be used for dependency resolution and installation, but the canonical URL will be written to the lockfile.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>May also be set with the <code>UV_INDEX_PROXY_URL</code> environment variable.</p>
 </dd><dt id="uv-tool-upgrade--index-strategy"><a href="#uv-tool-upgrade--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
@@ -5687,6 +5737,11 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
+</dd><dt id="uv-pip-compile--index-proxy-url"><a href="#uv-pip-compile--index-proxy-url"><code>--index-proxy-url</code></a> <i>index-proxy-url</i></dt><dd><p>A proxy URL for an index replaces the canonical index URL specified in configuration. It will be used for dependency resolution and installation, but the canonical URL will be written to the lockfile.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>May also be set with the <code>UV_INDEX_PROXY_URL</code> environment variable.</p>
 </dd><dt id="uv-pip-compile--index-strategy"><a href="#uv-pip-compile--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
@@ -6137,6 +6192,11 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
+</dd><dt id="uv-pip-sync--index-proxy-url"><a href="#uv-pip-sync--index-proxy-url"><code>--index-proxy-url</code></a> <i>index-proxy-url</i></dt><dd><p>A proxy URL for an index replaces the canonical index URL specified in configuration. It will be used for dependency resolution and installation, but the canonical URL will be written to the lockfile.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>May also be set with the <code>UV_INDEX_PROXY_URL</code> environment variable.</p>
 </dd><dt id="uv-pip-sync--index-strategy"><a href="#uv-pip-sync--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
@@ -6561,6 +6621,11 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
+</dd><dt id="uv-pip-install--index-proxy-url"><a href="#uv-pip-install--index-proxy-url"><code>--index-proxy-url</code></a> <i>index-proxy-url</i></dt><dd><p>A proxy URL for an index replaces the canonical index URL specified in configuration. It will be used for dependency resolution and installation, but the canonical URL will be written to the lockfile.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>May also be set with the <code>UV_INDEX_PROXY_URL</code> environment variable.</p>
 </dd><dt id="uv-pip-install--index-strategy"><a href="#uv-pip-install--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
@@ -7300,6 +7365,11 @@ uv pip list [OPTIONS]
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
+</dd><dt id="uv-pip-list--index-proxy-url"><a href="#uv-pip-list--index-proxy-url"><code>--index-proxy-url</code></a> <i>index-proxy-url</i></dt><dd><p>A proxy URL for an index replaces the canonical index URL specified in configuration. It will be used for dependency resolution and installation, but the canonical URL will be written to the lockfile.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>May also be set with the <code>UV_INDEX_PROXY_URL</code> environment variable.</p>
 </dd><dt id="uv-pip-list--index-strategy"><a href="#uv-pip-list--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
@@ -7651,6 +7721,11 @@ uv pip tree [OPTIONS]
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
+</dd><dt id="uv-pip-tree--index-proxy-url"><a href="#uv-pip-tree--index-proxy-url"><code>--index-proxy-url</code></a> <i>index-proxy-url</i></dt><dd><p>A proxy URL for an index replaces the canonical index URL specified in configuration. It will be used for dependency resolution and installation, but the canonical URL will be written to the lockfile.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>May also be set with the <code>UV_INDEX_PROXY_URL</code> environment variable.</p>
 </dd><dt id="uv-pip-tree--index-strategy"><a href="#uv-pip-tree--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
@@ -8021,6 +8096,11 @@ uv venv [OPTIONS] [PATH]
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
+</dd><dt id="uv-venv--index-proxy-url"><a href="#uv-venv--index-proxy-url"><code>--index-proxy-url</code></a> <i>index-proxy-url</i></dt><dd><p>A proxy URL for an index replaces the canonical index URL specified in configuration. It will be used for dependency resolution and installation, but the canonical URL will be written to the lockfile.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>May also be set with the <code>UV_INDEX_PROXY_URL</code> environment variable.</p>
 </dd><dt id="uv-venv--index-strategy"><a href="#uv-venv--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
@@ -8311,6 +8391,11 @@ uv build [OPTIONS] [SRC]
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
+</dd><dt id="uv-build--index-proxy-url"><a href="#uv-build--index-proxy-url"><code>--index-proxy-url</code></a> <i>index-proxy-url</i></dt><dd><p>A proxy URL for an index replaces the canonical index URL specified in configuration. It will be used for dependency resolution and installation, but the canonical URL will be written to the lockfile.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>May also be set with the <code>UV_INDEX_PROXY_URL</code> environment variable.</p>
 </dd><dt id="uv-build--index-strategy"><a href="#uv-build--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>

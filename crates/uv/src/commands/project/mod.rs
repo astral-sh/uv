@@ -199,6 +199,9 @@ pub(crate) enum ProjectError {
     #[error("Attempted to drop a temporary virtual environment while still in-use")]
     DroppedEnvironment,
 
+    #[error("Failed to substitute proxy URLs: {0}")]
+    ProxyUrl(#[from] url::ParseError),
+
     #[error(transparent)]
     DependencyGroup(#[from] DependencyGroupError),
 
@@ -1499,6 +1502,7 @@ pub(crate) async fn resolve_names(
     let ResolverInstallerSettings {
         index_locations,
         index_strategy,
+        index_proxies: _,
         keyring_provider,
         resolution: _,
         prerelease: _,
@@ -1637,6 +1641,7 @@ pub(crate) async fn resolve_environment(
     let ResolverSettingsRef {
         index_locations,
         index_strategy,
+        index_proxies: _,
         keyring_provider,
         resolution,
         prerelease,
@@ -1976,6 +1981,7 @@ pub(crate) async fn update_environment(
     let ResolverInstallerSettings {
         index_locations,
         index_strategy,
+        index_proxies: _,
         keyring_provider,
         resolution,
         prerelease,
@@ -2438,7 +2444,12 @@ fn warn_on_requirements_txt_setting(
         warn_user_once!("Ignoring `--no-index` from requirements file. Instead, use the `--no-index` command-line argument, or set `no-index` in a `uv.toml` or `pyproject.toml` file.");
     } else {
         if let Some(index_url) = index_url {
-            if settings.index_locations.default_index().map(Index::url) != Some(index_url) {
+            if settings
+                .index_locations
+                .default_index()
+                .map(Index::proxy_or_url)
+                != Some(index_url)
+            {
                 warn_user_once!(
                     "Ignoring `--index-url` from requirements file: `{index_url}`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file."
                 );
@@ -2448,7 +2459,7 @@ fn warn_on_requirements_txt_setting(
             if !settings
                 .index_locations
                 .implicit_indexes()
-                .any(|index| index.url() == extra_index_url)
+                .any(|index| index.proxy_or_url() == extra_index_url)
             {
                 warn_user_once!(
                     "Ignoring `--extra-index-url` from requirements file: `{extra_index_url}`. Instead, use the `--extra-index-url` command-line argument, or set `extra-index-url` in a `uv.toml` or `pyproject.toml` file.`"

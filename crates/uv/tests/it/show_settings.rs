@@ -135,6 +135,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -309,6 +310,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -484,6 +486,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -691,6 +694,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -1022,6 +1026,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -1221,6 +1226,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         default: false,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                     Index {
                         name: None,
@@ -1250,6 +1256,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -1428,6 +1435,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                             Cli,
                         ),
                         publish_url: None,
+                        proxy_url: None,
                     },
                     Index {
                         name: None,
@@ -1457,6 +1465,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         default: false,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                     Index {
                         name: None,
@@ -1486,6 +1495,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -1686,6 +1696,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
                         default: false,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 no_index: true,
@@ -2044,6 +2055,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         default: false,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                     Index {
                         name: None,
@@ -2073,6 +2085,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         default: false,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -2247,6 +2260,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         default: false,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                     Index {
                         name: None,
@@ -2276,6 +2290,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         default: false,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -3070,6 +3085,7 @@ fn resolve_tool() -> anyhow::Result<()> {
             index: None,
             index_url: None,
             extra_index_url: None,
+            proxy_urls: None,
             no_index: None,
             find_links: None,
             index_strategy: None,
@@ -3105,6 +3121,7 @@ fn resolve_tool() -> anyhow::Result<()> {
                 no_index: false,
             },
             index_strategy: FirstIndex,
+            index_proxies: None,
             keyring_provider: Disabled,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
@@ -3441,6 +3458,7 @@ fn resolve_both() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -3738,6 +3756,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -3841,7 +3860,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("--config-file")
         .arg(config.path())
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3852,8 +3871,8 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `publish-url`, `trusted-publishing`, `check-url`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`, `build-backend`
-    "###
+    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `proxy-url`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `publish-url`, `trusted-publishing`, `check-url`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`, `build-backend`
+    "
     );
 
     // Write an _actual_ `pyproject.toml`.
@@ -4507,6 +4526,7 @@ fn index_priority() -> anyhow::Result<()> {
                             Cli,
                         ),
                         publish_url: None,
+                        proxy_url: None,
                     },
                     Index {
                         name: None,
@@ -4536,6 +4556,7 @@ fn index_priority() -> anyhow::Result<()> {
                         default: false,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -4712,6 +4733,7 @@ fn index_priority() -> anyhow::Result<()> {
                             Cli,
                         ),
                         publish_url: None,
+                        proxy_url: None,
                     },
                     Index {
                         name: None,
@@ -4741,6 +4763,7 @@ fn index_priority() -> anyhow::Result<()> {
                         default: false,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -4923,6 +4946,7 @@ fn index_priority() -> anyhow::Result<()> {
                             Cli,
                         ),
                         publish_url: None,
+                        proxy_url: None,
                     },
                     Index {
                         name: None,
@@ -4952,6 +4976,7 @@ fn index_priority() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -5129,6 +5154,7 @@ fn index_priority() -> anyhow::Result<()> {
                             Cli,
                         ),
                         publish_url: None,
+                        proxy_url: None,
                     },
                     Index {
                         name: None,
@@ -5158,6 +5184,7 @@ fn index_priority() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -5342,6 +5369,7 @@ fn index_priority() -> anyhow::Result<()> {
                             Cli,
                         ),
                         publish_url: None,
+                        proxy_url: None,
                     },
                     Index {
                         name: None,
@@ -5371,6 +5399,7 @@ fn index_priority() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],
@@ -5548,6 +5577,7 @@ fn index_priority() -> anyhow::Result<()> {
                             Cli,
                         ),
                         publish_url: None,
+                        proxy_url: None,
                     },
                     Index {
                         name: None,
@@ -5577,6 +5607,7 @@ fn index_priority() -> anyhow::Result<()> {
                         default: true,
                         origin: None,
                         publish_url: None,
+                        proxy_url: None,
                     },
                 ],
                 flat_index: [],

@@ -375,7 +375,9 @@ pub(crate) async fn sync(
                     }
                 }
             }
-            result.into_lock()
+            result
+                .into_lock()
+                .with_proxy_urls(settings.index_proxies.as_deref())?
         }
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)

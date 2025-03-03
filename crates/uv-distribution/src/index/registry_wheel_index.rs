@@ -91,20 +91,20 @@ impl<'a> RegistryWheelIndex<'a> {
 
         let mut seen = FxHashSet::default();
         for index in index_locations.allowed_indexes() {
-            if !seen.insert(index.url()) {
+            if !seen.insert(index.proxy_or_url()) {
                 continue;
             }
 
             // Index all the wheels that were downloaded directly from the registry.
             let wheel_dir = cache.shard(
                 CacheBucket::Wheels,
-                WheelCache::Index(index.url()).wheel_dir(package.as_ref()),
+                WheelCache::Index(index.proxy_or_url()).wheel_dir(package.as_ref()),
             );
 
             // For registry wheels, the cache structure is: `<index>/<package-name>/<wheel>.http`
             // or `<index>/<package-name>/<version>/<wheel>.rev`.
             for file in files(&wheel_dir) {
-                match index.url() {
+                match index.proxy_or_url() {
                     // Add files from remote registries.
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                         if file
@@ -166,7 +166,7 @@ impl<'a> RegistryWheelIndex<'a> {
             // from the registry.
             let cache_shard = cache.shard(
                 CacheBucket::SourceDistributions,
-                WheelCache::Index(index.url()).wheel_dir(package.as_ref()),
+                WheelCache::Index(index.proxy_or_url()).wheel_dir(package.as_ref()),
             );
 
             // For registry source distributions, the cache structure is: `<index>/<package-name>/<version>/`.
@@ -174,7 +174,7 @@ impl<'a> RegistryWheelIndex<'a> {
                 let cache_shard = cache_shard.shard(shard);
 
                 // Read the revision from the cache.
-                let revision = match index.url() {
+                let revision = match index.proxy_or_url() {
                     // Add files from remote registries.
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                         let revision_entry = cache_shard.entry(HTTP_REVISION);

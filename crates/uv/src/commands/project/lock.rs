@@ -262,7 +262,8 @@ pub(super) async fn do_safe_lock(
             let existing = target
                 .read()
                 .await?
-                .ok_or_else(|| ProjectError::MissingLockfile)?;
+                .ok_or_else(|| ProjectError::MissingLockfile)?
+                .with_proxy_urls(settings.index_proxies.as_deref())?;
             Ok(LockResult::Unchanged(existing))
         }
         LockMode::Locked(interpreter) => {
@@ -270,7 +271,8 @@ pub(super) async fn do_safe_lock(
             let existing = target
                 .read()
                 .await?
-                .ok_or_else(|| ProjectError::MissingLockfile)?;
+                .ok_or_else(|| ProjectError::MissingLockfile)?
+                .with_proxy_urls(settings.index_proxies.as_deref())?;
 
             // Perform the lock operation, but don't write the lockfile to disk.
             let result = do_lock(
@@ -298,7 +300,9 @@ pub(super) async fn do_safe_lock(
         LockMode::Write(interpreter) | LockMode::DryRun(interpreter) => {
             // Read the existing lockfile.
             let existing = match target.read().await {
-                Ok(Some(existing)) => Some(existing),
+                Ok(Some(existing)) => {
+                    Some(existing.with_proxy_urls(settings.index_proxies.as_deref())?)
+                }
                 Ok(None) => None,
                 Err(ProjectError::Lock(err)) => {
                     warn_user!(
@@ -310,7 +314,7 @@ pub(super) async fn do_safe_lock(
             };
 
             // Perform the lock operation.
-            let result = do_lock(
+            let mut result = do_lock(
                 target,
                 interpreter,
                 existing,
@@ -327,8 +331,14 @@ pub(super) async fn do_safe_lock(
 
             // If the lockfile changed, write it to disk.
             if !matches!(mode, LockMode::DryRun(_)) {
-                if let LockResult::Changed(_, lock) = &result {
-                    target.commit(lock).await?;
+                if let LockResult::Changed(_, ref mut lock) = &mut result {
+                    if let Some(proxies) = settings.index_proxies {
+                        let mut lock = lock.clone();
+                        lock.substitute_canonical_urls(Some(proxies.as_ref()))?;
+                        target.commit(&lock).await?;
+                    } else {
+                        target.commit(lock).await?;
+                    }
                 }
             }
 
@@ -357,6 +367,7 @@ async fn do_lock(
     let ResolverSettingsRef {
         index_locations,
         index_strategy,
+        index_proxies: _,
         keyring_provider,
         resolution,
         prerelease,
