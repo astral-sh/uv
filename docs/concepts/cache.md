@@ -32,15 +32,17 @@ By default, uv will _only_ rebuild and reinstall local directory dependencies (e
 the `pyproject.toml`, `setup.py`, or `setup.cfg` file in the directory root has changed. This is a
 heuristic and, in some cases, may lead to fewer re-installs than desired.
 
-To incorporate other information into the cache key for a given package, you can add cache key
+To incorporate additional information into the cache key for a given package, you can add cache key
 entries under [`tool.uv.cache-keys`](https://docs.astral.sh/uv/reference/settings/#cache-keys),
-which can include both file paths and Git commit hashes. Setting `tool.uv.cache-keys` will replace
-the default values for the package, so you should include your project file in the cache key if you
-want to keep the default behavior.
+which covers both file paths and Git commit hashes. Setting
+[`tool.uv.cache-keys`](https://docs.astral.sh/uv/reference/settings/#cache-keys) will replace
+defaults, so any necessary files (like `pyproject.toml`) should still be included in the
+user-defined cache keys.
 
-For example, if a project specifies dependencies in `pyproject.toml`, uses
-[`setuptools-scm`](https://pypi.org/project/setuptools-scm/), and should be rebuilt whenever the
-commit hash or dependencies change, you can add the following to the project's `pyproject.toml`:
+For example, if a project specifies dependencies in `pyproject.toml` but uses
+[`setuptools-scm`](https://pypi.org/project/setuptools-scm/) to manage its version, and should thus
+be rebuilt whenever the commit hash or dependencies change, you can add the following to the
+project's `pyproject.toml`:
 
 ```toml title="pyproject.toml"
 [tool.uv]
@@ -52,7 +54,7 @@ key to include the tags:
 
 ```toml title="pyproject.toml"
 [tool.uv]
-cache-keys = [{ git = { commit = true, tags = true } }]
+cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]
 ```
 
 Similarly, if a project reads from a `requirements.txt` to populate its dependencies, you can add
@@ -60,7 +62,7 @@ the following to the project's `pyproject.toml`:
 
 ```toml title="pyproject.toml"
 [tool.uv]
-cache-keys = [{ file = "requirements.txt" }]
+cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }]
 ```
 
 Globs are supported, following the syntax of the
@@ -83,7 +85,7 @@ project's `pyproject.toml` to invalidate the cache whenever the environment vari
 
 ```toml title="pyproject.toml"
 [tool.uv]
-cache-keys = [{ env = "MY_ENV_VAR" }]
+cache-keys = [{ file = "pyproject.toml" }, { env = "MY_ENV_VAR" }]
 ```
 
 As an escape hatch, if a project uses `dynamic` metadata that isn't covered by `tool.uv.cache-keys`,
