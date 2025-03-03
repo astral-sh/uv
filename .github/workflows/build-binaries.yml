@@ -14,11 +14,15 @@ on:
         type: string
   pull_request:
     paths:
-      # When we change project metadata, we want to ensure that the maturin builds still work.
+      # We want to ensure that the maturin builds still work when we change
+      # Project metadata
       - pyproject.toml
       - Cargo.toml
+      - .cargo/config.toml
+      # Toolchain or dependency versions
       - Cargo.lock
-      # And when we change this workflow itself...
+      - rust-toolchain.toml
+      # And the workflow itself
       - .github/workflows/build-binaries.yml
 
 concurrency:
