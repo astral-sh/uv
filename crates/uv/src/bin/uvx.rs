@@ -1,5 +1,5 @@
 use std::convert::Infallible;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::{
     ffi::OsString,
     process::{Command, ExitCode, ExitStatus},
@@ -48,6 +48,18 @@ fn get_uvx_suffix(current_exe: &Path) -> std::io::Result<&str> {
     Ok(uvx_suffix)
 }
 
+fn get_uv_path(current_exe_parent: &Path, uvx_suffix: &str) -> PathBuf {
+    let uv_with_suffix =
+        current_exe_parent.join(format!("uv{}{}", uvx_suffix, std::env::consts::EXE_SUFFIX));
+
+    // fall back to plain `uv` if the suffixed version doesn't exist
+    if uv_with_suffix.exists() {
+        uv_with_suffix
+    } else {
+        current_exe_parent.join(format!("uv{}", std::env::consts::EXE_SUFFIX))
+    }
+}
+
 fn run() -> std::io::Result<ExitStatus> {
     let current_exe = std::env::current_exe()?;
     let Some(bin) = current_exe.parent() else {
@@ -57,7 +69,7 @@ fn run() -> std::io::Result<ExitStatus> {
         ));
     };
     let uvx_suffix = get_uvx_suffix(&current_exe)?;
-    let uv = bin.join(format!("uv{}{}", uvx_suffix, std::env::consts::EXE_SUFFIX));
+    let uv = get_uv_path(bin, uvx_suffix);
     let args = ["tool", "uvx"]
         .iter()
         .map(OsString::from)
