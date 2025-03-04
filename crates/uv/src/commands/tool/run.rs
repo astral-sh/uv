@@ -16,7 +16,9 @@ use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, PreviewMode};
-use uv_distribution_types::{Name, UnresolvedRequirement, UnresolvedRequirementSpecification};
+use uv_distribution_types::{
+    Name, NameRequirementSpecification, UnresolvedRequirement, UnresolvedRequirementSpecification,
+};
 use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -29,7 +31,7 @@ use uv_python::{
     PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_settings::PythonInstallMirrors;
+use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_static::EnvVars;
 use uv_tool::{entrypoint_paths, InstalledTools};
 use uv_warnings::warn_user;
@@ -74,9 +76,12 @@ pub(crate) async fn run(
     command: Option<ExternalCommand>,
     from: Option<String>,
     with: &[RequirementsSource],
+    constraints: &[RequirementsSource],
+    overrides: &[RequirementsSource],
     show_resolution: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
+    options: ResolverInstallerOptions,
     settings: ResolverInstallerSettings,
     network_settings: NetworkSettings,
     invocation_source: ToolRunCommand,
@@ -161,9 +166,12 @@ pub(crate) async fn run(
     let result = get_or_create_environment(
         &request,
         with,
+        constraints,
+        overrides,
         show_resolution,
         python.as_deref(),
         install_mirrors,
+        options,
         &settings,
         &network_settings,
         isolated,
@@ -491,9 +499,12 @@ impl std::fmt::Display for ToolRequirement {
 async fn get_or_create_environment(
     request: &ToolRequest<'_>,
     with: &[RequirementsSource],
+    constraints: &[RequirementsSource],
+    overrides: &[RequirementsSource],
     show_resolution: bool,
     python: Option<&str>,
     install_mirrors: PythonInstallMirrors,
+    options: ResolverInstallerOptions,
     settings: &ResolverInstallerSettings,
     network_settings: &NetworkSettings,
     isolated: bool,
@@ -676,13 +687,9 @@ async fn get_or_create_environment(
     };
 
     // Read the `--with` requirements.
-    let spec = {
-        let client_builder = BaseClientBuilder::new()
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
-        RequirementsSpecification::from_simple_sources(with, &client_builder).await?
-    };
+    let spec =
+        RequirementsSpecification::from_sources(with, constraints, overrides, &client_builder)
+            .await?;
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
@@ -708,6 +715,28 @@ async fn get_or_create_environment(
         requirements
     };
 
+    // Resolve the constraints.
+    let constraints = spec
+        .constraints
+        .clone()
+        .into_iter()
+        .map(|constraint| constraint.requirement)
+        .collect::<Vec<_>>();
+
+    // Resolve the overrides.
+    let overrides = resolve_names(
+        spec.overrides.clone(),
+        &interpreter,
+        settings,
+        network_settings,
+        &state,
+        concurrency,
+        cache,
+        printer,
+        preview,
+    )
+    .await?;
+
     // Check if the tool is already installed in a compatible environment.
     if !isolated && !request.is_latest() {
         let installed_tools = InstalledTools::from_settings()?.init()?;
@@ -721,27 +750,48 @@ async fn get_or_create_environment(
                         python_request.satisfied(environment.interpreter(), cache)
                     })
                 });
+
+            // Check if the installed packages meet the requirements.
             if let Some(environment) = existing_environment {
-                // Check if the installed packages meet the requirements.
-                let site_packages = SitePackages::from_environment(&environment)?;
+                if let Some(tool_receipt) = installed_tools
+                    .get_tool_receipt(&requirement.name)
+                    .ok()
+                    .flatten()
+                    .filter(|receipt| ToolOptions::from(options) == *receipt.options())
+                {
+                    if overrides.is_empty() {
+                        // Check if the installed packages meet the requirements.
+                        let site_packages = SitePackages::from_environment(&environment)?;
 
-                let requirements = requirements
-                    .iter()
-                    .cloned()
-                    .map(UnresolvedRequirementSpecification::from)
-                    .collect::<Vec<_>>();
-                let constraints = [];
+                        let requirements = requirements
+                            .iter()
+                            .cloned()
+                            .map(UnresolvedRequirementSpecification::from)
+                            .collect::<Vec<_>>();
+                        let constraints = [];
 
-                if matches!(
-                    site_packages.satisfies(
-                        &requirements,
-                        &constraints,
-                        &interpreter.resolver_marker_environment()
-                    ),
-                    Ok(SatisfiesResult::Fresh { .. })
-                ) {
-                    debug!("Using existing tool `{}`", requirement.name);
-                    return Ok((from, environment));
+                        if matches!(
+                            site_packages.satisfies(
+                                &requirements,
+                                &constraints,
+                                &interpreter.resolver_marker_environment()
+                            ),
+                            Ok(SatisfiesResult::Fresh { .. })
+                        ) {
+                            debug!("Using existing tool `{}`", requirement.name);
+                            return Ok((from, environment));
+                        }
+                    } else {
+                        // Check if the installed packages match the requirements.
+                        // TODO(charlie): Support overrides in `SitePackages::satisfies`.
+                        if requirements == tool_receipt.requirements()
+                            && constraints == tool_receipt.constraints()
+                            && overrides == tool_receipt.overrides()
+                        {
+                            debug!("Using existing tool `{}`", requirement.name);
+                            return Ok((from, environment));
+                        }
+                    }
                 }
             }
         }
@@ -750,6 +800,14 @@ async fn get_or_create_environment(
     // Create a `RequirementsSpecification` from the resolved requirements, to avoid re-resolving.
     let spec = EnvironmentSpecification::from(RequirementsSpecification {
         requirements: requirements
+            .into_iter()
+            .map(UnresolvedRequirementSpecification::from)
+            .collect(),
+        constraints: constraints
+            .into_iter()
+            .map(NameRequirementSpecification::from)
+            .collect(),
+        overrides: overrides
             .into_iter()
             .map(UnresolvedRequirementSpecification::from)
             .collect(),

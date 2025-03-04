@@ -441,13 +441,16 @@ pub(crate) struct ToolRunSettings {
     pub(crate) command: Option<ExternalCommand>,
     pub(crate) from: Option<String>,
     pub(crate) with: Vec<String>,
-    pub(crate) with_editable: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
+    pub(crate) with_editable: Vec<String>,
+    pub(crate) constraints: Vec<PathBuf>,
+    pub(crate) overrides: Vec<PathBuf>,
     pub(crate) isolated: bool,
     pub(crate) show_resolution: bool,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
+    pub(crate) options: ResolverInstallerOptions,
     pub(crate) settings: ResolverInstallerSettings,
 }
 
@@ -465,6 +468,8 @@ impl ToolRunSettings {
             with,
             with_editable,
             with_requirements,
+            constraints,
+            overrides,
             isolated,
             show_resolution,
             installer,
@@ -492,10 +497,20 @@ impl ToolRunSettings {
             }
         }
 
+        let options = resolver_installer_options(installer, build).combine(
+            filesystem
+                .clone()
+                .map(FilesystemOptions::into_options)
+                .map(|options| options.top_level)
+                .unwrap_or_default(),
+        );
+
         let install_mirrors = filesystem
-            .clone()
-            .map(|fs| fs.install_mirrors.clone())
+            .map(FilesystemOptions::into_options)
+            .map(|options| options.install_mirrors)
             .unwrap_or_default();
+
+        let settings = ResolverInstallerSettings::from(options.clone());
 
         Self {
             command,
@@ -512,14 +527,20 @@ impl ToolRunSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            constraints: constraints
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            overrides: overrides
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             isolated,
             show_resolution,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
-            settings: ResolverInstallerSettings::combine(
-                resolver_installer_options(installer, build),
-                filesystem,
-            ),
+            settings,
+            options,
             install_mirrors,
         }
     }
