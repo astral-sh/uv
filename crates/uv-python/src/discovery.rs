@@ -12,7 +12,10 @@ use which::{which, which_all};
 use uv_cache::Cache;
 use uv_fs::which::is_executable;
 use uv_fs::Simplified;
-use uv_pep440::{Prerelease, Version, VersionSpecifier, VersionSpecifiers};
+use uv_pep440::{
+    release_specifiers_to_ranges, LowerBound, Prerelease, UpperBound, Version, VersionSpecifier,
+    VersionSpecifiers,
+};
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
@@ -2178,7 +2181,23 @@ impl VersionRequest {
                 (*self_major, *self_minor) == (major, minor)
             }
             Self::Range(specifiers, _) => {
-                specifiers.contains(&Version::new([u64::from(major), u64::from(minor)]))
+                let range = release_specifiers_to_ranges(specifiers.clone());
+                let Some((lower, upper)) = range.bounding_range() else {
+                    return true;
+                };
+                let version = Version::new([u64::from(major), u64::from(minor)]);
+
+                let lower = LowerBound::new(lower.cloned());
+                if !lower.major_minor().contains(&version) {
+                    return false;
+                }
+
+                let upper = UpperBound::new(upper.cloned());
+                if !upper.major_minor().contains(&version) {
+                    return false;
+                }
+
+                true
             }
             Self::MajorMinorPrerelease(self_major, self_minor, _, _) => {
                 (*self_major, *self_minor) == (major, minor)
