@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::env::VarError;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt::Write;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -1117,6 +1117,58 @@ fn can_skip_ephemeral(
 }
 
 #[derive(Debug)]
+enum WindowsScript {
+    /// `PowerShell` script (.ps1)
+    PowerShell,
+    /// Command Prompt NT script (.cmd)
+    Command,
+    /// Command Prompt script (.bat)
+    Batch,
+}
+
+impl WindowsScript {
+    /// Returns a list of all supported Windows script types.
+    fn all() -> &'static [Self] {
+        &[Self::PowerShell, Self::Command, Self::Batch]
+    }
+
+    /// Returns the script extension for a given Windows script type.
+    fn to_extension(&self) -> &'static str {
+        match self {
+            Self::PowerShell => "ps1",
+            Self::Command => "cmd",
+            Self::Batch => "bat",
+        }
+    }
+
+    /// Determines the script type from a given Windows file extension.
+    fn from_extension(ext: &str) -> Option<Self> {
+        match ext {
+            "ps1" => Some(Self::PowerShell),
+            "cmd" => Some(Self::Command),
+            "bat" => Some(Self::Batch),
+            _ => None,
+        }
+    }
+
+    /// Returns a [`Command`] to run the given script under the appropriate Windows command.
+    fn as_command(&self, script: &Path) -> Command {
+        match self {
+            Self::PowerShell => {
+                let mut cmd = Command::new("powershell");
+                cmd.arg("-NoLogo").arg("-File").arg(script);
+                cmd
+            }
+            Self::Command | Self::Batch => {
+                let mut cmd = Command::new("cmd");
+                cmd.arg("/q").arg("/c").arg(script);
+                cmd
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
 pub(crate) enum RunCommand {
     /// Execute `python`.
     Python(Vec<OsString>),
@@ -1175,6 +1227,37 @@ impl RunCommand {
             }
             Self::External(executable, _) => executable.to_string_lossy(),
         }
+    }
+
+    /// Handle legacy setuptools scripts for Windows.
+    ///
+    /// Returns [`Command`] that can be used to run `.ps1`, `.cmd`, or `.bat` scripts on Windows.
+    fn for_windows_script(interpreter: &Interpreter, executable: &OsStr) -> Command {
+        let script_path = interpreter.scripts().join(executable);
+
+        // Honor explicit extension if provided and recognized.
+        if let Some(script_type) = script_path
+            .extension()
+            .and_then(OsStr::to_str)
+            .and_then(WindowsScript::from_extension)
+            .filter(|_| script_path.is_file())
+        {
+            return script_type.as_command(&script_path);
+        }
+
+        // Guess the extension when an explicit one is not provided.
+        // We also add the extension when missing since for PowerShell it must be explicit.
+        WindowsScript::all()
+            .iter()
+            .map(|script_type| {
+                (
+                    script_type,
+                    script_path.with_extension(script_type.to_extension()),
+                )
+            })
+            .find(|(_, script_path)| script_path.is_file())
+            .map(|(script_type, script_path)| script_type.as_command(&script_path))
+            .unwrap_or_else(|| Command::new(executable))
     }
 
     /// Convert a [`RunCommand`] into a [`Command`].
@@ -1292,7 +1375,11 @@ impl RunCommand {
                 process
             }
             Self::External(executable, args) => {
-                let mut process = Command::new(executable);
+                let mut process = if cfg!(windows) {
+                    Self::for_windows_script(interpreter, executable)
+                } else {
+                    Command::new(executable)
+                };
                 process.args(args);
                 process
             }
