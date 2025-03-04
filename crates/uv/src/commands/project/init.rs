@@ -934,8 +934,8 @@ fn pyproject_build_system(package: &PackageName, build_backend: ProjectBuildBack
             let max_version = Version::new([0, min_version.release()[1] + 1]);
             indoc::formatdoc! {r#"
                 [build-system]
-                requires = ["uv>={min_version},<{max_version}"]
-                build-backend = "uv"
+                requires = ["uv_build>={min_version},<{max_version}"]
+                build-backend = "uv_build"
             "#}
         }
         .to_string(),
