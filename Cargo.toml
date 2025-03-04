@@ -338,6 +338,9 @@ install-updater = false
 # Path that installers should place binaries in
 install-path = ["$XDG_BIN_HOME/", "$XDG_DATA_HOME/../bin", "~/.local/bin"]
 
+[workspace.metadata.dist.github-custom-runners]
+global = "depot-ubuntu-latest-4"
+
 [workspace.metadata.dist.min-glibc-version]
 # Override glibc version for specific target triplets.
 aarch64-unknown-linux-gnu = "2.28"
