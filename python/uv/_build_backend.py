@@ -23,7 +23,15 @@ if TYPE_CHECKING:
 
 
 def warn_config_settings(config_settings: "Mapping[Any, Any] | None" = None) -> None:
+    import os
     import sys
+
+    if not os.environ.get("UV_PREVIEW"):
+        print(
+            "Warning: The uv build backend is in preview. "
+            "Set the `UV_PREVIEW` environment variable to `1` to acknowledge.",
+            file=sys.stderr,
+        )
 
     if config_settings:
         print("Warning: Config settings are not supported", file=sys.stderr)
