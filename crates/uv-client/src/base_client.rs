@@ -13,7 +13,7 @@ use std::time::Duration;
 use std::{env, iter};
 use tracing::{debug, trace};
 use url::Url;
-use uv_auth::AuthMiddleware;
+use uv_auth::{AuthMiddleware, UrlAuthPolicies};
 use uv_configuration::{KeyringProviderType, TrustedHost};
 use uv_fs::Simplified;
 use uv_pep508::MarkerEnvironment;
@@ -54,6 +54,7 @@ pub struct BaseClientBuilder<'a> {
     markers: Option<&'a MarkerEnvironment>,
     platform: Option<&'a Platform>,
     auth_integration: AuthIntegration,
+    url_auth_policies: Option<UrlAuthPolicies>,
     default_timeout: Duration,
     extra_middleware: Option<ExtraMiddleware>,
 }
@@ -88,6 +89,7 @@ impl BaseClientBuilder<'_> {
             markers: None,
             platform: None,
             auth_integration: AuthIntegration::default(),
+            url_auth_policies: None,
             default_timeout: Duration::from_secs(30),
             extra_middleware: None,
         }
@@ -146,6 +148,12 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn auth_integration(mut self, auth_integration: AuthIntegration) -> Self {
         self.auth_integration = auth_integration;
+        self
+    }
+
+    #[must_use]
+    pub fn url_auth_policies(mut self, auth_policies: UrlAuthPolicies) -> Self {
+        self.url_auth_policies = Some(auth_policies);
         self
     }
 
@@ -324,8 +332,13 @@ impl<'a> BaseClientBuilder<'a> {
                 // Initialize the authentication middleware to set headers.
                 match self.auth_integration {
                     AuthIntegration::Default => {
-                        client = client
-                            .with(AuthMiddleware::new().with_keyring(self.keyring.to_provider()));
+                        let mut auth_middleware =
+                            AuthMiddleware::new().with_keyring(self.keyring.to_provider());
+                        if let Some(url_auth_policies) = &self.url_auth_policies {
+                            auth_middleware =
+                                auth_middleware.with_url_auth_policies(url_auth_policies.clone());
+                        }
+                        client = client.with(auth_middleware);
                     }
                     AuthIntegration::OnlyAuthenticated => {
                         client = client.with(

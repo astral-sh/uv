@@ -8,6 +8,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 
+use uv_auth::UrlAuthPolicies;
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -1531,10 +1532,11 @@ pub(crate) async fn resolve_names(
     let client = RegistryClientBuilder::new(cache.clone())
         .native_tls(network_settings.native_tls)
         .connectivity(network_settings.connectivity)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone())
+        .url_auth_policies(UrlAuthPolicies::from(index_locations))
         .index_urls(index_locations.index_urls())
         .index_strategy(*index_strategy)
         .keyring(*keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -1682,10 +1684,11 @@ pub(crate) async fn resolve_environment(
     let client = RegistryClientBuilder::new(cache.clone())
         .native_tls(network_settings.native_tls)
         .connectivity(network_settings.connectivity)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone())
+        .url_auth_policies(UrlAuthPolicies::from(index_locations))
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -1851,10 +1854,11 @@ pub(crate) async fn sync_environment(
     let client = RegistryClientBuilder::new(cache.clone())
         .native_tls(network_settings.native_tls)
         .connectivity(network_settings.connectivity)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone())
+        .url_auth_policies(UrlAuthPolicies::from(index_locations))
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -2053,10 +2057,11 @@ pub(crate) async fn update_environment(
     let client = RegistryClientBuilder::new(cache.clone())
         .native_tls(network_settings.native_tls)
         .connectivity(network_settings.connectivity)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone())
+        .url_auth_policies(UrlAuthPolicies::from(index_locations))
         .index_urls(index_locations.index_urls())
         .index_strategy(*index_strategy)
         .keyring(*keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
