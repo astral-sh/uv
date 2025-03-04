@@ -192,7 +192,7 @@ impl PyVenvConfiguration {
         let mut uv = false;
         let mut relocatable = false;
         let mut seed = false;
-        let mut include_system_side_packages = false;
+        let mut include_system_side_packages = true;
 
         // Per https://snarky.ca/how-virtual-environments-work/, the `pyvenv.cfg` file is not a
         // valid INI file, and is instead expected to be parsed by partitioning each line on the
