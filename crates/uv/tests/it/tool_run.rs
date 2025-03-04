@@ -1760,7 +1760,7 @@ fn tool_run_python_at_version() {
     success: false
     exit_code: 2
     ----- stdout -----
-    
+
     ----- stderr -----
     error: Invalid version request: 3.300
     "###);
@@ -1960,5 +1960,119 @@ fn tool_run_verbatim_name() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    ");
+}
+
+#[test]
+fn tool_run_with_existing_py_script() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    context.temp_dir.child("script.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.tool_run().arg("script.py"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: It looks you tried to run a Python script at `script.py`, which is not supported by `uv tool run`
+
+    hint: Use `uv run script.py` instead
+    ");
+    Ok(())
+}
+
+#[test]
+fn tool_run_with_existing_pyw_script() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    context.temp_dir.child("script.pyw").touch()?;
+
+    // We treat arguments before the command as uv arguments
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("script.pyw"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: It looks you tried to run a Python script at `script.pyw`, which is not supported by `uv tool run`
+
+    hint: Use `uv run script.pyw` instead
+    ");
+    Ok(())
+}
+
+#[test]
+fn tool_run_with_nonexistent_py_script() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // We treat arguments before the command as uv arguments
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("script.py"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: It looks you provided a Python script to run, which is not supported supported by `uv tool run`
+
+    hint: We did not find a script at the requested path. If you meant to run a command from the `script-py` package, pass the normalized package name to `--from` to disambiguate, e.g., `uv tool run --from script-py script.py`
+    ");
+}
+
+#[test]
+fn tool_run_with_nonexistent_pyw_script() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // We treat arguments before the command as uv arguments
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("script.pyw"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: It looks you provided a Python script to run, which is not supported supported by `uv tool run`
+
+    hint: We did not find a script at the requested path. If you meant to run a command from the `script-pyw` package, pass the normalized package name to `--from` to disambiguate, e.g., `uv tool run --from script-pyw script.pyw`
+    ");
+}
+
+#[test]
+fn tool_run_with_from_script() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // We treat arguments before the command as uv arguments
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("script.py")
+        .arg("ruff"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: It looks you provided a Python script to `--from`, which is not supported
+
+    hint: If you meant to run a command from the `script-py` package, use the normalized package name instead to disambiguate, e.g., `uv tool run --from script-py ruff`
+    ");
+}
+
+#[test]
+fn tool_run_with_script_and_from_script() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // We treat arguments before the command as uv arguments
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("script.py")
+        .arg("other-script.py"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: It looks you provided a Python script to `--from`, which is not supported
+
+    hint: If you meant to run a command from the `script-py` package, use the normalized package name instead to disambiguate, e.g., `uv tool run --from script-py other-script.py`
     ");
 }

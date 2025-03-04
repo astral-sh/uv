@@ -1,5 +1,6 @@
 use std::fmt::Display;
 use std::fmt::Write;
+use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -18,6 +19,7 @@ use uv_configuration::{Concurrency, PreviewMode};
 use uv_distribution_types::{
     Name, NameRequirementSpecification, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
+use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
@@ -92,6 +94,12 @@ pub(crate) async fn run(
     printer: Printer,
     preview: PreviewMode,
 ) -> anyhow::Result<ExitStatus> {
+    /// Whether or not a path looks like a Python script based on the file extension.
+    fn has_python_script_ext(path: &Path) -> bool {
+        path.extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
+    }
+
     let Some(command) = command else {
         // When a command isn't provided, we'll show a brief help including available tools
         show_help(invocation_source, &cache, printer).await?;
@@ -105,8 +113,45 @@ pub(crate) async fn run(
     };
 
     let Some(target) = target.to_str() else {
-        return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
+        return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name"));
     };
+
+    if let Some(ref from) = from {
+        if has_python_script_ext(Path::new(from)) {
+            let package_name = PackageName::from_str(from)?;
+            return Err(anyhow::anyhow!(
+                "It looks you provided a Python script to `--from`, which is not supported\n\n{}{} If you meant to run a command from the `{}` package, use the normalized package name instead to disambiguate, e.g., `{}`",
+                "hint".bold().cyan(),
+                ":".bold(),
+                package_name.cyan(),
+                format!("{} --from {} {}", invocation_source, package_name.cyan(), target),
+            ));
+        }
+    } else {
+        let target_path = Path::new(target);
+        if has_python_script_ext(target_path) {
+            return if target_path.try_exists()? {
+                Err(anyhow::anyhow!(
+                    "It looks you tried to run a Python script at `{}`, which is not supported by `{}`\n\n{}{} Use `{}` instead",
+                    target_path.user_display(),
+                    invocation_source,
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    format!("uv run {}", target_path.user_display().cyan()),
+                ))
+            } else {
+                let package_name = PackageName::from_str(target)?;
+                Err(anyhow::anyhow!(
+                    "It looks you provided a Python script to run, which is not supported supported by `{}`\n\n{}{} We did not find a script at the requested path. If you meant to run a command from the `{}` package, pass the normalized package name to `--from` to disambiguate, e.g., `{}`",
+                    invocation_source,
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package_name.cyan(),
+                    format!("{} --from {} {}", invocation_source, package_name, target),
+                ))
+            };
+        }
+    }
 
     let request = ToolRequest::parse(target, from.as_deref());
 
