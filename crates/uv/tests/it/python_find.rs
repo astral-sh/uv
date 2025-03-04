@@ -1,6 +1,7 @@
 use assert_fs::prelude::PathChild;
 use assert_fs::{fixture::FileWriteStr, prelude::PathCreateDir};
 use indoc::indoc;
+use std::path::Path;
 
 use uv_python::platform::{Arch, Os};
 use uv_static::EnvVars;
@@ -661,5 +662,84 @@ fn python_find_venv_invalid() {
     [PYTHON-3.12]
 
     ----- stderr -----
+    "###);
+}
+
+/// See: <https://github.com/astral-sh/uv/issues/11825>
+#[test]
+#[cfg(unix)]
+fn python_required_python_major_minor() {
+    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
+
+    // Find the Python 3.11 executable.
+    let path =
+        String::from_utf8(context.python_find().arg("3.11").output().unwrap().stdout).unwrap();
+    let path = Path::new(path.trim());
+
+    // Symlink it to `python3.11`.
+    fs_err::create_dir_all(context.temp_dir.child("child")).unwrap();
+    std::os::unix::fs::symlink(path, context.temp_dir.child("child").join("python3.11")).unwrap();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11.4, <3.12"
+        dependencies = ["anyio==3.7.0"]
+    "#})
+        .unwrap();
+
+    // Find `python3.11`, which is `>=3.11.4`.
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/child/python3.11
+
+    ----- stderr -----
+    "###);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">3.11.4, <3.12"
+        dependencies = ["anyio==3.7.0"]
+    "#})
+        .unwrap();
+
+    // Find `python3.11`, which is `>3.11.4`.
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/child/python3.11
+
+    ----- stderr -----
+    "###);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">3.11.255, <3.12"
+        dependencies = ["anyio==3.7.0"]
+    "#})
+        .unwrap();
+
+    // Fail to find any matching Python interpreter.
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python >3.11.[X], <3.12 in virtual environments, managed installations, or search path
     "###);
 }
