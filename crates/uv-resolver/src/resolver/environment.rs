@@ -617,10 +617,10 @@ mod tests {
     use std::ops::Bound;
     use std::sync::LazyLock;
 
-    use uv_pep440::Version;
+    use uv_pep440::{LowerBound, UpperBound, Version};
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
 
-    use crate::requires_python::{LowerBound, RequiresPython, RequiresPythonRange, UpperBound};
+    use crate::requires_python::{RequiresPython, RequiresPythonRange};
 
     use super::*;
 

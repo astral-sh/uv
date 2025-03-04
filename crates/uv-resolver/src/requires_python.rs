@@ -1,11 +1,12 @@
-use std::cmp::Ordering;
 use std::collections::Bound;
-use std::ops::Deref;
 
 use pubgrub::Range;
 
 use uv_distribution_filename::WheelFilename;
-use uv_pep440::{release_specifiers_to_ranges, Version, VersionSpecifier, VersionSpecifiers};
+use uv_pep440::{
+    release_specifiers_to_ranges, LowerBound, UpperBound, Version, VersionSpecifier,
+    VersionSpecifiers,
+};
 use uv_pep508::{MarkerExpression, MarkerTree, MarkerValueVersion};
 use uv_platform_tags::{AbiTag, LanguageTag};
 
@@ -53,7 +54,7 @@ impl RequiresPython {
             .unwrap_or((Bound::Unbounded, Bound::Unbounded));
         Self {
             specifiers: specifiers.clone(),
-            range: RequiresPythonRange(LowerBound(lower_bound), UpperBound(upper_bound)),
+            range: RequiresPythonRange(LowerBound::new(lower_bound), UpperBound::new(upper_bound)),
         }
     }
 
@@ -354,7 +355,7 @@ impl RequiresPython {
     /// into the marker explicitly.
     pub(crate) fn simplify_markers(&self, marker: MarkerTree) -> MarkerTree {
         let (lower, upper) = (self.range().lower(), self.range().upper());
-        marker.simplify_python_versions(lower.0.as_ref(), upper.0.as_ref())
+        marker.simplify_python_versions(lower.as_ref(), upper.as_ref())
     }
 
     /// The inverse of `simplify_markers`.
@@ -374,7 +375,7 @@ impl RequiresPython {
     /// ```
     pub(crate) fn complexify_markers(&self, marker: MarkerTree) -> MarkerTree {
         let (lower, upper) = (self.range().lower(), self.range().upper());
-        marker.complexify_python_versions(lower.0.as_ref(), upper.0.as_ref())
+        marker.complexify_python_versions(lower.as_ref(), upper.as_ref())
     }
 
     /// Returns `false` if the wheel's tags state it can't be used in the given Python version
@@ -623,276 +624,6 @@ impl SimplifiedMarkerTree {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct LowerBound(Bound<Version>);
-
-impl LowerBound {
-    /// Initialize a [`LowerBound`] with the given bound.
-    ///
-    /// These bounds use release-only semantics when comparing versions.
-    pub fn new(bound: Bound<Version>) -> Self {
-        Self(match bound {
-            Bound::Included(version) => Bound::Included(version.only_release()),
-            Bound::Excluded(version) => Bound::Excluded(version.only_release()),
-            Bound::Unbounded => Bound::Unbounded,
-        })
-    }
-
-    /// Return the [`LowerBound`] truncated to the major and minor version.
-    fn major_minor(&self) -> Self {
-        match &self.0 {
-            // Ex) `>=3.10.1` -> `>=3.10`
-            Bound::Included(version) => Self(Bound::Included(Version::new(
-                version.release().iter().take(2),
-            ))),
-            // Ex) `>3.10.1` -> `>=3.10`.
-            Bound::Excluded(version) => Self(Bound::Included(Version::new(
-                version.release().iter().take(2),
-            ))),
-            Bound::Unbounded => Self(Bound::Unbounded),
-        }
-    }
-
-    /// Returns `true` if the lower bound contains the given version.
-    pub fn contains(&self, version: &Version) -> bool {
-        match self.0 {
-            Bound::Included(ref bound) => bound <= version,
-            Bound::Excluded(ref bound) => bound < version,
-            Bound::Unbounded => true,
-        }
-    }
-
-    /// Returns the [`VersionSpecifier`] for the lower bound.
-    pub fn specifier(&self) -> Option<VersionSpecifier> {
-        match &self.0 {
-            Bound::Included(version) => Some(VersionSpecifier::greater_than_equal_version(
-                version.clone(),
-            )),
-            Bound::Excluded(version) => {
-                Some(VersionSpecifier::greater_than_version(version.clone()))
-            }
-            Bound::Unbounded => None,
-        }
-    }
-}
-
-impl PartialOrd for LowerBound {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-/// See: <https://github.com/pubgrub-rs/pubgrub/blob/4b4b44481c5f93f3233221dc736dd23e67e00992/src/range.rs#L324>
-impl Ord for LowerBound {
-    fn cmp(&self, other: &Self) -> Ordering {
-        let left = self.0.as_ref();
-        let right = other.0.as_ref();
-
-        match (left, right) {
-            // left:   ∞-----
-            // right:  ∞-----
-            (Bound::Unbounded, Bound::Unbounded) => Ordering::Equal,
-            // left:     [---
-            // right:  ∞-----
-            (Bound::Included(_left), Bound::Unbounded) => Ordering::Greater,
-            // left:     ]---
-            // right:  ∞-----
-            (Bound::Excluded(_left), Bound::Unbounded) => Ordering::Greater,
-            // left:   ∞-----
-            // right:    [---
-            (Bound::Unbounded, Bound::Included(_right)) => Ordering::Less,
-            // left:   [----- OR [----- OR   [-----
-            // right:    [--- OR [----- OR [---
-            (Bound::Included(left), Bound::Included(right)) => left.cmp(right),
-            (Bound::Excluded(left), Bound::Included(right)) => match left.cmp(right) {
-                // left:   ]-----
-                // right:    [---
-                Ordering::Less => Ordering::Less,
-                // left:   ]-----
-                // right:  [---
-                Ordering::Equal => Ordering::Greater,
-                // left:     ]---
-                // right:  [-----
-                Ordering::Greater => Ordering::Greater,
-            },
-            // left:   ∞-----
-            // right:    ]---
-            (Bound::Unbounded, Bound::Excluded(_right)) => Ordering::Less,
-            (Bound::Included(left), Bound::Excluded(right)) => match left.cmp(right) {
-                // left:   [-----
-                // right:    ]---
-                Ordering::Less => Ordering::Less,
-                // left:   [-----
-                // right:  ]---
-                Ordering::Equal => Ordering::Less,
-                // left:     [---
-                // right:  ]-----
-                Ordering::Greater => Ordering::Greater,
-            },
-            // left:   ]----- OR ]----- OR   ]---
-            // right:    ]--- OR ]----- OR ]-----
-            (Bound::Excluded(left), Bound::Excluded(right)) => left.cmp(right),
-        }
-    }
-}
-
-impl Default for LowerBound {
-    fn default() -> Self {
-        Self(Bound::Unbounded)
-    }
-}
-
-impl Deref for LowerBound {
-    type Target = Bound<Version>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl From<LowerBound> for Bound<Version> {
-    fn from(bound: LowerBound) -> Self {
-        bound.0
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct UpperBound(Bound<Version>);
-
-impl UpperBound {
-    /// Initialize a [`UpperBound`] with the given bound.
-    ///
-    /// These bounds use release-only semantics when comparing versions.
-    pub fn new(bound: Bound<Version>) -> Self {
-        Self(match bound {
-            Bound::Included(version) => Bound::Included(version.only_release()),
-            Bound::Excluded(version) => Bound::Excluded(version.only_release()),
-            Bound::Unbounded => Bound::Unbounded,
-        })
-    }
-
-    /// Return the [`UpperBound`] truncated to the major and minor version.
-    fn major_minor(&self) -> Self {
-        match &self.0 {
-            // Ex) `<=3.10.1` -> `<=3.10`
-            Bound::Included(version) => Self(Bound::Included(Version::new(
-                version.release().iter().take(2),
-            ))),
-            // Ex) `<3.10.1` -> `<=3.10` (but `<3.10.0` is `<3.10`)
-            Bound::Excluded(version) => {
-                if version.release().get(2).is_some_and(|patch| *patch > 0) {
-                    Self(Bound::Included(Version::new(
-                        version.release().iter().take(2),
-                    )))
-                } else {
-                    Self(Bound::Excluded(Version::new(
-                        version.release().iter().take(2),
-                    )))
-                }
-            }
-            Bound::Unbounded => Self(Bound::Unbounded),
-        }
-    }
-
-    /// Returns `true` if the upper bound contains the given version.
-    pub fn contains(&self, version: &Version) -> bool {
-        match self.0 {
-            Bound::Included(ref bound) => bound >= version,
-            Bound::Excluded(ref bound) => bound > version,
-            Bound::Unbounded => true,
-        }
-    }
-
-    /// Returns the [`VersionSpecifier`] for the upper bound.
-    pub fn specifier(&self) -> Option<VersionSpecifier> {
-        match &self.0 {
-            Bound::Included(version) => {
-                Some(VersionSpecifier::less_than_equal_version(version.clone()))
-            }
-            Bound::Excluded(version) => Some(VersionSpecifier::less_than_version(version.clone())),
-            Bound::Unbounded => None,
-        }
-    }
-}
-
-impl PartialOrd for UpperBound {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-/// See: <https://github.com/pubgrub-rs/pubgrub/blob/4b4b44481c5f93f3233221dc736dd23e67e00992/src/range.rs#L324>
-impl Ord for UpperBound {
-    fn cmp(&self, other: &Self) -> Ordering {
-        let left = self.0.as_ref();
-        let right = other.0.as_ref();
-
-        match (left, right) {
-            // left:   -----∞
-            // right:  -----∞
-            (Bound::Unbounded, Bound::Unbounded) => Ordering::Equal,
-            // left:   ---]
-            // right:  -----∞
-            (Bound::Included(_left), Bound::Unbounded) => Ordering::Less,
-            // left:   ---[
-            // right:  -----∞
-            (Bound::Excluded(_left), Bound::Unbounded) => Ordering::Less,
-            // left:  -----∞
-            // right: ---]
-            (Bound::Unbounded, Bound::Included(_right)) => Ordering::Greater,
-            // left:   -----] OR -----] OR ---]
-            // right:    ---] OR -----] OR -----]
-            (Bound::Included(left), Bound::Included(right)) => left.cmp(right),
-            (Bound::Excluded(left), Bound::Included(right)) => match left.cmp(right) {
-                // left:   ---[
-                // right:  -----]
-                Ordering::Less => Ordering::Less,
-                // left:   -----[
-                // right:  -----]
-                Ordering::Equal => Ordering::Less,
-                // left:   -----[
-                // right:  ---]
-                Ordering::Greater => Ordering::Greater,
-            },
-            (Bound::Unbounded, Bound::Excluded(_right)) => Ordering::Greater,
-            (Bound::Included(left), Bound::Excluded(right)) => match left.cmp(right) {
-                // left:   ---]
-                // right:  -----[
-                Ordering::Less => Ordering::Less,
-                // left:   -----]
-                // right:  -----[
-                Ordering::Equal => Ordering::Greater,
-                // left:   -----]
-                // right:  ---[
-                Ordering::Greater => Ordering::Greater,
-            },
-            // left:   -----[ OR -----[ OR ---[
-            // right:  ---[   OR -----[ OR -----[
-            (Bound::Excluded(left), Bound::Excluded(right)) => left.cmp(right),
-        }
-    }
-}
-
-impl Default for UpperBound {
-    fn default() -> Self {
-        Self(Bound::Unbounded)
-    }
-}
-
-impl Deref for UpperBound {
-    type Target = Bound<Version>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl From<UpperBound> for Bound<Version> {
-    fn from(bound: UpperBound) -> Self {
-        bound.0
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::cmp::Ordering;
@@ -900,9 +631,8 @@ mod tests {
     use std::str::FromStr;
 
     use uv_distribution_filename::WheelFilename;
-    use uv_pep440::{Version, VersionSpecifiers};
+    use uv_pep440::{LowerBound, UpperBound, Version, VersionSpecifiers};
 
-    use crate::requires_python::{LowerBound, UpperBound};
     use crate::RequiresPython;
 
     #[test]
