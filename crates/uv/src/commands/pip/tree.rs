@@ -15,7 +15,7 @@ use uv_cache_info::Timestamp;
 use uv_client::RegistryClientBuilder;
 use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
 use uv_distribution_types::{Diagnostic, IndexCapabilities, IndexLocations, Name};
-use uv_installer::SitePackages;
+use uv_installer::InstalledPackages;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::{Requirement, VersionOrUrl};
@@ -63,11 +63,11 @@ pub(crate) async fn pip_tree(
     report_target_environment(&environment, cache, printer)?;
 
     // Read packages from the virtual environment.
-    let site_packages = SitePackages::from_environment(&environment)?;
+    let installed_packages = InstalledPackages::from_environment(&environment)?;
 
     let packages = {
         let mut packages: FxHashMap<_, Vec<_>> = FxHashMap::default();
-        for package in site_packages.iter() {
+        for package in installed_packages.iter() {
             packages
                 .entry(package.name())
                 .or_default()
@@ -171,7 +171,7 @@ pub(crate) async fn pip_tree(
 
     // Validate that the environment is consistent.
     if strict {
-        for diagnostic in site_packages.diagnostics(&markers)? {
+        for diagnostic in installed_packages.diagnostics(&markers)? {
             writeln!(
                 printer.stderr(),
                 "{}{} {}",

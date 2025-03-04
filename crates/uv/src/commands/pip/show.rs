@@ -10,7 +10,7 @@ use uv_cache::Cache;
 use uv_distribution_types::{Diagnostic, Name};
 use uv_fs::Simplified;
 use uv_install_wheel::read_record_file;
-use uv_installer::SitePackages;
+use uv_installer::InstalledPackages;
 use uv_normalize::PackageName;
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
 
@@ -51,7 +51,7 @@ pub(crate) fn pip_show(
     report_target_environment(&environment, cache, printer)?;
 
     // Build the installed index.
-    let site_packages = SitePackages::from_environment(&environment)?;
+    let installed_packages = InstalledPackages::from_environment(&environment)?;
 
     // Determine the markers to use for resolution.
     let markers = environment.interpreter().resolver_marker_environment();
@@ -62,7 +62,7 @@ pub(crate) fn pip_show(
 
     // Map to the local distributions and collect missing packages.
     let (missing, distributions): (Vec<_>, Vec<_>) = packages.iter().partition_map(|name| {
-        let installed = site_packages.get_packages(name);
+        let installed = installed_packages.get_packages(name);
         if installed.is_empty() {
             Either::Left(name)
         } else {
@@ -110,7 +110,7 @@ pub(crate) fn pip_show(
     }
     // For Required-by field
     if !requires_map.is_empty() {
-        for installed in site_packages.iter() {
+        for installed in installed_packages.iter() {
             if requires_map.contains_key(installed.name()) {
                 continue;
             }
@@ -201,7 +201,7 @@ pub(crate) fn pip_show(
 
     // Validate that the environment is consistent.
     if strict {
-        for diagnostic in site_packages.diagnostics(&markers)? {
+        for diagnostic in installed_packages.diagnostics(&markers)? {
             writeln!(
                 printer.stderr(),
                 "{}{} {}",

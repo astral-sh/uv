@@ -166,7 +166,7 @@ pub trait SourceBuildTrait {
     ) -> impl Future<Output = Result<String, AnyErrorBuild>> + 'a;
 }
 
-/// A wrapper for [`uv_installer::SitePackages`]
+/// A wrapper for [`uv_installer::InstalledPackages`]
 pub trait InstalledPackagesProvider: Clone + Send + Sync + 'static {
     fn iter(&self) -> impl Iterator<Item = &InstalledDist>;
     fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist>;
