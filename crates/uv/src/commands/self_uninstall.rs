@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::fmt::Write;
 
 use crate::commands::cache_clean;
 use crate::commands::ExitStatus;
@@ -38,8 +39,20 @@ pub(crate) fn self_uninstall(
     let uvx_executable = uv_path.with_file_name(format!("uvx{}", std::env::consts::EXE_SUFFIX));
     let uvx_path = uvx_executable.as_path();
 
-    rm_rf(uv_path)?;
     rm_rf(uvx_path)?;
+
+    if cfg!(windows) {
+        // On Windows, an executable cannot remove itself
+        // While hacky workarounds exist, it may be more robust
+        // to simply prompt the user to manually remove the uv binary
+        writeln!(
+            printer.stdout(),
+            "uv binary at {} not deleted; you may remove it manually",
+            uv_path.display()
+        )?;
+    } else {
+        rm_rf(uv_path)?;
+    }
 
     Ok(ExitStatus::Success)
 }
