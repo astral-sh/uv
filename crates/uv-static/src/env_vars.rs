@@ -566,6 +566,11 @@ impl EnvVars {
     /// If logging is not enabled, e.g., with `RUST_LOG` or `-v`, this has no effect.
     pub const UV_LOG_CONTEXT: &'static str = "UV_LOG_CONTEXT";
 
+    /// Add additional context and structure to file logs.
+    ///
+    /// If logging is not enabled, e.g., with `--log` not set this has no effect
+    pub const UV_FILE_LOG_CONTEXT: &'static str = "UV_FILE_LOG_CONTEXT";
+
     /// Use to set the stack size used by uv.
     ///
     /// The value is in bytes, and the default is typically 2MB (2097152).
@@ -667,4 +672,7 @@ impl EnvVars {
     ///
     /// This is a quasi-standard variable, described e.g. in `ncurses(3x)`.
     pub const COLUMNS: &'static str = "COLUMNS";
+
+    /// Path to log file that uv would write to
+    pub const UV_LOG: &'static str = "UV_LOG";
 }
