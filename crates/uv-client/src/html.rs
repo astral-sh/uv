@@ -218,8 +218,8 @@ impl SimpleHtml {
             yanked,
             requires_python,
             hashes,
-            filename: filename.to_string(),
-            url: decoded.to_string(),
+            filename: filename.into(),
+            url: decoded.into(),
             size,
             upload_time,
         }))

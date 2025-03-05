@@ -116,13 +116,9 @@ impl CachedWheel {
         }
     }
 
-    /// Read a cached wheel from a `.http` pointer (e.g., `anyio-4.0.0-py3-none-any.http`).
+    /// Read a cached wheel from a `.http` pointer
     pub fn from_http_pointer(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
         let path = path.as_ref();
-
-        // Determine the wheel filename.
-        let filename = path.file_stem()?.to_str()?;
-        let filename = WheelFilename::from_stem(filename).ok()?;
 
         // Read the pointer.
         let pointer = HttpArchivePointer::read_from(path).ok()??;
@@ -135,25 +131,20 @@ impl CachedWheel {
         }
 
         let Archive { id, hashes, .. } = archive;
-
         let entry = cache.entry(CacheBucket::Archive, "", id);
 
         // Convert to a cached wheel.
         Some(Self {
-            filename,
+            filename: archive.filename,
             entry,
             hashes,
             cache_info,
         })
     }
 
-    /// Read a cached wheel from a `.rev` pointer (e.g., `anyio-4.0.0-py3-none-any.rev`).
+    /// Read a cached wheel from a `.rev` pointer
     pub fn from_local_pointer(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
         let path = path.as_ref();
-
-        // Determine the wheel filename.
-        let filename = path.file_stem()?.to_str()?;
-        let filename = WheelFilename::from_stem(filename).ok()?;
 
         // Read the pointer.
         let pointer = LocalArchivePointer::read_from(path).ok()??;
@@ -166,11 +157,11 @@ impl CachedWheel {
         }
 
         let Archive { id, hashes, .. } = archive;
+        let entry = cache.entry(CacheBucket::Archive, "", id);
 
         // Convert to a cached wheel.
-        let entry = cache.entry(CacheBucket::Archive, "", id);
         Some(Self {
-            filename,
+            filename: archive.filename,
             entry,
             hashes,
             cache_info,

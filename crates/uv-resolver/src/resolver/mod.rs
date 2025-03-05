@@ -2819,6 +2819,27 @@ impl ForkState {
         self
     }
 
+    /// Returns the URL or index for a package and version.
+    ///
+    /// In practice, exactly one of the returned values will be `Some`.
+    fn source(
+        &self,
+        name: &PackageName,
+        version: &Version,
+    ) -> (Option<&VerbatimParsedUrl>, Option<&IndexUrl>) {
+        let url = self.fork_urls.get(name);
+        let index = url
+            .is_none()
+            .then(|| {
+                self.pins
+                    .get(name, version)
+                    .expect("Every package should be pinned")
+                    .index()
+            })
+            .flatten();
+        (url, index)
+    }
+
     fn into_resolution(self) -> Resolution {
         let solution: FxHashMap<_, _> = self.pubgrub.partial_solution.extract_solution().collect();
         let edge_count: usize = solution
@@ -2865,10 +2886,10 @@ impl ForkState {
 
                     _ => continue,
                 };
-                let self_url = self_name.as_ref().and_then(|name| self.fork_urls.get(name));
-                let self_index = self_name
-                    .as_ref()
-                    .and_then(|name| self.fork_indexes.get(name));
+
+                let (self_url, self_index) = self_name
+                    .map(|self_name| self.source(self_name, self_version))
+                    .unwrap_or((None, None));
 
                 match **dependency_package {
                     PubGrubPackageInner::Package {
@@ -2894,8 +2915,8 @@ impl ForkState {
                             }
                         }
 
-                        let to_url = self.fork_urls.get(dependency_name);
-                        let to_index = self.fork_indexes.get(dependency_name);
+                        let (to_url, to_index) = self.source(dependency_name, dependency_version);
+
                         let edge = ResolutionDependencyEdge {
                             from: self_name.cloned(),
                             from_version: self_version.clone(),
@@ -2926,8 +2947,8 @@ impl ForkState {
                             }
                         }
 
-                        let to_url = self.fork_urls.get(dependency_name);
-                        let to_index = self.fork_indexes.get(dependency_name);
+                        let (to_url, to_index) = self.source(dependency_name, dependency_version);
+
                         let edge = ResolutionDependencyEdge {
                             from: self_name.cloned(),
                             from_version: self_version.clone(),
@@ -2957,10 +2978,9 @@ impl ForkState {
                                 "Extras should be flattened"
                             );
                         }
+                        let (to_url, to_index) = self.source(dependency_name, dependency_version);
 
                         // Insert an edge from the dependent package to the extra package.
-                        let to_url = self.fork_urls.get(dependency_name);
-                        let to_index = self.fork_indexes.get(dependency_name);
                         let edge = ResolutionDependencyEdge {
                             from: self_name.cloned(),
                             from_version: self_version.clone(),
@@ -2979,8 +2999,6 @@ impl ForkState {
                         edges.push(edge);
 
                         // Insert an edge from the dependent package to the base package.
-                        let to_url = self.fork_urls.get(dependency_name);
-                        let to_index = self.fork_indexes.get(dependency_name);
                         let edge = ResolutionDependencyEdge {
                             from: self_name.cloned(),
                             from_version: self_version.clone(),
@@ -3009,10 +3027,10 @@ impl ForkState {
                             "Groups should be flattened"
                         );
 
+                        let (to_url, to_index) = self.source(dependency_name, dependency_version);
+
                         // Add an edge from the dependent package to the dev package, but _not_ the
                         // base package.
-                        let to_url = self.fork_urls.get(dependency_name);
-                        let to_index = self.fork_indexes.get(dependency_name);
                         let edge = ResolutionDependencyEdge {
                             from: self_name.cloned(),
                             from_version: self_version.clone(),
@@ -3046,13 +3064,14 @@ impl ForkState {
                     marker: MarkerTree::TRUE,
                 } = &*self.pubgrub.package_store[package]
                 {
+                    let (url, index) = self.source(name, &version);
                     Some((
                         ResolutionPackage {
                             name: name.clone(),
                             extra: extra.clone(),
                             dev: dev.clone(),
-                            url: self.fork_urls.get(name).cloned(),
-                            index: self.fork_indexes.get(name).cloned(),
+                            url: url.cloned(),
+                            index: index.cloned(),
                         },
                         version,
                     ))
@@ -3091,10 +3110,9 @@ pub(crate) struct ResolutionPackage {
     pub(crate) name: PackageName,
     pub(crate) extra: Option<ExtraName>,
     pub(crate) dev: Option<GroupName>,
-    /// For index packages, this is `None`.
+    /// For registry packages, this is `None`; otherwise, the direct URL of the distribution.
     pub(crate) url: Option<VerbatimParsedUrl>,
-    /// For URL packages, this is `None`, and is only `Some` for packages that are pinned to a
-    /// specific index via `tool.uv.sources`.
+    /// For URL packages, this is `None`; otherwise, the index URL of the distribution.
     pub(crate) index: Option<IndexUrl>,
 }
 
