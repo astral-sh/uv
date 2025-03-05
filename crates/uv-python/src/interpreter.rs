@@ -474,10 +474,7 @@ impl Interpreter {
     /// Return the `site.getsitepackages` for this Python interpreter.
     ///
     /// These are the paths Python will search for packages in at runtime. We use this for
-    /// environment layering, but not for checking for installed packages. We could use these paths
-    /// to check for installed packages, but it introduces a lot of complexity, so instead we use a
-    /// simplified version that does not respect customized site-packages. See
-    /// [`Interpreter::site_packages`].
+    /// environment layering and for discovering installed packages.
     pub fn runtime_site_packages(&self) -> &[PathBuf] {
         &self.site_packages
     }
@@ -669,28 +666,11 @@ impl Interpreter {
                     .chain(iter::once(Cow::Borrowed(self.stdlib.as_path()))),
             )
         } else {
-            // Assumption: We're calling `discovery_paths` only once, so caching this IO operation
-            // is not applicable.
-            let include_system_site_packages = self.include_system_site_packages();
-
-            // Add the main site packages.
-            let prefix = self
-                .prefix()
-                .map(|prefix| prefix.site_packages(self.virtualenv()))
-                .into_iter()
-                .flatten()
-                .map(Cow::Owned);
-            // Add purelib and platlib (often the same path)
-            let interpreter = [Cow::Borrowed(self.purelib()), Cow::Borrowed(self.platlib())];
-            // Add system site packages, if configured for the venv.
-            let system_site_packages = [
-                Cow::Borrowed(self.sys_base_prefix.as_path()),
-                Cow::Borrowed(self.sys_base_exec_prefix.as_path()),
-            ]
-            .into_iter()
-            .filter(move |_| include_system_site_packages);
-
-            Either::Right(prefix.chain(interpreter).chain(system_site_packages))
+            Either::Right(
+                self.runtime_site_packages()
+                    .iter()
+                    .map(|path| Cow::Borrowed(path.as_path())),
+            )
         }
     }
     /// Whether or not this Python interpreter is from a default Python executable name, like
