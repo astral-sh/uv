@@ -307,6 +307,7 @@ uv run [OPTIONS] [COMMAND]
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
 
+<p>May also be set with the <code>UV_NO_BUILD</code> environment variable.</p>
 </dd><dt id="uv-run--no-build-isolation"><a href="#uv-run--no-build-isolation"><code>--no-build-isolation</code></a></dt><dd><p>Disable isolation when building source distributions.</p>
 
 <p>Assumes that build dependencies specified by PEP 518 are already installed.</p>
@@ -318,6 +319,7 @@ uv run [OPTIONS] [COMMAND]
 
 </dd><dt id="uv-run--no-build-package"><a href="#uv-run--no-build-package"><code>--no-build-package</code></a> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BUILD_PACKAGE</code> environment variable.</p>
 </dd><dt id="uv-run--no-cache"><a href="#uv-run--no-cache"><code>--no-cache</code></a>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
@@ -968,6 +970,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
 
+<p>May also be set with the <code>UV_NO_BUILD</code> environment variable.</p>
 </dd><dt id="uv-add--no-build-isolation"><a href="#uv-add--no-build-isolation"><code>--no-build-isolation</code></a></dt><dd><p>Disable isolation when building source distributions.</p>
 
 <p>Assumes that build dependencies specified by PEP 518 are already installed.</p>
@@ -979,6 +982,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 </dd><dt id="uv-add--no-build-package"><a href="#uv-add--no-build-package"><code>--no-build-package</code></a> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BUILD_PACKAGE</code> environment variable.</p>
 </dd><dt id="uv-add--no-cache"><a href="#uv-add--no-cache"><code>--no-cache</code></a>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
@@ -1331,6 +1335,7 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
 
+<p>May also be set with the <code>UV_NO_BUILD</code> environment variable.</p>
 </dd><dt id="uv-remove--no-build-isolation"><a href="#uv-remove--no-build-isolation"><code>--no-build-isolation</code></a></dt><dd><p>Disable isolation when building source distributions.</p>
 
 <p>Assumes that build dependencies specified by PEP 518 are already installed.</p>
@@ -1342,6 +1347,7 @@ uv remove [OPTIONS] <PACKAGES>...
 
 </dd><dt id="uv-remove--no-build-package"><a href="#uv-remove--no-build-package"><code>--no-build-package</code></a> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BUILD_PACKAGE</code> environment variable.</p>
 </dd><dt id="uv-remove--no-cache"><a href="#uv-remove--no-cache"><code>--no-cache</code></a>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
@@ -1706,6 +1712,7 @@ uv sync [OPTIONS]
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
 
+<p>May also be set with the <code>UV_NO_BUILD</code> environment variable.</p>
 </dd><dt id="uv-sync--no-build-isolation"><a href="#uv-sync--no-build-isolation"><code>--no-build-isolation</code></a></dt><dd><p>Disable isolation when building source distributions.</p>
 
 <p>Assumes that build dependencies specified by PEP 518 are already installed.</p>
@@ -1717,6 +1724,7 @@ uv sync [OPTIONS]
 
 </dd><dt id="uv-sync--no-build-package"><a href="#uv-sync--no-build-package"><code>--no-build-package</code></a> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BUILD_PACKAGE</code> environment variable.</p>
 </dd><dt id="uv-sync--no-cache"><a href="#uv-sync--no-cache"><code>--no-cache</code></a>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
@@ -2079,6 +2087,7 @@ uv lock [OPTIONS]
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
 
+<p>May also be set with the <code>UV_NO_BUILD</code> environment variable.</p>
 </dd><dt id="uv-lock--no-build-isolation"><a href="#uv-lock--no-build-isolation"><code>--no-build-isolation</code></a></dt><dd><p>Disable isolation when building source distributions.</p>
 
 <p>Assumes that build dependencies specified by PEP 518 are already installed.</p>
@@ -2090,6 +2099,7 @@ uv lock [OPTIONS]
 
 </dd><dt id="uv-lock--no-build-package"><a href="#uv-lock--no-build-package"><code>--no-build-package</code></a> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BUILD_PACKAGE</code> environment variable.</p>
 </dd><dt id="uv-lock--no-cache"><a href="#uv-lock--no-cache"><code>--no-cache</code></a>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
@@ -2426,6 +2436,7 @@ uv export [OPTIONS]
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
 
+<p>May also be set with the <code>UV_NO_BUILD</code> environment variable.</p>
 </dd><dt id="uv-export--no-build-isolation"><a href="#uv-export--no-build-isolation"><code>--no-build-isolation</code></a></dt><dd><p>Disable isolation when building source distributions.</p>
 
 <p>Assumes that build dependencies specified by PEP 518 are already installed.</p>
@@ -2437,6 +2448,7 @@ uv export [OPTIONS]
 
 </dd><dt id="uv-export--no-build-package"><a href="#uv-export--no-build-package"><code>--no-build-package</code></a> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BUILD_PACKAGE</code> environment variable.</p>
 </dd><dt id="uv-export--no-cache"><a href="#uv-export--no-cache"><code>--no-cache</code></a>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
@@ -2806,6 +2818,7 @@ uv tree [OPTIONS]
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
 
+<p>May also be set with the <code>UV_NO_BUILD</code> environment variable.</p>
 </dd><dt id="uv-tree--no-build-isolation"><a href="#uv-tree--no-build-isolation"><code>--no-build-isolation</code></a></dt><dd><p>Disable isolation when building source distributions.</p>
 
 <p>Assumes that build dependencies specified by PEP 518 are already installed.</p>
@@ -2817,6 +2830,7 @@ uv tree [OPTIONS]
 
 </dd><dt id="uv-tree--no-build-package"><a href="#uv-tree--no-build-package"><code>--no-build-package</code></a> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BUILD_PACKAGE</code> environment variable.</p>
 </dd><dt id="uv-tree--no-cache"><a href="#uv-tree--no-cache"><code>--no-cache</code></a>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
@@ -3288,6 +3302,7 @@ uv tool run [OPTIONS] [COMMAND]
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
 
+<p>May also be set with the <code>UV_NO_BUILD</code> environment variable.</p>
 </dd><dt id="uv-tool-run--no-build-isolation"><a href="#uv-tool-run--no-build-isolation"><code>--no-build-isolation</code></a></dt><dd><p>Disable isolation when building source distributions.</p>
 
 <p>Assumes that build dependencies specified by PEP 518 are already installed.</p>
@@ -3299,6 +3314,7 @@ uv tool run [OPTIONS] [COMMAND]
 
 </dd><dt id="uv-tool-run--no-build-package"><a href="#uv-tool-run--no-build-package"><code>--no-build-package</code></a> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BUILD_PACKAGE</code> environment variable.</p>
 </dd><dt id="uv-tool-run--no-cache"><a href="#uv-tool-run--no-cache"><code>--no-cache</code></a>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
@@ -3626,6 +3642,7 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
 
+<p>May also be set with the <code>UV_NO_BUILD</code> environment variable.</p>
 </dd><dt id="uv-tool-install--no-build-isolation"><a href="#uv-tool-install--no-build-isolation"><code>--no-build-isolation</code></a></dt><dd><p>Disable isolation when building source distributions.</p>
 
 <p>Assumes that build dependencies specified by PEP 518 are already installed.</p>
@@ -3637,6 +3654,7 @@ uv tool install [OPTIONS] <PACKAGE>
 
 </dd><dt id="uv-tool-install--no-build-package"><a href="#uv-tool-install--no-build-package"><code>--no-build-package</code></a> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BUILD_PACKAGE</code> environment variable.</p>
 </dd><dt id="uv-tool-install--no-cache"><a href="#uv-tool-install--no-cache"><code>--no-cache</code></a>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
@@ -3951,6 +3969,7 @@ uv tool upgrade [OPTIONS] <NAME>...
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
 
+<p>May also be set with the <code>UV_NO_BUILD</code> environment variable.</p>
 </dd><dt id="uv-tool-upgrade--no-build-isolation"><a href="#uv-tool-upgrade--no-build-isolation"><code>--no-build-isolation</code></a></dt><dd><p>Disable isolation when building source distributions.</p>
 
 <p>Assumes that build dependencies specified by PEP 518 are already installed.</p>
@@ -3962,6 +3981,7 @@ uv tool upgrade [OPTIONS] <NAME>...
 
 </dd><dt id="uv-tool-upgrade--no-build-package"><a href="#uv-tool-upgrade--no-build-package"><code>--no-build-package</code></a> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BUILD_PACKAGE</code> environment variable.</p>
 </dd><dt id="uv-tool-upgrade--no-cache"><a href="#uv-tool-upgrade--no-cache"><code>--no-cache</code></a>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
@@ -8397,6 +8417,7 @@ uv build [OPTIONS] [SRC]
 
 <p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
 
+<p>May also be set with the <code>UV_NO_BUILD</code> environment variable.</p>
 </dd><dt id="uv-build--no-build-isolation"><a href="#uv-build--no-build-isolation"><code>--no-build-isolation</code></a></dt><dd><p>Disable isolation when building source distributions.</p>
 
 <p>Assumes that build dependencies specified by PEP 518 are already installed.</p>
@@ -8410,6 +8431,7 @@ uv build [OPTIONS] [SRC]
 
 </dd><dt id="uv-build--no-build-package"><a href="#uv-build--no-build-package"><code>--no-build-package</code></a> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
+<p>May also be set with the <code>UV_NO_BUILD_PACKAGE</code> environment variable.</p>
 </dd><dt id="uv-build--no-cache"><a href="#uv-build--no-cache"><code>--no-cache</code></a>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>

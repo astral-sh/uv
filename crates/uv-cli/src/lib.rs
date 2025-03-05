@@ -4818,7 +4818,13 @@ pub struct BuildOptionsArgs {
     /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
     /// already-built source distributions will be reused, but operations that require building
     /// distributions will exit with an error.
-    #[arg(long, overrides_with("build"), help_heading = "Build options")]
+    #[arg(
+        long,
+        env = EnvVars::UV_NO_BUILD,
+        overrides_with("build"),
+        value_parser = clap::builder::BoolishValueParser::new(),
+        help_heading = "Build options",
+    )]
     pub no_build: bool,
 
     #[arg(
@@ -4830,7 +4836,7 @@ pub struct BuildOptionsArgs {
     pub build: bool,
 
     /// Don't build source distributions for a specific package.
-    #[arg(long, help_heading = "Build options")]
+    #[arg(long, help_heading = "Build options", env = EnvVars::UV_NO_BUILD_PACKAGE, value_delimiter = ' ')]
     pub no_build_package: Vec<PackageName>,
 
     /// Don't install pre-built wheels.
