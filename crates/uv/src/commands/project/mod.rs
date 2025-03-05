@@ -1220,8 +1220,9 @@ impl ProjectEnvironment {
                     let temp_dir = cache.venv_dir()?;
                     let environment = uv_virtualenv::create_venv(
                         temp_dir.path(),
-                        interpreter,
+                        &interpreter,
                         prompt,
+                        cache,
                         false,
                         false,
                         false,
@@ -1257,8 +1258,9 @@ impl ProjectEnvironment {
 
                 let environment = uv_virtualenv::create_venv(
                     &root,
-                    interpreter,
+                    &interpreter,
                     prompt,
+                    cache,
                     false,
                     false,
                     false,
@@ -1386,8 +1388,9 @@ impl ScriptEnvironment {
                     let temp_dir = cache.venv_dir()?;
                     let environment = uv_virtualenv::create_venv(
                         temp_dir.path(),
-                        interpreter,
+                        &interpreter,
                         prompt,
+                        cache,
                         false,
                         false,
                         false,
@@ -1420,8 +1423,9 @@ impl ScriptEnvironment {
 
                 let environment = uv_virtualenv::create_venv(
                     &root,
-                    interpreter,
+                    &interpreter,
                     prompt,
+                    cache,
                     false,
                     false,
                     false,

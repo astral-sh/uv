@@ -27,6 +27,7 @@ use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{debug, info_span, instrument, Instrument};
 
+use uv_cache::Cache;
 use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
 use uv_distribution::BuildRequires;
 use uv_distribution_types::{IndexLocations, Resolution};
@@ -276,6 +277,7 @@ impl SourceBuild {
         mut environment_variables: FxHashMap<OsString, OsString>,
         level: BuildOutput,
         concurrent_builds: usize,
+        cache: &Cache,
     ) -> Result<Self, Error> {
         let temp_dir = build_context.cache().venv_dir()?;
 
@@ -316,8 +318,9 @@ impl SourceBuild {
         } else {
             uv_virtualenv::create_venv(
                 temp_dir.path(),
-                interpreter.clone(),
+                interpreter,
                 uv_virtualenv::Prompt::None,
+                cache,
                 false,
                 false,
                 false,

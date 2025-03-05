@@ -176,7 +176,7 @@ pub(crate) fn install_executables(
     let installed_packages = InstalledPackages::from_environment(environment)?;
     let installed = installed_packages.get_packages(name);
     let Some(installed_dist) = installed.first().copied() else {
-        bail!("Expected at least one requirement")
+        bail!("Expected at least one installed distribution for executables for {name}")
     };
 
     // Find a suitable path to install into

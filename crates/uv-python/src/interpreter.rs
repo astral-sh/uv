@@ -576,7 +576,7 @@ impl Interpreter {
         } else {
             Either::Right(
                 self.site_packages_()
-                    .into_iter()
+                    .iter()
                     .map(|path| Cow::Borrowed(path.as_path())),
             )
         }
