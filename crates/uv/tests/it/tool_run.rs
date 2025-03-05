@@ -506,6 +506,250 @@ fn tool_run_from_install() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     "###);
+
+    // Verify that `tool run black` with a compatible constraint uses the already-installed version.
+    context
+        .temp_dir
+        .child("constraints.txt")
+        .write_str("click<9.0.0")
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--constraints")
+        .arg("constraints.txt")
+        .arg("black")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black, 24.1.0 (compiled: yes)
+    Python (CPython) 3.12.[X]
+
+    ----- stderr -----
+    "###);
+
+    // Verify that `tool run black` with an incompatible constraint uses the already-installed version.
+    context
+        .temp_dir
+        .child("constraints.txt")
+        .write_str("click<8.0.0")
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--constraints")
+        .arg("constraints.txt")
+        .arg("black")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black, 24.1.0 (compiled: yes)
+    Python (CPython) 3.12.[X]
+
+    ----- stderr -----
+    "###);
+}
+
+#[test]
+fn tool_run_from_install_constraints() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `flask` at a specific version.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("flask==3.0.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.0
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    Installed 1 executable: flask
+    warning: `[TEMP_DIR]/bin` is not on your PATH. To use installed tools, run `export PATH="[TEMP_DIR]/bin:$PATH"` or `uv tool update-shell`.
+    "###);
+
+    // Verify that `tool run flask` uses the already-installed version.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.0
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    "###);
+
+    // Verify that `tool run flask` with a compatible constraint uses the already-installed version.
+    context
+        .temp_dir
+        .child("constraints.txt")
+        .write_str("werkzeug<4.0.0")
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--constraints")
+        .arg("constraints.txt")
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.0
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    "###);
+
+    // Verify that `tool run flask` with an incompatible constraint installs a new version.
+    context
+        .temp_dir
+        .child("constraints.txt")
+        .write_str("werkzeug<3.0.0")
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--constraints")
+        .arg("constraints.txt")
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 2.3.3
+    Werkzeug 2.3.8
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==2.3.3
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==2.3.8
+    "###);
+
+    // Verify that `tool run flask` with a compatible override uses the already-installed version.
+    context
+        .temp_dir
+        .child("override.txt")
+        .write_str("werkzeug==3.0.1")
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--override")
+        .arg("override.txt")
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.0
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    "###);
+
+    // Verify that `tool run flask` with an incompatible override installs a new version.
+    context
+        .temp_dir
+        .child("override.txt")
+        .write_str("werkzeug==3.0.0")
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--override")
+        .arg("override.txt")
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.0
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.0
+    "###);
+
+    // Verify that an override that enables a new extra also invalidates the environment.
+    context
+        .temp_dir
+        .child("override.txt")
+        .write_str("flask[dotenv]")
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--override")
+        .arg("override.txt")
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + python-dotenv==1.0.1
+     + werkzeug==3.0.1
+    "###);
 }
 
 #[test]
