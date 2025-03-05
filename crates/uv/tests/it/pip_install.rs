@@ -3288,6 +3288,56 @@ fn install_constraints_respects_offline_mode() {
     );
 }
 
+/// Test that constraint markers are respected when validating the current environment (i.e., we
+/// skip resolution entirely).
+#[test]
+fn install_constraints_with_markers() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("pytest")?;
+
+    // Create a constraints file with a marker that is not relevant to the current environment.
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("pytest==8.0.0; sys_platform == 'nonexistent-platform'")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--constraint")
+        .arg("constraints.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+    "###
+    );
+
+    // We should only see "Audited" here; no need to resolve.
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--constraint")
+        .arg("constraints.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
 /// Tests that we can install `polars==0.14.0`, which has this odd dependency
 /// requirement in its wheel metadata: `pyarrow>=4.0.*; extra == 'pyarrow'`.
 ///

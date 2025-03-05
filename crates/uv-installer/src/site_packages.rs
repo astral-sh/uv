@@ -287,17 +287,17 @@ impl SitePackages {
         constraints: &[NameRequirementSpecification],
         markers: &ResolverMarkerEnvironment,
     ) -> Result<SatisfiesResult> {
-        // Collect the constraints.
-        let constraints: FxHashMap<&PackageName, Vec<&Requirement>> =
-            constraints
-                .iter()
-                .fold(FxHashMap::default(), |mut constraints, constraint| {
-                    constraints
-                        .entry(&constraint.requirement.name)
-                        .or_default()
-                        .push(&constraint.requirement);
-                    constraints
-                });
+        // Collect the constraints, filtering them by their marker environment.
+        let constraints: FxHashMap<&PackageName, Vec<&Requirement>> = constraints
+            .iter()
+            .filter(|constraint| constraint.requirement.evaluate_markers(Some(markers), &[]))
+            .fold(FxHashMap::default(), |mut constraints, constraint| {
+                constraints
+                    .entry(&constraint.requirement.name)
+                    .or_default()
+                    .push(&constraint.requirement);
+                constraints
+            });
 
         let mut stack = Vec::with_capacity(requirements.len());
         let mut seen = FxHashSet::with_capacity_and_hasher(requirements.len(), FxBuildHasher);
