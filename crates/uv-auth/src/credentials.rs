@@ -28,15 +28,7 @@ impl Username {
     /// Unlike `reqwest`, empty usernames are be encoded as `None` instead of an empty string.
     pub(crate) fn new(value: Option<String>) -> Self {
         // Ensure empty strings are `None`
-        if let Some(value) = value {
-            if value.is_empty() {
-                Self(None)
-            } else {
-                Self(Some(value))
-            }
-        } else {
-            Self(value)
-        }
+        Self(value.filter(|s| !s.is_empty()))
     }
 
     pub(crate) fn none() -> Self {
