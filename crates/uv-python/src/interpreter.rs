@@ -642,7 +642,7 @@ impl Interpreter {
     }
 
     /// The paths to consider for discovering installed packages
-    pub fn discovery_paths(&self) -> impl Iterator<Item = Cow<Path>> {
+    pub fn discovery_paths(&self) -> impl Iterator<Item = Cow<'_, Path>> {
         let target = self.target().map(Target::site_packages);
 
         let prefix = self

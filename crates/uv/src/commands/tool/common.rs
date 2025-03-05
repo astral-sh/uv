@@ -394,9 +394,9 @@ pub(crate) fn finalize_tool_install(
         }
 
         let installed = installed_packages.get_packages(package);
-        let dist = installed
-            .first()
-            .context("Expected at least one requirement")?;
+        let dist = installed.first().with_context(|| {
+            format!("Expected at least one installed distribution for executables for {package}")
+        })?;
         let dist_entrypoints = entrypoint_paths(&installed_packages, dist.name(), dist.version())?;
 
         // Determine the entry points targets. Use a sorted collection for deterministic output.

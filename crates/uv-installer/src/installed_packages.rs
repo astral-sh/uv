@@ -182,7 +182,7 @@ impl InstalledPackages {
             // access across this symlink, such as:
             // * `.venv/lib/python3.13/site-packages/foo-1.0.0.dist-info`
             // * `.venv/lib64/python3.13/site-packages/foo-1.0.0.dist-info`
-            if is_same_file(existing.path(), dist_info.path()).unwrap_or(false) {
+            if is_same_file(existing.install_path(), dist_info.install_path()).unwrap_or(false) {
                 return true;
             }
 
@@ -213,8 +213,8 @@ impl InstalledPackages {
             // of which version the module that Python will pick up is. We must keep both
             // to remove both.
             if !is_same_file(
-                existing.path().parent().unwrap_or(Path::new("")),
-                dist_info.path().parent().unwrap_or(Path::new("")),
+                existing.install_path().parent().unwrap_or(Path::new("")),
+                dist_info.install_path().parent().unwrap_or(Path::new("")),
             )
             .unwrap_or(false)
             {
@@ -224,9 +224,9 @@ impl InstalledPackages {
                       - version {} at `{}`",
                     dist_info.name(),
                     existing.version(),
-                    existing.path().user_display(),
+                    existing.install_path().user_display(),
                     dist_info.version(),
-                    dist_info.path().user_display(),
+                    dist_info.install_path().user_display(),
                 );
                 // We can't skip distributions even if they are inexact duplicates as we must
                 // uninstall them, so we continue to the `false` return.

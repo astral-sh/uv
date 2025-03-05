@@ -114,7 +114,7 @@ pub(crate) async fn pip_list(
             debug!(
                 "Shadowed package {} at: `{}`",
                 installed_dist.name(),
-                installed_dist.path().user_display()
+                installed_dist.install_path().user_display()
             );
             shadowed.push(installed_dist);
             continue;
@@ -301,7 +301,7 @@ pub(crate) async fn pip_list(
                     "hint".bold().cyan(),
                     ":".bold(),
                     shadowed.into_iter().join(", ")
-                );
+                )?;
             }
         }
         ListFormat::Freeze if results.is_empty() => {}
@@ -321,7 +321,7 @@ pub(crate) async fn pip_list(
                     "hint".bold().cyan(),
                     ":".bold(),
                     shadowed.into_iter().join(", ")
-                );
+                )?;
             }
         }
     }
