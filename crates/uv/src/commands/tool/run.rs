@@ -806,48 +806,42 @@ async fn get_or_create_environment(
 
             // Check if the installed packages meet the requirements.
             if let Some(environment) = existing_environment {
-                if let Some(tool_receipt) = installed_tools
+                if installed_tools
                     .get_tool_receipt(&requirement.name)
                     .ok()
                     .flatten()
-                    .filter(|receipt| ToolOptions::from(options) == *receipt.options())
+                    .is_some_and(|receipt| ToolOptions::from(options) == *receipt.options())
                 {
-                    if overrides.is_empty() {
-                        // Check if the installed packages meet the requirements.
-                        let site_packages = SitePackages::from_environment(&environment)?;
+                    // Check if the installed packages meet the requirements.
+                    let site_packages = SitePackages::from_environment(&environment)?;
 
-                        let requirements = requirements
-                            .iter()
-                            .cloned()
-                            .map(UnresolvedRequirementSpecification::from)
-                            .collect::<Vec<_>>();
-                        let constraints = constraints
-                            .iter()
-                            .cloned()
-                            .map(NameRequirementSpecification::from)
-                            .collect::<Vec<_>>();
+                    let requirements = requirements
+                        .iter()
+                        .cloned()
+                        .map(NameRequirementSpecification::from)
+                        .collect::<Vec<_>>();
+                    let constraints = constraints
+                        .iter()
+                        .cloned()
+                        .map(NameRequirementSpecification::from)
+                        .collect::<Vec<_>>();
+                    let overrides = overrides
+                        .iter()
+                        .cloned()
+                        .map(NameRequirementSpecification::from)
+                        .collect::<Vec<_>>();
 
-                        if matches!(
-                            site_packages.satisfies(
-                                &requirements,
-                                &constraints,
-                                &interpreter.resolver_marker_environment()
-                            ),
-                            Ok(SatisfiesResult::Fresh { .. })
-                        ) {
-                            debug!("Using existing tool `{}`", requirement.name);
-                            return Ok((from, environment));
-                        }
-                    } else {
-                        // Check if the installed packages match the requirements.
-                        // TODO(charlie): Support overrides in `SitePackages::satisfies`.
-                        if requirements == tool_receipt.requirements()
-                            && constraints == tool_receipt.constraints()
-                            && overrides == tool_receipt.overrides()
-                        {
-                            debug!("Using existing tool `{}`", requirement.name);
-                            return Ok((from, environment));
-                        }
+                    if matches!(
+                        site_packages.satisfies_names(
+                            &requirements,
+                            &constraints,
+                            &overrides,
+                            &interpreter.resolver_marker_environment()
+                        ),
+                        Ok(SatisfiesResult::Fresh { .. })
+                    ) {
+                        debug!("Using existing tool `{}`", requirement.name);
+                        return Ok((from, environment));
                     }
                 }
             }
