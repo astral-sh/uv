@@ -778,3 +778,186 @@ fn list_ignores_quiet_flag_format_freeze() {
     "###
     );
 }
+
+/// Check support for `include-system-site-packages = true` in `uv pip list`.
+///
+/// Specifically, check that:
+/// * system packages are shown when using the system interpreter
+/// * system packages are hidden with `include-system-site-packages = false`, but venv packages are
+///   shown
+/// * system packages are shown with `include-system-site-packages = true`, and also venv packages
+#[test]
+fn list_system_site_packages() -> Result<()> {
+    use std::str::FromStr;
+
+    use uv_python::managed::ManagedPythonInstallations;
+    use uv_python::PythonVersion;
+
+    let context = TestContext::new("3.12");
+
+    let python_version_312 = PythonVersion::from_str("3.12").unwrap();
+    let base_python = ManagedPythonInstallations::from_settings(None)?
+        .find_version(&python_version_312)?
+        .next()
+        .expect("a managed Python 3.12 interpreter")
+        .path()
+        .to_path_buf();
+
+    let custom_python_path = context.temp_dir.join(
+        base_python
+            .file_name()
+            .expect("managed Python 3.12 interpreter has a filename"),
+    );
+    uv_fs::copy_dir_all(&base_python, &custom_python_path)?;
+
+    let no_system_venv = context.temp_dir.join("no-system-venv");
+    let system_venv = context.temp_dir.join("system-venv");
+
+    let custom_python_3_12 =
+        ManagedPythonInstallations::from_settings(Some(context.temp_dir.to_path_buf()))?
+            .find_version(&python_version_312)?
+            .next()
+            .expect("the copied Python 3.12 interpreter");
+
+    uv_snapshot!(context.filters(), context
+        .venv()
+        .arg("--python")
+        .arg(custom_python_3_12.executable(false))
+        .arg(&no_system_venv), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: cpython-3.12.[X]-linux-x86_64-gnu/bin/python3.12
+    Creating virtual environment at: no-system-venv
+    Activate with: source no-system-venv/[BIN]/activate
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .venv()
+        .arg("--system-site-packages")
+        .arg("--python")
+        .arg(custom_python_3_12.executable(false))
+        .arg(&system_venv), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: cpython-3.12.[X]-linux-x86_64-gnu/bin/python3.12
+    Creating virtual environment at: system-venv
+    Activate with: source system-venv/[BIN]/activate
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("--system")
+        // Don't do this at home
+        .arg("--break-system-packages")
+        .arg("--python")
+        .arg(custom_python_3_12.executable(false))
+        .arg("anyio"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: cpython-3.12.[X]-linux-x86_64-gnu
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("--python")
+        .arg(&no_system_venv)
+        .arg("markupsafe"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: no-system-venv
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + markupsafe==2.1.5
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("--python")
+        .arg(&system_venv)
+        .arg("markupsafe"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: system-venv
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + markupsafe==2.1.5
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .pip_list()
+        .arg("--python")
+        .arg(custom_python_3_12.executable(false)), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package Version
+    ------- -------
+    anyio   4.3.0
+    idna    3.6
+    pip     24.1.2
+    sniffio 1.3.1
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: cpython-3.12.[X]-linux-x86_64-gnu
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .pip_list()
+        .arg("--python")
+        .arg(&no_system_venv),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package    Version
+    ---------- -------
+    markupsafe 2.1.5
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: no-system-venv
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .pip_list()
+        .arg("--python")
+        .arg(&system_venv),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package    Version
+    ---------- -------
+    anyio      4.3.0
+    idna       3.6
+    markupsafe 2.1.5
+    pip        24.1.2
+    sniffio    1.3.1
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: system-venv
+    ");
+
+    Ok(())
+}

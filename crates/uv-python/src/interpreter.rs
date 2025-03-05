@@ -1120,6 +1120,7 @@ mod tests {
                 "purelib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages",
                 "scripts": "/home/ferris/.pyenv/versions/3.12.0/bin"
             },
+            "site_packages": ["/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages"],
             "virtualenv": {
                 "data": "",
                 "include": "include",
