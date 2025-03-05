@@ -212,18 +212,12 @@ impl TargetTriple {
                 Arch::X86_64,
             ),
             Self::Macos | Self::Aarch64AppleDarwin => {
-                let (major, minor) = macos_deployment_target().map_or((12, 0), |(major, minor)| {
-                    debug!("Found macOS deployment target: {}.{}", major, minor);
-                    (major, minor)
-                });
+                let (major, minor) = macos_deployment_target();
                 Platform::new(Os::Macos { major, minor }, Arch::Aarch64)
             }
             Self::I686PcWindowsMsvc => Platform::new(Os::Windows, Arch::X86),
             Self::X8664AppleDarwin => {
-                let (major, minor) = macos_deployment_target().map_or((12, 0), |(major, minor)| {
-                    debug!("Found macOS deployment target: {}.{}", major, minor);
-                    (major, minor)
-                });
+                let (major, minor) = macos_deployment_target();
                 Platform::new(Os::Macos { major, minor }, Arch::X86_64)
             }
             Self::Aarch64UnknownLinuxGnu => Platform::new(
@@ -721,15 +715,19 @@ impl TargetTriple {
 }
 
 /// Return the macOS deployment target as parsed from the environment.
-fn macos_deployment_target() -> Option<(u16, u16)> {
-    let version = std::env::var(EnvVars::MACOSX_DEPLOYMENT_TARGET).ok()?;
-    let mut parts = version.split('.');
-
-    // Parse the major version (e.g., `12` in `12.0`).
-    let major = parts.next()?.parse::<u16>().ok()?;
-
-    // Parse the minor version (e.g., `0` in `12.0`), with a default of `0`.
-    let minor = parts.next().unwrap_or("0").parse::<u16>().ok()?;
-
-    Some((major, minor))
+///
+/// Defaults to the least-recent, non-EOL macOS version (12.0), if not found from the environment.
+pub fn macos_deployment_target() -> (u16, u16) {
+    std::env::var(EnvVars::MACOSX_DEPLOYMENT_TARGET)
+        .ok()
+        .and_then(|version| {
+            let mut parts = version.split('.');
+            // Parse the major version (e.g., `12` in `12.0`).
+            let major = parts.next()?.parse::<u16>().ok()?;
+            // Parse the minor version (e.g., `0` in `12.0`), with a default of `0`.
+            let minor = parts.next().unwrap_or("0").parse::<u16>().ok()?;
+            debug!("Found macOS deployment target: {}.{}", major, minor);
+            Some((major, minor))
+        })
+        .unwrap_or((12, 0))
 }
