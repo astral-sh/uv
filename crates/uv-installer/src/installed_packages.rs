@@ -50,8 +50,8 @@ impl InstalledPackages {
     /// Build an index of installed packages from the given Python executable.
     pub fn from_interpreter(interpreter: &Interpreter) -> Result<Self> {
         let mut distributions: Vec<Option<InstalledDist>> = Vec::new();
-        let mut by_name = FxHashMap::default();
-        let mut by_url = FxHashMap::default();
+        let mut by_name: FxHashMap<PackageName, Vec<usize>> = FxHashMap::default();
+        let mut by_url: FxHashMap<Url, Vec<usize>> = FxHashMap::default();
 
         for import_path in interpreter.discovery_paths() {
             // Read the site-packages directory.
@@ -76,12 +76,12 @@ impl InstalledPackages {
                     dist_likes
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                    return Ok(Self {
-                        interpreter: interpreter.clone(),
-                        distributions,
-                        by_name,
-                        by_url,
-                    });
+                    debug!(
+                        "Package directory does not exist: `{}`",
+                        import_path.user_display()
+                    );
+                    // The site-packages directory doesn't exist, skip it.
+                    continue;
                 }
                 Err(err) => return Err(err).context("Failed to read site-packages directory"),
             };

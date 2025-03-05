@@ -3,7 +3,7 @@ Queries information about the current Python interpreter and prints it as JSON.
 
 The script will exit with status 0 on known error that are turned into rust errors.
 """
-
+import site
 import sys
 
 import json
@@ -609,6 +609,7 @@ def main() -> None:
         # temporary path to `sys.path` so we can import it, which we have to strip later
         # to avoid having this now-deleted path around.
         "sys_path": sys.path[1:],
+        "site_packages": site.getsitepackages(),
         "stdlib": sysconfig.get_path("stdlib"),
         # Prior to the introduction of `sysconfig` patching, python-build-standalone installations would always use
         # "/install" as the prefix. With `sysconfig` patching, we rewrite the prefix to match the actual installation
