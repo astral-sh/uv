@@ -4543,6 +4543,19 @@ fn no_build() -> Result<()> {
 
     assert!(context.temp_dir.child("uv.lock").exists());
 
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BUILD_PACKAGE", "iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ iniconfig==2.0.0
+    "###);
+
     Ok(())
 }
 
@@ -4571,6 +4584,47 @@ fn no_build_error() -> Result<()> {
     ----- stderr -----
     Resolved 19 packages in [TIME]
     error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 19 packages in [TIME]
+    error: Distribution `project==0.1.0 @ virtual+.` can't be installed because it is marked as `--no-build` but has no binary distribution
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BUILD", "1"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 19 packages in [TIME]
+    error: Distribution `project==0.1.0 @ virtual+.` can't be installed because it is marked as `--no-build` but has no binary distribution
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BUILD_PACKAGE", "django-allauth"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 19 packages in [TIME]
+    error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BUILD", "django-allauth"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value 'django-allauth' for '--no-build': value was not a boolean
+
+    For more information, try '--help'.
     "###);
 
     assert!(context.temp_dir.child("uv.lock").exists());
