@@ -29,8 +29,8 @@ use uv_pep508::MarkerTreeContents;
 use uv_pypi_types::{ConflictPackage, ConflictSet, Conflicts, Requirement};
 use uv_python::{
     EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
-    VersionFileDiscoveryOptions, VersionRequest,
+    PythonInstallation, PythonPreference, PythonRequest, PythonRequestSource, PythonVariant,
+    PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
@@ -694,6 +694,7 @@ impl ScriptInterpreter {
 
         let interpreter = PythonInstallation::find_or_download(
             python_request.as_ref(),
+            Some(&source),
             EnvironmentPreference::Any,
             python_preference,
             python_downloads,
@@ -868,6 +869,7 @@ impl ProjectInterpreter {
         // Locate the Python interpreter to use in the environment.
         let python = PythonInstallation::find_or_download(
             python_request.as_ref(),
+            Some(&source),
             EnvironmentPreference::OnlySystem,
             python_preference,
             python_downloads,
@@ -940,28 +942,6 @@ pub(crate) enum RequiresPythonSource {
     Script,
     /// From a `pyproject.toml` in a workspace.
     Project,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) enum PythonRequestSource {
-    /// The request was provided by the user.
-    UserRequest,
-    /// The request was inferred from a `.python-version` or `.python-versions` file.
-    DotPythonVersion(PythonVersionFile),
-    /// The request was inferred from a `pyproject.toml` file.
-    RequiresPython,
-}
-
-impl std::fmt::Display for PythonRequestSource {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PythonRequestSource::UserRequest => write!(f, "explicit request"),
-            PythonRequestSource::DotPythonVersion(file) => {
-                write!(f, "version file at `{}`", file.path().user_display())
-            }
-            PythonRequestSource::RequiresPython => write!(f, "`requires-python` metadata"),
-        }
-    }
 }
 
 /// The resolved Python request and requirement for a [`Workspace`].
@@ -2205,27 +2185,46 @@ pub(crate) async fn init_script_python_requirement(
     cache: &Cache,
     reporter: &PythonDownloadReporter,
 ) -> anyhow::Result<RequiresPython> {
-    let python_request = if let Some(request) = python {
+    let (python_request, source) = if let Some(request) = python {
         // (1) Explicit request from user
-        PythonRequest::parse(request)
-    } else if let (false, Some(request)) = (
-        no_pin_python,
-        PythonVersionFile::discover(
+        (
+            PythonRequest::parse(request),
+            Some(PythonRequestSource::UserRequest),
+        )
+    } else if let (false, Some((request, source))) = (no_pin_python, {
+        if let Some(version_file) = PythonVersionFile::discover(
             directory,
             &VersionFileDiscoveryOptions::default().with_no_config(no_config),
         )
         .await?
-        .and_then(PythonVersionFile::into_version),
-    ) {
+        {
+            // Clippy wants to restructure this to use `map` but that causes a borrow check error
+            // on `version_file` since we take ownership of it in the source type
+            #[allow(clippy::manual_map)]
+            {
+                if let Some(request) = version_file.version() {
+                    Some((
+                        request.clone(),
+                        PythonRequestSource::DotPythonVersion(version_file),
+                    ))
+                } else {
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    }) {
         // (2) Request from `.python-version`
-        request
+        (request, Some(source))
     } else {
         // (3) Assume any Python version
-        PythonRequest::Any
+        (PythonRequest::Any, None)
     };
 
     let interpreter = PythonInstallation::find_or_download(
         Some(&python_request),
+        source.as_ref(),
         EnvironmentPreference::Any,
         python_preference,
         python_downloads,

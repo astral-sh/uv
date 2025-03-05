@@ -23,7 +23,7 @@ use uv_pep508::PackageName;
 use uv_pypi_types::Conflicts;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonInstallation, PythonPreference,
-    PythonRequest, PythonVersion, Target,
+    PythonRequest, PythonRequestSource, PythonVersion, Target,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
@@ -137,6 +137,7 @@ pub(crate) async fn pip_sync(
                 .as_deref()
                 .map(PythonRequest::parse)
                 .unwrap_or_default(),
+            python.as_ref().map(|_| &PythonRequestSource::UserRequest),
             EnvironmentPreference::from_system_flag(system, false),
             python_preference,
             &cache,
@@ -149,6 +150,7 @@ pub(crate) async fn pip_sync(
                 .as_deref()
                 .map(PythonRequest::parse)
                 .unwrap_or_default(),
+            python.as_ref().map(|_| &PythonRequestSource::UserRequest),
             EnvironmentPreference::from_system_flag(system, true),
             &cache,
         )?;

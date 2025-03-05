@@ -15,6 +15,7 @@ use uv_pypi_types::Requirement;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::EnvironmentPreference;
 use uv_python::PythonRequest;
+use uv_python::PythonRequestSource;
 use uv_python::{Prefix, PythonEnvironment, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
@@ -55,6 +56,7 @@ pub(crate) async fn pip_uninstall(
             .as_deref()
             .map(PythonRequest::parse)
             .unwrap_or_default(),
+        python.as_ref().map(|_| &PythonRequestSource::UserRequest),
         EnvironmentPreference::from_system_flag(system, true),
         &cache,
     )?;

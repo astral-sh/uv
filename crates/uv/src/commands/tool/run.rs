@@ -25,6 +25,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{Requirement, RequirementSource};
+use uv_python::PythonRequestSource;
 use uv_python::VersionRequest;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
@@ -558,6 +559,9 @@ async fn get_or_create_environment(
     // Discover an interpreter.
     let interpreter = PythonInstallation::find_or_download(
         python_request.as_ref(),
+        python_request
+            .as_ref()
+            .map(|_| &PythonRequestSource::UserRequest),
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,

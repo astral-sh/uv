@@ -142,6 +142,7 @@ pub(crate) async fn refine_interpreter(
 
     let interpreter = PythonInstallation::find_or_download(
         Some(&python_request),
+        None,
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,
