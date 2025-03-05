@@ -77,8 +77,6 @@ impl OperationDiagnostic {
                 if let Some(context) = self.context {
                     no_solution_context(&err, context);
                 } else if let Some(hint) = self.hint {
-                    // TODO(charlie): The `hint` should be shown on all diagnostics, not just
-                    // `NoSolutionError`.
                     no_solution_hint(err, hint);
                 } else {
                     no_solution(&err);
@@ -91,11 +89,17 @@ impl OperationDiagnostic {
                 chain,
                 err,
             )) => {
-                requested_dist_error(kind, dist, &chain, err);
+                requested_dist_error(kind, dist, &chain, err, self.hint);
                 None
             }
             pip::operations::Error::Requirements(uv_requirements::Error::Dist(kind, dist, err)) => {
-                dist_error(kind, dist, &DerivationChain::default(), Arc::new(err));
+                dist_error(
+                    kind,
+                    dist,
+                    &DerivationChain::default(),
+                    Arc::new(err),
+                    self.hint,
+                );
                 None
             }
             pip::operations::Error::Prepare(uv_installer::PrepareError::Dist(
@@ -104,7 +108,7 @@ impl OperationDiagnostic {
                 chain,
                 err,
             )) => {
-                dist_error(kind, dist, &chain, Arc::new(err));
+                dist_error(kind, dist, &chain, Arc::new(err), self.hint);
                 None
             }
             pip::operations::Error::Requirements(err) => {
@@ -134,6 +138,7 @@ pub(crate) fn dist_error(
     dist: Box<Dist>,
     chain: &DerivationChain,
     cause: Arc<uv_distribution::Error>,
+    help: Option<String>,
 ) {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
     #[error("{kind} `{dist}`")]
@@ -147,23 +152,25 @@ pub(crate) fn dist_error(
         help: Option<String>,
     }
 
-    let help = SUGGESTIONS
-        .get(dist.name())
-        .map(|suggestion| {
-            format!(
-                "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
-                dist.name().cyan(),
-                suggestion.cyan(),
-                suggestion.cyan(),
-            )
-        })
-        .or_else(|| {
-            if chain.is_empty() {
-                None
-            } else {
-                Some(format_chain(dist.name(), dist.version(), chain))
-            }
-        });
+    let help = help.or_else(|| {
+        SUGGESTIONS
+            .get(dist.name())
+            .map(|suggestion| {
+                format!(
+                    "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
+                    dist.name().cyan(),
+                    suggestion.cyan(),
+                    suggestion.cyan(),
+                )
+            })
+            .or_else(|| {
+                if chain.is_empty() {
+                    None
+                } else {
+                    Some(format_chain(dist.name(), dist.version(), chain))
+                }
+            })
+    });
     let report = miette::Report::new(Diagnostic {
         kind,
         dist,
@@ -179,6 +186,7 @@ pub(crate) fn requested_dist_error(
     dist: Box<RequestedDist>,
     chain: &DerivationChain,
     cause: Arc<uv_distribution::Error>,
+    help: Option<String>,
 ) {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
     #[error("{kind} `{dist}`")]
@@ -192,23 +200,25 @@ pub(crate) fn requested_dist_error(
         help: Option<String>,
     }
 
-    let help = SUGGESTIONS
-        .get(dist.name())
-        .map(|suggestion| {
-            format!(
-                "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
-                dist.name().cyan(),
-                suggestion.cyan(),
-                suggestion.cyan(),
-            )
-        })
-        .or_else(|| {
-            if chain.is_empty() {
-                None
-            } else {
-                Some(format_chain(dist.name(), dist.version(), chain))
-            }
-        });
+    let help = help.or_else(|| {
+        SUGGESTIONS
+            .get(dist.name())
+            .map(|suggestion| {
+                format!(
+                    "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
+                    dist.name().cyan(),
+                    suggestion.cyan(),
+                    suggestion.cyan(),
+                )
+            })
+            .or_else(|| {
+                if chain.is_empty() {
+                    None
+                } else {
+                    Some(format_chain(dist.name(), dist.version(), chain))
+                }
+            })
+    });
     let report = miette::Report::new(Diagnostic {
         kind,
         dist,

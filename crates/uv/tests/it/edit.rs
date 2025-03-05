@@ -6646,7 +6646,7 @@ fn fail_to_add_revert_project() -> Result<()> {
           ZeroDivisionError: division by zero
 
           hint: This usually indicates a problem with the package or the build environment.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -6757,7 +6757,7 @@ fn fail_to_edit_revert_project() -> Result<()> {
           ZeroDivisionError: division by zero
 
           hint: This usually indicates a problem with the package or the build environment.
-      help: `child` was included because `parent` (v0.1.0) depends on `child`
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -10135,7 +10135,7 @@ fn add_with_build_constraints() -> Result<()> {
     build-constraint-dependencies = ["setuptools==1"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("requests==1.2"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("requests==1.2"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -10145,8 +10145,8 @@ fn add_with_build_constraints() -> Result<()> {
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
-      help: `requests` (v1.2.0) was included because `project` (v0.1.0) depends on `requests==1.2`
-    ");
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "###);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"

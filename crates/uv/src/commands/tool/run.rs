@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use anstream::eprint;
 use anyhow::{bail, Context};
+use console::Term;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::process::Command;
@@ -17,7 +18,8 @@ use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_distribution_types::{
-    Name, NameRequirementSpecification, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    IndexUrl, Name, NameRequirementSpecification, UnresolvedRequirement,
+    UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
@@ -124,11 +126,13 @@ pub(crate) async fn run(
                 "hint".bold().cyan(),
                 ":".bold(),
                 package_name.cyan(),
-                format!("{} --from {} {}", invocation_source, package_name.cyan(), target),
+                format!("{} --from {} {}", invocation_source, package_name.cyan(), target).green(),
             ));
         }
     } else {
         let target_path = Path::new(target);
+
+        // If the user tries to invoke `uvx script.py`, hint them towards `uv run`.
         if has_python_script_ext(target_path) {
             return if target_path.try_exists()? {
                 Err(anyhow::anyhow!(
@@ -147,9 +151,43 @@ pub(crate) async fn run(
                     "hint".bold().cyan(),
                     ":".bold(),
                     package_name.cyan(),
-                    format!("{} --from {} {}", invocation_source, package_name, target),
+                    format!("{invocation_source} --from {package_name} {target}").green(),
                 ))
             };
+        }
+    }
+
+    // If the user tries to invoke `uvx run ruff`, hint them towards `uvx ruff`, but only if
+    // the `run` package is guaranteed to come from PyPI.
+    let (mut target, mut args) = (target, args);
+    if from.is_none()
+        && invocation_source == ToolRunCommand::Uvx
+        && target == "run"
+        && settings
+            .index_locations
+            .indexes()
+            .all(|index| matches!(index.url, IndexUrl::Pypi(..)))
+    {
+        let term = Term::stderr();
+        if term.is_term() {
+            let rest = args.iter().map(|s| s.to_string_lossy()).join(" ");
+            let prompt = format!(
+                "`{}` invokes the `{}` package. Did you mean `{}`?",
+                format!("uvx run {rest}").green(),
+                "run".cyan(),
+                format!("uvx {rest}").green()
+            );
+            let confirmation = uv_console::confirm(&prompt, &term, true)?;
+            if confirmation {
+                let Some((next_target, next_args)) = args.split_first() else {
+                    return Err(anyhow::anyhow!("No tool command provided"));
+                };
+                let Some(next_target) = next_target.to_str() else {
+                    return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name"));
+                };
+                target = next_target;
+                args = next_args;
+            }
         }
     }
 
@@ -188,10 +226,25 @@ pub(crate) async fn run(
     let (from, environment) = match result {
         Ok(resolution) => resolution,
         Err(ProjectError::Operation(err)) => {
+            // If the user ran `uvx run ...`, the `run` is likely a mistake. Show a dedicated hint.
+            if from.is_none() && invocation_source == ToolRunCommand::Uvx && target == "run" {
+                let rest = args.iter().map(|s| s.to_string_lossy()).join(" ");
+                return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+                    .with_hint(format!(
+                        "`{}` invokes the `{}` package. Did you mean `{}`?",
+                        format!("uvx run {rest}").green(),
+                        "run".cyan(),
+                        format!("uvx {rest}").green()
+                    ))
+                    .with_context("tool")
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            }
+
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .with_context("tool")
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(ProjectError::Requirements(err)) => {
             let err = miette::Report::msg(format!("{err}"))
