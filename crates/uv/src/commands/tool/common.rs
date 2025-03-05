@@ -11,7 +11,7 @@ use uv_distribution_types::{InstalledDist, Name};
 #[cfg(unix)]
 use uv_fs::replace_symlink;
 use uv_fs::Simplified;
-use uv_installer::SitePackages;
+use uv_installer::InstalledPackages;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::PackageName;
 use uv_pypi_types::Requirement;
@@ -30,11 +30,14 @@ use crate::commands::{pip, ExitStatus};
 use crate::printer::Printer;
 
 /// Return all packages which contain an executable with the given name.
-pub(super) fn matching_packages(name: &str, site_packages: &SitePackages) -> Vec<InstalledDist> {
-    site_packages
+pub(super) fn matching_packages(
+    name: &str,
+    installed_packages: &InstalledPackages,
+) -> Vec<InstalledDist> {
+    installed_packages
         .iter()
         .filter_map(|package| {
-            entrypoint_paths(site_packages, package.name(), package.version())
+            entrypoint_paths(installed_packages, package.name(), package.version())
                 .ok()
                 .and_then(|entrypoints| {
                     entrypoints
@@ -170,10 +173,10 @@ pub(crate) fn install_executables(
     overrides: Vec<Requirement>,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
-    let site_packages = SitePackages::from_environment(environment)?;
-    let installed = site_packages.get_packages(name);
+    let installed_packages = InstalledPackages::from_environment(environment)?;
+    let installed = installed_packages.get_packages(name);
     let Some(installed_dist) = installed.first().copied() else {
-        bail!("Expected at least one requirement")
+        bail!("Expected at least one installed distribution for executables for {name}")
     };
 
     // Find a suitable path to install into
@@ -187,7 +190,7 @@ pub(crate) fn install_executables(
     );
 
     let entry_points = entrypoint_paths(
-        &site_packages,
+        &installed_packages,
         installed_dist.name(),
         installed_dist.version(),
     )?;
@@ -213,7 +216,7 @@ pub(crate) fn install_executables(
             from = name.cyan()
         )?;
 
-        hint_executable_from_dependency(name, &site_packages, printer)?;
+        hint_executable_from_dependency(name, &installed_packages, printer)?;
 
         // Clean up the environment we just created.
         installed_tools.remove_environment(name)?;
@@ -334,10 +337,10 @@ pub(crate) fn install_executables(
 /// Displays a hint if an executable matching the package name can be found in a dependency of the package.
 fn hint_executable_from_dependency(
     name: &PackageName,
-    site_packages: &SitePackages,
+    installed_packages: &InstalledPackages,
     printer: Printer,
 ) -> anyhow::Result<()> {
-    let packages = matching_packages(name.as_ref(), site_packages);
+    let packages = matching_packages(name.as_ref(), installed_packages);
     match packages.as_slice() {
         [] => {}
         [package] => {

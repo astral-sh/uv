@@ -87,8 +87,9 @@ impl CachedEnvironment {
         let temp_dir = cache.venv_dir()?;
         let venv = uv_virtualenv::create_venv(
             temp_dir.path(),
-            interpreter,
+            &interpreter,
             uv_virtualenv::Prompt::None,
+            cache,
             false,
             false,
             true,

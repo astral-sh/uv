@@ -101,7 +101,7 @@ pub(crate) async fn pip_uninstall(
     let _lock = environment.lock().await?;
 
     // Index the current `site-packages` directory.
-    let site_packages = uv_installer::SitePackages::from_environment(&environment)?;
+    let installed_packages = uv_installer::InstalledPackages::from_environment(&environment)?;
 
     // Partition the requirements into named and unnamed requirements.
     let (named, unnamed): (Vec<Requirement>, Vec<UnnamedRequirement<VerbatimParsedUrl>>) = spec
@@ -141,7 +141,7 @@ pub(crate) async fn pip_uninstall(
 
         // Identify all packages that are installed.
         for package in &names {
-            let installed = site_packages.get_packages(package);
+            let installed = installed_packages.get_packages(package);
             if installed.is_empty() {
                 if !dry_run.enabled() {
                     writeln!(
@@ -159,7 +159,7 @@ pub(crate) async fn pip_uninstall(
 
         // Identify all unnamed distributions that are installed.
         for url in &urls {
-            let installed = site_packages.get_urls(url);
+            let installed = installed_packages.get_urls(url);
             if installed.is_empty() {
                 if !dry_run.enabled() {
                     writeln!(

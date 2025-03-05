@@ -1,13 +1,14 @@
 use std::borrow::Cow;
 use std::env::consts::ARCH;
 use std::fmt::{Display, Formatter};
-use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 use std::sync::OnceLock;
+use std::{io, iter};
 
 use configparser::ini::Ini;
 use fs_err as fs;
+use itertools::Either;
 use owo_colors::OwoColorize;
 use same_file::is_same_file;
 use serde::{Deserialize, Serialize};
@@ -47,6 +48,7 @@ pub struct Interpreter {
     sys_base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
+    site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
     standalone: bool,
     tags: OnceLock<Tags>,
@@ -81,6 +83,7 @@ impl Interpreter {
             sys_base_executable: info.sys_base_executable,
             sys_executable: info.sys_executable,
             sys_path: info.sys_path,
+            site_packages: info.site_packages,
             stdlib: info.stdlib,
             standalone: info.standalone,
             tags: OnceLock::new(),
@@ -394,8 +397,12 @@ impl Interpreter {
     }
 
     /// Return the `sys.path` for this Python interpreter.
-    pub fn sys_path(&self) -> &Vec<PathBuf> {
+    pub fn sys_path(&self) -> &[PathBuf] {
         &self.sys_path
+    }
+    /// Return the `site.getsitepackages` for this Python interpreter.
+    pub fn site_packages_(&self) -> &[PathBuf] {
+        &self.site_packages
     }
 
     /// Return the `stdlib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
@@ -523,7 +530,7 @@ impl Interpreter {
         let interpreter = if target.is_none() && prefix.is_none() {
             let purelib = self.purelib();
             let platlib = self.platlib();
-            Some(std::iter::once(purelib).chain(
+            Some(iter::once(purelib).chain(
                 if purelib == platlib || is_same_file(purelib, platlib).unwrap_or(false) {
                     None
                 } else {
@@ -540,6 +547,39 @@ impl Interpreter {
             .map(Cow::Borrowed)
             .chain(prefix.into_iter().flatten().map(Cow::Owned))
             .chain(interpreter.into_iter().flatten().map(Cow::Borrowed))
+    }
+
+    /// The paths to consider for discovering installed packages
+    pub fn discovery_paths(&self) -> impl Iterator<Item = Cow<Path>> {
+        let target = self.target().map(Target::site_packages);
+
+        let prefix = self
+            .prefix()
+            .map(|prefix| prefix.site_packages(self.virtualenv()));
+
+        debug_assert!(
+            !(target.is_some() && prefix.is_some()),
+            "target and prefix can't both be defined"
+        );
+
+        // When installing into a specific directory, we ignore all other `sys.path` entries. The
+        // exception is the std path since PyPy vendors packages into std.
+        if target.is_some() || prefix.is_some() {
+            Either::Left(
+                target
+                    .into_iter()
+                    .flatten()
+                    .map(Cow::Borrowed)
+                    .chain(prefix.into_iter().flatten().map(Cow::Owned))
+                    .chain(iter::once(Cow::Borrowed(self.stdlib.as_path()))),
+            )
+        } else {
+            Either::Right(
+                self.site_packages_()
+                    .iter()
+                    .map(|path| Cow::Borrowed(path.as_path())),
+            )
+        }
     }
 
     /// Check if the interpreter matches the given Python version.
@@ -726,6 +766,7 @@ struct InterpreterInfo {
     sys_base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
+    site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
     standalone: bool,
     pointer_size: PointerSize,
@@ -1079,6 +1120,7 @@ mod tests {
                 "purelib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages",
                 "scripts": "/home/ferris/.pyenv/versions/3.12.0/bin"
             },
+            "site_packages": ["/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages"],
             "virtualenv": {
                 "data": "",
                 "include": "include",
