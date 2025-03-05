@@ -77,8 +77,7 @@ jobs:
       - name: "Test sdist uv-build"
         run: |
           pip install crates/uv-build/dist/${{ env.PACKAGE_NAME }}_build-*.tar.gz --force-reinstall
-          ${{ env.MODULE_NAME }}-build --help
-          python -m ${{ env.MODULE_NAME }}_build --help
+          python -c "import ${{ env.PACKAGE_NAME }}_build; print(${{ env.PACKAGE_NAME }}_build.__version__)"
       - name: "Upload sdist uv-build"
         uses: actions/upload-artifact@v4
         with:
@@ -196,8 +195,7 @@ jobs:
       - name: "Test wheel - aarch64"
         run: |
           pip install ${{ env.PACKAGE_NAME }}_build --no-index --find-links crates/uv-build/dist --force-reinstall
-          ${{ env.MODULE_NAME }}-build --help
-          python -m ${{ env.MODULE_NAME }}_build --help
+          python -c "import ${{ env.PACKAGE_NAME }}_build; print(${{ env.PACKAGE_NAME }}_build.__version__)"
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@v4
         with:
@@ -270,8 +268,7 @@ jobs:
         shell: bash
         run: |
           pip install ${{ env.PACKAGE_NAME }}_build --no-index --find-links crates/uv-build/dist --force-reinstall
-          ${{ env.MODULE_NAME }}-build --help
-          python -m ${{ env.MODULE_NAME }}_build --help
+          python -c "import ${{ env.PACKAGE_NAME }}_build; print(${{ env.PACKAGE_NAME }}_build.__version__)"
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@v4
         with:
@@ -360,8 +357,7 @@ jobs:
         if: ${{ startsWith(matrix.target, 'x86_64') }}
         run: |
           pip install ${{ env.PACKAGE_NAME }}_build --no-index --find-links crates/uv-build/dist --force-reinstall
-          ${{ env.MODULE_NAME }}-build --help
-          python -m ${{ env.MODULE_NAME }}_build --help
+          python -c "import ${{ env.PACKAGE_NAME }}_build; print(${{ env.PACKAGE_NAME }}_build.__version__)"
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@v4
         with:
@@ -464,9 +460,7 @@ jobs:
             pip3 install -U pip
           run: |
             pip install ${{ env.PACKAGE_NAME }}_build --no-index --find-links crates/uv-build/dist --force-reinstall
-            ${{ env.MODULE_NAME }}-build --help
-            # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
-            # python -m ${{ env.MODULE_NAME }}_build --help
+            python -c "import ${{ env.PACKAGE_NAME }}_build; print(${{ env.PACKAGE_NAME }}_build.__version__)"
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@v4
         with:
@@ -563,9 +557,7 @@ jobs:
             pip3 install -U pip
           run: |
             pip install ${{ env.PACKAGE_NAME }}-build --no-index --find-links crates/uv-build/dist --force-reinstall
-            ${{ env.MODULE_NAME }}-build --help
-            # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
-            # python -m ${{ env.MODULE_NAME }}-build --help
+            python -c "import ${{ env.PACKAGE_NAME }}_build; print(${{ env.PACKAGE_NAME }}_build.__version__)"
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@v4
         with:
@@ -758,8 +750,7 @@ jobs:
             python3 -m venv .venv
             .venv/bin/pip install --upgrade pip
             .venv/bin/pip install ${{ env.PACKAGE_NAME }}-build --no-index --find-links crates/uv-build/dist --force-reinstall
-            .venv/bin/${{ env.MODULE_NAME }}-build --help
-            .venv/bin/python -m ${{ env.MODULE_NAME }}_build --help
+            .venv/bin/python -c "import ${{ env.PACKAGE_NAME }}_build; print(${{ env.PACKAGE_NAME }}_build.__version__)"
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@v4
         with:
@@ -874,9 +865,7 @@ jobs:
           run: |
             python -m venv .venv
             .venv/bin/pip install ${{ env.PACKAGE_NAME }}-build --no-index --find-links crates/uv-build/dist --force-reinstall
-            .venv/bin/${{ env.MODULE_NAME }}-build --help
-            # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
-            # .venv/bin/python -m ${{ env.MODULE_NAME }}_build --help
+            .venv/bin/python -c "import ${{ env.PACKAGE_NAME }}_build; print(${{ env.PACKAGE_NAME }}_build.__version__)"
       - uses: uraimo/run-on-arch-action@v2
         name: "Test wheel (manylinux)"
         if: matrix.platform.arch == 'aarch64'
@@ -890,9 +879,7 @@ jobs:
             pip3 install -U pip
           run: |
             pip install ${{ env.PACKAGE_NAME }}-build --no-index --find-links crates/uv-build/dist --force-reinstall
-            ${{ env.MODULE_NAME }}-build --help
-            # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
-            # python -m ${{ env.MODULE_NAME }}_build --help
+            python -c "import ${{ env.PACKAGE_NAME }}_build; print(${{ env.PACKAGE_NAME }}_build.__version__)"
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:

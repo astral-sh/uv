@@ -13,7 +13,7 @@ license.workspace = true
 uv-build-backend = { workspace = true }
 uv-version = { workspace = true }
 
-anyhow = { workspace = true }
+pyo3 = { workspace = true }
 
 [lints]
 workspace = true
