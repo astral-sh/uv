@@ -20172,7 +20172,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         key: PythonInstallationKey {
             major: 3,
             minor: 10,
-            patch: 19,
+            patch: 16,
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch{
@@ -20190,7 +20190,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         key: PythonInstallationKey {
             major: 3,
             minor: 10,
-            patch: 19,
+            patch: 16,
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch{
@@ -20208,7 +20208,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         key: PythonInstallationKey {
             major: 3,
             minor: 10,
-            patch: 19,
+            patch: 16,
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch{
@@ -20226,7 +20226,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         key: PythonInstallationKey {
             major: 3,
             minor: 10,
-            patch: 19,
+            patch: 16,
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch{
@@ -20244,7 +20244,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         key: PythonInstallationKey {
             major: 3,
             minor: 10,
-            patch: 19,
+            patch: 16,
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch{
@@ -20262,7 +20262,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         key: PythonInstallationKey {
             major: 3,
             minor: 10,
-            patch: 19,
+            patch: 16,
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::PyPy),
             arch: Arch{
