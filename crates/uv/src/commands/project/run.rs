@@ -931,7 +931,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             .is_virtualenv()
             .then(|| {
                 PyVenvConfiguration::parse(base_interpreter.sys_prefix().join("pyvenv.cfg"))
-                    .is_ok_and(|cfg| cfg.include_system_side_packages())
+                    .is_ok_and(|cfg| cfg.include_system_site_packages())
             })
             .unwrap_or(false)
         {
