@@ -246,16 +246,14 @@ impl ManagedPythonInstallations {
         let arch = Arch::from_env();
         let libc = Libc::from_env()?;
 
-        let iter = ManagedPythonInstallations::from_settings(None)?
-            .find_all()?
-            .filter(move |installation| {
-                installation.key.os == os
-                    && (arch.supports(installation.key.arch)
-                        // TODO(zanieb): Allow inequal variants, as `Arch::supports` does not
-                        // implement this yet. See https://github.com/astral-sh/uv/pull/9788
-                        || arch.family == installation.key.arch.family)
-                    && installation.key.libc == libc
-            });
+        let iter = self.find_all()?.filter(move |installation| {
+            installation.key.os == os
+                && (arch.supports(installation.key.arch)
+                    // TODO(zanieb): Allow inequal variants, as `Arch::supports` does not
+                    // implement this yet. See https://github.com/astral-sh/uv/pull/9788
+                    || arch.family == installation.key.arch.family)
+                && installation.key.libc == libc
+        });
 
         Ok(iter)
     }
@@ -317,7 +315,7 @@ impl ManagedPythonInstallation {
         }
     }
 
-    pub(crate) fn from_path(path: PathBuf) -> Result<Self, Error> {
+    pub fn from_path(path: PathBuf) -> Result<Self, Error> {
         let key = PythonInstallationKey::from_str(
             path.file_name()
                 .ok_or(Error::NameError("name is empty".to_string()))?
