@@ -184,7 +184,7 @@ pub(crate) fn setup_logging(
         };
     let writer = std::sync::Mutex::new(anstream::AutoStream::new(std::io::stderr(), color_choice));
 
-    let detailed_logging = std::env::var(uv_static::EnvVars::UV_LOG_CONTEXT).is_ok();
+    let detailed_logging = std::env::var(EnvVars::UV_LOG_CONTEXT).is_ok();
 
     if detailed_logging {
         // Regardless of the tracing level, include the uptime and target for each message.
@@ -244,7 +244,7 @@ pub(crate) fn setup_logging(
             anstream::ColorChoice::Never,
         ));
 
-        let detailed_file_logging = std::env::var(uv_static::EnvVars::UV_FILE_LOG_CONTEXT).is_ok();
+        let detailed_file_logging = std::env::var(EnvVars::UV_FILE_LOG_CONTEXT).is_ok();
 
         // Depending on the log level, different layers are added to the subscriber.
         // An equivalent of `RUST_LOG` for file logs might be needed to be implemented.
@@ -274,10 +274,10 @@ pub(crate) fn setup_logging(
             );
         }
     };
- 
-  subscriber.with(layers).init();
 
-  Ok(())
+    subscriber.with(layers).init();
+
+    Ok(())
 }
 
 /// Setup the `TRACING_DURATIONS_FILE` environment variable to enable tracing durations.
