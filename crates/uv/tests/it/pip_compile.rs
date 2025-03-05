@@ -14791,8 +14791,38 @@ fn invalid_platform() -> Result<()> {
           hint: You require CPython 3.10 (`cp310`), but we only found wheels for `open3d` (v0.15.2) with the following Python ABI tags: `cp36m`, `cp37m`, `cp38`, `cp39`
 
           hint: Wheels are available for `open3d` (v0.18.0) on the following platforms: `manylinux_2_27_aarch64`, `manylinux_2_27_x86_64`, `macosx_11_0_x86_64`, `macosx_13_0_arm64`, `win_amd64`
+    ");
 
-          hint: Use `MACOSX_DEPLOYMENT_TARGET` to set the deployment target on macos platform
+    Ok(())
+}
+
+/// See: <https://github.com/astral-sh/uv/issues/10699>
+#[test]
+fn invalid_platform_macos() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("mlx")?;
+
+    uv_snapshot!(context
+        .pip_compile()
+        .env(EnvVars::MACOSX_DEPLOYMENT_TARGET, "12.5")
+        .arg("--python-platform")
+        .arg("macos")
+        .arg("requirements.in"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only mlx<=0.7.0 is available and mlx<=0.0.3 has no wheels with a matching Python ABI tag (e.g., `cp312`), we can conclude that mlx<=0.0.3 cannot be used.
+          And because mlx>=0.0.4,<=0.7.0 has no wheels with a matching platform tag (e.g., `macosx_12_0_arm64`) and you require mlx, we can conclude that your requirements are unsatisfiable.
+
+          hint: You require CPython 3.12 (`cp312`), but we only found wheels for `mlx` (v0.0.3) with the following Python ABI tags: `cp38`, `cp39`, `cp310`, `cp311`
+
+          hint: Wheels are available for `mlx` (v0.7.0) on the following platforms: `macosx_13_0_arm64`, `macosx_14_0_arm64`
+
+          hint: The current minimum macOS deployment target is 12.5, set environment variable MACOSX_DEPLOYMENT_TARGET to change the minimum deployment target (e.g. MACOSX_DEPLOYMENT_TARGET=13.0)
     ");
 
     Ok(())

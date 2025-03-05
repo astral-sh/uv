@@ -4135,8 +4135,6 @@ fn no_sdist_no_wheels_with_matching_platform() {
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
 
           hint: Wheels are available for `package-a` (v1.0.0) on the following platform: `macosx_10_0_ppc64`
-
-          hint: Use `MACOSX_DEPLOYMENT_TARGET` to set the deployment target on macos platform
     ");
 
     assert_not_installed(
