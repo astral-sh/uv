@@ -40,7 +40,7 @@ pub struct PyVenvConfiguration {
     /// Was the virtual environment populated with seed packages?
     pub(crate) seed: bool,
     /// Should the virtual environment include system site packages?
-    pub(crate) include_system_side_packages: bool,
+    pub(crate) include_system_site_packages: bool,
 }
 
 #[derive(Debug, Error)]
@@ -192,7 +192,7 @@ impl PyVenvConfiguration {
         let mut uv = false;
         let mut relocatable = false;
         let mut seed = false;
-        let mut include_system_side_packages = true;
+        let mut include_system_site_packages = true;
 
         // Per https://snarky.ca/how-virtual-environments-work/, the `pyvenv.cfg` file is not a
         // valid INI file, and is instead expected to be parsed by partitioning each line on the
@@ -217,7 +217,7 @@ impl PyVenvConfiguration {
                     seed = value.trim().to_lowercase() == "true";
                 }
                 "include-system-site-packages" => {
-                    include_system_side_packages = value.trim().to_lowercase() == "true";
+                    include_system_site_packages = value.trim().to_lowercase() == "true";
                 }
                 _ => {}
             }
@@ -228,7 +228,7 @@ impl PyVenvConfiguration {
             uv,
             relocatable,
             seed,
-            include_system_side_packages,
+            include_system_site_packages,
         })
     }
 
@@ -253,8 +253,8 @@ impl PyVenvConfiguration {
     }
 
     /// Returns true if the virtual environment should include system site packages.
-    pub fn include_system_side_packages(&self) -> bool {
-        self.include_system_side_packages
+    pub fn include_system_site_packages(&self) -> bool {
+        self.include_system_site_packages
     }
 
     /// Set the key-value pair in the `pyvenv.cfg` file.
